@@ -12,19 +12,19 @@ __pycache__/
 *$py.class
 *.so
 .Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-share/python-wheels/
+/build/
+/develop-eggs/
+/dist/
+/downloads/
+/eggs/
+/.eggs/
+/lib/
+/lib64/
+/parts/
+/sdist/
+/var/
+/wheels/
+/share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
@@ -44,7 +44,7 @@ ENV/
 .coverage
 .coverage.*
 coverage.xml
-htmlcov/
+/htmlcov/
 .tox/
 .nox/
 .hypothesis/
@@ -79,10 +79,10 @@ config.local.*
 
 # --- Datos y artefactos del motor ---
 # Archivos de disco generados por el gestor (heap, sequential, índices)
-data/
-storage/
-!data/.gitkeep
-!storage/.gitkeep
+/data/*
+/storage/*
+!/data/.gitkeep
+!/storage/.gitkeep
 *.dat
 *.idx
 *.heap
@@ -100,9 +100,9 @@ storage/
 *.sqlite3
 
 # --- Datasets y multimedia (demasiado pesados para versionar) ---
-datasets/
-dataset/
-raw/
+/datasets/
+/dataset/
+/raw/
 *.csv
 *.tsv
 *.parquet
@@ -134,9 +134,9 @@ raw/
 *.pt
 *.pth
 *.onnx
-models/
-embeddings/
-checkpoints/
+/models/
+/embeddings/
+/checkpoints/
 
 # --- Resultados de benchmarks (crudos) ---
 benchmarks/results/
@@ -145,7 +145,7 @@ benchmarks/output/
 *.lprof
 
 # --- Logs ---
-logs/
+/logs/
 *.log
 
 # --- Editores e IDEs ---
@@ -168,8 +168,8 @@ ehthumbs.db
 desktop.ini
 
 # --- Temporales ---
-tmp/
-temp/
+/tmp/
+/temp/
 *.tmp
 *.bak
 *.orig

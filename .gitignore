@@ -148,6 +148,9 @@ benchmarks/output/
 /logs/
 *.log
 
+# --- Herramientas de captura ---
+.playwright-mcp/
+
 # --- Editores e IDEs ---
 .vscode/
 !.vscode/extensions.json

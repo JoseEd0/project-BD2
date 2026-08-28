@@ -12,11 +12,11 @@ from __future__ import annotations
 
 import struct
 from collections.abc import Iterator
-from hashlib import blake2b
 from pathlib import Path
 from types import TracebackType
 
 from config import EngineConfig
+from hashing import stable_hash
 from index.keys import Key, KeyCodec
 from storage.page import NO_PAGE, RecordPage, slot_capacity
 from storage.pager import HEADER_PAGE_ID, Pager
@@ -27,22 +27,12 @@ HASH_MAGIC = b"EHSH"
 HASH_VERSION = 1
 DIRECTORY_SUFFIX = ".dir"
 DIRECTORY_ENTRY = struct.Struct("<i")
-HASH_DIGEST_BYTES = 8
 MAX_LOCAL_DEPTH = 32
 INITIAL_GLOBAL_DEPTH = 1
 
 
 class HashFormatError(StorageError):
     """El archivo no corresponde a este formato de índice hash."""
-
-
-def stable_hash(raw: bytes) -> int:
-    """Hash reproducible entre ejecuciones.
-
-    `hash()` de Python está aleatorizado por proceso para las cadenas: un índice construido
-    hoy no se podría leer mañana. Blake2b da siempre el mismo valor para los mismos bytes.
-    """
-    return int.from_bytes(blake2b(raw, digest_size=HASH_DIGEST_BYTES).digest(), "little")
 
 
 class ExtendibleHashIndex:

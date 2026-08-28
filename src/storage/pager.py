@@ -10,6 +10,7 @@ metadata (cabeza de la lista de libres, raíz del árbol, profundidad global, �
 
 from __future__ import annotations
 
+import threading
 from collections import OrderedDict
 from pathlib import Path
 from types import TracebackType
@@ -44,6 +45,9 @@ class Pager:
         self._page_count = self._measure_page_count()
         self._cache: OrderedDict[int, bytearray] = OrderedDict()
         self._dirty: set[int] = set()
+        # Varias sesiones comparten el mismo paginador: sin este cerrojo, dos hilos
+        # tocando la caché LRU la dejarían inconsistente.
+        self._guard = threading.RLock()
         self.reads = 0
         self.writes = 0
 
@@ -61,12 +65,13 @@ class Pager:
 
     def allocate(self) -> int:
         """Añade una página en blanco al final del archivo y devuelve su número."""
-        page_id = self._page_count
-        self._page_count += 1
-        self._cache[page_id] = bytearray(self._page_size)
-        self._dirty.add(page_id)
-        self._evict_if_needed()
-        return page_id
+        with self._guard:
+            page_id = self._page_count
+            self._page_count += 1
+            self._cache[page_id] = bytearray(self._page_size)
+            self._dirty.add(page_id)
+            self._evict_if_needed()
+            return page_id
 
     def read(self, page_id: int) -> bytes:
         """Copia de la página.
@@ -74,7 +79,8 @@ class Pager:
         Raises:
             PageNotFoundError: si la página no existe.
         """
-        return bytes(self._load(page_id))
+        with self._guard:
+            return bytes(self._load(page_id))
 
     def write(self, page_id: int, data: bytes) -> None:
         """Reemplaza el contenido de la página.
@@ -87,24 +93,27 @@ class Pager:
             raise StorageError(
                 f"se intentó escribir {len(data)} bytes en una página de {self._page_size}"
             )
-        self._check_page(page_id)
-        self._cache[page_id] = bytearray(data)
-        self._cache.move_to_end(page_id)
-        self._dirty.add(page_id)
-        self._evict_if_needed()
+        with self._guard:
+            self._check_page(page_id)
+            self._cache[page_id] = bytearray(data)
+            self._cache.move_to_end(page_id)
+            self._dirty.add(page_id)
+            self._evict_if_needed()
 
     def flush(self) -> None:
         """Vuelca a disco todas las páginas modificadas."""
-        for page_id in sorted(self._dirty):
-            self._write_through(page_id, self._cache[page_id])
-        self._dirty.clear()
-        self._file.flush()
+        with self._guard:
+            for page_id in sorted(self._dirty):
+                self._write_through(page_id, self._cache[page_id])
+            self._dirty.clear()
+            self._file.flush()
 
     def close(self) -> None:
-        if self._file.closed:
-            return
-        self.flush()
-        self._file.close()
+        with self._guard:
+            if self._file.closed:
+                return
+            self.flush()
+            self._file.close()
 
     def __enter__(self) -> Pager:
         return self

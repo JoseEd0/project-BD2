@@ -20,6 +20,8 @@ DEFAULT_HASH_PARTITIONS = 16
 DEFAULT_TEXT_LENGTH = 256
 DEFAULT_BLOB_LENGTH = 256
 DEFAULT_LOCK_TIMEOUT_SECONDS = 5.0
+DEFAULT_CSV_DELIMITER = ","
+DEFAULT_CSV_ENCODING = "utf-8"
 DATA_DIRECTORY_VARIABLE = "MINIGESTOR_DATA_DIR"
 FALLBACK_DATA_DIRECTORY = "data"
 
@@ -41,6 +43,8 @@ class EngineConfig:
         text_length: longitud fija que se asigna a las columnas TEXT.
         blob_length: longitud fija que se asigna a las columnas BLOB.
         lock_timeout_seconds: espera máxima de una transacción por un bloqueo.
+        csv_delimiter: separador de los archivos que carga `CREATE TABLE ... FROM FILE`.
+        csv_encoding: codificación de esos archivos.
         data_directory: raíz donde viven los archivos del gestor.
     """
 
@@ -54,6 +58,8 @@ class EngineConfig:
     text_length: int = DEFAULT_TEXT_LENGTH
     blob_length: int = DEFAULT_BLOB_LENGTH
     lock_timeout_seconds: float = DEFAULT_LOCK_TIMEOUT_SECONDS
+    csv_delimiter: str = DEFAULT_CSV_DELIMITER
+    csv_encoding: str = DEFAULT_CSV_ENCODING
     data_directory: Path = Path(FALLBACK_DATA_DIRECTORY)
 
     @classmethod

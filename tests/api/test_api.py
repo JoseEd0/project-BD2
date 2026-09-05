@@ -104,3 +104,133 @@ def test_dates_travel_as_text(client: TestClient):
     run(client, "CREATE TABLE t (id INT PRIMARY KEY, alta DATE)")
     run(client, "INSERT INTO t VALUES (1, NULL)")
     assert run(client, "SELECT alta FROM t")["rows"] == [[None]]
+
+
+def test_a_script_runs_every_statement(client: TestClient):
+    body = run(
+        client,
+        "CREATE TABLE a (id INT PRIMARY KEY);"
+        "CREATE TABLE b (id INT PRIMARY KEY);"
+        "INSERT INTO a VALUES (1), (2);",
+    )
+    assert len(body["statements"]) == 3
+    assert body["statements"][2]["affected_rows"] == 2
+    assert [table["name"] for table in client.get("/tables").json()] == ["a", "b"]
+
+
+def test_a_script_returns_the_rows_of_its_last_query(client: TestClient):
+    body = run(
+        client,
+        "CREATE TABLE t (id INT PRIMARY KEY, v INT);"
+        "INSERT INTO t VALUES (1, 5), (2, 7);"
+        "SELECT v FROM t ORDER BY v;",
+    )
+    assert body["columns"] == ["v"]
+    assert body["rows"] == [[5], [7]]
+    assert body["plan"] is not None
+
+
+def test_a_failing_statement_stops_the_script(client: TestClient):
+    response = client.post(
+        "/query",
+        json={"sql": "CREATE TABLE t (id INT PRIMARY KEY); INSERT INTO fantasma VALUES (1);"},
+    )
+    assert response.status_code == 400
+    assert response.json()["detail"]["kind"] == "UnknownTableError"
+    assert [table["name"] for table in client.get("/tables").json()] == ["t"]
+
+
+def test_elapsed_time_adds_up_the_statements(client: TestClient):
+    body = run(client, "CREATE TABLE t (id INT PRIMARY KEY); INSERT INTO t VALUES (1);")
+    assert body["elapsed_ms"] >= sum(item["elapsed_ms"] for item in body["statements"]) - 0.01
+
+
+CSV_CONTENT = "id,nombre,precio\n1,teclado,89.9\n2,monitor,450.0\n3,mouse,25.5\n"
+
+
+def upload(client: TestClient, **fields: object) -> object:
+    data = {"name": "productos", **fields}
+    return client.post(
+        "/tables/upload",
+        data=data,
+        files={"file": ("productos.csv", CSV_CONTENT.encode(), "text/csv")},
+    )
+
+
+def test_upload_creates_a_heap_table(client: TestClient):
+    response = upload(client)
+    assert response.status_code == 200, response.text
+    assert response.json()["affected_rows"] == 3
+    table = client.get("/tables").json()[0]
+    assert table["name"] == "productos"
+    assert table["organization"] == "heap"
+    assert [column["name"] for column in table["columns"]] == ["id", "nombre", "precio"]
+
+
+def test_upload_infers_the_column_types(client: TestClient):
+    upload(client)
+    types = {item["name"]: item["type"] for item in client.get("/tables").json()[0]["columns"]}
+    assert types == {"id": "INT", "nombre": "STRING", "precio": "FLOAT"}
+
+
+def test_upload_can_order_the_table_by_a_key(client: TestClient):
+    response = upload(client, organization="clustered_btree", key_column="id")
+    assert response.status_code == 200, response.text
+    assert client.get("/tables").json()[0]["organization"] == "clustered_btree"
+
+
+def test_uploaded_rows_are_queryable(client: TestClient):
+    upload(client)
+    body = run(client, "SELECT nombre FROM productos ORDER BY precio DESC;")
+    assert body["rows"] == [["monitor"], ["teclado"], ["mouse"]]
+
+
+def test_upload_rejects_an_invalid_table_name(client: TestClient):
+    response = upload(client, name="productos; DROP TABLE x")
+    assert response.status_code == 400
+    assert response.json()["detail"]["kind"] == "UploadError"
+
+
+def test_upload_rejects_an_unknown_organization(client: TestClient):
+    assert upload(client, organization="magia").status_code == 400
+
+
+def test_ordered_upload_without_a_key_is_rejected(client: TestClient):
+    assert upload(client, organization="sequential").status_code == 400
+
+
+def test_upload_rejects_an_empty_file(client: TestClient):
+    response = client.post(
+        "/tables/upload",
+        data={"name": "vacia"},
+        files={"file": ("vacia.csv", b"", "text/csv")},
+    )
+    assert response.status_code == 400
+
+
+def test_uploading_the_same_name_twice_is_rejected(client: TestClient):
+    upload(client)
+    assert upload(client).status_code == 400
+
+
+def test_dropping_every_table_leaves_the_database_empty(client: TestClient):
+    run(client, "CREATE TABLE a (id INT PRIMARY KEY); CREATE TABLE b (id INT PRIMARY KEY);")
+    run(client, "INSERT INTO a VALUES (1), (2);")
+    response = client.delete("/tables")
+    assert response.status_code == 200, response.text
+    assert len(response.json()["statements"]) == 2
+    assert client.get("/tables").json() == []
+
+
+def test_dropping_every_table_on_an_empty_database_is_harmless(client: TestClient):
+    response = client.delete("/tables")
+    assert response.status_code == 200
+    assert response.json()["statements"] == []
+
+
+def test_tables_can_be_recreated_after_dropping_everything(client: TestClient):
+    run(client, "CREATE TABLE a (id INT PRIMARY KEY, v VARCHAR(4));")
+    run(client, "INSERT INTO a VALUES (1, 'x');")
+    client.delete("/tables")
+    run(client, "CREATE TABLE a (id INT PRIMARY KEY, v VARCHAR(4));")
+    assert run(client, "SELECT * FROM a;")["rows"] == []

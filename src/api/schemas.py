@@ -47,9 +47,20 @@ class PlanInfo(BaseModel):
     children: list[PlanInfo] = Field(default_factory=list)
 
 
-class QueryResponse(BaseModel):
-    """Resultado de una sentencia."""
+class StatementOutcome(BaseModel):
+    """Qué pasó con una de las sentencias de un script."""
 
+    sql: str
+    message: str = ""
+    affected_rows: int = 0
+    elapsed_ms: float = 0.0
+    returned_rows: int = 0
+
+
+class QueryResponse(BaseModel):
+    """Resultado de un script. Las filas y el plan son los de la última consulta."""
+
+    statements: list[StatementOutcome] = Field(default_factory=list)
     columns: list[str] = Field(default_factory=list)
     rows: list[list[Any]] = Field(default_factory=list)
     plan: PlanInfo | None = None
@@ -59,6 +70,14 @@ class QueryResponse(BaseModel):
     in_transaction: bool = False
 
 
+class UploadForm(BaseModel):
+    """Parámetros que acompañan al archivo en una carga."""
+
+    name: str = Field(min_length=1, description="Nombre de la tabla a crear")
+    organization: str = Field(default="heap", description="heap | sequential | clustered_btree")
+    key_column: str | None = Field(default=None, description="Columna clave si se ordena")
+
+
 class ErrorResponse(BaseModel):
     """Error devuelto al frontend con la posición si el parser la conoce."""
 
@@ -66,3 +85,4 @@ class ErrorResponse(BaseModel):
     kind: str
     line: int | None = None
     column: int | None = None
+    statement_index: int | None = None

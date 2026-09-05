@@ -22,6 +22,7 @@ DEFAULT_BLOB_LENGTH = 256
 DEFAULT_LOCK_TIMEOUT_SECONDS = 5.0
 DEFAULT_CSV_DELIMITER = ","
 DEFAULT_CSV_ENCODING = "utf-8"
+DEFAULT_MAX_UPLOAD_BYTES = 64 * 1024 * 1024
 DATA_DIRECTORY_VARIABLE = "MINIGESTOR_DATA_DIR"
 FALLBACK_DATA_DIRECTORY = "data"
 
@@ -45,6 +46,7 @@ class EngineConfig:
         lock_timeout_seconds: espera máxima de una transacción por un bloqueo.
         csv_delimiter: separador de los archivos que carga `CREATE TABLE ... FROM FILE`.
         csv_encoding: codificación de esos archivos.
+        max_upload_bytes: tamaño máximo de un archivo subido por el API.
         data_directory: raíz donde viven los archivos del gestor.
     """
 
@@ -60,6 +62,7 @@ class EngineConfig:
     lock_timeout_seconds: float = DEFAULT_LOCK_TIMEOUT_SECONDS
     csv_delimiter: str = DEFAULT_CSV_DELIMITER
     csv_encoding: str = DEFAULT_CSV_ENCODING
+    max_upload_bytes: int = DEFAULT_MAX_UPLOAD_BYTES
     data_directory: Path = Path(FALLBACK_DATA_DIRECTORY)
 
     @classmethod

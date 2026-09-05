@@ -16,6 +16,7 @@ Documentación interactiva generada por FastAPI en `http://localhost:8000/docs`.
 |---|---|---|
 | `MINIGESTOR_DATA_DIR` | dónde viven los archivos del gestor | `data` |
 | `MINIGESTOR_CORS_ORIGINS` | orígenes permitidos, separados por comas | `http://localhost:5173` |
+| `MINIGESTOR_LOCK_TIMEOUT` | segundos que una transacción espera un bloqueo | `5` |
 
 Ninguna ruta ni puerto está escrito en el código.
 
@@ -25,7 +26,8 @@ Ninguna ruta ni puerto está escrito en el código.
 |---|---|---|
 | `GET` | `/health` | comprobar que el servidor responde |
 | `GET` | `/tables` | panel de archivos: tablas, columnas, tipos, índices y número de filas |
-| `POST` | `/query` | ejecuta una sentencia y devuelve filas, mensaje y plan |
+| `POST` | `/query` | ejecuta un script y devuelve filas, mensajes y plan |
+| `DELETE` | `/tables` | borra todas las tablas y sus archivos (dejar la BD vacía) |
 | `DELETE` | `/sessions/{id}` | cierra una sesión y aborta lo que tuviera abierto |
 
 ### Sesiones y transacciones
@@ -37,12 +39,26 @@ Ninguna ruta ni puerto está escrito en el código.
   funciona a través de varias llamadas. Eso es lo que permite demostrar transacciones desde
   la interfaz.
 
+### Scripts de varias sentencias
+
+El cuerpo puede traer varias sentencias separadas por `;`. Se ejecutan **en orden**; si una
+falla, las anteriores ya quedaron aplicadas, igual que en cualquier gestor fuera de una
+transacción. La respuesta trae un resumen por sentencia y, en el nivel superior, **las filas
+y el plan de la última consulta**, que es lo que el editor enseña.
+
 ```jsonc
 // POST /query
-{ "sql": "SELECT * FROM alumnos WHERE id = 1", "session_id": "ui-a1b2c3" }
+{ "sql": "INSERT INTO alumnos VALUES (1, 'Ana'); SELECT * FROM alumnos;",
+  "session_id": "ui-a1b2c3" }
 
 // 200 OK
 {
+  "statements": [
+    { "sql": "Insert", "message": "1 fila(s) insertada(s) en 'alumnos'",
+      "affected_rows": 1, "elapsed_ms": 0.31, "returned_rows": 0 },
+    { "sql": "Select", "message": "", "affected_rows": 1,
+      "elapsed_ms": 0.11, "returned_rows": 1 }
+  ],
   "columns": ["id", "nombre"],
   "rows": [[1, "Ana"]],
   "plan": { "operation": "Projection", "detail": "id, nombre", "children": [ ... ] },

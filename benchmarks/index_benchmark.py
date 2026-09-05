@@ -38,6 +38,7 @@ DEFAULT_QUERIES = 100
 DEFAULT_SEED = 20260827
 RANGE_WIDTH = 50
 MUTATION_FRACTION = 10
+MUTATION_LABEL = "inserciones/eliminaciones"
 CLUSTERED = "B+ agrupado"
 UNCLUSTERED = "B+ no agrupado"
 HASH = "hash extendible"
@@ -112,13 +113,19 @@ def _measure_clustered(
             altura=index.height,
             nota="incluye las filas: el índice es la tabla",
         )
-        victims = [key for key in range(size) if key % MUTATION_FRACTION == 0]
+        churn = [
+            (key, record)
+            for key, record in zip(
+                [serializer.unpack_field(item, 0) for item in records], records, strict=True
+            )
+            if key % MUTATION_FRACTION == 0
+        ]
         report.add(
             CLUSTERED,
-            "borrado",
+            MUTATION_LABEL,
             size,
-            time_it(lambda: [index.delete(key) for key in victims]),
-            filas=len(victims),
+            time_it(lambda: _churn_clustered(index, churn)),
+            operaciones=len(churn) * 2,
         )
 
 
@@ -184,17 +191,17 @@ def _measure_unclustered(
             altura=index.height,
             nota="solo el índice; las filas están en el heap",
         )
-        victims = [
+        churn = [
             (record, address)
             for record, address in zip(records, addresses, strict=True)
             if serializer.unpack_field(record, 0) % MUTATION_FRACTION == 0
         ]
         report.add(
             UNCLUSTERED,
-            "borrado",
+            MUTATION_LABEL,
             size,
-            time_it(lambda: [index.delete(record, address) for record, address in victims]),
-            filas=len(victims),
+            time_it(lambda: _churn_unclustered(index, churn)),
+            operaciones=len(churn) * 2,
         )
 
 
@@ -245,14 +252,38 @@ def _measure_hash(
             kib=round(directory_size([path, path.with_name(path.name + ".dir")]), 1),
             profundidad_global=index.global_depth,
         )
-        victims = [key for key, _ in entries if key % MUTATION_FRACTION == 0]
+        churn = [(key, address) for key, address in entries if key % MUTATION_FRACTION == 0]
         report.add(
             HASH,
-            "borrado",
+            MUTATION_LABEL,
             size,
-            time_it(lambda: [index.delete(key) for key in victims]),
-            filas=len(victims),
+            time_it(lambda: _churn_hash(index, churn)),
+            operaciones=len(churn) * 2,
         )
+
+
+def _churn_clustered(index: ClusteredBPlusIndex, entries: list[tuple[int, bytes]]) -> None:
+    """Borra y reinserta: mide el coste de un índice sometido a cambios frecuentes."""
+    for key, _ in entries:
+        index.delete(key)
+    for _, record in entries:
+        index.insert(record)
+
+
+def _churn_unclustered(
+    index: UnclusteredBPlusIndex, entries: list[tuple[bytes, RecordId]]
+) -> None:
+    for record, address in entries:
+        index.delete(record, address)
+    for record, address in entries:
+        index.insert(record, address)
+
+
+def _churn_hash(index: ExtendibleHashIndex, entries: list[tuple[int, RecordId]]) -> None:
+    for key, _ in entries:
+        index.delete(key)
+    for key, address in entries:
+        index.insert(key, address.pack())
 
 
 def _resolve_range(heap: HeapFile, found: Iterable[tuple[object, RecordId]]) -> list[bytes]:

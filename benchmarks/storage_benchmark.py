@@ -32,7 +32,6 @@ BENCHMARK_NAME = "almacenamiento"
 DEFAULT_SIZES = (1000, 10000)
 DEFAULT_QUERIES = 100
 DEFAULT_SEED = 20260827
-DELETION_FRACTION = 4
 HEAP = "heap file"
 SEQUENTIAL = "archivo secuencial"
 
@@ -75,14 +74,12 @@ def _measure_heap(
         )
         heap.flush()
         report.add(HEAP, "espacio en disco", size, 0.0, kib=round(directory_size([path]), 1))
-        victims = [address for index, (address, _) in enumerate(heap.scan())
-                   if index % DELETION_FRACTION == 0]
         report.add(
             HEAP,
-            "borrado",
+            "reorganización",
             size,
-            time_it(lambda: [heap.delete(address) for address in victims]),
-            filas=len(victims),
+            0.0,
+            nota="no aplica: el heap reutiliza las ranuras libres al vuelo",
         )
 
 
@@ -131,20 +128,13 @@ def _measure_sequential(
             0.0,
             kib=round(directory_size([path, overflow]), 1),
         )
-        victims = [key for key in range(size) if key % DELETION_FRACTION == 0]
-        report.add(
-            SEQUENTIAL,
-            "borrado",
-            size,
-            time_it(lambda: [sequential.delete(key) for key in victims]),
-            filas=len(victims),
-        )
+        wasted = round(sequential.waste_ratio, 3)
         report.add(
             SEQUENTIAL,
             "reorganización",
             size,
             time_it(sequential.reorganize),
-            desperdicio=round(sequential.waste_ratio, 3),
+            desperdicio_previo=wasted,
         )
 
 

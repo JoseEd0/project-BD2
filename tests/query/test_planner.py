@@ -85,3 +85,50 @@ def test_plan_serializes_to_a_dictionary(alumnos: Engine, config: EngineConfig):
     payload = result.plan.to_dict()
     assert payload["operation"] == "Projection"
     assert payload["children"][0]["children"][0]["operation"] == "IndexLookup"
+
+
+def test_a_joined_table_also_uses_its_index(engine: Engine):
+    """La tabla unida no tiene por qué recorrerse entera si el WHERE la acota."""
+    engine.execute("CREATE TABLE pedidos (id INT PRIMARY KEY, cliente_id INT)")
+    engine.execute(
+        "CREATE TABLE clientes (id INT PRIMARY KEY, ciudad VARCHAR(10) INDEX HASH)"
+    )
+    engine.execute("INSERT INTO clientes VALUES (1, 'lima'), (2, 'cusco')")
+    engine.execute("INSERT INTO pedidos VALUES (10, 1), (11, 2)")
+    plan = plan_of(
+        engine,
+        "SELECT p.id FROM pedidos AS p JOIN clientes AS c ON p.cliente_id = c.id "
+        "WHERE c.ciudad = 'lima'",
+    )
+    assert "IndexLookup" in plan
+    assert "idx_clientes_ciudad" in plan
+
+
+def test_an_unqualified_condition_is_not_pushed_into_a_join(engine: Engine):
+    """Sin cualificar, la columna podría ser de la otra tabla: acotar dejaría fuera filas."""
+    engine.execute("CREATE TABLE pedidos (id INT PRIMARY KEY, cliente_id INT)")
+    engine.execute(
+        "CREATE TABLE clientes (id INT PRIMARY KEY, ciudad VARCHAR(10) INDEX HASH)"
+    )
+    engine.execute("INSERT INTO clientes VALUES (1, 'lima')")
+    engine.execute("INSERT INTO pedidos VALUES (10, 1)")
+    plan = plan_of(
+        engine,
+        "SELECT p.id FROM pedidos AS p JOIN clientes AS c ON p.cliente_id = c.id "
+        "WHERE ciudad = 'lima'",
+    )
+    assert "IndexLookup" not in plan
+
+
+def test_pushing_the_condition_down_keeps_the_same_rows(engine: Engine):
+    engine.execute("CREATE TABLE pedidos (id INT PRIMARY KEY, cliente_id INT, total INT)")
+    engine.execute(
+        "CREATE TABLE clientes (id INT PRIMARY KEY, ciudad VARCHAR(10) INDEX HASH)"
+    )
+    engine.execute("INSERT INTO clientes VALUES (1, 'lima'), (2, 'cusco'), (3, 'lima')")
+    engine.execute("INSERT INTO pedidos VALUES (10, 1, 5), (11, 2, 7), (12, 3, 9)")
+    result = engine.execute(
+        "SELECT p.id FROM pedidos AS p JOIN clientes AS c ON p.cliente_id = c.id "
+        "WHERE c.ciudad = 'lima' ORDER BY p.id"
+    )
+    assert result.rows == ((10,), (12,))

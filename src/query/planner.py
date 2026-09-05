@@ -79,6 +79,8 @@ class Planner:
     def __init__(self, tables: Mapping[str, Table], config: EngineConfig) -> None:
         self._tables = tables
         self._config = config
+        self._temporaries = 0
+        self._single_source = True
 
     def plan(self, statement: SelectStatement) -> Operator:
         """Árbol de operadores listo para ejecutar.
@@ -86,6 +88,7 @@ class Planner:
         Raises:
             UnsupportedQueryError: si la consulta usa algo que el ejecutor no implementa.
         """
+        self._single_source = not statement.joins
         source = self._scan_of(statement.source, statement.where)
         operator = self._join_all(source, statement)
         if statement.where is not None:
@@ -125,13 +128,63 @@ class Planner:
         return AccessPath(SequentialScan(table, alias), used_index=None)
 
     def _path_for(self, table: Table, alias: str, condition: Expression) -> AccessPath | None:
-        equality = _equality_on_column(condition, alias)
+        equality = self._equality_on_column(condition, alias)
         if equality is not None:
             return self._equality_path(table, alias, *equality)
-        interval = _range_on_column(condition, alias)
+        interval = self._range_on_column(condition, alias)
         if interval is not None:
             return self._range_path(table, alias, *interval)
         return None
+
+    def _equality_on_column(self, condition: Expression, alias: str) -> tuple[str, Value] | None:
+        if not isinstance(condition, BinaryOperation):
+            return None
+        if condition.operator is not BinaryOperator.EQUAL:
+            return None
+        sides = ((condition.left, condition.right), (condition.right, condition.left))
+        for column_side, value_side in sides:
+            column = self._column_named(column_side, alias)
+            if column is not None and isinstance(value_side, Literal):
+                return column, value_side.value
+        return None
+
+    def _range_on_column(
+        self, condition: Expression, alias: str
+    ) -> tuple[str, Value | None, Value | None] | None:
+        if isinstance(condition, BetweenPredicate) and not condition.negated:
+            return self._between_bounds(condition, alias)
+        if not isinstance(condition, BinaryOperation) or condition.operator not in RANGE_OPERATORS:
+            return None
+        column = self._column_named(condition.left, alias)
+        if column is None or not isinstance(condition.right, Literal):
+            return None
+        value = condition.right.value
+        if condition.operator in (BinaryOperator.LESS, BinaryOperator.LESS_EQUAL):
+            return column, None, value
+        return column, value, None
+
+    def _between_bounds(
+        self, condition: BetweenPredicate, alias: str
+    ) -> tuple[str, Value | None, Value | None] | None:
+        column = self._column_named(condition.operand, alias)
+        if column is None or not isinstance(condition.lower, Literal):
+            return None
+        if not isinstance(condition.upper, Literal):
+            return None
+        return column, condition.lower.value, condition.upper.value
+
+    def _column_named(self, expression: Expression, alias: str) -> str | None:
+        """Nombre de columna si la condición se refiere sin ambigüedad a esta tabla.
+
+        Con varias tablas en juego, una columna sin cualificar podría ser de cualquiera de
+        ellas: acotar el acceso por ella dejaría fuera filas que sí cumplen. Por eso solo se
+        aprovecha una condición sin cualificar cuando hay una única tabla.
+        """
+        if not isinstance(expression, ColumnRef):
+            return None
+        if expression.qualifier is None:
+            return expression.name if self._single_source else None
+        return expression.name if expression.qualifier.lower() == alias.lower() else None
 
     def _equality_path(
         self, table: Table, alias: str, column: str, value: Value
@@ -170,7 +223,7 @@ class Planner:
                 )
             table = self._table(join.table.name)
             alias = join.table.alias or join.table.name
-            right = SequentialScan(table, alias)
+            right = self._access_path(table, alias, statement.where).operator
             left_key, right_key = _equi_join_keys(join.condition, operator.layout, right.layout)
             operator = HashJoin(
                 operator,
@@ -257,7 +310,14 @@ class Planner:
             raise UnsupportedQueryError(f"la tabla '{name}' no está abierta") from None
 
     def _temporary(self, name: str) -> Path:
-        return self._config.data_directory / name
+        """Directorio propio para cada operador que se apoya en disco.
+
+        Dos operadores del mismo plan —dos JOIN encadenados, por ejemplo— escribirían
+        particiones con el mismo nombre y se pisarían: el de arriba sobrescribe los
+        archivos que el de abajo todavía está leyendo.
+        """
+        self._temporaries += 1
+        return self._config.data_directory / f"{name}-{self._temporaries}"
 
 
 def _conjuncts(expression: Expression | None) -> list[Expression]:
@@ -267,46 +327,6 @@ def _conjuncts(expression: Expression | None) -> list[Expression]:
     if isinstance(expression, BinaryOperation) and expression.operator is BinaryOperator.AND:
         return [*_conjuncts(expression.left), *_conjuncts(expression.right)]
     return [expression]
-
-
-def _equality_on_column(condition: Expression, alias: str) -> tuple[str, Value] | None:
-    if not isinstance(condition, BinaryOperation) or condition.operator is not BinaryOperator.EQUAL:
-        return None
-    sides = ((condition.left, condition.right), (condition.right, condition.left))
-    for column_side, value_side in sides:
-        column = _column_of(column_side, alias)
-        if column is not None and isinstance(value_side, Literal):
-            return column, value_side.value
-    return None
-
-
-def _range_on_column(
-    condition: Expression, alias: str
-) -> tuple[str, Value | None, Value | None] | None:
-    if isinstance(condition, BetweenPredicate) and not condition.negated:
-        column = _column_of(condition.operand, alias)
-        if column is None or not isinstance(condition.lower, Literal):
-            return None
-        if not isinstance(condition.upper, Literal):
-            return None
-        return column, condition.lower.value, condition.upper.value
-    if not isinstance(condition, BinaryOperation) or condition.operator not in RANGE_OPERATORS:
-        return None
-    column = _column_of(condition.left, alias)
-    if column is None or not isinstance(condition.right, Literal):
-        return None
-    value = condition.right.value
-    if condition.operator in (BinaryOperator.LESS, BinaryOperator.LESS_EQUAL):
-        return column, None, value
-    return column, value, None
-
-
-def _column_of(expression: Expression, alias: str) -> str | None:
-    if not isinstance(expression, ColumnRef):
-        return None
-    if expression.qualifier is not None and expression.qualifier.lower() != alias.lower():
-        return None
-    return expression.name
 
 
 def _equi_join_keys(

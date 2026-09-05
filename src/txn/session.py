@@ -86,6 +86,14 @@ class Session:
             raise SessionError(f"se esperaba una sentencia y llegaron {len(statements)}")
         return self.run(statements[0])
 
+    def execute_script(self, sql: str) -> list[QueryResult]:
+        """Ejecuta varias sentencias separadas por `;`, en orden.
+
+        Se detiene en la primera que falle: las anteriores ya quedaron aplicadas, igual que
+        en cualquier gestor cuando el script no va dentro de una transacción.
+        """
+        return [self.run(statement) for statement in parse_script(sql)]
+
     def run(self, statement: Statement) -> QueryResult:
         if isinstance(statement, BeginTransactionStatement):
             return self._begin()

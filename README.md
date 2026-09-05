@@ -47,7 +47,7 @@ capa del motor sabe que existe un API.
 | [`src/api/`](src/api/) | API REST | [README](src/api/README.md) |
 | [`frontend/`](frontend/) | interfaz de 4 paneles | [README](frontend/README.md) |
 | [`benchmarks/`](benchmarks/) | comparación experimental | [README](benchmarks/README.md) |
-| [`demos/`](demos/) | demostración de concurrencia con hilos | — |
+| [`demos/`](demos/) | dataset de demostración y simulación de concurrencia | [README](demos/README.md) |
 
 Cada estructura de datos tiene su carpeta y su `.md` explicando cómo funciona, con qué
 complejidad y cómo se prueba.
@@ -64,12 +64,19 @@ cd frontend && npm install && cp .env.example .env
 ## Arrancar
 
 ```bash
-# API
+# 1. poblar con el dataset de demostración (e-commerce, 5 tablas relacionadas)
+.venv/bin/python demos/poblar_ecommerce.py --data-dir ./data
+
+# 2. API
 MINIGESTOR_DATA_DIR=./data .venv/bin/uvicorn api.main:app --reload --port 8000
 
-# interfaz
+# 3. interfaz
 npm --prefix frontend run dev        # http://localhost:5173
 ```
+
+El dataset de demostración carga unas 27 000 filas repartidas en cinco tablas, **cada una
+con una organización física distinta**, para que las diferencias entre estructuras se vean
+en la interfaz. Detalles en [`demos/README.md`](demos/README.md).
 
 ## Uso desde Python
 
@@ -121,12 +128,32 @@ Los tests están segmentados por módulo, para no tener que correrlos todos:
 .venv/bin/python -m pytest tests/txn -q
 ```
 
+## Documentación
+
+Cada estructura tiene su propio README junto al código, con cómo funciona, su API, sus
+complejidades y sus tests:
+
+| Módulo | Qué documenta |
+|---|---|
+| [`src/storage/`](src/storage/README.md) | páginas, registros y buffer pool |
+| [`src/storage/heap/`](src/storage/heap/README.md) | heap file y reutilización de espacio |
+| [`src/storage/sequential/`](src/storage/sequential/README.md) | archivo secuencial y reorganización |
+| [`src/index/bplustree/`](src/index/bplustree/README.md) | árbol B+ agrupado y no agrupado |
+| [`src/index/hash/`](src/index/hash/README.md) | hash extendible |
+| [`src/external/`](src/external/README.md) | ordenamiento y hashing externos |
+| [`src/query/`](src/query/README.md) | catálogo, planificador y ejecutor |
+| [`src/txn/`](src/txn/README.md) | transacciones y control de concurrencia |
+| [`src/api/`](src/api/README.md) | API REST |
+| [`frontend/`](frontend/README.md) | interfaz |
+| [`benchmarks/`](benchmarks/README.md) | comparación experimental medida |
+
 ## Experimentos y demos
 
 ```bash
 .venv/bin/python -m benchmarks.storage_benchmark --sizes 1000 10000 100000
 .venv/bin/python -m benchmarks.index_benchmark   --sizes 1000 10000 100000
 .venv/bin/python demos/concurrencia.py
+.venv/bin/python demos/poblar_ecommerce.py --data-dir ./data --escala 3 --reiniciar
 ```
 
 ## Autor

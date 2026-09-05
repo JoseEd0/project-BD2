@@ -120,8 +120,6 @@ config.local.*
 *.ogg
 *.mp4
 *.pdf
-!docs/**/*.png
-!docs/**/*.pdf
 !README_assets/**
 
 # --- Modelos y vectores precomputados ---
@@ -150,6 +148,9 @@ benchmarks/output/
 
 # --- Herramientas de captura ---
 .playwright-mcp/
+
+# --- Documentación de trabajo (no se versiona) ---
+/docs/
 
 # --- Editores e IDEs ---
 .vscode/

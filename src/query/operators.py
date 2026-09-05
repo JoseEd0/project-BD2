@@ -216,6 +216,7 @@ class Filter(Operator):
         self._child = child
         self._predicate = predicate
         self._evaluator = ExpressionEvaluator(child.layout)
+        self._evaluator.validate(predicate)
 
     @property
     def layout(self) -> RowLayout:
@@ -250,6 +251,8 @@ class Sort(Operator):
         self._config = config
         self._serializer = RecordSerializer(child.schema)
         self._evaluator = ExpressionEvaluator(child.layout)
+        for expression, _ in self._keys:
+            self._evaluator.validate(expression)
         self._runs = 0
         self._passes = 0
 
@@ -304,6 +307,8 @@ class HashAggregate(Operator):
         self._config = config
         self._input_serializer = RecordSerializer(child.schema)
         self._evaluator = ExpressionEvaluator(child.layout)
+        for aggregate in self._aggregates:
+            self._evaluator.validate(aggregate.argument)
         self._layout = self._build_layout()
         self._schema = self._build_schema()
 
@@ -365,7 +370,11 @@ class HashAggregate(Operator):
         return tuple(self._evaluator.evaluate(expression, row) for expression in self._group_by)
 
     def _build_layout(self) -> RowLayout:
-        slots = [ColumnSlot(None, _describe(expression)) for expression in self._group_by]
+        """Las claves de agrupación conservan su tabla, para que `SELECT a.ciudad` resuelva."""
+        slots = [
+            ColumnSlot(column.qualifier, column.name)
+            for column in map(_grouping_column, self._group_by)
+        ]
         slots.extend(ColumnSlot(None, aggregate.label) for aggregate in self._aggregates)
         return RowLayout(slots)
 
@@ -375,9 +384,8 @@ class HashAggregate(Operator):
         return internal_schema(fields)
 
     def _field_of(self, expression: Expression) -> Field:
-        if not isinstance(expression, ColumnRef):
-            raise UnsupportedQueryError("GROUP BY solo admite columnas, no expresiones")
-        position = self._child.layout.position_of(expression.name, expression.qualifier)
+        column = _grouping_column(expression)
+        position = self._child.layout.position_of(column.name, column.qualifier)
         return self._child.schema.fields[position]
 
     def _aggregate_field(self, aggregate: Aggregate) -> Field:
@@ -469,6 +477,8 @@ class Projection(Operator):
         self._expressions = tuple(expressions)
         self._names = tuple(names)
         self._evaluator = ExpressionEvaluator(child.layout)
+        for expression in self._expressions:
+            self._evaluator.validate(expression)
         self._layout = RowLayout.of_names(self._names)
 
     @property
@@ -579,6 +589,17 @@ class _NullsFirst:
         if other.value is None:
             return False
         return bool(self.value < other.value)
+
+
+def _grouping_column(expression: Expression) -> ColumnRef:
+    """Una clave de agrupación tiene que ser una columna: su tipo se toma de la entrada.
+
+    Raises:
+        UnsupportedQueryError: si el GROUP BY lleva una expresión calculada.
+    """
+    if not isinstance(expression, ColumnRef):
+        raise UnsupportedQueryError("GROUP BY solo admite columnas, no expresiones")
+    return expression
 
 
 def _as_tuple(key: Key) -> tuple[Value, ...]:

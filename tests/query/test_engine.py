@@ -3,6 +3,7 @@ import pytest
 from config import EngineConfig
 from query.catalog import UnknownTableError
 from query.engine import Engine, EngineError, QueryResult, TransactionStatementError
+from query.expressions import ExpressionError, UnknownColumnError
 from query.table import DuplicatePrimaryKeyError
 
 
@@ -213,3 +214,57 @@ def test_create_table_from_csv(engine: Engine, config: EngineConfig):
         (1, "ana", 4.5),
         (2, "luis", 3.25),
     )
+
+
+def test_chained_joins_do_not_clobber_each_other(engine: Engine):
+    """Dos JOIN en el mismo plan escriben particiones a la vez: cada uno necesita su sitio."""
+    engine.execute("CREATE TABLE alumnos (id INT PRIMARY KEY, nombre VARCHAR(10))")
+    engine.execute("CREATE TABLE cursos (id INT PRIMARY KEY, nombre VARCHAR(10))")
+    engine.execute("CREATE TABLE matriculas (id INT PRIMARY KEY, alumno_id INT, curso_id INT)")
+    engine.execute("INSERT INTO alumnos VALUES (1, 'ana'), (2, 'luis')")
+    engine.execute("INSERT INTO cursos VALUES (10, 'bd2'), (11, 'algo')")
+    engine.execute("INSERT INTO matriculas VALUES (100, 1, 10), (101, 2, 11)")
+    result = engine.execute(
+        "SELECT a.nombre, c.nombre FROM matriculas AS m "
+        "JOIN alumnos AS a ON m.alumno_id = a.id "
+        "JOIN cursos AS c ON m.curso_id = c.id "
+        "ORDER BY a.nombre"
+    )
+    assert result.rows == (("ana", "bd2"), ("luis", "algo"))
+
+
+def test_a_join_combined_with_grouping_and_sorting(engine: Engine):
+    engine.execute("CREATE TABLE a (id INT PRIMARY KEY, ciudad VARCHAR(10))")
+    engine.execute("CREATE TABLE b (id INT PRIMARY KEY, a_id INT)")
+    engine.execute("INSERT INTO a VALUES (1, 'lima'), (2, 'lima'), (3, 'cusco')")
+    engine.execute("INSERT INTO b VALUES (10, 1), (11, 1), (12, 3)")
+    result = engine.execute(
+        "SELECT a.ciudad, COUNT(*) AS total FROM b JOIN a ON b.a_id = a.id "
+        "GROUP BY a.ciudad ORDER BY total DESC"
+    )
+    assert result.rows == (("lima", 2), ("cusco", 1))
+
+
+def test_an_unknown_column_is_rejected_even_on_an_empty_table(engine: Engine):
+    """La validación va antes de leer filas: sin datos, el error debe salir igual."""
+    engine.execute("CREATE TABLE t (id INT PRIMARY KEY, v VARCHAR(8))")
+    for query in (
+        "SELECT falsa FROM t",
+        "SELECT * FROM t WHERE falsa = 1",
+        "SELECT * FROM t ORDER BY falsa",
+        "SELECT SUM(falsa) FROM t",
+        "SELECT * FROM t WHERE (id + falsa) > 1",
+    ):
+        with pytest.raises(UnknownColumnError):
+            engine.execute(query)
+
+
+def test_an_unknown_function_is_rejected_before_reading_rows(engine: Engine):
+    engine.execute("CREATE TABLE t (id INT PRIMARY KEY)")
+    with pytest.raises(ExpressionError):
+        engine.execute("SELECT RAIZ(id) FROM t")
+
+
+def test_a_valid_query_on_an_empty_table_returns_no_rows(engine: Engine):
+    engine.execute("CREATE TABLE t (id INT PRIMARY KEY, v VARCHAR(8))")
+    assert engine.execute("SELECT id, v FROM t WHERE id > 0 ORDER BY v").rows == ()

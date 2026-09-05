@@ -159,6 +159,33 @@ class ExpressionEvaluator:
             raise ExpressionError("'*' no es una expresión de valor")
         raise ExpressionError(f"expresión no soportada: {type(expression).__name__}")
 
+    def validate(self, expression: Expression | None) -> None:
+        """Comprueba que la expresión se pueda resolver sobre este layout.
+
+        Se llama al construir el operador, antes de leer ninguna fila. Sin esto, una
+        consulta que nombra una columna inexistente sobre una tabla vacía devolvería cero
+        filas en silencio en vez de rechazarse, porque el error solo aparecería al evaluar
+        la primera fila.
+
+        Raises:
+            UnknownColumnError: si alguna columna no existe.
+            AmbiguousColumnError: si alguna columna encaja con más de una tabla.
+            ExpressionError: si la expresión usa algo que el evaluador no soporta.
+        """
+        if expression is None:
+            return
+        if isinstance(expression, Literal):
+            return
+        if isinstance(expression, ColumnRef):
+            self._layout.position_of(expression.name, expression.qualifier)
+            return
+        if isinstance(expression, FunctionCall):
+            raise ExpressionError(f"la función '{expression.name}' no se puede usar aquí")
+        if isinstance(expression, Star):
+            raise ExpressionError("'*' no es una expresión de valor")
+        for operand in _operands_of(expression):
+            self.validate(operand)
+
     def matches(self, expression: Expression | None, row: Record) -> bool:
         """Evalúa un predicado tratando NULL como falso, igual que SQL."""
         if expression is None:
@@ -251,6 +278,25 @@ class ExpressionEvaluator:
         if isinstance(value, bool) or not isinstance(value, int | float):
             raise ExpressionError(f"se esperaba un número y llegó {value!r}")
         return value
+
+
+def _operands_of(expression: Expression) -> tuple[Expression, ...]:
+    """Subexpresiones de un nodo compuesto, para recorrer el árbol sin evaluarlo."""
+    if isinstance(expression, UnaryOperation):
+        return (expression.operand,)
+    if isinstance(expression, BinaryOperation):
+        return (expression.left, expression.right)
+    if isinstance(expression, BetweenPredicate):
+        return (expression.operand, expression.lower, expression.upper)
+    if isinstance(expression, InPredicate):
+        return (expression.operand, *expression.values)
+    if isinstance(expression, LikePredicate):
+        return (expression.operand, expression.pattern)
+    if isinstance(expression, NullPredicate):
+        return (expression.operand,)
+    if isinstance(expression, TupleExpression):
+        return expression.elements
+    raise ExpressionError(f"expresión no soportada: {type(expression).__name__}")
 
 
 def like_to_regex(pattern: str) -> str:

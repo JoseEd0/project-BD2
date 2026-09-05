@@ -1,29 +1,34 @@
 interface StatusBarProps {
   tableCount: number;
+  totalRows: number;
   rowCount: number | null;
   elapsedMs: number | null;
-  sessionId: string;
   connected: boolean;
 }
 
 export default function StatusBar({
   tableCount,
+  totalRows,
   rowCount,
   elapsedMs,
-  sessionId,
   connected,
 }: StatusBarProps) {
   return (
     <footer className="statusbar">
-      <span className="statusbar__item">
-        Motor <span className="statusbar__value">{connected ? "conectado" : "sin conexión"}</span>
+      <span className={connected ? "statusbar__item" : "statusbar__item statusbar__item--down"}>
+        <span className="badge__dot" />
+        {connected ? "Motor conectado" : "Sin conexión con el motor"}
       </span>
       <span className="statusbar__item">
         Tablas <span className="statusbar__value">{tableCount}</span>
       </span>
+      <span className="statusbar__item">
+        Filas almacenadas <span className="statusbar__value">{totalRows.toLocaleString("es")}</span>
+      </span>
+      <span className="statusbar__spacer" />
       {rowCount !== null && (
         <span className="statusbar__item">
-          Filas <span className="statusbar__value">{rowCount.toLocaleString("es")}</span>
+          Devueltas <span className="statusbar__value">{rowCount.toLocaleString("es")}</span>
         </span>
       )}
       {elapsedMs !== null && (
@@ -31,10 +36,6 @@ export default function StatusBar({
           Tiempo <span className="statusbar__value">{elapsedMs.toFixed(2)} ms</span>
         </span>
       )}
-      <span className="statusbar__spacer" />
-      <span className="statusbar__item">
-        Sesión <span className="statusbar__value">{sessionId}</span>
-      </span>
     </footer>
   );
 }

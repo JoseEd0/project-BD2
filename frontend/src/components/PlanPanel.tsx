@@ -12,14 +12,19 @@ const ACCESS_OPERATIONS = new Set([
   "PrimaryKeyRange",
 ]);
 
+const EXTERNAL_OPERATIONS = new Set(["ExternalSort", "HashAggregate", "HashJoin"]);
+
+function operationClass(operation: string): string {
+  if (ACCESS_OPERATIONS.has(operation)) return "plan__op plan__op--access";
+  if (EXTERNAL_OPERATIONS.has(operation)) return "plan__op plan__op--external";
+  return "plan__op";
+}
+
 function PlanNode({ node, root }: { node: PlanInfo; root: boolean }) {
-  const accessPath = ACCESS_OPERATIONS.has(node.operation);
   return (
     <div className={root ? "plan__node plan__node--root" : "plan__node"}>
       <div className="plan__row">
-        <span className={accessPath ? "plan__op plan__op--access" : "plan__op"}>
-          {node.operation}
-        </span>
+        <span className={operationClass(node.operation)}>{node.operation}</span>
         {node.detail && <span className="plan__detail">{node.detail}</span>}
       </div>
       {node.children.length > 0 && (
@@ -49,11 +54,20 @@ export default function PlanPanel({ plan }: PlanPanelProps) {
             <div className="plan">
               <PlanNode node={plan} root />
             </div>
-            <p className="plan__legend">
-              En verde, el <strong>camino de acceso</strong> elegido: recorrido completo,
-              índice hash, índice B+ o el orden propio de la tabla. Encima van los operadores
-              que consumen esas filas, de abajo hacia arriba.
-            </p>
+            <div className="plan__legend">
+              <p>
+                Se lee <strong>de abajo hacia arriba</strong>: cada operador consume las filas
+                del que tiene debajo.
+              </p>
+              <p>
+                <span className="legend-dot legend-dot--access" /> camino de acceso —
+                recorrido completo, índice hash, índice B+ o el orden propio de la tabla.
+              </p>
+              <p>
+                <span className="legend-dot legend-dot--external" /> algoritmo externo —
+                se apoya en disco para no cargarlo todo en memoria.
+              </p>
+            </div>
           </>
         )}
       </div>

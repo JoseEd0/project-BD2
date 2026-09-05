@@ -24,7 +24,16 @@ export interface PlanInfo {
 
 export type CellValue = string | number | boolean | null;
 
+export interface StatementOutcome {
+  sql: string;
+  message: string;
+  affected_rows: number;
+  elapsed_ms: number;
+  returned_rows: number;
+}
+
 export interface QueryResponse {
+  statements: StatementOutcome[];
   columns: string[];
   rows: CellValue[][];
   plan: PlanInfo | null;
@@ -39,4 +48,5 @@ export interface QueryFailure {
   kind: string;
   line: number | null;
   column: number | null;
+  statement_index: number | null;
 }

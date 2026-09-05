@@ -1,66 +1,88 @@
-import type { KeyboardEvent } from "react";
+import { useState } from "react";
+
+import SqlEditor from "./SqlEditor";
+import type { Snippet } from "../snippets";
 
 interface QueryPanelProps {
   sql: string;
   running: boolean;
-  snippets: { label: string; sql: string }[];
+  snippets: Snippet[];
+  history: string[];
   onChange: (sql: string) => void;
   onRun: () => void;
-  onPickSnippet: (sql: string) => void;
 }
 
 export default function QueryPanel({
   sql,
   running,
   snippets,
+  history,
   onChange,
   onRun,
-  onPickSnippet,
 }: QueryPanelProps) {
-  function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-    if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
-      event.preventDefault();
-      onRun();
-    }
-  }
+  const [openHistory, setOpenHistory] = useState(false);
+  const statementCount = sql.split(";").filter((part) => part.trim().length > 0).length;
 
   return (
     <section className="panel panel--editor">
       <header className="panel__header">
         <h2 className="panel__title">Consultas</h2>
-        <span className="panel__hint">SQL</span>
-        <button
-          className="action action--primary"
-          disabled={running || sql.trim().length === 0}
-          onClick={onRun}
-          style={{ marginLeft: "auto" }}
-          type="button"
-        >
-          {running ? "Ejecutando…" : "Ejecutar"}
-          <span className="action__key">⌘↵</span>
-        </button>
-      </header>
-      <div className="editor">
-        <textarea
-          className="editor__input"
-          onChange={(event) => onChange(event.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="SELECT * FROM alumnos WHERE id = 1;"
-          spellCheck={false}
-          value={sql}
-        />
-        <div className="snippets">
-          {snippets.map((snippet) => (
+        <span className="panel__hint">
+          {statementCount === 1 ? "1 sentencia" : `${statementCount} sentencias`}
+        </span>
+        <div className="panel__actions">
+          <div className="dropdown">
             <button
-              className="snippet"
-              key={snippet.label}
-              onClick={() => onPickSnippet(snippet.sql)}
+              className="action"
+              disabled={history.length === 0}
+              onClick={() => setOpenHistory(!openHistory)}
               type="button"
             >
-              {snippet.label}
+              Historial
+              <span className="action__key">{history.length}</span>
             </button>
-          ))}
+            {openHistory && history.length > 0 && (
+              <ul className="dropdown__menu">
+                {history.map((item, index) => (
+                  <li key={index}>
+                    <button
+                      onClick={() => {
+                        onChange(item);
+                        setOpenHistory(false);
+                      }}
+                      type="button"
+                    >
+                      {item.replace(/\s+/g, " ").slice(0, 90)}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <button
+            className="action action--primary"
+            disabled={running || sql.trim().length === 0}
+            onClick={onRun}
+            type="button"
+          >
+            {running ? "Ejecutando…" : "Ejecutar"}
+            <span className="action__key">⌘↵</span>
+          </button>
         </div>
+      </header>
+      <SqlEditor onChange={onChange} onRun={onRun} value={sql} />
+      <div className="snippets">
+        {snippets.map((snippet) => (
+          <button
+            className="snippet"
+            key={snippet.label}
+            onClick={() => onChange(snippet.sql)}
+            title={snippet.description}
+            type="button"
+          >
+            {snippet.label}
+          </button>
+        ))}
       </div>
     </section>
   );

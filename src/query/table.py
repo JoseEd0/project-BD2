@@ -154,9 +154,19 @@ class Table:
             yield self._serializer.unpack(record)
 
     def search_primary_key(self, key: Key) -> Iterator[Record]:
-        """Filas cuya clave primaria vale `key`, usando la organización de la tabla."""
+        """Filas cuya clave primaria vale `key`, por el camino más corto que haya.
+
+        Un heap file no ordena nada, así que sin índice esto es un recorrido completo. Como
+        toda tabla con clave primaria recibe un índice B+ sobre ella, el caso normal es que
+        aquí se use ese índice: sin esto, cada inserción pagaría un recorrido entero al
+        comprobar que la clave no se repite, y cargar N filas costaría O(N²).
+        """
         if isinstance(self._storage, HeapFile):
-            yield from self._filter_scan(key)
+            index = self._primary_key_index()
+            if index is None:
+                yield from self._filter_scan(key)
+            else:
+                yield from self.search_index(index.name, key)
         elif isinstance(self._storage, SequentialFile):
             for record in self._storage.search(key):
                 yield self._serializer.unpack(record)
@@ -332,6 +342,11 @@ class Table:
             return
         key = self._primary_key_of(record)
         self._storage.delete(key)
+
+    def _primary_key_index(self) -> IndexDefinition | None:
+        if self._definition.primary_key is None:
+            return None
+        return self._definition.index_on(self._definition.primary_key)
 
     def _filter_scan(self, key: Key) -> Iterator[Record]:
         position = self._primary_key_position()

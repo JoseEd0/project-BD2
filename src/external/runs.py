@@ -97,3 +97,13 @@ class RunReader:
         traceback: TracebackType | None,
     ) -> None:
         self.close()
+
+
+def remove_if_empty(directory: Path) -> None:
+    """Borra el directorio temporal de un operador cuando ya no le queda ningún archivo.
+
+    Cada `ORDER BY`, `GROUP BY` o `JOIN` trabaja en su propio directorio; sin esto el
+    directorio de datos acumularía uno vacío por consulta.
+    """
+    if directory.is_dir() and not any(directory.iterdir()):
+        directory.rmdir()

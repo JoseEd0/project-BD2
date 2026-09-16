@@ -68,3 +68,13 @@ def test_closing_twice_is_harmless(config: EngineConfig):
     pager = Pager(config.data_directory / "a.dat", config)
     pager.close()
     pager.close()
+
+
+def test_only_cache_misses_count_as_reads(config: EngineConfig):
+    path = config.data_directory / "a.dat"
+    with Pager(path, config) as pager:
+        pager.write(pager.allocate(), bytes(config.page_size))
+    with Pager(path, config) as pager:
+        pager.read(0)
+        pager.read(0)
+        assert pager.reads == 1

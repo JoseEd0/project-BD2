@@ -14,8 +14,9 @@ Ejecutar (requiere `pip install -e .`):
     .venv/bin/python demos/poblar_ecommerce.py --data-dir ./data
     .venv/bin/python demos/poblar_ecommerce.py --data-dir ./data --escala 3 --reiniciar
 
-Deja además los CSV en `<data-dir>/csv/`, que sirven para probar la carga de archivos
-desde la interfaz.
+Deja además los CSV —por defecto en `<data-dir>/csv/`, o donde diga `--csv-dir`—, que
+sirven para probar la carga de archivos desde la interfaz. Los de `demos/samples/` salen
+de este mismo script con la semilla y la escala por defecto.
 """
 
 from __future__ import annotations
@@ -161,9 +162,6 @@ class Generator:
     def rows_of(self, table: str) -> Iterator[Sequence[object]]:
         return getattr(self, f"_{table}")()
 
-    def count_of(self, table: str) -> int:
-        return int(getattr(self, table if table != "detalle_pedidos" else "detalles"))
-
     def _categorias(self) -> Iterator[Sequence[object]]:
         yield from ((number, nombre) for number, nombre in enumerate(CATEGORIAS, start=1))
 
@@ -285,6 +283,12 @@ def main() -> None:
     parser.add_argument("--escala", type=float, default=DEFAULT_SCALE)
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
     parser.add_argument(
+        "--csv-dir",
+        type=Path,
+        default=None,
+        help=f"dónde dejar los CSV (por defecto <data-dir>/{CSV_DIRECTORY})",
+    )
+    parser.add_argument(
         "--reiniciar",
         action="store_true",
         help="borra el contenido del directorio de datos antes de cargar",
@@ -295,7 +299,7 @@ def main() -> None:
         shutil.rmtree(arguments.data_dir)
     config = EngineConfig(data_directory=arguments.data_dir)
     generator = Generator(arguments.escala, arguments.seed)
-    csv_directory = arguments.data_dir / CSV_DIRECTORY
+    csv_directory = arguments.csv_dir or arguments.data_dir / CSV_DIRECTORY
 
     print(f"Generando CSV en {csv_directory}")
     measured: list[tuple[TableSpec, int, float]] = []

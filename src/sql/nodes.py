@@ -319,3 +319,15 @@ class CommitTransactionStatement(Statement):
 @dataclass(frozen=True, slots=True)
 class RollbackTransactionStatement(Statement):
     pass
+
+
+@dataclass(frozen=True, slots=True)
+class ExplainStatement(Statement):
+    """`EXPLAIN [ANALYZE] SELECT ...`.
+
+    Sin `ANALYZE` se devuelve el plan sin ejecutar la consulta; con `ANALYZE` se ejecuta y
+    cada operador informa de las filas que produjo y del tiempo que tardó.
+    """
+
+    query: SelectStatement
+    analyze: bool = False

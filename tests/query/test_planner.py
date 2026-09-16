@@ -1,7 +1,10 @@
 """Elección del camino de acceso: es la decisión que el plan muestra al usuario."""
 
+import pytest
+
 from config import EngineConfig
 from query.engine import Engine
+from sql.errors import SqlSyntaxError
 
 
 def plan_of(engine: Engine, sql: str) -> str:
@@ -132,3 +135,45 @@ def test_pushing_the_condition_down_keeps_the_same_rows(engine: Engine):
         "WHERE c.ciudad = 'lima' ORDER BY p.id"
     )
     assert result.rows == ((10,), (12,))
+
+
+def test_the_sort_plan_reports_runs_and_merge_passes(engine: Engine):
+    engine.execute("CREATE TABLE t (id INT PRIMARY KEY, v INT)")
+    engine.execute("INSERT INTO t VALUES (1, 30), (2, 10), (3, 20)")
+    result = engine.execute("SELECT v FROM t ORDER BY v LIMIT 1")
+    assert result.rows == ((10,),)
+    assert "run(s)" in result.plan.render()
+    assert "pasada(s)" in result.plan.render()
+
+
+def test_explain_returns_the_plan_without_running_the_query(engine: Engine):
+    engine.execute("CREATE TABLE t (id INT PRIMARY KEY, v INT INDEX HASH)")
+    engine.execute("INSERT INTO t VALUES (1, 10), (2, 20)")
+    result = engine.execute("EXPLAIN SELECT id FROM t WHERE v = 10")
+    assert result.rows == ()
+    assert "IndexLookup" in result.plan.render()
+    assert result.plan.actual_rows is None
+
+
+def test_explain_analyze_reports_actual_rows_per_operator(engine: Engine):
+    engine.execute("CREATE TABLE t (id INT PRIMARY KEY, v INT)")
+    engine.execute("INSERT INTO t VALUES (1, 10), (2, 20), (3, 30)")
+    result = engine.execute("EXPLAIN ANALYZE SELECT id FROM t WHERE v > 10")
+    assert result.rows == ()
+    assert result.affected_rows == 2
+    filter_node = result.plan.children[0]
+    assert (filter_node.operation, filter_node.actual_rows) == ("Filter", 2)
+    assert filter_node.children[0].actual_rows == 3
+
+
+def test_a_limit_does_not_pull_one_row_too_many(engine: Engine):
+    engine.execute("CREATE TABLE t (id INT PRIMARY KEY)")
+    engine.execute("INSERT INTO t VALUES (1), (2), (3), (4)")
+    plan = engine.execute("SELECT id FROM t LIMIT 2").plan
+    assert plan.actual_rows == 2
+    assert plan.children[0].actual_rows == 2
+
+
+def test_explain_only_accepts_a_select(engine: Engine):
+    with pytest.raises(SqlSyntaxError, match="EXPLAIN"):
+        engine.execute("EXPLAIN DELETE FROM t")

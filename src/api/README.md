@@ -27,6 +27,9 @@ Ninguna ruta ni puerto está escrito en el código.
 | `GET` | `/health` | comprobar que el servidor responde |
 | `GET` | `/tables` | panel de archivos: tablas, columnas, tipos, índices y número de filas |
 | `POST` | `/query` | ejecuta un script y devuelve filas, mensajes y plan |
+| `POST` | `/tables/upload` | crea una tabla a partir de un CSV subido |
+| `POST` | `/files/upload` | solo guarda el CSV; devuelve su ruta y su cabecera para usarla en `CREATE TABLE ... FROM FILE` |
+| `GET` | `/tables/{name}/structure` | estructura física: páginas del archivo, niveles del B+, profundidad global y cubetas del hash |
 | `DELETE` | `/tables` | borra todas las tablas y sus archivos (dejar la BD vacía) |
 | `DELETE` | `/sessions/{id}` | cierra una sesión y aborta lo que tuviera abierto |
 
@@ -69,6 +72,22 @@ y el plan de la última consulta**, que es lo que el editor enseña.
 }
 ```
 
+### Carga de CSV
+
+`POST /tables/upload` recibe un formulario *multipart*:
+
+| Campo | Qué es |
+|---|---|
+| `file` | el CSV, con cabecera; los tipos se deducen leyendo el archivo entero |
+| `name` | nombre de la tabla; solo se admite un identificador |
+| `organization` | `heap`, `sequential` o `clustered_btree` |
+| `key_column` | columna clave: obligatoria en `sequential` y `clustered_btree`; opcional en `heap`, donde recibe un índice hash |
+| `session_id` | sesión, igual que en `/query` |
+
+La sentencia se construye como objeto, **no concatenando texto SQL**: un nombre de tabla
+malicioso no puede inyectar nada. La carga es atómica: si una fila falla —una clave
+repetida, una columna clave que no está en la cabecera— la tabla no queda creada.
+
 ### Errores
 
 Los errores de SQL devuelven `400` con la posición cuando el parser la conoce, que es lo
@@ -78,6 +97,11 @@ que el editor del frontend necesita para señalar dónde está el problema:
 { "detail": { "error": "expected a statement, found 'FROM'",
               "kind": "SqlSyntaxError", "line": 1, "column": 8 } }
 ```
+
+Solo las excepciones **de dominio** —errores del SQL, del catálogo, del almacenamiento, de
+la carga de archivos o de bloqueos— se devuelven como `400`: son culpa de lo que se pidió.
+Cualquier otra excepción es un fallo del servidor y llega como `500`; convertirla en un
+`400` escondería el bug detrás de un «error del usuario».
 
 ## Tests
 

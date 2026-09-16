@@ -18,7 +18,7 @@ from pathlib import Path
 from types import TracebackType
 
 from config import EngineConfig
-from external.runs import RunReader, RunWriter
+from external.runs import RunReader, RunWriter, remove_if_empty
 from index.keys import Key
 from storage.page import slot_capacity
 
@@ -62,11 +62,6 @@ class ExternalSorter:
         """Runs que la mezcla combina a la vez."""
         return self._fan_in
 
-    @property
-    def buffer_records(self) -> int:
-        """Registros que la fase de generación mantiene en memoria a la vez."""
-        return self._buffer_records
-
     def sort(self, records: Iterable[bytes]) -> Iterator[bytes]:
         """Devuelve los registros en orden de clave, apoyándose en disco."""
         runs = self._write_runs(records)
@@ -84,6 +79,7 @@ class ExternalSorter:
         for path in self._temporary:
             path.unlink(missing_ok=True)
         self._temporary.clear()
+        remove_if_empty(self._directory)
 
     def __enter__(self) -> ExternalSorter:
         return self

@@ -10,9 +10,10 @@ ejecución del frontend muestra al usuario.
 
 from __future__ import annotations
 
+import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import Enum, unique
 from pathlib import Path
 from typing import Any
@@ -34,6 +35,7 @@ SORT_DIRECTORY = "sort"
 GROUP_DIRECTORY = "group"
 JOIN_DIRECTORY = "join"
 INTERNAL_COLUMN_PREFIX = "c"
+MILLISECONDS = 1000.0
 
 
 class UnsupportedQueryError(Exception):
@@ -89,12 +91,46 @@ class Operator(ABC):
     def schema(self) -> Schema:
         """Tipos de las columnas, para poder serializar las filas a disco."""
 
-    @abstractmethod
+    _actual_rows: int | None = None
+    _elapsed_seconds: float = 0.0
+
     def rows(self) -> Iterator[Record]:
+        """Filas del operador, contándolas y midiendo el tiempo que cuesta producirlas.
+
+        El tiempo es inclusivo, como el `actual time` de PostgreSQL: incluye lo que tardan
+        los hijos, porque se mide alrededor de cada petición de fila. No incluye el tiempo
+        que el consumidor pasa entre una fila y la siguiente.
+        """
+        produced = iter(self._produce())
+        self._actual_rows = 0
+        while True:
+            started = time.perf_counter()
+            try:
+                row = next(produced)
+            except StopIteration:
+                self._elapsed_seconds += time.perf_counter() - started
+                return
+            self._elapsed_seconds += time.perf_counter() - started
+            self._actual_rows += 1
+            yield row
+
+    def plan(self) -> PlanNode:
+        """Nodo del plan; tras ejecutar, con las filas y el tiempo reales del operador."""
+        node = self._plan_node()
+        if self._actual_rows is None:
+            return node
+        return replace(
+            node,
+            actual_rows=self._actual_rows,
+            actual_ms=self._elapsed_seconds * MILLISECONDS,
+        )
+
+    @abstractmethod
+    def _produce(self) -> Iterator[Record]:
         """Filas producidas por el operador."""
 
     @abstractmethod
-    def plan(self) -> PlanNode:
+    def _plan_node(self) -> PlanNode:
         """Descripción de este paso y de sus hijos."""
 
 
@@ -103,7 +139,6 @@ class TableOperator(Operator):
 
     def __init__(self, table: Table, alias: str) -> None:
         self._table = table
-        self._alias = alias
         self._layout = RowLayout.of_table(table.schema, alias)
         self._schema = internal_schema(table.schema.fields)
 
@@ -119,10 +154,10 @@ class TableOperator(Operator):
 class SequentialScan(TableOperator):
     """Recorre la tabla entera. Es el plan de referencia contra el que se comparan los índices."""
 
-    def rows(self) -> Iterator[Record]:
+    def _produce(self) -> Iterator[Record]:
         return self._table.scan()
 
-    def plan(self) -> PlanNode:
+    def _plan_node(self) -> PlanNode:
         return PlanNode(
             "SequentialScan",
             f"{self._table.name} ({self._table.organization.value}, {self._table.row_count} filas)",
@@ -136,10 +171,10 @@ class PrimaryKeyLookup(TableOperator):
         super().__init__(table, alias)
         self._key = key
 
-    def rows(self) -> Iterator[Record]:
+    def _produce(self) -> Iterator[Record]:
         return self._table.search_primary_key(self._key)
 
-    def plan(self) -> PlanNode:
+    def _plan_node(self) -> PlanNode:
         return PlanNode(
             "PrimaryKeyLookup",
             f"{self._table.name}.{self._table.primary_key} = {self._key!r} "
@@ -155,10 +190,10 @@ class PrimaryKeyRange(TableOperator):
         self._low = low
         self._high = high
 
-    def rows(self) -> Iterator[Record]:
+    def _produce(self) -> Iterator[Record]:
         return self._table.range_primary_key(self._low, self._high)
 
-    def plan(self) -> PlanNode:
+    def _plan_node(self) -> PlanNode:
         return PlanNode(
             "PrimaryKeyRange",
             f"{self._table.name}.{self._table.primary_key} entre {self._low!r} y {self._high!r} "
@@ -174,10 +209,10 @@ class IndexLookup(TableOperator):
         self._index_name = index_name
         self._value = value
 
-    def rows(self) -> Iterator[Record]:
+    def _produce(self) -> Iterator[Record]:
         return self._table.search_index(self._index_name, self._value)
 
-    def plan(self) -> PlanNode:
+    def _plan_node(self) -> PlanNode:
         definition = self._table.definition.index_on_name(self._index_name)
         return PlanNode(
             "IndexLookup",
@@ -197,10 +232,10 @@ class IndexRange(TableOperator):
         self._low = low
         self._high = high
 
-    def rows(self) -> Iterator[Record]:
+    def _produce(self) -> Iterator[Record]:
         return self._table.range_index(self._index_name, self._low, self._high)
 
-    def plan(self) -> PlanNode:
+    def _plan_node(self) -> PlanNode:
         definition = self._table.definition.index_on_name(self._index_name)
         return PlanNode(
             "IndexRange",
@@ -226,12 +261,12 @@ class Filter(Operator):
     def schema(self) -> Schema:
         return self._child.schema
 
-    def rows(self) -> Iterator[Record]:
+    def _produce(self) -> Iterator[Record]:
         for row in self._child.rows():
             if self._evaluator.matches(self._predicate, row):
                 yield row
 
-    def plan(self) -> PlanNode:
+    def _plan_node(self) -> PlanNode:
         return PlanNode("Filter", "condición del WHERE", (self._child.plan(),))
 
 
@@ -264,21 +299,30 @@ class Sort(Operator):
     def schema(self) -> Schema:
         return self._child.schema
 
-    def rows(self) -> Iterator[Record]:
+    def _produce(self) -> Iterator[Record]:
         sorter = ExternalSorter(
             self._directory, self._serializer.size, self._sort_key, self._config
         )
         with sorter:
             packed = (self._serializer.pack(row) for row in self._child.rows())
-            for record in sorter.sort(packed):
-                yield self._serializer.unpack(record)
+            merged = sorter.sort(packed)
             self._runs = sorter.run_count
             self._passes = sorter.merge_passes
+            for record in merged:
+                yield self._serializer.unpack(record)
 
-    def plan(self) -> PlanNode:
-        detail = ", ".join(
+    def _plan_node(self) -> PlanNode:
+        """Tras ejecutar, el detalle incluye cuántos runs se generaron y cuántas pasadas hubo.
+
+        Los runs se conocen en cuanto `sort` termina de repartir la entrada, antes de emitir
+        la primera fila, así que el dato es correcto aunque un `LIMIT` corte la mezcla.
+        """
+        keys = ", ".join(
             f"{_describe(expression)} {direction.value}" for expression, direction in self._keys
         )
+        if self._actual_rows is None:
+            return PlanNode("ExternalSort", keys, (self._child.plan(),))
+        detail = f"{keys} · {self._runs} run(s), {self._passes} pasada(s) de mezcla"
         return PlanNode("ExternalSort", detail, (self._child.plan(),))
 
     def _sort_key(self, record: bytes) -> Key:
@@ -320,7 +364,7 @@ class HashAggregate(Operator):
     def schema(self) -> Schema:
         return self._schema
 
-    def rows(self) -> Iterator[Record]:
+    def _produce(self) -> Iterator[Record]:
         if not self._group_by:
             yield self._aggregate_all()
             return
@@ -333,7 +377,7 @@ class HashAggregate(Operator):
                 group = [self._input_serializer.unpack(record) for record in records]
                 yield (*_as_tuple(key), *self._compute(group))
 
-    def plan(self) -> PlanNode:
+    def _plan_node(self) -> PlanNode:
         keys = ", ".join(_describe(expression) for expression in self._group_by) or "(sin GROUP BY)"
         functions = ", ".join(item.label for item in self._aggregates)
         return PlanNode("HashAggregate", f"{keys} → {functions}", (self._child.plan(),))
@@ -435,7 +479,7 @@ class HashJoin(Operator):
     def schema(self) -> Schema:
         return self._schema
 
-    def rows(self) -> Iterator[Record]:
+    def _produce(self) -> Iterator[Record]:
         joiner = ExternalHashJoin(
             self._directory,
             self._left_serializer.size,
@@ -453,7 +497,7 @@ class HashJoin(Operator):
                     *self._right_serializer.unpack(right_record),
                 )
 
-    def plan(self) -> PlanNode:
+    def _plan_node(self) -> PlanNode:
         detail = f"{_describe(self._left_key)} = {_describe(self._right_key)}"
         return PlanNode("HashJoin", detail, (self._left.plan(), self._right.plan()))
 
@@ -489,13 +533,13 @@ class Projection(Operator):
     def schema(self) -> Schema:
         raise UnsupportedQueryError("una proyección no se puede volcar a disco")
 
-    def rows(self) -> Iterator[Record]:
+    def _produce(self) -> Iterator[Record]:
         for row in self._child.rows():
             yield tuple(
                 self._evaluator.evaluate(expression, row) for expression in self._expressions
             )
 
-    def plan(self) -> PlanNode:
+    def _plan_node(self) -> PlanNode:
         return PlanNode("Projection", ", ".join(self._names), (self._child.plan(),))
 
 
@@ -513,7 +557,7 @@ class Distinct(Operator):
     def schema(self) -> Schema:
         return self._child.schema
 
-    def rows(self) -> Iterator[Record]:
+    def _produce(self) -> Iterator[Record]:
         seen: set[bytes] = set()
         for row in self._child.rows():
             signature = canonical_key_bytes(row)
@@ -522,7 +566,7 @@ class Distinct(Operator):
             seen.add(signature)
             yield row
 
-    def plan(self) -> PlanNode:
+    def _plan_node(self) -> PlanNode:
         return PlanNode("Distinct", "", (self._child.plan(),))
 
 
@@ -542,17 +586,21 @@ class LimitOffset(Operator):
     def schema(self) -> Schema:
         return self._child.schema
 
-    def rows(self) -> Iterator[Record]:
+    def _produce(self) -> Iterator[Record]:
+        """Corta en cuanto entrega la última fila, sin pedir una más al hijo: con un
+        `LIMIT 5` el operador de abajo no debe producir la sexta."""
+        if self._limit == 0:
+            return
         produced = 0
         for position, row in enumerate(self._child.rows()):
             if position < self._offset:
                 continue
+            yield row
+            produced += 1
             if self._limit is not None and produced >= self._limit:
                 return
-            produced += 1
-            yield row
 
-    def plan(self) -> PlanNode:
+    def _plan_node(self) -> PlanNode:
         detail = f"limit={self._limit}, offset={self._offset}"
         return PlanNode("Limit", detail, (self._child.plan(),))
 

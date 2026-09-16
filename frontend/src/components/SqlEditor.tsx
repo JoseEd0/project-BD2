@@ -82,7 +82,7 @@ export default function SqlEditor({ value, onChange, onRun }: SqlEditorProps) {
             void event;
             syncScroll();
           }}
-          placeholder="SELECT * FROM alumnos WHERE id = 1;"
+          placeholder="Escribe una consulta o elige un atajo de abajo. Ejemplo: SELECT * FROM clientes LIMIT 10;"
           ref={textareaRef}
           spellCheck={false}
           value={value}

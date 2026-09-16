@@ -6,7 +6,6 @@ constantes de comportamiento en el cuerpo de una función.
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -23,7 +22,6 @@ DEFAULT_LOCK_TIMEOUT_SECONDS = 5.0
 DEFAULT_CSV_DELIMITER = ","
 DEFAULT_CSV_ENCODING = "utf-8"
 DEFAULT_MAX_UPLOAD_BYTES = 64 * 1024 * 1024
-DATA_DIRECTORY_VARIABLE = "MINIGESTOR_DATA_DIR"
 FALLBACK_DATA_DIRECTORY = "data"
 
 
@@ -64,9 +62,3 @@ class EngineConfig:
     csv_encoding: str = DEFAULT_CSV_ENCODING
     max_upload_bytes: int = DEFAULT_MAX_UPLOAD_BYTES
     data_directory: Path = Path(FALLBACK_DATA_DIRECTORY)
-
-    @classmethod
-    def from_environment(cls) -> EngineConfig:
-        """Construye la configuración por defecto tomando el directorio de datos del entorno."""
-        directory = os.environ.get(DATA_DIRECTORY_VARIABLE, FALLBACK_DATA_DIRECTORY)
-        return cls(data_directory=Path(directory))

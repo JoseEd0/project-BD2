@@ -9,11 +9,12 @@ from __future__ import annotations
 from collections.abc import Callable, Iterator
 from pathlib import Path
 from types import TracebackType
-from typing import Protocol
+from typing import Any, Protocol
 
 from config import EngineConfig
 from index.bplustree import ClusteredBPlusIndex, UnclusteredBPlusIndex
 from index.hash import ExtendibleHashIndex
+from index.hash.extendible_hash import DIRECTORY_SUFFIX
 from index.keys import Key, ScalarKeyCodec
 from query.catalog import IndexDefinition, Organization, TableDefinition
 from sql.nodes import IndexType
@@ -22,6 +23,7 @@ from storage.record import Record, RecordSerializer
 from storage.record_id import RECORD_ID_SIZE, RecordId
 from storage.schema import Schema
 from storage.sequential import SequentialFile
+from storage.sequential.sequential_file import OVERFLOW_SUFFIX, REBUILD_SUFFIX
 from storage.types import StorageError
 
 HEAP_SUFFIX = ".heap"
@@ -29,6 +31,15 @@ SEQUENTIAL_SUFFIX = ".seq"
 CLUSTERED_SUFFIX = ".bpt"
 INDEX_SUFFIX = ".idx"
 PRIMARY_KEY_INDEX_PREFIX = "pk_"
+OWNED_SUFFIXES = (
+    HEAP_SUFFIX,
+    SEQUENTIAL_SUFFIX,
+    OVERFLOW_SUFFIX,
+    REBUILD_SUFFIX,
+    CLUSTERED_SUFFIX,
+    INDEX_SUFFIX,
+    DIRECTORY_SUFFIX,
+)
 
 
 class TableError(StorageError):
@@ -51,6 +62,8 @@ class SecondaryIndex(Protocol):
     def delete(self, record: bytes, record_id: RecordId) -> bool: ...
 
     def search(self, value: Key) -> list[RecordId]: ...
+
+    def describe(self) -> dict[str, Any]: ...
 
     def close(self) -> None: ...
 
@@ -87,6 +100,9 @@ class HashSecondaryIndex:
 
     def search(self, value: Key) -> list[RecordId]:
         return [RecordId.unpack(raw) for raw in self._index.search(value)]
+
+    def describe(self) -> dict[str, Any]:
+        return self._index.describe()
 
     def close(self) -> None:
         self._index.close()
@@ -144,7 +160,10 @@ class Table:
         """
         record = self._serializer.pack(values)
         self._reject_duplicate_key(record)
-        record_id = self._insert_into_storage(record)
+        if not isinstance(self._storage, HeapFile):
+            self._storage.insert(record)
+            return
+        record_id = self._storage.insert(record)
         for index in self._indexes.values():
             index.insert(record, record_id)
 
@@ -289,21 +308,67 @@ class Table:
     def drop_index(self, name: str) -> None:
         index = self._indexes.pop(name)
         index.close()
-        self._index_path(name).unlink(missing_ok=True)
+        self.discard_index_files(name)
 
-    def index_names(self) -> list[str]:
-        return sorted(self._indexes)
+    def discard_index_files(self, name: str) -> None:
+        """Borra los archivos de un índice, incluido el directorio de un índice hash."""
+        path = self._index_path(name)
+        path.unlink(missing_ok=True)
+        path.with_name(path.name + DIRECTORY_SUFFIX).unlink(missing_ok=True)
 
     def close(self) -> None:
         self._storage.close()
         for index in self._indexes.values():
             index.close()
 
+    def describe_structure(self) -> dict[str, Any]:
+        """Organización física y forma real de cada índice, para inspeccionarlas."""
+        return {
+            "table": self.name,
+            "organization": self.organization.value,
+            "rows": self.row_count,
+            "storage": self._describe_storage(),
+            "indexes": [
+                {
+                    "name": definition.name,
+                    "column": definition.column,
+                    "method": definition.method.value,
+                    "structure": self._indexes[definition.name].describe(),
+                }
+                for definition in self._definition.indexes
+            ],
+        }
+
+    def _describe_storage(self) -> dict[str, Any]:
+        if isinstance(self._storage, HeapFile):
+            return {
+                "kind": "heap",
+                "pages": self._storage.page_count,
+                "slots_per_page": self._storage.slots_per_page,
+                "records": self._storage.record_count,
+            }
+        if isinstance(self._storage, SequentialFile):
+            return {
+                "kind": "sequential",
+                "main_pages": self._storage.main_page_count,
+                "slots_per_page": self._storage.slots_per_page,
+                "records": self._storage.record_count,
+                "overflow_records": self._storage.overflow_count,
+                "deleted_records": self._storage.deleted_count,
+                "waste_ratio": self._storage.waste_ratio,
+            }
+        return self._storage.describe()
+
     def remove_files(self) -> None:
-        """Borra del disco todos los archivos de la tabla."""
+        """Borra del disco los archivos que creó la tabla, y solo esos.
+
+        Filtrar por sufijo importa: un `productos.csv` del usuario en el mismo directorio
+        también empieza por `productos.`, y no es de la tabla.
+        """
         self.close()
         for path in self._directory.glob(f"{self.name}.*"):
-            path.unlink(missing_ok=True)
+            if path.name.endswith(OWNED_SUFFIXES):
+                path.unlink(missing_ok=True)
 
     def __enter__(self) -> Table:
         return self
@@ -325,12 +390,6 @@ class Table:
         else:
             for record in self._storage.scan():
                 yield None, record
-
-    def _insert_into_storage(self, record: bytes) -> RecordId:
-        if isinstance(self._storage, HeapFile):
-            return self._storage.insert(record)
-        self._storage.insert(record)
-        return RecordId(page_id=0, slot=0)
 
     def _delete_one(self, address: RecordId | None, record: bytes) -> None:
         if isinstance(self._storage, HeapFile):

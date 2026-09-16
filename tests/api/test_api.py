@@ -234,3 +234,87 @@ def test_tables_can_be_recreated_after_dropping_everything(client: TestClient):
     client.delete("/tables")
     run(client, "CREATE TABLE a (id INT PRIMARY KEY, v VARCHAR(4));")
     assert run(client, "SELECT * FROM a;")["rows"] == []
+
+
+def test_a_csv_with_another_encoding_is_a_user_error(client: TestClient):
+    latin1 = "id,nombre\n1,Peña\n".encode("latin-1")
+    response = client.post(
+        "/tables/upload",
+        data={"name": "t"},
+        files={"file": ("t.csv", latin1, "text/csv")},
+    )
+    assert response.status_code == 400
+    assert response.json()["detail"]["kind"] == "LoaderError"
+
+
+def test_a_script_with_a_syntax_error_reports_line_and_column(client: TestClient):
+    response = client.post("/query", json={"sql": "SELECT *\nFROM"})
+    assert response.status_code == 400
+    detail = response.json()["detail"]
+    assert (detail["line"], detail["kind"]) == (2, "SqlSyntaxError")
+
+
+def test_a_heap_upload_with_a_key_gets_a_primary_key_index(client: TestClient):
+    response = upload(client, key_column="id")
+    assert response.status_code == 200, response.text
+    table = client.get("/tables").json()[0]
+    assert (table["organization"], table["primary_key"]) == ("heap", "id")
+    assert table["indexes"] == ["pk_productos"]
+    plan = run(client, "SELECT * FROM productos WHERE id = 2;")["plan"]
+    assert "IndexLookup" in str(plan)
+
+
+def test_a_heap_upload_without_a_key_has_no_index(client: TestClient):
+    upload(client, key_column="")
+    table = client.get("/tables").json()[0]
+    assert (table["primary_key"], table["indexes"]) == (None, [])
+
+
+def test_an_upload_with_a_missing_key_column_leaves_nothing(client: TestClient):
+    response = upload(client, organization="sequential", key_column="falsa")
+    assert response.status_code == 400
+    assert client.get("/tables").json() == []
+
+
+def test_a_file_can_be_uploaded_without_creating_a_table(client: TestClient):
+    response = client.post(
+        "/files/upload",
+        data={"name": "productos"},
+        files={"file": ("productos.csv", CSV_CONTENT.encode(), "text/csv")},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["columns"] == ["id", "nombre", "precio"]
+    assert client.get("/tables").json() == []
+    created = run(client, f"CREATE TABLE productos FROM FILE '{body['path']}' USING INDEX BTREE(\"id\");")
+    assert created["affected_rows"] == 3
+    assert client.get("/tables").json()[0]["organization"] == "clustered_btree"
+
+
+def test_the_structure_of_a_clustered_table_shows_its_tree(client: TestClient):
+    run(client, "CREATE TABLE t (id INT PRIMARY KEY INDEX BTREE, v INT);")
+    rows = ", ".join(f"({key}, {key})" for key in range(300))
+    run(client, f"INSERT INTO t VALUES {rows};")
+    body = client.get("/tables/t/structure").json()
+    tree = body["storage"]
+    assert tree["kind"] == "bplustree"
+    assert tree["height"] == len(tree["levels"]) >= 2
+    assert tree["levels"][-1]["key_count"] == tree["entries"] == 300
+
+
+def test_the_structure_of_a_hash_index_respects_its_invariant(client: TestClient):
+    run(client, "CREATE TABLE t (id INT PRIMARY KEY, v INT INDEX HASH);")
+    rows = ", ".join(f"({key}, {key})" for key in range(400))
+    run(client, f"INSERT INTO t VALUES {rows};")
+    index = next(
+        item for item in client.get("/tables/t/structure").json()["indexes"]
+        if item["method"] == "HASH"
+    )["structure"]
+    assert index["entries"] == 400
+    assert index["directory_size"] == 2 ** index["global_depth"]
+    for bucket in index["buckets"]:
+        assert bucket["pointers"] == 2 ** (index["global_depth"] - bucket["local_depth"])
+
+
+def test_the_structure_of_an_unknown_table_is_an_error(client: TestClient):
+    assert client.get("/tables/fantasma/structure").status_code == 400

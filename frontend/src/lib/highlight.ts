@@ -22,7 +22,7 @@ const KEYWORDS = new Set([
   "LIMIT", "OFFSET", "JOIN", "INNER", "LEFT", "RIGHT", "FULL", "OUTER", "ON", "AS",
   "AND", "OR", "NOT", "IN", "IS", "NULL", "LIKE", "BETWEEN", "DISTINCT", "ASC", "DESC",
   "PRIMARY", "KEY", "UNIQUE", "IF", "EXISTS", "FILE", "BEGIN", "END", "COMMIT",
-  "ROLLBACK", "TRANSACTION", "TRUE", "FALSE",
+  "ROLLBACK", "TRANSACTION", "TRUE", "FALSE", "EXPLAIN", "ANALYZE",
 ]);
 
 const TYPES = new Set([
@@ -72,4 +72,24 @@ export function tokenize(sql: string): Token[] {
     rest = rest.slice(text.length);
   }
   return tokens;
+}
+
+const IGNORED_KINDS = new Set<TokenKind>(["comment"]);
+
+/**
+ * Cuenta las sentencias con el mismo tokenizador del resaltado, para que un `;` dentro de
+ * una cadena o de un comentario no cuente como separador.
+ */
+export function countStatements(sql: string): number {
+  let count = 0;
+  let pending = false;
+  for (const token of tokenize(sql)) {
+    if (token.kind === "punctuation" && token.text === ";") {
+      count += pending ? 1 : 0;
+      pending = false;
+    } else if (!IGNORED_KINDS.has(token.kind) && token.text.trim().length > 0) {
+      pending = true;
+    }
+  }
+  return count + (pending ? 1 : 0);
 }

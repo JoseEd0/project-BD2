@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import csv
 from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from datetime import date
 from pathlib import Path
 
@@ -31,7 +32,7 @@ def infer_schema(path: Path, config: EngineConfig) -> Schema:
     Raises:
         LoaderError: si el archivo no existe o no tiene cabecera.
     """
-    names = _read_header(path, config)
+    names = read_header(path, config)
     kinds: list[FieldType] = [FieldType.INT] * len(names)
     lengths = [MINIMUM_STRING_LENGTH] * len(names)
     for row in _read_rows(path, config, len(names)):
@@ -60,10 +61,27 @@ def read_values(path: Path, schema: Schema, config: EngineConfig) -> Iterator[tu
         )
 
 
-def _read_header(path: Path, config: EngineConfig) -> list[str]:
+@contextmanager
+def _readable(path: Path, config: EngineConfig) -> Iterator[None]:
+    """Un archivo con otra codificación o con comillas rotas es un error del archivo, no del
+    gestor: se informa como `LoaderError` para que el usuario sepa qué corregir."""
+    try:
+        yield
+    except (UnicodeDecodeError, csv.Error) as error:
+        raise LoaderError(
+            f"'{path.name}' no se puede leer como CSV en {config.csv_encoding}: {error}"
+        ) from error
+
+
+def read_header(path: Path, config: EngineConfig) -> list[str]:
+    """Nombres de columna de la cabecera del CSV.
+
+    Raises:
+        LoaderError: si el archivo no existe, no tiene cabecera o no se puede leer.
+    """
     if not path.exists():
         raise LoaderError(f"no existe el archivo '{path}'")
-    with path.open(newline="", encoding=config.csv_encoding) as handle:
+    with _readable(path, config), path.open(newline="", encoding=config.csv_encoding) as handle:
         header = next(csv.reader(handle, delimiter=config.csv_delimiter), None)
     if not header:
         raise LoaderError(f"'{path.name}' no tiene cabecera")
@@ -71,7 +89,7 @@ def _read_header(path: Path, config: EngineConfig) -> list[str]:
 
 
 def _read_rows(path: Path, config: EngineConfig, columns: int) -> Iterator[Sequence[str]]:
-    with path.open(newline="", encoding=config.csv_encoding) as handle:
+    with _readable(path, config), path.open(newline="", encoding=config.csv_encoding) as handle:
         reader = csv.reader(handle, delimiter=config.csv_delimiter)
         next(reader, None)
         for number, row in enumerate(reader, start=2):

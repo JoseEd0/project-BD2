@@ -14,6 +14,7 @@ from bisect import bisect_left, bisect_right
 from collections.abc import Iterator
 from pathlib import Path
 from types import TracebackType
+from typing import Any
 
 from config import EngineConfig
 from index.keys import Key, KeyCodec
@@ -25,6 +26,10 @@ from .node import NO_NODE, Node, NodeCodec, NodeKind
 HEADER_FORMAT = struct.Struct("<4sHIIiiQI")
 TREE_MAGIC = b"BPT1"
 TREE_VERSION = 1
+
+
+MAX_NODES_SHOWN_PER_LEVEL = 8
+MAX_KEYS_SHOWN_PER_NODE = 6
 
 
 class TreeFormatError(StorageError):
@@ -120,9 +125,6 @@ class BPlusTree:
             return leaf.values[position]
         return None
 
-    def contains(self, key: Key) -> bool:
-        return self.search(key) is not None
-
     def range_scan(self, low: Key | None, high: Key | None) -> Iterator[tuple[Key, bytes]]:
         """Entradas con `low <= clave <= high`, en orden de clave.
 
@@ -157,6 +159,42 @@ class BPlusTree:
         self._repair(path, leaf_id, leaf)
         self._write_header()
         return True
+
+    def describe(self) -> dict[str, Any]:
+        """Forma real del árbol, nivel por nivel, leída de sus páginas.
+
+        Recorre el árbol en anchura, así que cuesta leer todas sus páginas: es una
+        herramienta de inspección, no algo que use una consulta. De cada nivel se muestran
+        los primeros nodos y de cada nodo sus primeras claves; los totales son exactos.
+        """
+        levels: list[dict[str, Any]] = []
+        frontier = [self._root]
+        while frontier:
+            nodes = [self._load(page_id) for page_id in frontier]
+            levels.append(
+                {
+                    "kind": "hojas" if nodes[0].is_leaf else "internos",
+                    "node_count": len(nodes),
+                    "key_count": sum(len(node.keys) for node in nodes),
+                    "nodes": [
+                        {
+                            "keys": [str(key) for key in node.keys[:MAX_KEYS_SHOWN_PER_NODE]],
+                            "key_count": len(node.keys),
+                        }
+                        for node in nodes[:MAX_NODES_SHOWN_PER_LEVEL]
+                    ],
+                }
+            )
+            frontier = [] if nodes[0].is_leaf else [c for node in nodes for c in node.children]
+        return {
+            "kind": "bplustree",
+            "height": self._height,
+            "entries": self._entry_count,
+            "pages": self._pager.page_count,
+            "leaf_capacity": self._codec.leaf_capacity,
+            "internal_capacity": self._codec.internal_capacity,
+            "levels": levels,
+        }
 
     def flush(self) -> None:
         self._write_header()

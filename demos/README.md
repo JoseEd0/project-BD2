@@ -31,9 +31,19 @@ categorias ──< productos ──┐
 | `--escala` | multiplica el número de filas; `3` da unas 80 000 |
 | `--seed` | semilla del generador; misma semilla, mismos datos |
 | `--reiniciar` | borra el directorio antes de cargar |
+| `--csv-dir` | dónde dejar los CSV; por defecto `<data-dir>/csv/` |
 
-Deja además los CSV en `<data-dir>/csv/`, que sirven para probar **Cargar CSV** desde la
-interfaz.
+Deja además los CSV, que sirven para probar **Cargar CSV** desde la interfaz.
+
+### `samples/`: los CSV versionados
+
+[`samples/`](samples/) guarda los cinco CSV de la escala por defecto, para que quien clone
+el repositorio pueda probar la carga de archivos sin ejecutar nada. Salen de este mismo
+script, con la semilla por defecto, así que se regeneran idénticos byte a byte:
+
+```bash
+.venv/bin/python demos/poblar_ecommerce.py --data-dir /tmp/semilla --reiniciar --csv-dir demos/samples
+```
 
 Al terminar imprime el tiempo de carga por tabla —que ya es una comparación entre
 organizaciones— y una lista de consultas para la demo.

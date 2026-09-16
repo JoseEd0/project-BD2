@@ -8,7 +8,6 @@ decisión es la que el panel de plan de ejecución enseña al usuario.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
 from pathlib import Path
 
 from config import EngineConfig
@@ -65,14 +64,6 @@ RANGE_OPERATORS = {
 }
 
 
-@dataclass(frozen=True, slots=True)
-class AccessPath:
-    """Camino de acceso elegido para una tabla."""
-
-    operator: Operator
-    used_index: str | None
-
-
 class Planner:
     """Construye el árbol de operadores de una consulta."""
 
@@ -117,17 +108,17 @@ class Planner:
     def _scan_of(self, reference: TableRef, where: Expression | None) -> Operator:
         table = self._table(reference.name)
         alias = reference.alias or reference.name
-        return self._access_path(table, alias, where).operator
+        return self._access_path(table, alias, where)
 
-    def _access_path(self, table: Table, alias: str, where: Expression | None) -> AccessPath:
+    def _access_path(self, table: Table, alias: str, where: Expression | None) -> Operator:
         """Elige entre índice y recorrido completo mirando las condiciones del WHERE."""
         for condition in _conjuncts(where):
             path = self._path_for(table, alias, condition)
             if path is not None:
                 return path
-        return AccessPath(SequentialScan(table, alias), used_index=None)
+        return SequentialScan(table, alias)
 
-    def _path_for(self, table: Table, alias: str, condition: Expression) -> AccessPath | None:
+    def _path_for(self, table: Table, alias: str, condition: Expression) -> Operator | None:
         equality = self._equality_on_column(condition, alias)
         if equality is not None:
             return self._equality_path(table, alias, *equality)
@@ -188,27 +179,25 @@ class Planner:
 
     def _equality_path(
         self, table: Table, alias: str, column: str, value: Value
-    ) -> AccessPath | None:
+    ) -> Operator | None:
         """Un índice explícito gana a la organización: en un heap file buscar por clave
         primaria sin índice sería un recorrido completo."""
         index = table.definition.index_on(column)
         if index is not None:
-            return AccessPath(IndexLookup(table, alias, index.name, value), used_index=index.name)
+            return IndexLookup(table, alias, index.name, value)
         if self._is_primary_key(table, column):
-            return AccessPath(PrimaryKeyLookup(table, alias, value), used_index=None)
+            return PrimaryKeyLookup(table, alias, value)
         return None
 
     def _range_path(
         self, table: Table, alias: str, column: str, low: Value | None, high: Value | None
-    ) -> AccessPath | None:
+    ) -> Operator | None:
         if self._is_primary_key(table, column) and table.organization in ORDERED_ORGANIZATIONS:
-            return AccessPath(PrimaryKeyRange(table, alias, low, high), used_index=None)
+            return PrimaryKeyRange(table, alias, low, high)
         index = table.definition.index_on(column)
         if index is None or index.method is not IndexType.BTREE:
             return None
-        return AccessPath(
-            IndexRange(table, alias, index.name, low, high), used_index=index.name
-        )
+        return IndexRange(table, alias, index.name, low, high)
 
     @staticmethod
     def _is_primary_key(table: Table, column: str) -> bool:
@@ -223,7 +212,7 @@ class Planner:
                 )
             table = self._table(join.table.name)
             alias = join.table.alias or join.table.name
-            right = self._access_path(table, alias, statement.where).operator
+            right = self._access_path(table, alias, statement.where)
             left_key, right_key = _equi_join_keys(join.condition, operator.layout, right.layout)
             operator = HashJoin(
                 operator,

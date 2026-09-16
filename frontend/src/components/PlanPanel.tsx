@@ -26,6 +26,11 @@ function PlanNode({ node, root }: { node: PlanInfo; root: boolean }) {
       <div className="plan__row">
         <span className={operationClass(node.operation)}>{node.operation}</span>
         {node.detail && <span className="plan__detail">{node.detail}</span>}
+        {node.actual_rows !== null && node.actual_ms !== null && (
+          <span className="plan__stats">
+            {node.actual_rows.toLocaleString("es")} filas · {node.actual_ms.toFixed(2)} ms
+          </span>
+        )}
       </div>
       {node.children.length > 0 && (
         <div className="plan__children">
@@ -66,6 +71,12 @@ export default function PlanPanel({ plan }: PlanPanelProps) {
               <p>
                 <span className="legend-dot legend-dot--external" /> algoritmo externo —
                 se apoya en disco para no cargarlo todo en memoria.
+              </p>
+              <p>
+                Tras ejecutar, cada paso muestra las <strong>filas reales</strong> que
+                produjo y su <strong>tiempo</strong>, que incluye el de sus hijos: es lo que
+                da <code>EXPLAIN ANALYZE</code>. <code>EXPLAIN</code> solo muestra el camino
+                elegido, sin ejecutar.
               </p>
             </div>
           </>

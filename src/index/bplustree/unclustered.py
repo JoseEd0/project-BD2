@@ -15,6 +15,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from pathlib import Path
 from types import TracebackType
+from typing import Any
 
 from config import EngineConfig
 from index.keys import CompositeKeyCodec, Key, RecordIdKeyCodec, ScalarKeyCodec
@@ -72,6 +73,9 @@ class UnclusteredBPlusIndex:
 
     def delete(self, record: bytes, record_id: RecordId) -> bool:
         return self._tree.delete((self._key_of(record), record_id))
+
+    def describe(self) -> dict[str, Any]:
+        return self._tree.describe()
 
     def flush(self) -> None:
         self._tree.flush()

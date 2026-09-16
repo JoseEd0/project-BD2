@@ -89,6 +89,9 @@ class TokenType(Enum):
     COMMIT = "COMMIT"
     ROLLBACK = "ROLLBACK"
 
+    EXPLAIN = "EXPLAIN"
+    ANALYZE = "ANALYZE"
+
     EOF = "end of input"
 
 

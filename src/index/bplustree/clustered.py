@@ -11,6 +11,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from pathlib import Path
 from types import TracebackType
+from typing import Any
 
 from config import EngineConfig
 from index.keys import Key, ScalarKeyCodec
@@ -65,6 +66,9 @@ class ClusteredBPlusIndex:
 
     def delete(self, key: Key) -> bool:
         return self._tree.delete(key)
+
+    def describe(self) -> dict[str, Any]:
+        return self._tree.describe()
 
     def flush(self) -> None:
         self._tree.flush()

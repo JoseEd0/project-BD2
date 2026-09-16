@@ -7,6 +7,7 @@ interface FilesPanelProps {
   onPreview: (table: TableInfo) => void;
   onDescribe: (table: TableInfo) => void;
   onDrop: (table: TableInfo) => void;
+  onInspect: (table: TableInfo) => void;
   onUpload: () => void;
   onEmpty: () => void;
 }
@@ -38,11 +39,13 @@ function TableGroup({
   onPreview,
   onDescribe,
   onDrop,
+  onInspect,
 }: {
   table: TableInfo;
   onPreview: () => void;
   onDescribe: () => void;
   onDrop: () => void;
+  onInspect: () => void;
 }) {
   const [open, setOpen] = useState(true);
   return (
@@ -61,7 +64,15 @@ function TableGroup({
         <button className="icon-button" onClick={onPreview} title="Ver datos" type="button">
           ▦
         </button>
-        <button className="icon-button" onClick={onDescribe} title="Ver estructura" type="button">
+        <button
+          className="icon-button"
+          onClick={onInspect}
+          title="Estructura física: niveles del B+, cubetas del hash"
+          type="button"
+        >
+          ⌬
+        </button>
+        <button className="icon-button" onClick={onDescribe} title="Ver en el diagrama" type="button">
           ⓘ
         </button>
         <button
@@ -101,6 +112,7 @@ export default function FilesPanel({
   onPreview,
   onDescribe,
   onDrop,
+  onInspect,
   onUpload,
   onEmpty,
 }: FilesPanelProps) {
@@ -145,9 +157,18 @@ export default function FilesPanel({
       </div>
       <div className="panel__body">
         {tables.length === 0 && (
-          <p className="panel__empty">
-            Todavía no hay tablas. Crea una con <code>CREATE TABLE</code> desde el editor.
-          </p>
+          <div className="panel__empty panel__empty--guide">
+            <p>La base de datos está vacía.</p>
+            <p>
+              Pulsa <strong>Cargar CSV</strong> y sube los archivos de{" "}
+              <code>demos/samples/</code>, o crea una tabla con <code>CREATE TABLE</code>.
+            </p>
+            <p>
+              También puedes poblarla entera desde la terminal:
+              <br />
+              <code>python demos/poblar_ecommerce.py --data-dir ./data</code>
+            </p>
+          </div>
         )}
         {tables.length > 0 && visible.length === 0 && (
           <p className="panel__empty">Nada coincide con «{filter}».</p>
@@ -159,6 +180,7 @@ export default function FilesPanel({
                 key={table.name}
                 onDescribe={() => onDescribe(table)}
                 onDrop={() => onDrop(table)}
+                onInspect={() => onInspect(table)}
                 onPreview={() => onPreview(table)}
                 table={table}
               />

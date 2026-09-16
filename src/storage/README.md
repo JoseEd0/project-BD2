@@ -96,7 +96,8 @@ Ninguna estructura abre archivos por su cuenta. Todas piden páginas al `Pager`,
 
 1. mantiene en memoria las últimas `buffer_pool_pages` páginas usadas (política **LRU**);
 2. marca como *sucias* las que se modifican y solo las escribe al expulsarlas o al cerrar;
-3. cuenta lecturas y escrituras físicas, que es lo que miden los benchmarks.
+3. cuenta las lecturas y escrituras físicas (`reads`, `writes`): la diferencia entre
+   páginas pedidas y páginas leídas de disco es lo que ahorra el buffer pool.
 
 `read()` devuelve una **copia** de la página. Cuesta un `memcpy` por acceso y a cambio hace
 imposible corromper el buffer pool por descuido: quien quiera cambiar algo escribe de

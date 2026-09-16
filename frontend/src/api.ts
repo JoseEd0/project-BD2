@@ -1,4 +1,10 @@
-import type { QueryFailure, QueryResponse, TableInfo } from "./types";
+import type {
+  FileUpload,
+  QueryFailure,
+  QueryResponse,
+  TableInfo,
+  TableStructure,
+} from "./types";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 
@@ -20,7 +26,6 @@ async function parseFailure(response: Response): Promise<never> {
     kind: detail?.kind ?? "HttpError",
     line: detail?.line ?? null,
     column: detail?.column ?? null,
-    statement_index: detail?.statement_index ?? null,
   });
 }
 
@@ -72,6 +77,25 @@ export async function dropAllTables(sessionId: string): Promise<QueryResponse> {
   const response = await fetch(`${API_URL}/tables?session_id=${encodeURIComponent(sessionId)}`, {
     method: "DELETE",
   });
+  if (!response.ok) {
+    return parseFailure(response);
+  }
+  return response.json();
+}
+
+export async function uploadFileOnly(file: File, name: string): Promise<FileUpload> {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("name", name);
+  const response = await fetch(`${API_URL}/files/upload`, { method: "POST", body: form });
+  if (!response.ok) {
+    return parseFailure(response);
+  }
+  return response.json();
+}
+
+export async function fetchStructure(table: string): Promise<TableStructure> {
+  const response = await fetch(`${API_URL}/tables/${encodeURIComponent(table)}/structure`);
   if (!response.ok) {
     return parseFailure(response);
   }

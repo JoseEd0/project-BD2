@@ -18,7 +18,7 @@ from pathlib import Path
 from types import TracebackType
 
 from config import EngineConfig
-from external.runs import RunReader, RunWriter
+from external.runs import RunReader, RunWriter, remove_if_empty
 from hashing import canonical_key_bytes, stable_hash
 from index.keys import Key
 
@@ -42,7 +42,6 @@ class HashPartitioner:
     ) -> None:
         directory.mkdir(parents=True, exist_ok=True)
         self._directory = directory
-        self._prefix = prefix
         self._record_size = record_size
         self._partition_count = partition_count
         self._key_of = key_of
@@ -81,6 +80,7 @@ class HashPartitioner:
     def close(self) -> None:
         for path in self._paths:
             path.unlink(missing_ok=True)
+        remove_if_empty(self._directory)
 
 
 class ExternalHashGrouper:

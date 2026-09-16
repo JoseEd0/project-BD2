@@ -27,6 +27,7 @@ from sql.nodes import (
     DeleteStatement,
     DropIndexStatement,
     DropTableStatement,
+    ExplainStatement,
     InsertStatement,
     RollbackTransactionStatement,
     SelectStatement,
@@ -85,14 +86,6 @@ class Session:
         if len(statements) != 1:
             raise SessionError(f"se esperaba una sentencia y llegaron {len(statements)}")
         return self.run(statements[0])
-
-    def execute_script(self, sql: str) -> list[QueryResult]:
-        """Ejecuta varias sentencias separadas por `;`, en orden.
-
-        Se detiene en la primera que falle: las anteriores ya quedaron aplicadas, igual que
-        en cualquier gestor cuando el script no va dentro de una transacción.
-        """
-        return [self.run(statement) for statement in parse_script(sql)]
 
     def run(self, statement: Statement) -> QueryResult:
         if isinstance(statement, BeginTransactionStatement):
@@ -190,6 +183,8 @@ class Session:
 
 def _resources_of(statement: Statement) -> set[str]:
     """Tablas que la sentencia toca, que son los recursos que hay que bloquear."""
+    if isinstance(statement, ExplainStatement):
+        return _resources_of(statement.query)
     if isinstance(statement, SelectStatement):
         return {statement.source.name.lower(), *(j.table.name.lower() for j in statement.joins)}
     for attribute in ("table", "name"):

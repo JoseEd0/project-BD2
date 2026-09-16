@@ -34,9 +34,6 @@ SQL_TO_STORAGE_TYPE: dict[DataTypeKind, FieldType] = {
     DataTypeKind.BLOB: FieldType.BYTES,
 }
 
-CLUSTERING_METHODS = frozenset({IndexType.SEQUENTIAL, IndexType.BTREE})
-SECONDARY_METHODS = frozenset({IndexType.BTREE, IndexType.HASH})
-
 
 class CatalogError(Exception):
     """Error de definición o de consulta del catálogo."""
@@ -71,6 +68,15 @@ ORGANIZATION_BY_METHOD: dict[IndexType, Organization] = {
     IndexType.SEQUENTIAL: Organization.SEQUENTIAL,
     IndexType.BTREE: Organization.CLUSTERED_BTREE,
 }
+
+
+def organization_for(method: IndexType) -> Organization:
+    """Organización física que pide un método declarado sobre la clave primaria.
+
+    Un B+ sobre la clave convierte la tabla en un B+ agrupado y `SEQ` en un archivo
+    secuencial; cualquier otro método deja las filas en un heap file con ese índice encima.
+    """
+    return ORGANIZATION_BY_METHOD.get(method, Organization.HEAP)
 
 
 @dataclass(frozen=True, slots=True)
@@ -223,6 +229,13 @@ class Catalog:
         removed = next(item for item in definition.indexes if item.name.lower() == name.lower())
         self._replace(definition, indexes=remaining)
         return removed
+
+    def has_index(self, name: str) -> bool:
+        return any(
+            index.name.lower() == name.lower()
+            for definition in self._tables.values()
+            for index in definition.indexes
+        )
 
     def find_index(self, name: str) -> tuple[TableDefinition, IndexDefinition]:
         """Busca un índice por su nombre en todas las tablas.

@@ -10,6 +10,9 @@ interface ResultsPanelProps {
 
 type Tab = "filas" | "mensajes";
 
+/** Milisegundos que el botón muestra «Copiado» antes de volver a su texto. */
+const COPIED_FEEDBACK_MS = 1500;
+
 /** Dígitos significativos que bastan para quitar el ruido binario de un doble. */
 const SIGNIFICANT_DIGITS = 12;
 
@@ -87,7 +90,7 @@ export default function ResultsPanel({ result, failure }: ResultsPanelProps) {
     if (!result) return;
     await navigator.clipboard.writeText(toClipboardTable(result.columns, result.rows));
     setCopied(true);
-    window.setTimeout(() => setCopied(false), 1500);
+    window.setTimeout(() => setCopied(false), COPIED_FEEDBACK_MS);
   }
 
   return (

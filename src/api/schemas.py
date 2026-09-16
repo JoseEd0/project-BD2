@@ -45,6 +45,8 @@ class PlanInfo(BaseModel):
     operation: str
     detail: str
     children: list[PlanInfo] = Field(default_factory=list)
+    actual_rows: int | None = None
+    actual_ms: float | None = None
 
 
 class StatementOutcome(BaseModel):
@@ -70,19 +72,8 @@ class QueryResponse(BaseModel):
     in_transaction: bool = False
 
 
-class UploadForm(BaseModel):
-    """Parámetros que acompañan al archivo en una carga."""
+class FileUploadResponse(BaseModel):
+    """Archivo guardado sin crear tabla: la tabla se crea después con SQL."""
 
-    name: str = Field(min_length=1, description="Nombre de la tabla a crear")
-    organization: str = Field(default="heap", description="heap | sequential | clustered_btree")
-    key_column: str | None = Field(default=None, description="Columna clave si se ordena")
-
-
-class ErrorResponse(BaseModel):
-    """Error devuelto al frontend con la posición si el parser la conoce."""
-
-    error: str
-    kind: str
-    line: int | None = None
-    column: int | None = None
-    statement_index: int | None = None
+    path: str = Field(description="Ruta para usar en CREATE TABLE ... FROM FILE")
+    columns: list[str] = Field(default_factory=list)

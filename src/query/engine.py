@@ -12,6 +12,7 @@ from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import TracebackType
+from typing import Any
 
 from config import EngineConfig
 from query.catalog import (
@@ -21,6 +22,7 @@ from query.catalog import (
     Organization,
     TableDefinition,
     field_from_column,
+    organization_for,
 )
 from query.expressions import ExpressionEvaluator, RowLayout
 from query.journal import Journal
@@ -40,6 +42,7 @@ from sql.nodes import (
     DeleteStatement,
     DropIndexStatement,
     DropTableStatement,
+    ExplainStatement,
     Expression,
     IndexType,
     InsertStatement,
@@ -71,7 +74,7 @@ class QueryResult:
     Attributes:
         columns: nombres de las columnas del resultado.
         rows: filas devueltas; vacío en las sentencias que no consultan.
-        plan: árbol del plan de ejecución, solo en los SELECT.
+        plan: árbol del plan de ejecución, en los SELECT y los EXPLAIN.
         message: descripción de lo ocurrido para las sentencias sin filas.
         affected_rows: filas creadas, borradas o modificadas.
         elapsed_ms: tiempo de ejecución medido.
@@ -97,10 +100,6 @@ class Engine:
         self.config.data_directory.mkdir(parents=True, exist_ok=True)
         self._catalog = Catalog(self.config)
 
-    @property
-    def catalog(self) -> Catalog:
-        return self._catalog
-
     def execute(self, sql: str, journal: Journal | None = None) -> QueryResult:
         """Ejecuta una sola sentencia.
 
@@ -112,9 +111,6 @@ class Engine:
         if len(statements) != 1:
             raise EngineError(f"se esperaba una sentencia y llegaron {len(statements)}")
         return self.run(statements[0], journal)
-
-    def execute_script(self, sql: str, journal: Journal | None = None) -> list[QueryResult]:
-        return [self.run(statement, journal) for statement in parse_script(sql)]
 
     def run(self, statement: Statement, journal: Journal | None = None) -> QueryResult:
         """Ejecuta una sentencia ya parseada y mide cuánto tarda."""
@@ -145,6 +141,10 @@ class Engine:
             self._tables[key] = Table(definition, self.config)
         return self._tables[key]
 
+    def describe_table(self, name: str) -> dict[str, Any]:
+        """Estructura física de la tabla y de sus índices (ver `Table.describe_structure`)."""
+        return self.table(name).describe_structure()
+
     def close(self) -> None:
         for table in self._tables.values():
             table.close()
@@ -164,6 +164,8 @@ class Engine:
     def _dispatch(self, statement: Statement, journal: Journal | None) -> QueryResult:
         if isinstance(statement, SelectStatement):
             return self._select(statement)
+        if isinstance(statement, ExplainStatement):
+            return self._explain(statement)
         if isinstance(statement, InsertStatement):
             return self._insert(statement, journal)
         if isinstance(statement, DeleteStatement):
@@ -195,6 +197,24 @@ class Engine:
         rows = tuple(operator.rows())
         return QueryResult(
             columns=operator.layout.names, rows=rows, plan=operator.plan(), affected_rows=len(rows)
+        )
+
+    def _explain(self, statement: ExplainStatement) -> QueryResult:
+        """`EXPLAIN` planifica sin ejecutar; `EXPLAIN ANALYZE` ejecuta, mide y descarta las filas.
+
+        El planificador es por reglas, no por costos: el plan sin ejecutar dice qué camino se
+        eligió, pero no trae una estimación de filas. Las cifras reales salen con ANALYZE.
+        """
+        operator = Planner(self._tables_of(statement.query), self.config).plan(statement.query)
+        if not statement.analyze:
+            return QueryResult(
+                plan=operator.plan(), message="plan elegido, sin ejecutar la consulta"
+            )
+        produced = sum(1 for _ in operator.rows())
+        return QueryResult(
+            plan=operator.plan(),
+            message=f"consulta ejecutada: {produced} fila(s); se muestran el plan y sus medidas",
+            affected_rows=produced,
         )
 
     def _insert(self, statement: InsertStatement, journal: Journal | None) -> QueryResult:
@@ -240,7 +260,7 @@ class Engine:
         primary_key = next(
             (column.name for column in statement.columns if column.primary_key), None
         )
-        organization = self._organization_of(statement, primary_key)
+        organization = self._organization_of(statement)
         definition = TableDefinition(
             name=statement.name,
             schema=Schema(fields),
@@ -259,10 +279,12 @@ class Engine:
         path = Path(statement.path)
         schema = infer_schema(path, self.config)
         primary_key = statement.index.columns[0] if statement.index is not None else None
+        if primary_key is not None and not schema.has_field(primary_key):
+            raise CatalogError(f"la columna clave '{primary_key}' no está en '{path.name}'")
         organization = (
             Organization.HEAP
             if statement.index is None
-            else self._organization_for_method(statement.index.method)
+            else organization_for(statement.index.method)
         )
         definition = TableDefinition(
             name=statement.name,
@@ -272,11 +294,11 @@ class Engine:
             indexes=self._file_indexes(statement, organization, primary_key),
         )
         self._register(definition)
-        table = self.table(definition.name)
-        loaded = 0
-        for values in read_values(path, schema, self.config):
-            table.insert(values)
-            loaded += 1
+        try:
+            loaded = self._load_rows(self.table(definition.name), path, schema)
+        except Exception:
+            self._remove_table(definition.name)
+            raise
         return QueryResult(
             message=f"tabla '{definition.name}' creada desde '{path.name}' con {loaded} filas",
             affected_rows=loaded,
@@ -292,9 +314,15 @@ class Engine:
         name = statement.name or f"idx_{table.name}_{column}"
         if statement.if_not_exists and table.definition.index_on(column) is not None:
             return QueryResult(message=f"la columna '{column}' ya tenía índice")
+        _require_heap_for_secondary_index(table.organization, column)
         definition = IndexDefinition(name=name, column=column, method=statement.spec.method)
         self._catalog.add_index(table.name, definition)
-        table.build_index(definition)
+        try:
+            table.build_index(definition)
+        except Exception:
+            self._catalog.drop_index(table.name, definition.name)
+            table.discard_index_files(definition.name)
+            raise
         self._reopen(table.name)
         return QueryResult(
             message=f"índice '{name}' creado sobre {table.name}.{column} "
@@ -304,19 +332,33 @@ class Engine:
     def _drop_table(self, statement: DropTableStatement) -> QueryResult:
         if statement.if_exists and not self._catalog.has_table(statement.name):
             return QueryResult(message=f"la tabla '{statement.name}' no existía")
-        table = self.table(statement.name)
-        table.remove_files()
-        self._tables.pop(statement.name.lower(), None)
-        self._catalog.drop_table(statement.name)
+        self._remove_table(statement.name)
         return QueryResult(message=f"tabla '{statement.name}' eliminada")
 
     def _drop_index(self, statement: DropIndexStatement) -> QueryResult:
+        if statement.if_exists and not self._catalog.has_index(statement.name):
+            return QueryResult(message=f"el índice '{statement.name}' no existía")
         definition, index = self._catalog.find_index(statement.name)
         table = self.table(definition.name)
         table.drop_index(index.name)
         self._catalog.drop_index(definition.name, index.name)
         self._reopen(definition.name)
         return QueryResult(message=f"índice '{index.name}' eliminado")
+
+    def _load_rows(self, table: Table, path: Path, schema: Schema) -> int:
+        """Inserta las filas del archivo. Si una falla, quien llama deshace la tabla entera:
+        una carga a medias dejaría una tabla que nadie pidió con la mitad de sus filas."""
+        loaded = 0
+        for values in read_values(path, schema, self.config):
+            table.insert(values)
+            loaded += 1
+        return loaded
+
+    def _remove_table(self, name: str) -> None:
+        table = self.table(name)
+        table.remove_files()
+        self._tables.pop(name.lower(), None)
+        self._catalog.drop_table(name)
 
     def _register(self, definition: TableDefinition) -> None:
         self._catalog.create_table(definition)
@@ -328,22 +370,11 @@ class Engine:
             table.close()
         self._tables[name.lower()] = Table(self._catalog.table(name), self.config)
 
-    def _organization_of(
-        self, statement: CreateTableStatement, primary_key: str | None
-    ) -> Organization:
+    @staticmethod
+    def _organization_of(statement: CreateTableStatement) -> Organization:
         for column in statement.columns:
             if column.primary_key and column.index is not None:
-                return self._organization_for_method(column.index)
-        if primary_key is None:
-            return Organization.HEAP
-        return Organization.HEAP
-
-    @staticmethod
-    def _organization_for_method(method: IndexType) -> Organization:
-        if method is IndexType.SEQUENTIAL:
-            return Organization.SEQUENTIAL
-        if method is IndexType.BTREE:
-            return Organization.CLUSTERED_BTREE
+                return organization_for(column.index)
         return Organization.HEAP
 
     def _declared_indexes(
@@ -364,10 +395,7 @@ class Engine:
         for column in statement.columns:
             if column.index is None or column.primary_key:
                 continue
-            if organization is not Organization.HEAP:
-                raise CatalogError(
-                    "los índices secundarios necesitan que la tabla sea un heap file"
-                )
+            _require_heap_for_secondary_index(organization, column.name)
             indexes.append(
                 IndexDefinition(
                     name=f"idx_{statement.name}_{column.name}",
@@ -448,3 +476,18 @@ class Engine:
     @staticmethod
     def _collect(table: Table, matches: Callable[[Record], bool]) -> tuple[Record, ...]:
         return tuple(row for row in table.scan() if matches(row))
+
+
+def _require_heap_for_secondary_index(organization: Organization, column: str) -> None:
+    """Un índice secundario guarda direcciones `(página, ranura)`, y solo el heap file las
+    mantiene estables: el secuencial y el B+ agrupado mueven las filas al reorganizar o
+    dividir nodos, y las direcciones apuntarían a otra fila.
+
+    Raises:
+        CatalogError: si la tabla no es un heap file.
+    """
+    if organization is not Organization.HEAP:
+        raise CatalogError(
+            f"no se puede indexar '{column}': los índices secundarios necesitan una tabla "
+            f"heap file y esta es {organization.value}"
+        )

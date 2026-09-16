@@ -31,6 +31,7 @@ from .nodes import (
     DeleteStatement,
     DropIndexStatement,
     DropTableStatement,
+    ExplainStatement,
     Expression,
     FunctionCall,
     IndexSpec,
@@ -186,6 +187,8 @@ class Parser:
         token = self._peek()
         if token.type is TokenType.SELECT:
             return self._parse_select()
+        if token.type is TokenType.EXPLAIN:
+            return self._parse_explain()
         if token.type is TokenType.INSERT:
             return self._parse_insert()
         if token.type is TokenType.UPDATE:
@@ -201,6 +204,13 @@ class Parser:
         raise self._error_here("expected a statement")
 
     # --- SELECT -------------------------------------------------------------
+
+    def _parse_explain(self) -> ExplainStatement:
+        self._expect(TokenType.EXPLAIN)
+        analyze = self._match(TokenType.ANALYZE)
+        if not self._check(TokenType.SELECT):
+            raise self._error_here("EXPLAIN solo admite una consulta SELECT")
+        return ExplainStatement(query=self._parse_select(), analyze=analyze)
 
     def _parse_select(self) -> SelectStatement:
         self._expect(TokenType.SELECT)

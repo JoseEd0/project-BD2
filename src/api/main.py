@@ -28,35 +28,67 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from api.schemas import (
     ColumnInfo,
+    FileUploadResponse,
     PlanInfo,
     QueryRequest,
     QueryResponse,
     StatementOutcome,
     TableInfo,
 )
-from config import DATA_DIRECTORY_VARIABLE, EngineConfig
-from query.catalog import Organization
-from query.engine import Engine, QueryResult
+from config import EngineConfig
+from query.catalog import CatalogError, Organization
+from query.engine import Engine, EngineError, QueryResult
+from query.expressions import ExpressionError
+from query.loader import LoaderError, read_header
+from query.operators import UnsupportedQueryError
 from query.plan import PlanNode
 from sql import parse_script
-from sql.errors import SqlPositionError
-from sql.nodes import CreateTableFromFileStatement, DropTableStatement, IndexSpec, IndexType
-from storage.types import Value
-from txn import LockManager, Session, TransactionManager
+from sql.errors import SqlError, SqlPositionError
+from sql.nodes import (
+    CreateTableFromFileStatement,
+    DropTableStatement,
+    IndexSpec,
+    IndexType,
+    Statement,
+)
+from storage.types import StorageError, Value
+from txn import LockManager, Session, SessionError, TransactionManager
+from txn.lock_manager import LockError
+from txn.transaction import TransactionError
 
 TITLE = "Minigestor de Base de Datos Multimodal"
 VERSION = "0.1.0"
+DATA_DIRECTORY_VARIABLE = "MINIGESTOR_DATA_DIR"
 CORS_ORIGINS_VARIABLE = "MINIGESTOR_CORS_ORIGINS"
 DEFAULT_CORS_ORIGINS = "http://localhost:5173"
 LOCK_TIMEOUT_VARIABLE = "MINIGESTOR_LOCK_TIMEOUT"
 BAD_REQUEST = 400
+ELAPSED_DECIMALS = 3
+
+# Solo estos errores son culpa de lo que pidió el usuario y merecen un 400. Cualquier otra
+# excepción es un fallo del servidor y debe llegar como 500, no disfrazarse de error suyo.
+DOMAIN_ERRORS: tuple[type[Exception], ...] = (
+    SqlError,
+    StorageError,
+    CatalogError,
+    ExpressionError,
+    LoaderError,
+    EngineError,
+    UnsupportedQueryError,
+    LockError,
+    TransactionError,
+    SessionError,
+)
 UPLOAD_DIRECTORY = "uploads"
 IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
-ORGANIZATION_INDEX: dict[str, IndexType | None] = {
-    Organization.HEAP.value: None,
+# Método que se declara sobre la clave para obtener cada organización. En el heap la clave
+# es opcional: si se da, las filas siguen en el heap y la clave recibe un índice hash.
+ORGANIZATION_INDEX: dict[str, IndexType] = {
+    Organization.HEAP.value: IndexType.HASH,
     Organization.SEQUENTIAL.value: IndexType.SEQUENTIAL,
     Organization.CLUSTERED_BTREE.value: IndexType.BTREE,
 }
+KEYLESS_ORGANIZATIONS = frozenset({Organization.HEAP.value})
 
 
 class Service:
@@ -165,18 +197,53 @@ def create_app(config: EngineConfig | None = None) -> FastAPI:
     def tables() -> list[TableInfo]:
         return list(service.tables())
 
+    @app.get("/tables/{name}/structure")
+    def table_structure(name: str) -> dict[str, Any]:
+        """Organización física de la tabla y forma real de sus índices: niveles del B+,
+        profundidad global y cubetas del hash."""
+        try:
+            return service.engine.describe_table(name)
+        except DOMAIN_ERRORS as error:
+            raise _as_http_error(error, None, None) from error
+
     @app.post("/query", response_model=QueryResponse)
     def query(request: QueryRequest) -> QueryResponse:
-        """Ejecuta el script del editor. Devuelve las filas y el plan de la última consulta."""
+        """Ejecuta el script del editor y devuelve las filas y el plan de la última consulta.
+
+        Las sentencias corren en orden y el script se detiene en la primera que falle: las
+        anteriores ya quedaron aplicadas, igual que en cualquier gestor fuera de una
+        transacción.
+        """
         session = service.session(request.session_id)
         try:
-            texts = _split(request.sql)
-            results = session.execute_script(request.sql)
+            statements = parse_script(request.sql)
+            results = [session.run(statement) for statement in statements]
         except SqlPositionError as error:
-            raise _as_http_error(error, error.line, error.column, None) from error
-        except Exception as error:
-            raise _as_http_error(error, None, None, None) from error
-        return _as_response(results, texts, session.in_transaction)
+            raise _as_http_error(error, error.line, error.column) from error
+        except DOMAIN_ERRORS as error:
+            raise _as_http_error(error, None, None) from error
+        labels = [_describe_statement(statement) for statement in statements]
+        return _as_response(results, labels, session.in_transaction)
+
+    @app.post("/files/upload", response_model=FileUploadResponse)
+    async def upload_file(
+        file: Annotated[UploadFile, File(description="CSV con cabecera")],
+        name: Annotated[str, Form()],
+    ) -> FileUploadResponse:
+        """Solo guarda el archivo, sin crear tabla.
+
+        Devuelve la ruta y las columnas para que la tabla se cree a mano con
+        `CREATE TABLE ... FROM FILE`, eligiendo la organización en el propio SQL.
+        """
+        if not IDENTIFIER_PATTERN.match(name):
+            raise _invalid(f"'{name}' no es un nombre de archivo válido")
+        path = await _store_upload(service, file, name)
+        try:
+            columns = read_header(path, service.config)
+        except LoaderError as error:
+            path.unlink(missing_ok=True)
+            raise _as_http_error(error, None, None) from error
+        return FileUploadResponse(path=_path_for_sql(path), columns=columns)
 
     @app.post("/tables/upload", response_model=QueryResponse)
     async def upload(
@@ -192,10 +259,8 @@ def create_app(config: EngineConfig | None = None) -> FastAPI:
         session = service.session(session_id)
         try:
             result = session.run(_with_path(statement, path))
-        except SqlPositionError as error:
-            raise _as_http_error(error, error.line, error.column, None) from error
-        except Exception as error:
-            raise _as_http_error(error, None, None, None) from error
+        except DOMAIN_ERRORS as error:
+            raise _as_http_error(error, None, None) from error
         return _as_response([result], ["CreateTableFromFile"], session.in_transaction)
 
     @app.delete("/tables", response_model=QueryResponse)
@@ -208,8 +273,8 @@ def create_app(config: EngineConfig | None = None) -> FastAPI:
         names = service.engine.table_names()
         try:
             results = [session.run(DropTableStatement(name=name)) for name in names]
-        except Exception as error:
-            raise _as_http_error(error, None, None, None) from error
+        except DOMAIN_ERRORS as error:
+            raise _as_http_error(error, None, None) from error
         labels = ["DropTable"] * len(results)
         return _as_response(results, labels, session.in_transaction)
 
@@ -235,12 +300,14 @@ def _upload_statement(
         raise _invalid(f"'{name}' no es un nombre de tabla válido")
     if organization not in ORGANIZATION_INDEX:
         raise _invalid(f"organización desconocida: '{organization}'")
-    method = ORGANIZATION_INDEX[organization]
-    if method is None:
-        return CreateTableFromFileStatement(name=name, path="", index=None)
-    if key_column is None or not IDENTIFIER_PATTERN.match(key_column):
-        raise _invalid(f"la organización '{organization}' necesita una columna clave válida")
-    spec = IndexSpec(method=method, columns=(key_column,))
+    key = (key_column or "").strip()
+    if not key:
+        if organization in KEYLESS_ORGANIZATIONS:
+            return CreateTableFromFileStatement(name=name, path="", index=None)
+        raise _invalid(f"la organización '{organization}' necesita una columna clave")
+    if not IDENTIFIER_PATTERN.match(key):
+        raise _invalid(f"'{key}' no es un nombre de columna válido")
+    spec = IndexSpec(method=ORGANIZATION_INDEX[organization], columns=(key,))
     return CreateTableFromFileStatement(name=name, path="", index=spec)
 
 
@@ -276,38 +343,45 @@ async def _store_upload(service: Service, file: UploadFile, name: str) -> Path:
     return path
 
 
+def _path_for_sql(path: Path) -> str:
+    """Ruta tal como la resolverá el motor: relativa al directorio del proceso si cabe.
+
+    El motor abre `FROM FILE` respecto al directorio desde el que corre el API, así que una
+    ruta relativa a él es a la vez correcta y legible en el editor.
+    """
+    absolute = path.resolve()
+    try:
+        return str(absolute.relative_to(Path.cwd()))
+    except ValueError:
+        return str(absolute)
+
+
 def _invalid(message: str) -> HTTPException:
     return HTTPException(
         status_code=BAD_REQUEST,
-        detail={"error": message, "kind": "UploadError", "line": None, "column": None,
-                "statement_index": None},
+        detail={"error": message, "kind": "UploadError", "line": None, "column": None},
     )
 
 
-def _split(sql: str) -> list[str]:
-    """Texto de cada sentencia, para poder etiquetar el resultado de cada una."""
-    return [_describe_statement(statement) for statement in parse_script(sql)]
-
-
-def _describe_statement(statement: object) -> str:
+def _describe_statement(statement: Statement) -> str:
     return type(statement).__name__.replace("Statement", "")
 
 
 def _as_response(
     results: list[QueryResult], labels: list[str], in_transaction: bool
 ) -> QueryResponse:
-    last_query = next((item for item in reversed(results) if item.columns), None)
+    last_query = next((item for item in reversed(results) if item.plan is not None), None)
     outcomes = [
         StatementOutcome(
             sql=label,
             message=item.message,
             affected_rows=item.affected_rows,
-            elapsed_ms=round(item.elapsed_ms, 3),
+            elapsed_ms=round(item.elapsed_ms, ELAPSED_DECIMALS),
             returned_rows=len(item.rows),
         )
-        for item, label in zip(results, labels, strict=False)
+        for item, label in zip(results, labels, strict=True)
     ]
-    total = round(sum(item.elapsed_ms for item in results), 3)
+    total = round(sum(item.elapsed_ms for item in results), ELAPSED_DECIMALS)
     if last_query is None:
         message = " · ".join(item.message for item in results if item.message)
         return QueryResponse(
@@ -336,6 +410,8 @@ def _as_plan(node: PlanNode | None) -> PlanInfo | None:
         operation=node.operation,
         detail=node.detail,
         children=[plan for plan in (_as_plan(child) for child in node.children) if plan],
+        actual_rows=node.actual_rows,
+        actual_ms=None if node.actual_ms is None else round(node.actual_ms, ELAPSED_DECIMALS),
     )
 
 
@@ -350,9 +426,7 @@ def _as_json(value: Value) -> Any:
     return str(value)
 
 
-def _as_http_error(
-    error: Exception, line: int | None, column: int | None, statement_index: int | None
-) -> HTTPException:
+def _as_http_error(error: Exception, line: int | None, column: int | None) -> HTTPException:
     return HTTPException(
         status_code=BAD_REQUEST,
         detail={
@@ -360,7 +434,6 @@ def _as_http_error(
             "kind": type(error).__name__,
             "line": line,
             "column": column,
-            "statement_index": statement_index,
         },
     )
 

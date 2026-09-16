@@ -20,6 +20,8 @@ export interface PlanInfo {
   operation: string;
   detail: string;
   children: PlanInfo[];
+  actual_rows: number | null;
+  actual_ms: number | null;
 }
 
 export type CellValue = string | number | boolean | null;
@@ -48,5 +50,74 @@ export interface QueryFailure {
   kind: string;
   line: number | null;
   column: number | null;
-  statement_index: number | null;
+}
+
+export interface FileUpload {
+  path: string;
+  columns: string[];
+}
+
+export interface TreeLevel {
+  kind: string;
+  node_count: number;
+  key_count: number;
+  nodes: { keys: string[]; key_count: number }[];
+}
+
+export interface TreeStructure {
+  kind: "bplustree";
+  height: number;
+  entries: number;
+  pages: number;
+  leaf_capacity: number;
+  internal_capacity: number;
+  levels: TreeLevel[];
+}
+
+export interface HashBucket {
+  bits: string;
+  local_depth: number;
+  entries: number;
+  pointers: number;
+  overflow_pages: number;
+}
+
+export interface HashStructure {
+  kind: "hash";
+  global_depth: number;
+  directory_size: number;
+  bucket_capacity: number;
+  bucket_count: number;
+  entries: number;
+  buckets: HashBucket[];
+}
+
+export interface HeapStorage {
+  kind: "heap";
+  pages: number;
+  slots_per_page: number;
+  records: number;
+}
+
+export interface SequentialStorage {
+  kind: "sequential";
+  main_pages: number;
+  slots_per_page: number;
+  records: number;
+  overflow_records: number;
+  deleted_records: number;
+  waste_ratio: number;
+}
+
+export interface TableStructure {
+  table: string;
+  organization: string;
+  rows: number;
+  storage: HeapStorage | SequentialStorage | TreeStructure;
+  indexes: {
+    name: string;
+    column: string;
+    method: string;
+    structure: TreeStructure | HashStructure;
+  }[];
 }

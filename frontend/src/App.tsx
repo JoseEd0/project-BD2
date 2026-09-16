@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { ApiError, closeSession, dropAllTables, fetchTables, runQuery, uploadCsv } from "./api";
+import {
+  ApiError,
+  closeSession,
+  dropAllTables,
+  fetchTables,
+  runQuery,
+  uploadCsv,
+  uploadFileOnly,
+} from "./api";
 import ConfirmDialog from "./components/ConfirmDialog";
 import FilesPanel from "./components/FilesPanel";
 import PlanPanel from "./components/PlanPanel";
@@ -8,21 +16,27 @@ import QueryPanel from "./components/QueryPanel";
 import ResultsPanel from "./components/ResultsPanel";
 import SchemaView from "./components/SchemaView";
 import StatusBar from "./components/StatusBar";
+import StructureDialog from "./components/StructureDialog";
 import UploadDialog from "./components/UploadDialog";
 import type { UploadValues } from "./components/UploadDialog";
 import { useSplitter } from "./hooks/useSplitter";
-import { SNIPPETS } from "./snippets";
+import { createFromFileSql } from "./lib/csvFiles";
+import { SNIPPET_GROUPS } from "./snippets";
 import type { QueryFailure, QueryResponse, TableInfo } from "./types";
 
 type View = "consulta" | "esquema";
 
 const PREVIEW_LIMIT = 100;
 const HISTORY_LIMIT = 25;
+const SESSION_ID_RADIX = 36;
+const SESSION_ID_LENGTH = 6;
+const SESSION_ID_OFFSET = 2;
 const SIDEBAR = { initial: 300, min: 220, max: 520 };
 const EDITOR = { initial: 240, min: 120, max: 620 };
 
 function newSessionId(): string {
-  return `ui-${Math.random().toString(36).slice(2, 8)}`;
+  const random = Math.random().toString(SESSION_ID_RADIX);
+  return `ui-${random.slice(SESSION_ID_OFFSET, SESSION_ID_OFFSET + SESSION_ID_LENGTH)}`;
 }
 
 export default function App() {
@@ -30,7 +44,7 @@ export default function App() {
   const [view, setView] = useState<View>("consulta");
   const [tables, setTables] = useState<TableInfo[]>([]);
   const [connected, setConnected] = useState(false);
-  const [sql, setSql] = useState(SNIPPETS[0].sql);
+  const [sql, setSql] = useState("");
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<QueryResponse | null>(null);
   const [failure, setFailure] = useState<QueryFailure | null>(null);
@@ -41,6 +55,7 @@ export default function App() {
   const [showUpload, setShowUpload] = useState(false);
   const [pendingDrop, setPendingDrop] = useState<TableInfo | null>(null);
   const [confirmEmpty, setConfirmEmpty] = useState(false);
+  const [inspected, setInspected] = useState<TableInfo | null>(null);
 
   const sidebar = useSplitter(SIDEBAR.initial, SIDEBAR.min, SIDEBAR.max, "x");
   const editor = useSplitter(EDITOR.initial, EDITOR.min, EDITOR.max, "y");
@@ -99,7 +114,6 @@ export default function App() {
             kind: "ConnectionError",
             line: null,
             column: null,
-            statement_index: null,
           });
         }
       } finally {
@@ -146,6 +160,14 @@ export default function App() {
       setUploading(true);
       setFailure(null);
       try {
+        if (values.mode === "fileOnly") {
+          const stored = await uploadFileOnly(values.file, values.name);
+          setSql(createFromFileSql(values.name, stored.path, stored.columns));
+          setView("consulta");
+          setResult(null);
+          setShowUpload(false);
+          return;
+        }
         const response = await uploadCsv({ ...values, sessionId });
         setResult(response);
         setShowUpload(false);
@@ -212,6 +234,7 @@ export default function App() {
         <FilesPanel
           onDescribe={describe}
           onDrop={setPendingDrop}
+          onInspect={setInspected}
           onEmpty={() => setConfirmEmpty(true)}
           onPreview={preview}
           onUpload={() => setShowUpload(true)}
@@ -229,7 +252,7 @@ export default function App() {
               onChange={setSql}
               onRun={() => void execute(sql)}
               running={running}
-              snippets={SNIPPETS}
+              snippetGroups={SNIPPET_GROUPS}
               sql={sql}
             />
             <div
@@ -257,6 +280,10 @@ export default function App() {
           onClose={() => setShowUpload(false)}
           onSubmit={(values) => void upload(values)}
         />
+      )}
+
+      {inspected !== null && (
+        <StructureDialog onClose={() => setInspected(null)} table={inspected} />
       )}
 
       {confirmEmpty && (

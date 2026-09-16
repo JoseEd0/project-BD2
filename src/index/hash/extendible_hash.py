@@ -14,6 +14,7 @@ import struct
 from collections.abc import Iterator
 from pathlib import Path
 from types import TracebackType
+from typing import Any
 
 from config import EngineConfig
 from hashing import stable_hash
@@ -29,6 +30,9 @@ DIRECTORY_SUFFIX = ".dir"
 DIRECTORY_ENTRY = struct.Struct("<i")
 MAX_LOCAL_DEPTH = 32
 INITIAL_GLOBAL_DEPTH = 1
+
+
+MAX_BUCKETS_SHOWN = 32
 
 
 class HashFormatError(StorageError):
@@ -151,6 +155,38 @@ class ExtendibleHashIndex:
             for entry in self._entries_of(bucket_id):
                 key_size = self._key_codec.size
                 yield self._key_codec.unpack(entry[:key_size]), entry[key_size:]
+
+    def describe(self) -> dict[str, Any]:
+        """Directorio y cubetas tal como están en disco.
+
+        Por cada cubeta: su profundidad local, cuántas entradas guarda, cuántos punteros del
+        directorio la apuntan (siempre `2^(gd - ld)`) y cuántas páginas de desbordamiento
+        encadena.
+        """
+        pointers: dict[int, list[int]] = {}
+        for index in range(self.directory_size):
+            pointers.setdefault(self._directory_entry(index), []).append(index)
+        buckets = []
+        for bucket_id, indexes in sorted(pointers.items(), key=lambda item: item[1][0]):
+            chain = list(self._chain_pages(bucket_id))
+            buckets.append(
+                {
+                    "bits": format(indexes[0], f"0{self._global_depth}b"),
+                    "local_depth": chain[0][1].flags,
+                    "entries": sum(len(list(page.live_slots())) for _, page in chain),
+                    "pointers": len(indexes),
+                    "overflow_pages": len(chain) - 1,
+                }
+            )
+        return {
+            "kind": "hash",
+            "global_depth": self._global_depth,
+            "directory_size": self.directory_size,
+            "bucket_capacity": self._bucket_capacity,
+            "bucket_count": len(buckets),
+            "entries": self._entry_count,
+            "buckets": buckets[:MAX_BUCKETS_SHOWN],
+        }
 
     def flush(self) -> None:
         self._write_header()

@@ -78,6 +78,23 @@ El dataset de demostración carga unas 27 000 filas repartidas en cinco tablas, 
 con una organización física distinta**, para que las diferencias entre estructuras se vean
 en la interfaz. Detalles en [`demos/README.md`](demos/README.md).
 
+### Sin la terminal: cargar los CSV desde la interfaz
+
+Los cinco archivos del dataset están versionados en [`demos/samples/`](demos/samples/). Con
+la base vacía, el botón **Cargar CSV** los sube uno a uno eligiendo su organización:
+
+| Archivo | Organización | Columna clave |
+|---|---|---|
+| `categorias.csv` | Heap file | `id` |
+| `clientes.csv` | Heap file | `id` |
+| `productos.csv` | B+ agrupado | `id` |
+| `pedidos.csv` | Archivo secuencial | `id` |
+| `detalle_pedidos.csv` | Heap file | `id` |
+
+Después, el atajo **Carga → Índices tras cargar CSV** crea los dos índices secundarios del
+dataset (hash sobre `clientes.ciudad` y B+ sobre `detalle_pedidos.pedido_id`), y todos los
+demás atajos del editor quedan listos para usarse.
+
 ## Uso desde Python
 
 ```python

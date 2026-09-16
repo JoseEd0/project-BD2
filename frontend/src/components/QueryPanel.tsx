@@ -1,27 +1,34 @@
 import { useState } from "react";
 
 import SqlEditor from "./SqlEditor";
-import type { Snippet } from "../snippets";
+import { countStatements } from "../lib/highlight";
+import type { SnippetGroup } from "../snippets";
 
 interface QueryPanelProps {
   sql: string;
   running: boolean;
-  snippets: Snippet[];
+  snippetGroups: SnippetGroup[];
   history: string[];
   onChange: (sql: string) => void;
   onRun: () => void;
 }
 
+/** Caracteres de cada consulta que se ven en el desplegable del historial. */
+const HISTORY_PREVIEW_LENGTH = 90;
+
 export default function QueryPanel({
   sql,
   running,
-  snippets,
+  snippetGroups,
   history,
   onChange,
   onRun,
 }: QueryPanelProps) {
   const [openHistory, setOpenHistory] = useState(false);
-  const statementCount = sql.split(";").filter((part) => part.trim().length > 0).length;
+  const [activeGroup, setActiveGroup] = useState(snippetGroups[0]?.name ?? "");
+  const statementCount = countStatements(sql);
+  const visibleSnippets =
+    snippetGroups.find((group) => group.name === activeGroup)?.snippets ?? [];
 
   return (
     <section className="panel panel--editor">
@@ -52,7 +59,7 @@ export default function QueryPanel({
                       }}
                       type="button"
                     >
-                      {item.replace(/\s+/g, " ").slice(0, 90)}
+                      {item.replace(/\s+/g, " ").slice(0, HISTORY_PREVIEW_LENGTH)}
                     </button>
                   </li>
                 ))}
@@ -72,17 +79,37 @@ export default function QueryPanel({
       </header>
       <SqlEditor onChange={onChange} onRun={onRun} value={sql} />
       <div className="snippets">
-        {snippets.map((snippet) => (
-          <button
-            className="snippet"
-            key={snippet.label}
-            onClick={() => onChange(snippet.sql)}
-            title={snippet.description}
-            type="button"
-          >
-            {snippet.label}
-          </button>
-        ))}
+        <div className="snippets__groups" role="tablist">
+          {snippetGroups.map((group) => (
+            <button
+              aria-selected={group.name === activeGroup}
+              className={
+                group.name === activeGroup
+                  ? "snippets__group snippets__group--active"
+                  : "snippets__group"
+              }
+              key={group.name}
+              onClick={() => setActiveGroup(group.name)}
+              role="tab"
+              type="button"
+            >
+              {group.name}
+            </button>
+          ))}
+        </div>
+        <div className="snippets__items">
+          {visibleSnippets.map((snippet) => (
+            <button
+              className="snippet"
+              key={snippet.label}
+              onClick={() => onChange(snippet.sql)}
+              title={snippet.description}
+              type="button"
+            >
+              {snippet.label}
+            </button>
+          ))}
+        </div>
       </div>
     </section>
   );

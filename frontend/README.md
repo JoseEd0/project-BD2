@@ -28,16 +28,27 @@ consulta, sus filas y cómo se ejecutó.
 - **Archivos** — las tablas y su estructura: organización física (heap file, secuencial o
   B+ agrupado), número de filas, columnas con su tipo, marca de clave primaria, `NOT NULL`
   y **con qué índice está indexada cada columna**. Tiene filtro por nombre de tabla o de
-  columna, y tres botones por tabla: `▦` abre sus datos, `ⓘ` la enfoca en el diagrama y
-  `🗑` la elimina (con confirmación que avisa de cuántas filas e índices se pierden).
-  El botón **Cargar CSV** abre el diálogo de ingesta: se elige el archivo, el nombre de la
-  tabla —que se propone a partir del nombre del archivo— y la organización física; los
-  tipos de cada columna se deducen leyendo el archivo.
+  columna, y cuatro botones por tabla: `▦` abre sus datos, `⌬` su **estructura física**
+  (niveles del B+ con sus separadores y ocupación, o profundidad global y cubetas del hash),
+  `ⓘ` la enfoca en el diagrama y `🗑` la elimina (con confirmación que avisa de cuántas
+  filas e índices se pierden).
+  El botón **Cargar CSV** abre el diálogo de ingesta, con dos modos. *Crear la tabla
+  ahora*: se elige el archivo (arrastrándolo o con el selector), el nombre de la tabla
+  —propuesto a partir del archivo—, la organización física y la columna clave, elegida
+  de la cabecera del CSV (obligatoria en el B+ agrupado y el secuencial; opcional en el
+  heap, donde recibe un índice hash). *Solo subir el archivo*: el CSV se guarda en el
+  servidor y el editor recibe la plantilla `CREATE TABLE ... FROM FILE ... USING INDEX`
+  para decidir la organización a mano con SQL. Los tipos se deducen leyendo el archivo. El
+  botón `⌦` vacía la base de datos entera. Con la base vacía, el panel explica cómo
+  poblarla.
 - **Consultas** — editor con **numeración de líneas y resaltado de sintaxis**, `⌘↵` /
-  `Ctrl↵` para ejecutar, `Tab` para indentar, historial de las últimas 25 consultas y una
-  fila de atajos que recorre todo lo que sabe hacer la Parte 1. Admite **varias sentencias
-  separadas por `;`**: se ejecutan en orden y el panel muestra las filas de la última
-  consulta.
+  `Ctrl↵` para ejecutar, `Tab` para indentar e historial de las últimas 25 consultas.
+  Admite **varias sentencias separadas por `;`**: se ejecutan en orden y el panel muestra
+  las filas de la última consulta. Debajo, **24 atajos** agrupados por bloque de la
+  exposición —*Carga*, *Índices*, *Plan*, *Externos*, *SQL* y *Transacciones*—; un clic escribe la
+  consulta en el editor. Todos se pueden lanzar varias veces sin error, porque los que
+  crean o borran algo usan `IF [NOT] EXISTS`. Para editarlos, ver
+  [`src/snippets.ts`](src/snippets.ts).
 - **Resultados** — dos pestañas. *Filas* con la tabla de resultados (números alineados a la
   derecha, `NULL` en cursiva, cabecera fija al hacer scroll y columna `#` fija a la
   izquierda), y *Mensajes* con qué hizo cada sentencia del script y cuánto tardó. Botones
@@ -45,7 +56,9 @@ consulta, sus filas y cómo se ejecutó.
   el **cursor bajo la posición exacta** que devuelve el parser.
 - **Plan de ejecución** — el árbol de operadores. En **verde** el camino de acceso elegido
   (recorrido completo, índice hash, índice B+ o el orden propio de la tabla) y en
-  **naranja** los algoritmos externos que se apoyan en disco.
+  **naranja** los algoritmos externos que se apoyan en disco. Tras ejecutar, cada operador
+  lleva las **filas reales** que produjo y su **tiempo inclusivo**: es lo mismo que
+  devuelve `EXPLAIN ANALYZE`. Con `EXPLAIN` a secas se ve el plan sin ejecutar nada.
 
 ### Esquema
 

@@ -1,7 +1,7 @@
 import pytest
 
 from config import EngineConfig
-from query.catalog import UnknownTableError
+from query.catalog import CatalogError, UnknownTableError
 from query.engine import Engine, EngineError, QueryResult, TransactionStatementError
 from query.expressions import ExpressionError, UnknownColumnError
 from query.table import DuplicatePrimaryKeyError
@@ -268,3 +268,77 @@ def test_an_unknown_function_is_rejected_before_reading_rows(engine: Engine):
 def test_a_valid_query_on_an_empty_table_returns_no_rows(engine: Engine):
     engine.execute("CREATE TABLE t (id INT PRIMARY KEY, v VARCHAR(8))")
     assert engine.execute("SELECT id, v FROM t WHERE id > 0 ORDER BY v").rows == ()
+
+
+def test_drop_index_if_exists_tolerates_a_missing_index(engine: Engine):
+    engine.execute("CREATE TABLE t (id INT PRIMARY KEY, v INT)")
+    assert "no existía" in engine.execute("DROP INDEX IF EXISTS fantasma").message
+
+
+def test_drop_index_if_exists_drops_an_existing_index(engine: Engine):
+    engine.execute("CREATE TABLE t (id INT PRIMARY KEY, v INT)")
+    engine.execute("CREATE INDEX idx_v ON t USING HASH (v)")
+    engine.execute("DROP INDEX IF EXISTS idx_v")
+    assert engine.table("t").definition.index_on("v") is None
+
+
+def test_loading_a_file_with_an_unknown_key_registers_nothing(engine: Engine, tmp_path):
+    source = tmp_path / "p.csv"
+    source.write_text("id,nombre\n1,a\n")
+    with pytest.raises(CatalogError):
+        engine.execute(f"CREATE TABLE p FROM FILE '{source}' USING INDEX SEQ(\"falsa\")")
+    assert engine.table_names() == []
+
+
+def test_a_load_that_fails_halfway_leaves_no_table_behind(engine: Engine, tmp_path):
+    """Una clave repetida a mitad del archivo no debe dejar una tabla a medio cargar."""
+    source = tmp_path / "p.csv"
+    source.write_text("id,nombre\n1,a\n2,b\n1,c\n")
+    with pytest.raises(DuplicatePrimaryKeyError):
+        engine.execute(f"CREATE TABLE p FROM FILE '{source}' USING INDEX BTREE(\"id\")")
+    assert engine.table_names() == []
+    engine.execute(f"CREATE TABLE p FROM FILE '{source}'")
+    assert len(engine.execute("SELECT * FROM p").rows) == 3
+
+
+def test_dropping_a_table_leaves_foreign_files_alone(engine: Engine, tmp_path):
+    """`productos.csv` empieza igual que los archivos de la tabla, pero no es suyo."""
+    engine.execute("CREATE TABLE productos (id INT PRIMARY KEY, v INT INDEX HASH)")
+    foreign = tmp_path / "productos.csv"
+    foreign.write_text("id\n1\n")
+    engine.execute("DROP TABLE productos")
+    assert foreign.exists()
+    assert not list(tmp_path.glob("productos.*.idx*"))
+    assert not (tmp_path / "productos.heap").exists()
+
+
+def test_a_secondary_index_on_an_ordered_table_is_rejected_cleanly(engine: Engine):
+    """Fallar al crear el índice no puede dejarlo apuntado en el catálogo."""
+    engine.execute("CREATE TABLE p (id INT PRIMARY KEY INDEX SEQ, estado VARCHAR(10))")
+    engine.execute("INSERT INTO p VALUES (1, 'a'), (2, 'b')")
+    with pytest.raises(CatalogError, match="heap file"):
+        engine.execute("CREATE INDEX idx_estado ON p USING HASH (estado)")
+    assert engine.table("p").definition.indexes == ()
+    engine.close()
+    with Engine(engine.config) as reopened:
+        assert reopened.table("p").definition.indexes == ()
+        assert reopened.execute("SELECT id FROM p WHERE estado = 'a'").rows == ((1,),)
+
+
+def test_dropping_a_hash_index_removes_its_directory_file(engine: Engine, tmp_path):
+    engine.execute("CREATE TABLE t (id INT PRIMARY KEY, v INT)")
+    engine.execute("CREATE INDEX idx_v ON t USING HASH (v)")
+    assert list(tmp_path.glob("t.idx_v.idx*"))
+    engine.execute("DROP INDEX idx_v")
+    assert list(tmp_path.glob("t.idx_v.idx*")) == []
+
+
+def test_spilling_operators_leave_no_temporary_directories(engine: Engine, tmp_path):
+    engine.execute("CREATE TABLE a (id INT PRIMARY KEY, g INT)")
+    engine.execute("CREATE TABLE b (id INT PRIMARY KEY, a_id INT)")
+    engine.execute("INSERT INTO a VALUES (1, 10), (2, 20), (3, 10)")
+    engine.execute("INSERT INTO b VALUES (7, 1), (8, 3)")
+    engine.execute("SELECT g, COUNT(*) FROM a GROUP BY g ORDER BY g")
+    engine.execute("SELECT b.id FROM b JOIN a ON b.a_id = a.id ORDER BY b.id")
+    leftovers = [path.name for path in tmp_path.iterdir() if path.is_dir()]
+    assert leftovers == []

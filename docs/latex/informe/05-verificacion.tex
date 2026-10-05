@@ -1,0 +1,24 @@
+\section{Verificación}
+
+El repositorio tiene \textbf{\totalpruebas{} pruebas automáticas}, organizadas como un
+espejo del código, que cubren el \coberturapruebas{}\,\% de las líneas y ramas del motor,
+y pasa limpio el análisis de estilo (\texttt{ruff}) y el de tipos en modo estricto
+(\texttt{mypy}). Tres ideas las guían:
+
+\begin{itemize}[nosep, leftmargin=*]
+  \item \textbf{Validadores estructurales.} Una estructura puede responder bien y estar
+        rota por dentro. Cada índice tiene un validador que la recorre entera: en el B+, el
+        orden, la ocupación mínima y que todas las hojas estén a la misma profundidad; en
+        el hash, que cada cubeta reciba $2^{gd-ld}$ punteros; en el R-Tree, que cada MBR
+        sea exactamente el ajustado.
+  \item \textbf{Comparación con un modelo.} Cada estructura se somete a miles de
+        operaciones al azar y se compara con una lista ordenada o con la fuerza bruta. Cada
+        consulta espacial se ejecuta sin índice y con R-Tree, y cada condición sobre una
+        tabla sin índices, un heap con índices, un secuencial y un B+ agrupado: las
+        respuestas tienen que coincidir.
+  \item \textbf{Contraste externo.} Las 1\,800 consultas del experimento espacial devuelven
+        exactamente las mismas filas que PostGIS.
+\end{itemize}
+
+Las pruebas de almacenamiento usan páginas de 256 bytes a propósito: así cualquier prueba
+cruza varias páginas y los errores de frontera aparecen enseguida.

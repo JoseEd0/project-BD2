@@ -1,0 +1,46 @@
+\section{Dominio de datos}
+
+Se trabaja con dos conjuntos de datos, uno por cada necesidad.
+
+\paragraph{Un comercio electrónico, generado.} El dataset de demostración modela clientes
+que hacen pedidos de productos organizados en categorías, más una red de tiendas con
+ubicación en Lima: seis tablas y unas 30\,000 filas. \textbf{Cada tabla usa una organización
+física distinta}, para que las diferencias se vean funcionando sobre los mismos datos.
+
+\begin{center}
+\small
+\begin{tabular}{@{}lrL{5.0cm}ll@{}}
+\toprule
+\textbf{Tabla} & \textbf{Filas} & \textbf{Columnas} & \textbf{Organización} & \textbf{Índice secundario} \\
+\midrule
+\texttt{categorias}       & 12      & id, nombre & heap file & --- \\
+\texttt{clientes}         & 2\,000  & id, nombre, email, ciudad, fecha\_alta & heap file & hash en \texttt{ciudad} \\
+\texttt{productos}        & 800     & id, nombre, categoria\_id, precio, stock & B+ agrupado & --- \\
+\texttt{pedidos}          & 6\,000  & id, cliente\_id, fecha, estado, total & archivo secuencial & --- \\
+\texttt{detalle\_pedidos} & 18\,000 & id, pedido\_id, producto\_id, cantidad, precio\_unitario & heap file & B+ en \texttt{pedido\_id} \\
+\texttt{tiendas}          & 3\,000  & id, nombre, rubro, distrito, ubicacion & heap file & R-Tree en \texttt{ubicacion} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Sale de un generador determinista (\texttt{demos/poblar\_ecommerce.py}): la misma semilla
+produce los mismos datos byte a byte, su tamaño se ajusta con \texttt{-{}-escala} y los
+seis CSV están versionados para cargarlos desde la interfaz. Las tiendas se generan dentro
+del contorno de doce distritos, de modo que \guillemotleft{}tiendas dentro de
+Miraflores\guillemotright{} tiene una respuesta comprobable.
+
+\paragraph{Lugares reales de OpenStreetMap.} Para la parte espacial importa que los puntos
+estén repartidos como en el mundo y no como los reparte un generador. El guion
+\texttt{demos/descargar\_lugares.py} descarga los puntos de interés del Perú ---colegios,
+restaurantes, farmacias, bancos, gasolineras--- y los deja en un CSV que el gestor carga
+tal cual: \texttt{id, nombre, rubro, ubicacion}, con la ubicación como
+\texttt{POINT(latitud, longitud)}. Son \textbf{128\,011 lugares} con nombre en todo el país
+(26\,606 en Lima y Callao), en 128 rubros. Lee el extracto de Geofabrik pidiendo por HTTP
+solo los bytes de las capas que necesita y decodifica el shapefile con un lector propio.
+Es el dataset del experimento espacial y el que se usa en la demostración del mapa.
+
+\paragraph{Tipos.} El motor almacena enteros, reales, booleanos, fechas, texto de longitud
+fija, bytes y puntos. Al cargar un CSV, el tipo de cada columna se deduce de todos sus
+valores. Solo se comparan valores de la misma familia: \texttt{WHERE id = 'abc'} no
+devuelve cero filas en silencio, se rechaza nombrando la columna, y antes de leer ninguna
+fila.

@@ -1,0 +1,192 @@
+\section{Explicación de los algoritmos}
+
+\subsection{Almacenamiento: páginas, heap file y archivo secuencial}
+
+Un registro es un mapa de nulos seguido de sus campos, todos de tamaño fijo. Una página de
+4\,096 bytes tiene una cabecera de 8 y ranuras de un byte de estado (\emph{libre},
+\emph{ocupada} o \emph{lápida}) más el registro: caben
+$\lfloor (4096 - 8)/(1 + \text{registro}) \rfloor$.
+
+\paragraph{Heap file.} Los registros se guardan donde haya sitio. La única estructura
+auxiliar es una \textbf{lista enlazada de páginas con ranuras libres}: insertar va a la
+cabeza de la lista ($O(1)$) y borrar devuelve la página a la lista, que es la reutilización
+de espacio que pide el enunciado. No sabe buscar por valor (recorrido completo); para eso
+están los índices, cuyas hojas guardan la dirección \texttt{(página, ranura)} de cada fila.
+
+\paragraph{Archivo secuencial.} Los registros se mantienen ordenados por clave en un
+\textbf{espacio principal}, con un \textbf{espacio auxiliar} de desbordamiento.
+\begin{itemize}[nosep, leftmargin=*]
+  \item \emph{Buscar}: búsqueda binaria sobre las páginas ($O(\log P)$), otra dentro de la
+        página y, si hace falta, su cadena de desbordamiento.
+  \item \emph{Insertar}: si la página tiene sitio, se desplazan sus ranuras; si está llena
+        y la clave es la mayor, se añade una página; si va en medio, a la cadena de
+        desbordamiento de esa página.
+  \item \emph{Borrar}: eliminación \emph{lazy}; se marca una lápida, que conserva la
+        posición de la clave.
+  \item \emph{Reorganizar}: cuando
+        $(\text{lápidas} + \text{desbordamiento}) / \text{registros}$ supera el
+        \textbf{30\,\%}, se reescribe el espacio principal en orden, sin lápidas, llenando
+        cada página al \textbf{80\,\%}; ese hueco hace que las inserciones siguientes
+        quepan en su sitio.
+\end{itemize}
+
+\subsection{Índices: B+ y hash extendible}
+
+\paragraph{Árbol B+.} Cada nodo ocupa una página; los datos están solo en las hojas, que
+van encadenadas. Si una hoja se desborda se parte por la mitad y la primera clave de la
+mitad derecha \emph{se copia} al padre; si un nodo interno se desborda, su clave central
+\emph{sube}. Al borrar, un nodo que baja de la mitad pide una entrada a un hermano
+(\emph{redistribución}) o se une con él (\emph{fusión}). El árbol solo crece o mengua por
+la raíz, así que todas las hojas quedan siempre a la misma profundidad.
+
+\begin{center}
+\small
+\begin{tabular}{@{}L{3.0cm}L{6.6cm}rr@{}}
+\toprule
+\textbf{Variante} & \textbf{Qué guardan las hojas} & \textbf{Hoja} & \textbf{Interno} \\
+\midrule
+Agrupado      & la fila completa: el árbol \emph{es} la tabla, uno por tabla & 50 & 340 \\
+No agrupado   & la dirección de la fila en el heap; varios por tabla; la clave es el par
+                \texttt{(valor, dirección)}, que admite valores repetidos & 292 & 226 \\
+\bottomrule
+\end{tabular}
+
+{\footnotesize\color{gris} Entradas por nodo con páginas de 4 KB y una clave entera
+(tabla \texttt{productos}, fila de 73 bytes).}
+\end{center}
+
+\paragraph{Hash extendible.} Un directorio de $2^{gd}$ punteros (profundidad global $gd$)
+apunta a cubetas, cada una con su profundidad local $ld$; una cubeta de profundidad $ld$
+recibe exactamente $2^{gd-ld}$ punteros. Buscar son dos accesos, sea cual sea el tamaño.
+Cuando una cubeta se llena, si $ld = gd$ se \textbf{duplica el directorio} (se copian
+punteros, no se mueve ningún registro) y se parte \textbf{solo esa cubeta} según el bit
+$ld$ del hash. Borrar deshace el camino: una cubeta holgada se \textbf{funde con su
+gemela} y, si las dos mitades del directorio quedan iguales, este se reduce a la mitad. Si
+muchas filas comparten clave, partir no reparte nada: se detecta antes de duplicar y se
+encadena una página de desbordamiento. El hash es Blake2b sobre los bytes de la clave,
+porque el de Python cambia en cada proceso.
+
+\subsection{Algoritmos externos}
+
+Trabajan con más datos de los que caben en memoria: el presupuesto es un buffer de 16
+páginas, y todo lo demás vive en archivos temporales leídos página a página.
+
+\begin{description}[leftmargin=*, nosep]
+  \item[\texttt{ORDER BY}: ordenamiento externo.] Se generan \emph{runs} ordenados del
+        tamaño del buffer ($\lceil N/B \rceil$) y se mezclan de 8 en 8 con un montículo,
+        con una página por run en memoria: $\lceil \log_8 (N/B) \rceil$ pasadas.
+  \item[\texttt{GROUP BY} y \texttt{DISTINCT}: hashing externo.] Las filas se reparten en
+        16 particiones por el hash de la clave; filas iguales caen en la misma. De cada
+        grupo se guarda un \textbf{acumulador} (un contador, una suma compensada, un
+        mínimo), no sus filas: la memoria depende del número de grupos, no del de filas.
+        Si los grupos de una partición no caben, se vuelve a repartir con otra función de
+        hash.
+  \item[\texttt{JOIN} con igualdad: \emph{grace hash join}.] Se particionan las dos tablas
+        con el mismo hash; para cada par de particiones, una se carga en un diccionario y
+        la otra la recorre: $O(N + M)$ en lugar de $O(N \cdot M)$. Admite claves
+        compuestas, una condición residual y las cuatro reuniones
+        (\texttt{INNER}, \texttt{LEFT}, \texttt{RIGHT}, \texttt{FULL}).
+  \item[\texttt{JOIN} sin igualdad: bucles anidados en bloques.] Sin una clave por la que
+        repartir, se compara todo con todo, pero la tabla interior se relee una vez por
+        \emph{bloque} de la exterior y no una vez por fila. Es también la salida del hash
+        join para una clave tan repetida que ningún hash la separa.
+\end{description}
+
+\subsection{Procesamiento de consultas y transacciones}
+
+El parser es recursivo descendente, con las precedencias completas de expresiones, y
+señala cada error con línea, columna y un cursor. El planificador elige por reglas el
+\textbf{camino de acceso} mirando las condiciones del \texttt{WHERE}, y el ejecutor sigue
+el modelo de iteradores (\emph{Volcano}): cada operador pide filas a su hijo.
+
+\begin{center}
+\small
+\begin{tabular}{@{}L{5.4cm}L{5.6cm}L{4.0cm}@{}}
+\toprule
+\textbf{En la consulta} & \textbf{Con una estructura que lo resuelva} & \textbf{Sin ella} \\
+\midrule
+\texttt{col = valor}                 & \texttt{IndexLookup} (hash, B+, R-Tree)      & \texttt{SequentialScan} \\
+\texttt{col BETWEEN a AND b}         & \texttt{IndexRange}, \texttt{PrimaryKeyRange} & \texttt{SequentialScan} \\
+\texttt{ORDER BY clave}              & \texttt{OrderedScan}: la tabla ya está en orden & \texttt{ExternalSort} \\
+\texttt{distancia(col, p) < r}       & \texttt{SpatialRangeScan}                     & recorrido + filtro \\
+\texttt{intersecta(col, polígono)}   & \texttt{SpatialPolygonScan}                   & recorrido + filtro \\
+\texttt{ORDER BY distancia(col, p)}  & \texttt{SpatialNearestScan}, sin ordenar      & recorrido + \texttt{ExternalSort} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Una consulta mal escrita se rechaza \textbf{antes de leer ninguna fila}, también sobre una
+tabla vacía: columnas inexistentes, una constante de otro tipo que su columna, una función
+mal llamada o un \texttt{SUM} sobre texto. Y una sentencia que falla a mitad no deja nada
+escrito: \texttt{INSERT} y \texttt{UPDATE} validan todas las filas antes de escribir la
+primera.
+
+\paragraph{Transacciones.} \texttt{BEGIN TRANSACTION} \dots{} \texttt{END TRANSACTION}
+agrupa sentencias. Los bloqueos son por tabla, compartidos para leer y exclusivos para
+escribir, y se sueltan todos al confirmar o abortar: \textbf{bloqueo en dos fases}. Antes
+de esperar un bloqueo se recorre el \textbf{grafo de espera}; si esperar cerraría un ciclo,
+esa transacción aborta y la otra continúa. Abortar recorre el registro de cambios
+\emph{al revés} aplicando el inverso de cada uno. El guion \texttt{demos/concurrencia.py}
+lo demuestra con hilos: cuatro hilos restan 25 veces de un saldo de 1\,000 y sin control
+queda en 975 en lugar de 900 (una \emph{race condition} real); con transacciones, siempre
+900; y dos transacciones que piden dos tablas en orden opuesto terminan en un interbloqueo
+que el gestor detecta, abortando exactamente una.
+
+\subsection{Base de datos espacial: R-Tree}
+
+\paragraph{Métricas.} Un punto es \texttt{POINT(latitud, longitud)}. La distancia
+\textbf{euclidiana} es la recta sobre el plano de coordenadas, en grados; la de
+\textbf{Haversine}, el arco sobre la esfera, en metros:
+\[
+d = 2R \arcsin\sqrt{\sin^2\!\tfrac{\Delta\varphi}{2} + \cos\varphi_1 \cos\varphi_2
+    \sin^2\!\tfrac{\Delta\lambda}{2}}, \qquad R = 6\,371\,008.8 \text{ m}
+\]
+Cada métrica ofrece además la \textbf{distancia mínima de un punto a un rectángulo}, que es
+lo que el índice necesita para descartar ramas enteras sin leerlas.
+
+\paragraph{Estructura.} Es el R-Tree de Guttman (1984) sobre disco. Una hoja guarda hasta
+185 puntos con la dirección de su fila; un nodo interno, hasta 113 hijos, cada uno con su
+\textbf{MBR}: el menor rectángulo que encierra todo lo que cuelga de él. A diferencia del
+B+, los MBR de dos hermanos pueden solaparse, así que la calidad del árbol depende de que
+queden pequeños.
+\begin{itemize}[nosep, leftmargin=*]
+  \item \emph{Insertar}: se baja por el hijo cuyo MBR \emph{menos crece}; si la hoja se
+        desborda, se divide y los MBR del camino se ajustan.
+  \item \emph{Dividir (cuadrática)}: las dos entradas que más área desperdiciarían juntas
+        son las semillas; el resto se asigna de una en una, empezando por la de
+        preferencia más marcada. Los empates de área ---puntos alineados--- se resuelven
+        por semiperímetro.
+  \item \emph{Borrar}: un nodo que baja del 40\,\% se disuelve y sus entradas se
+        reinsertan, porque los hermanos de un R-Tree no tienen un orden que permita
+        fusionarlos.
+  \item \emph{Carga masiva (STR)}: \texttt{CREATE INDEX} sobre una tabla con datos ordena
+        los puntos por latitud, los corta en franjas, ordena cada franja por longitud y la
+        corta en hojas que no se solapan. Reutiliza el ordenamiento externo de la Parte~1.
+\end{itemize}
+
+\paragraph{Las tres búsquedas.}
+\begin{description}[leftmargin=*, nosep]
+  \item[Por radio.] Solo se abren los hijos cuya distancia mínima al centro no supera el
+        radio; en las hojas se mide la distancia exacta.
+  \item[$k$ vecinos más cercanos.] Búsqueda \emph{primero-el-mejor} (Hjaltason y Samet,
+        1999): una cola de prioridad mezcla nodos, con la distancia mínima a su MBR, y
+        puntos, con su distancia real. Se saca siempre lo más cercano; si es un punto,
+        \textbf{es el siguiente vecino}, porque nada de lo que queda puede estar más cerca.
+        Es incremental: el \texttt{LIMIT} deja de pedir tras el $k$-ésimo y no se ordena
+        nada.
+  \item[Por polígono.] \emph{Filtrar y refinar}: el árbol busca por el rectángulo que
+        encierra al polígono y cada candidato pasa la prueba exacta de punto en polígono
+        (regla par-impar). Admite polígonos cóncavos.
+\end{description}
+
+\begin{lstlisting}[style=sql]
+CREATE INDEX idx_lugares ON lugares USING RTREE (ubicacion);
+SELECT * FROM lugares WHERE distancia(ubicacion, POINT(-12.0464, -77.0428)) < 5000;
+SELECT * FROM lugares ORDER BY distancia(ubicacion, POINT(-12.0464, -77.0428)) LIMIT 10;
+SELECT * FROM lugares WHERE intersecta(ubicacion,
+                            POLYGON((-12.11, -77.05), (-12.11, -77.01), (-12.14, -77.01)));
+\end{lstlisting}
+
+Las funciones espaciales se evalúan como cualquier expresión, de modo que las tres
+consultas dan \textbf{lo mismo con índice que sin él}; con el R-Tree, el plan dice además
+cuántos nodos del árbol abrió.

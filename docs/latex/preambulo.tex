@@ -1,0 +1,94 @@
+% Preámbulo del informe: paquetes, colores, títulos, código y figuras.
+
+\usepackage[T1]{fontenc}
+\usepackage[spanish,es-noquoting,es-tabla]{babel}
+\usepackage[a4paper,margin=2.1cm,top=2.3cm,bottom=2.2cm]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usepackage{float}
+\usepackage{listings}
+\usepackage{tcolorbox}
+\usepackage{enumitem}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage[font=small,labelfont=bf,skip=4pt]{caption}
+\usepackage[hidelinks]{hyperref}
+
+\usetikzlibrary{positioning,arrows.meta}
+\tcbuselibrary{skins,breakable}
+
+% --- paleta ---------------------------------------------------------------
+\definecolor{tinta}{HTML}{1B2733}
+\definecolor{acento}{HTML}{1F6FEB}
+\definecolor{acentoSuave}{HTML}{DDE9FB}
+\definecolor{exito}{HTML}{1A7F37}
+\definecolor{exitoSuave}{HTML}{DCF4E3}
+\definecolor{gris}{HTML}{6E7781}
+\definecolor{grisSuave}{HTML}{F0F2F5}
+
+\color{tinta}
+
+% --- títulos, párrafos y encabezados ---------------------------------------
+\titleformat{\section}{\Large\bfseries\color{acento}}{\thesection}{0.7em}{}
+\titleformat{\subsection}{\large\bfseries}{\thesubsection}{0.6em}{}
+\titlespacing*{\section}{0pt}{14pt}{6pt}
+\titlespacing*{\subsection}{0pt}{10pt}{4pt}
+\titlespacing*{\paragraph}{0pt}{7pt}{0.8em}
+\setlength{\parskip}{4pt}
+\setlength{\parindent}{0pt}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\color{gris}Minigestor de base de datos multimodal}
+\fancyhead[R]{\small\color{gris}Informe: Partes 1 y 2}
+\fancyfoot[C]{\small\color{gris}\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% --- tablas ----------------------------------------------------------------
+% Columna de párrafo sin justificar: en celdas estrechas la justificación parte palabras.
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
+
+% --- código ---------------------------------------------------------------
+\lstdefinestyle{consola}{
+  basicstyle=\ttfamily\footnotesize,
+  keywordstyle=\color{acento}\bfseries,
+  commentstyle=\color{gris}\itshape,
+  stringstyle=\color{exito},
+  numbers=none,
+  frame=leftline,
+  framesep=8pt,
+  rulecolor=\color{acentoSuave},
+  framerule=2pt,
+  backgroundcolor=\color{grisSuave},
+  xleftmargin=10pt,
+  breaklines=true,
+  showstringspaces=false,
+  columns=fullflexible,
+  keepspaces=true
+}
+\lstdefinestyle{sql}{
+  style=consola,
+  morekeywords={SELECT,FROM,WHERE,CREATE,TABLE,INDEX,USING,ORDER,BY,LIMIT,ON,AND,RTREE}
+}
+\lstset{style=consola}
+
+% --- cajas y figuras --------------------------------------------------------
+\newtcolorbox{resumen}{
+  enhanced, colback=exitoSuave, colframe=exito,
+  boxrule=0pt, leftrule=3pt, arc=2pt, left=8pt, right=8pt, top=5pt, bottom=5pt}
+
+\tikzset{
+  flecha/.style={-{Stealth[length=2mm]}, gris, thick},
+}
+
+% Una gráfica de benchmarks/figures con su pie: [ancho]{archivo}{etiqueta}{pie}.
+\newcommand{\grafica}[4][\textwidth]{%
+  \begin{figure}[H]
+    \centering
+    \includegraphics[width=#1]{../../benchmarks/figures/#2}
+    \caption{#4}
+    \label{#3}
+  \end{figure}}

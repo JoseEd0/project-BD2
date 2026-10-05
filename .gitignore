@@ -121,6 +121,8 @@ config.local.*
 *.mp4
 *.pdf
 !README_assets/**
+# Las gráficas de los experimentos sí se versionan: son parte del informe.
+!benchmarks/figures/*.png
 
 # --- Modelos y vectores precomputados ---
 *.npy
@@ -136,8 +138,9 @@ config.local.*
 /embeddings/
 /checkpoints/
 
-# --- Resultados de benchmarks (crudos) ---
-benchmarks/results/
+# --- Salidas de benchmarks ---
+# `benchmarks/results/` (medidas crudas) y `benchmarks/figures/` se versionan: son las
+# cifras que cita el informe. Lo que se ignora son las salidas de prueba.
 benchmarks/output/
 *.prof
 *.lprof
@@ -150,7 +153,10 @@ benchmarks/output/
 .playwright-mcp/
 
 # --- Documentación de trabajo (no se versiona) ---
-/docs/
+/docs/extra/
+# El informe entregable sí se versiona, con su fuente en docs/latex/.
+!/docs/informe.pdf
+
 
 # --- Editores e IDEs ---
 .vscode/

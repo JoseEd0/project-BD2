@@ -1,0 +1,57 @@
+\documentclass[10pt,a4paper]{article}
+\input{preambulo}
+
+% --- datos del alumno y del repositorio ---------------------------------------
+% Lo único que hay que tocar aquí. Si \codigo queda vacío, su fila no se imprime.
+\newcommand{\alumno}{José Huamaní}
+\newcommand{\codigo}{}
+\newcommand{\carrera}{Ciencias de la Computación, UTEC}
+\newcommand{\curso}{Base de Datos 2 (2026-2)}
+\newcommand{\entrega}{Entrega parcial, semana 8}
+\newcommand{\repositorio}{https://github.com/JoseEd0/project-BD2}
+
+% --- cifras que se sincronizan con el repositorio -------------------------------
+% Número de pruebas automáticas y cobertura de líneas y ramas de src/.
+\newcommand{\totalpruebas}{1287}
+\newcommand{\coberturapruebas}{99}
+
+\begin{document}
+\thispagestyle{empty}
+
+{\Huge\bfseries Minigestor de base de datos multimodal\par}
+\vspace{2pt}
+{\Large Informe incremental: Parte 1 (relacional) y Parte 2 (espacial)\par}
+\vspace{8pt}
+{\color{acento}\hrule height 1.2pt}
+\vspace{8pt}
+
+\begin{tabular}{@{}>{\bfseries\color{gris}}l@{\hspace{1.2em}}l@{}}
+Alumno      & \alumno \\
+\if\relax\detokenize\expandafter{\codigo}\relax\else
+Código      & \codigo \\
+\fi
+Carrera     & \carrera \\
+Curso       & \curso \\
+Entrega     & \entrega \\
+Repositorio & \href{\repositorio}{\texttt{\repositorio}} \\
+\end{tabular}
+
+\vspace{6pt}
+\begin{resumen}
+Un gestor de base de datos construido desde cero en Python: sin ORM, sin motor externo y
+sin librerías que resuelvan las estructuras. Esta entrega cubre la \textbf{Parte~1}
+---almacenamiento paginado, índices B+ y hash, algoritmos externos, SQL, transacciones e
+interfaz--- y la \textbf{Parte~2}: R-Tree sobre disco, consultas por radio, por cercanía y
+por polígono, dos métricas de distancia y panel de mapa. Todo lo que se afirma sobre
+rendimiento está \textbf{medido}: tres experimentos reproducibles con un comando, con
+resultados crudos y gráficas versionados. El índice espacial se contrastó con PostGIS sobre
+100\,000 lugares reales de OpenStreetMap: las 1\,800 consultas devuelven las mismas filas.
+\end{resumen}
+
+\input{informe/01-arquitectura}
+\input{informe/02-datos}
+\input{informe/03-algoritmos}
+\input{informe/04-experimentos}
+\input{informe/05-verificacion}
+
+\end{document}

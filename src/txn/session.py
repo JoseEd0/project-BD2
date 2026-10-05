@@ -40,6 +40,7 @@ from txn.transaction import (
     TransactionManager,
     TransactionState,
     undo,
+    undo_statement,
 )
 
 WRITE_STATEMENTS = (
@@ -141,6 +142,7 @@ class Session:
     def _run_in_transaction(self, statement: Statement) -> QueryResult:
         autocommit = self._current is None
         transaction = self._current or self._manager.begin()
+        first_change = len(transaction.changes)
         try:
             self._lock_for(statement, transaction)
             result = self._engine.run(statement, journal=transaction)
@@ -150,6 +152,8 @@ class Session:
         except Exception:
             if autocommit:
                 self._abort(transaction)
+            else:
+                undo_statement(transaction, self._tables_of(transaction), first_change)
             raise
         if autocommit:
             self._manager.finish(transaction, TransactionState.COMMITTED)
@@ -167,8 +171,29 @@ class Session:
 
     def _lock_for(self, statement: Statement, transaction: Transaction) -> None:
         mode = LockMode.EXCLUSIVE if isinstance(statement, WRITE_STATEMENTS) else LockMode.SHARED
-        for resource in sorted(_resources_of(statement)):
+        for resource in sorted(self._resources_of(statement)):
             self._locks.acquire(transaction.identifier, resource, mode)
+
+    def _resources_of(self, statement: Statement) -> set[str]:
+        """Tablas que la sentencia toca, que son los recursos que hay que bloquear."""
+        if isinstance(statement, ExplainStatement):
+            return self._resources_of(statement.query)
+        if isinstance(statement, SelectStatement):
+            joined = (join.table.name.lower() for join in statement.joins)
+            return {statement.source.name.lower(), *joined}
+        if isinstance(statement, DropIndexStatement):
+            return self._table_of_index(statement)
+        for attribute in ("table", "name"):
+            value = getattr(statement, attribute, None)
+            if isinstance(value, str):
+                return {value.lower()}
+        return set()
+
+    def _table_of_index(self, statement: DropIndexStatement) -> set[str]:
+        """La tabla dueña del índice: borrarlo cambia esa tabla, y es ella la que hay que
+        bloquear. Si el índice no existe no hay nada que proteger; el motor dará el error."""
+        table = statement.table or self._engine.table_of_index(statement.name)
+        return set() if table is None else {table.lower()}
 
     def _tables_of(self, transaction: Transaction) -> dict[str, Table]:
         return {
@@ -179,16 +204,3 @@ class Session:
         if self._current is None:
             raise SessionError("no hay ninguna transacción abierta")
         return self._current
-
-
-def _resources_of(statement: Statement) -> set[str]:
-    """Tablas que la sentencia toca, que son los recursos que hay que bloquear."""
-    if isinstance(statement, ExplainStatement):
-        return _resources_of(statement.query)
-    if isinstance(statement, SelectStatement):
-        return {statement.source.name.lower(), *(j.table.name.lower() for j in statement.joins)}
-    for attribute in ("table", "name"):
-        value = getattr(statement, attribute, None)
-        if isinstance(value, str):
-            return {value.lower()}
-    return set()

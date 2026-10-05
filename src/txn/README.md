@@ -11,7 +11,8 @@ Dos usuarios tocando la misma fila a la vez se pisan. El caso clásico:
 ```
 
 La demo [`demos/concurrencia.py`](../../demos/concurrencia.py) reproduce exactamente eso:
-con 4 hilos y 20 vueltas cada uno, el saldo esperado es 920 y sin control sale 980.
+con 4 hilos y 25 vueltas cada uno sobre un saldo de 1 000, el esperado es 900 y sin
+control sale 975: en cada vuelta se pierden tres de las cuatro restas.
 
 ## Las tres piezas
 
@@ -38,6 +39,11 @@ Granularidad: **tabla**. Dos modos:
 
 `SELECT` pide compartido; `INSERT`, `UPDATE`, `DELETE` y el DDL piden exclusivo. Una
 transacción que ya tiene S y pide X **asciende** el bloqueo.
+
+El recurso que se bloquea es siempre **la tabla**. `EXPLAIN` bloquea las tablas de la
+consulta que explica, y `DROP INDEX nombre` —que no nombra ninguna— bloquea la tabla dueña
+de ese índice: borrarlo cambia la tabla, y no puede hacerse mientras otra transacción la
+esté usando.
 
 Los bloqueos se sueltan al confirmar o abortar, nunca antes: es **bloqueo en dos fases**
 (primero se adquiere todo, luego se suelta todo), que es lo que impide que otra transacción
@@ -69,6 +75,17 @@ aplicando el inverso:
 El orden inverso importa: si una transacción inserta una fila y luego la modifica, deshacer
 en orden directo intentaría restaurar una fila que aún no existe.
 
+El motor anota cada fila **en cuanto la cambia** y **tal como quedó guardada** —la fecha
+ya como fecha, no como el texto que escribió el usuario—, porque deshacer consiste en
+volver a encontrar esa fila en la tabla.
+
+### Una sentencia que falla no deja nada
+
+Si una sentencia falla a mitad dentro de una transacción, la sesión **deshace solo lo que
+esa sentencia alcanzó a cambiar** y la transacción sigue abierta, con sus cambios
+anteriores intactos. Confirmar después no puede dejar escrito medio `INSERT`. En
+autocommit, la sentencia fallida se aborta entera.
+
 ## Sesión (`session.py`)
 
 Es la puerta por la que se ejecuta SQL. Decide qué tablas bloquear y en qué modo, y qué
@@ -78,6 +95,7 @@ hacer si algo falla.
 - Dentro de `BEGIN … COMMIT`, los bloqueos se conservan hasta el final.
 - `ROLLBACK` (y cerrar la sesión con algo abierto) deshace todo.
 - Un interbloqueo aborta la transacción automáticamente y propaga el error.
+- Cualquier otro error deshace esa sentencia y deja la transacción abierta.
 
 `END TRANSACTION` y `COMMIT` son lo mismo, como pide el enunciado.
 
@@ -98,12 +116,14 @@ with Session(engine, locks, manager) as session:
 Cada usuario concurrente necesita **su propia sesión**; el motor y el gestor de bloqueos se
 comparten.
 
-## Límites conocidos
+## Decisiones de alcance
 
-- Bloqueo a nivel de tabla, no de fila: dos transacciones que tocan filas distintas de la
-  misma tabla igualmente se esperan.
-- El registro de deshacer vive en memoria: no sobrevive a una caída del proceso. Recuperar
-  tras un fallo pediría un log de escritura anticipada (WAL) en disco.
+- **El bloqueo es por tabla.** Es el grano más simple que garantiza el aislamiento, y el
+  que hace visible la espera en la demostración: dos transacciones que tocan filas
+  distintas de la misma tabla se esperan.
+- **El registro de deshacer vive en memoria.** Sirve para lo que pide el enunciado
+  —agrupar operaciones y poder abortarlas—, no para recuperarse de una caída del proceso:
+  eso es otro mecanismo, un log de escritura anticipada en disco.
 
 ## Tests y demo
 
@@ -114,6 +134,7 @@ comparten.
 
 Los tests cubren: compatibilidad de modos, ascenso de S a X, espera real entre hilos,
 tiempo de espera agotado, **detección de ciclo**, autocommit, deshacer de `INSERT`,
-`DELETE`, `UPDATE` y de varios cambios en orden inverso, liberación de bloqueos al
-confirmar, y dos escenarios con hilos: transferencias concurrentes que conservan el total y
+`DELETE`, `UPDATE` y de varios cambios en orden inverso, deshacer de una sentencia que
+falla a mitad, de un cambio de clave primaria y de filas con fechas y puntos, liberación
+de bloqueos al confirmar, y dos escenarios con hilos: transferencias concurrentes que conservan el total y
 un interbloqueo del que exactamente una de las dos transacciones sale abortada.

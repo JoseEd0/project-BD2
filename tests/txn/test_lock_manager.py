@@ -3,7 +3,13 @@ import threading
 import pytest
 
 from config import EngineConfig
-from txn.lock_manager import DeadlockError, LockManager, LockMode, LockTimeoutError
+from txn.lock_manager import (
+    DeadlockError,
+    LockError,
+    LockManager,
+    LockMode,
+    LockTimeoutError,
+)
 
 FIRST = 1
 SECOND = 2
@@ -88,3 +94,41 @@ def test_a_cycle_is_detected_as_a_deadlock(locks: LockManager):
     locks.release_all(SECOND)
     blocked.wait(timeout=2)
     thread.join()
+
+
+def test_a_shared_wait_graph_without_a_cycle_is_not_a_deadlock(locks: LockManager):
+    """Dos transacciones comparten una tabla y las dos esperan a una tercera. Quien espere
+    a esas dos llega a la tercera por dos caminos, pero no vuelve a sí misma: tiene que
+    esperar, no abortar."""
+    fourth = 4
+    locks.acquire(FIRST, TABLE, LockMode.SHARED)
+    locks.acquire(SECOND, TABLE, LockMode.SHARED)
+    locks.acquire(THIRD, OTHER, LockMode.EXCLUSIVE)
+    outcomes: dict[int, str] = {}
+
+    def attempt(transaction: int, resource: str, mode: LockMode) -> None:
+        try:
+            locks.acquire(transaction, resource, mode)
+            outcomes[transaction] = "acquired"
+        except LockError as error:
+            outcomes[transaction] = type(error).__name__
+
+    readers = [
+        threading.Thread(target=attempt, args=(holder, OTHER, LockMode.SHARED))
+        for holder in (FIRST, SECOND)
+    ]
+    for reader in readers:
+        reader.start()
+    threading.Event().wait(0.05)
+    writer = threading.Thread(target=attempt, args=(fourth, TABLE, LockMode.EXCLUSIVE))
+    writer.start()
+    threading.Event().wait(0.1)
+    assert outcomes == {}
+    assert locks.deadlocks_detected == 0
+    locks.release_all(THIRD)
+    for reader in readers:
+        reader.join()
+    locks.release_all(FIRST)
+    locks.release_all(SECOND)
+    writer.join()
+    assert outcomes == {FIRST: "acquired", SECOND: "acquired", fourth: "acquired"}

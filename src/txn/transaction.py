@@ -13,6 +13,7 @@ Confirmar es tirar esa lista; abortar es recorrerla al revés aplicando el cambi
 from __future__ import annotations
 
 import itertools
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import Enum, unique
 
@@ -88,8 +89,27 @@ def undo(transaction: Transaction, tables: dict[str, Table]) -> int:
     Raises:
         TransactionError: si falta alguna de las tablas afectadas.
     """
+    return _revert_all(transaction.changes, tables)
+
+
+def undo_statement(transaction: Transaction, tables: dict[str, Table], first_change: int) -> int:
+    """Deshace los cambios anotados a partir de `first_change` y los quita del registro.
+
+    Es lo que hace atómica una sentencia dentro de una transacción: si falla a mitad, lo
+    que alcanzó a cambiar se revierte y la transacción sigue abierta como si esa
+    sentencia no se hubiera ejecutado.
+
+    Raises:
+        TransactionError: si falta alguna de las tablas afectadas.
+    """
+    undone = _revert_all(transaction.changes[first_change:], tables)
+    del transaction.changes[first_change:]
+    return undone
+
+
+def _revert_all(changes: Sequence[Change], tables: dict[str, Table]) -> int:
     undone = 0
-    for change in reversed(transaction.changes):
+    for change in reversed(changes):
         table = tables.get(change.table.lower())
         if table is None:
             raise TransactionError(f"no se puede deshacer: falta la tabla '{change.table}'")

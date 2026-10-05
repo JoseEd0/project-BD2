@@ -28,10 +28,6 @@ class RunWriter:
         self._page_id: int | None = None
         self.record_count = 0
 
-    @property
-    def path(self) -> Path:
-        return self._pager.path
-
     def append(self, record: bytes) -> None:
         if self._page.used_slots >= self._capacity:
             self._flush_page()
@@ -74,10 +70,6 @@ class RunReader:
         self._pager = Pager(path, config)
         self._record_size = record_size
 
-    @property
-    def path(self) -> Path:
-        return self._pager.path
-
     def __iter__(self) -> Iterator[bytes]:
         for page_id in range(self._pager.page_count):
             page = RecordPage.from_bytes(self._pager.read(page_id), self._record_size)
@@ -97,6 +89,11 @@ class RunReader:
         traceback: TracebackType | None,
     ) -> None:
         self.close()
+
+
+def buffered_records(config: EngineConfig, record_size: int) -> int:
+    """Registros de ese tamaño que un algoritmo externo puede tener a la vez en memoria."""
+    return config.sort_buffer_pages * slot_capacity(config.page_size, record_size)
 
 
 def remove_if_empty(directory: Path) -> None:

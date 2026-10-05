@@ -3,22 +3,39 @@
 Su única decisión interesante es la **elección del camino de acceso**: si el WHERE contiene
 una condición sobre una columna indexada, se usa el índice; si no, se recorre la tabla. Esa
 decisión es la que el panel de plan de ejecución enseña al usuario.
+
+Las consultas espaciales siguen la misma regla con el R-Tree: un radio o un polígono en el
+WHERE, o un ORDER BY por distancia, se resuelven con el índice si la columna lo tiene.
 """
 
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 
 from config import EngineConfig
-from query.catalog import Organization
-from query.expressions import RowLayout, UnknownColumnError
+from query.aggregation import Aggregate
+from query.catalog import IndexDefinition, Organization
+from query.expressions import (
+    NOT_CONSTANT,
+    ExpressionEvaluator,
+    RowLayout,
+    UnknownColumnError,
+    column_literal,
+    conjuncts,
+    constant_value,
+    describe_expression,
+    order_key,
+    rewritten,
+    subexpressions,
+)
+from query.functions import AGGREGATE_NAMES
 from query.operators import (
-    AGGREGATE_NAMES,
+    DISTINCT_DIRECTORY,
     GROUP_DIRECTORY,
     JOIN_DIRECTORY,
     SORT_DIRECTORY,
-    Aggregate,
     Distinct,
     Filter,
     HashAggregate,
@@ -26,14 +43,19 @@ from query.operators import (
     IndexLookup,
     IndexRange,
     LimitOffset,
+    NestedLoopJoin,
     Operator,
+    OrderedScan,
     PrimaryKeyLookup,
     PrimaryKeyRange,
     Projection,
     SequentialScan,
     Sort,
     UnsupportedQueryError,
+    grouping_label,
 )
+from query.spatial import nearest_search, polygon_search, radius_search
+from query.spatial_operators import SpatialNearestScan, SpatialPolygonScan, SpatialRangeScan
 from query.table import Table
 from sql.nodes import (
     BetweenPredicate,
@@ -43,25 +65,23 @@ from sql.nodes import (
     Expression,
     FunctionCall,
     IndexType,
-    JoinKind,
-    Literal,
+    Join,
     SelectStatement,
+    SortDirection,
     Star,
     TableRef,
-    UnaryOperation,
 )
-from sql.nodes import (
-    Projection as SqlProjection,
-)
-from storage.types import Value
+from storage.types import StorageError, Value, codec_for
 
 ORDERED_ORGANIZATIONS = frozenset({Organization.SEQUENTIAL, Organization.CLUSTERED_BTREE})
-RANGE_OPERATORS = {
-    BinaryOperator.LESS,
-    BinaryOperator.LESS_EQUAL,
-    BinaryOperator.GREATER,
-    BinaryOperator.GREATER_EQUAL,
+# Cada comparación de orden y la que resulta de intercambiar sus lados: `5 < id` es `id > 5`.
+MIRRORED_OPERATORS = {
+    BinaryOperator.LESS: BinaryOperator.GREATER,
+    BinaryOperator.LESS_EQUAL: BinaryOperator.GREATER_EQUAL,
+    BinaryOperator.GREATER: BinaryOperator.LESS,
+    BinaryOperator.GREATER_EQUAL: BinaryOperator.LESS_EQUAL,
 }
+RANGE_OPERATORS = frozenset(MIRRORED_OPERATORS)
 
 
 class Planner:
@@ -80,27 +100,36 @@ class Planner:
             UnsupportedQueryError: si la consulta usa algo que el ejecutor no implementa.
         """
         self._single_source = not statement.joins
+        aggregates, labels = self._aggregates_of(statement)
+        grouped = bool(aggregates or statement.group_by)
         source = self._scan_of(statement.source, statement.where)
-        operator = self._join_all(source, statement)
+        presorted = self._nearest_scan(statement, source, grouped)
+        if presorted is None:
+            presorted = self._key_ordered(statement, source, grouped)
+        operator = self._join_all(presorted or source, statement)
         if statement.where is not None:
             operator = Filter(operator, statement.where)
-        aggregates, labels = self._aggregates_of(statement)
-        if aggregates or statement.group_by:
+        computed = _Computed({}, ())
+        if grouped:
+            keys = [
+                order_key(key, statement.projections, operator.layout) for key in statement.group_by
+            ]
+            computed = _Computed(labels, _grouped_expressions(keys))
             operator = HashAggregate(
-                operator,
-                statement.group_by,
-                aggregates,
-                self._temporary(GROUP_DIRECTORY),
-                self._config,
+                operator, keys, aggregates, self._temporary(GROUP_DIRECTORY), self._config
             )
             if statement.having is not None:
-                operator = Filter(operator, _replace_aggregates(statement.having, labels))
+                operator = Filter(operator, computed.reading(statement.having))
         elif statement.having is not None:
             raise UnsupportedQueryError("HAVING necesita GROUP BY o funciones de agregación")
-        operator = self._order(operator, statement)
-        operator = self._project(operator, statement, aggregates)
+        if presorted is None:
+            operator = self._order(operator, statement, computed)
+        expressions, names = self._selected(operator.layout, statement, computed)
         if statement.distinct:
-            operator = Distinct(operator)
+            operator = Distinct(
+                operator, expressions, self._temporary(DISTINCT_DIRECTORY), self._config
+            )
+        operator = Projection(operator, expressions, names)
         if statement.limit is not None or statement.offset is not None:
             operator = LimitOffset(operator, statement.limit, statement.offset)
         return operator
@@ -112,7 +141,7 @@ class Planner:
 
     def _access_path(self, table: Table, alias: str, where: Expression | None) -> Operator:
         """Elige entre índice y recorrido completo mirando las condiciones del WHERE."""
-        for condition in _conjuncts(where):
+        for condition in conjuncts(where):
             path = self._path_for(table, alias, condition)
             if path is not None:
                 return path
@@ -125,7 +154,76 @@ class Planner:
         interval = self._range_on_column(condition, alias)
         if interval is not None:
             return self._range_path(table, alias, *interval)
+        return self._spatial_path(table, alias, condition)
+
+    def _spatial_path(self, table: Table, alias: str, condition: Expression) -> Operator | None:
+        """Búsqueda por radio o por polígono, si la columna tiene un R-Tree."""
+        radius = radius_search(condition)
+        if radius is not None:
+            index = self._spatial_index_on(table, alias, radius.target.column)
+            return None if index is None else SpatialRangeScan(table, alias, index.name, radius)
+        polygon = polygon_search(condition)
+        if polygon is not None:
+            index = self._spatial_index_on(table, alias, polygon.column)
+            return None if index is None else SpatialPolygonScan(table, alias, index.name, polygon)
         return None
+
+    def _nearest_scan(
+        self, statement: SelectStatement, source: Operator, grouped: bool
+    ) -> Operator | None:
+        """R-Tree en lugar de recorrer y ordenar, si el ORDER BY es por distancia a un punto.
+
+        El índice entrega las filas ya en orden de cercanía, de modo que el plan no lleva
+        ordenamiento y un `LIMIT k` corta tras la k-ésima fila. Un filtro o un `DISTINCT`
+        conservan ese orden; un JOIN o una agrupación no, así que con ellos no se aplica.
+        Tampoco si el WHERE ya eligió otro índice: el acceso a la tabla es uno solo.
+        """
+        if not isinstance(source, SequentialScan) or grouped or statement.joins:
+            return None
+        target = nearest_search(statement, source.layout)
+        if target is None:
+            return None
+        table = self._table(statement.source.name)
+        alias = statement.source.alias or statement.source.name
+        index = self._spatial_index_on(table, alias, target.column)
+        return None if index is None else SpatialNearestScan(table, alias, index.name, target)
+
+    def _key_ordered(
+        self, statement: SelectStatement, source: Operator, grouped: bool
+    ) -> Operator | None:
+        """El acceso a la tabla, si ya entrega las filas en el orden que pide el ORDER BY.
+
+        Un archivo secuencial y un B+ agrupado guardan las filas por clave primaria, así
+        que un `ORDER BY` ascendente por esa clave no necesita ordenar: basta leerlas.
+        Vale para el recorrido completo y para un rango de claves; un JOIN o una
+        agrupación deshacen ese orden.
+        """
+        if grouped or statement.joins or len(statement.order_by) != 1:
+            return None
+        item = statement.order_by[0]
+        table = self._table(statement.source.name)
+        alias = statement.source.alias or statement.source.name
+        if item.direction is not SortDirection.ASCENDING:
+            return None
+        if table.organization not in ORDERED_ORGANIZATIONS:
+            return None
+        column = self._column_named(
+            order_key(item.expression, statement.projections, source.layout), alias
+        )
+        if column is None or not self._is_primary_key(table, column):
+            return None
+        if isinstance(source, PrimaryKeyRange | PrimaryKeyLookup):
+            return source
+        return OrderedScan(table, alias) if isinstance(source, SequentialScan) else None
+
+    def _spatial_index_on(
+        self, table: Table, alias: str, column: ColumnRef
+    ) -> IndexDefinition | None:
+        name = self._column_named(column, alias)
+        if name is None:
+            return None
+        index = table.definition.index_on(name)
+        return index if index is not None and index.method is IndexType.RTREE else None
 
     def _equality_on_column(self, condition: Expression, alias: str) -> tuple[str, Value] | None:
         if not isinstance(condition, BinaryOperation):
@@ -135,8 +233,9 @@ class Planner:
         sides = ((condition.left, condition.right), (condition.right, condition.left))
         for column_side, value_side in sides:
             column = self._column_named(column_side, alias)
-            if column is not None and isinstance(value_side, Literal):
-                return column, value_side.value
+            value = constant_value(value_side)
+            if column is not None and value is not NOT_CONSTANT:
+                return column, value
         return None
 
     def _range_on_column(
@@ -146,23 +245,28 @@ class Planner:
             return self._between_bounds(condition, alias)
         if not isinstance(condition, BinaryOperation) or condition.operator not in RANGE_OPERATORS:
             return None
-        column = self._column_named(condition.left, alias)
-        if column is None or not isinstance(condition.right, Literal):
-            return None
-        value = condition.right.value
-        if condition.operator in (BinaryOperator.LESS, BinaryOperator.LESS_EQUAL):
-            return column, None, value
-        return column, value, None
+        sides = (
+            (condition.left, condition.right, condition.operator),
+            (condition.right, condition.left, MIRRORED_OPERATORS[condition.operator]),
+        )
+        for column_side, value_side, operator in sides:
+            column = self._column_named(column_side, alias)
+            value = constant_value(value_side)
+            if column is None or value is NOT_CONSTANT:
+                continue
+            if operator in (BinaryOperator.LESS, BinaryOperator.LESS_EQUAL):
+                return column, None, value
+            return column, value, None
+        return None
 
     def _between_bounds(
         self, condition: BetweenPredicate, alias: str
     ) -> tuple[str, Value | None, Value | None] | None:
         column = self._column_named(condition.operand, alias)
-        if column is None or not isinstance(condition.lower, Literal):
+        lower, upper = constant_value(condition.lower), constant_value(condition.upper)
+        if column is None or lower is NOT_CONSTANT or upper is NOT_CONSTANT:
             return None
-        if not isinstance(condition.upper, Literal):
-            return None
-        return column, condition.lower.value, condition.upper.value
+        return column, lower, upper
 
     def _column_named(self, expression: Expression, alias: str) -> str | None:
         """Nombre de columna si la condición se refiere sin ambigüedad a esta tabla.
@@ -182,16 +286,22 @@ class Planner:
     ) -> Operator | None:
         """Un índice explícito gana a la organización: en un heap file buscar por clave
         primaria sin índice sería un recorrido completo."""
+        key = _stored_key(table, column, value)
+        if key is None:
+            return None
         index = table.definition.index_on(column)
         if index is not None:
-            return IndexLookup(table, alias, index.name, value)
+            return IndexLookup(table, alias, index.name, key)
         if self._is_primary_key(table, column):
-            return PrimaryKeyLookup(table, alias, value)
+            return PrimaryKeyLookup(table, alias, key)
         return None
 
     def _range_path(
         self, table: Table, alias: str, column: str, low: Value | None, high: Value | None
     ) -> Operator | None:
+        if not table.schema.has_field(column):
+            return None
+        low, high = _bound(table, column, low), _bound(table, column, high)
         if self._is_primary_key(table, column) and table.organization in ORDERED_ORGANIZATIONS:
             return PrimaryKeyRange(table, alias, low, high)
         index = table.definition.index_on(column)
@@ -206,51 +316,64 @@ class Planner:
 
     def _join_all(self, operator: Operator, statement: SelectStatement) -> Operator:
         for join in statement.joins:
-            if join.kind is not JoinKind.INNER:
-                raise UnsupportedQueryError(
-                    f"solo se implementa INNER JOIN; llegó {join.kind.value}"
-                )
             table = self._table(join.table.name)
             alias = join.table.alias or join.table.name
             right = self._access_path(table, alias, statement.where)
-            left_key, right_key = _equi_join_keys(join.condition, operator.layout, right.layout)
-            operator = HashJoin(
-                operator,
-                right,
-                left_key,
-                right_key,
-                self._temporary(JOIN_DIRECTORY),
-                self._config,
-            )
+            operator = self._join(operator, right, join)
         return operator
 
-    def _order(self, operator: Operator, statement: SelectStatement) -> Operator:
+    def _join(self, left: Operator, right: Operator, join: Join) -> Operator:
+        """Hash join si el `ON` iguala alguna columna de cada lado; si no, bucles anidados.
+
+        Las igualdades son la clave por la que se reparten las filas, y lo que quede de
+        la condición se comprueba sobre cada par que comparte clave. El `ON` entero se
+        valida antes contra las dos tablas juntas: una columna sin cualificar que está en
+        ambas es ambigua, aunque partida la condición cada mitad se entendiera.
+        """
+        ExpressionEvaluator(left.layout.concat(right.layout)).validate(join.condition)
+        left_keys, right_keys, rest = _split_join_condition(
+            join.condition, left.layout, right.layout
+        )
+        directory = self._temporary(JOIN_DIRECTORY)
+        if not left_keys:
+            return NestedLoopJoin(left, right, join.kind, join.condition, directory, self._config)
+        return HashJoin(
+            left, right, join.kind, left_keys, right_keys, _all_of(rest), directory, self._config
+        )
+
+    def _order(
+        self, operator: Operator, statement: SelectStatement, computed: _Computed
+    ) -> Operator:
         if not statement.order_by:
             return operator
-        aliases = _select_aliases(statement.projections)
         keys = [
-            (_resolve_alias(item.expression, aliases, operator.layout), item.direction)
+            (
+                computed.reading(
+                    order_key(item.expression, statement.projections, operator.layout)
+                ),
+                item.direction,
+            )
             for item in statement.order_by
         ]
         return Sort(operator, keys, self._temporary(SORT_DIRECTORY), self._config)
 
-    def _project(
-        self, operator: Operator, statement: SelectStatement, aggregates: Sequence[Aggregate]
-    ) -> Operator:
+    def _selected(
+        self, layout: RowLayout, statement: SelectStatement, computed: _Computed
+    ) -> tuple[list[Expression], list[str]]:
+        """Expresiones del SELECT, con `*` ya desplegado, y el nombre de cada columna."""
         expressions: list[Expression] = []
         names: list[str] = []
         for projection in statement.projections:
             if isinstance(projection.expression, Star):
-                self._expand_star(operator.layout, projection.expression, expressions, names)
+                if computed.aggregates:
+                    raise UnsupportedQueryError(
+                        "'*' no se puede combinar con funciones de agregación"
+                    )
+                self._expand_star(layout, projection.expression, expressions, names)
                 continue
-            expression = projection.expression
-            if isinstance(expression, FunctionCall) and _is_aggregate(expression):
-                expression = ColumnRef(_aggregate_label(expression, projection.alias))
-            expressions.append(expression)
+            expressions.append(computed.reading(projection.expression))
             names.append(projection.alias or _column_name(projection.expression))
-        if aggregates and any(isinstance(item.expression, Star) for item in statement.projections):
-            raise UnsupportedQueryError("'*' no se puede combinar con funciones de agregación")
-        return Projection(operator, expressions, names)
+        return expressions, names
 
     @staticmethod
     def _expand_star(
@@ -270,10 +393,12 @@ class Planner:
     def _aggregates_of(
         statement: SelectStatement,
     ) -> tuple[tuple[Aggregate, ...], dict[str, str]]:
-        """Reúne las agregaciones del SELECT y del HAVING, sin calcular dos veces la misma.
+        """Reúne las agregaciones de la consulta, sin calcular dos veces la misma.
 
-        Devuelve también el mapa firma → etiqueta, que es lo que permite reescribir el
-        HAVING para que apunte a la columna que produjo la agregación.
+        Pueden estar en el SELECT, en el HAVING o en el ORDER BY, solas o dentro de una
+        expresión (`SUM(total) / COUNT(*)`). Devuelve también el mapa firma → etiqueta,
+        que es lo que permite reescribir esas expresiones para que lean la columna que
+        produjo cada agregación. La que el SELECT nombra con un alias se llama como él.
         """
         found: dict[str, Aggregate] = {}
         labels: dict[str, str] = {}
@@ -282,8 +407,13 @@ class Planner:
             if isinstance(expression, FunctionCall) and _is_aggregate(expression):
                 aggregate = _build_aggregate(expression, projection.alias)
                 found[aggregate.label] = aggregate
-                labels[_signature(expression)] = aggregate.label
-        for call in _aggregate_calls(statement.having):
+                labels.setdefault(_signature(expression), aggregate.label)
+        sources = (
+            *(projection.expression for projection in statement.projections),
+            statement.having,
+            *(item.expression for item in statement.order_by),
+        )
+        for call in (call for source in sources for call in _aggregate_calls(source)):
             signature = _signature(call)
             if signature in labels:
                 continue
@@ -309,111 +439,138 @@ class Planner:
         return self._config.data_directory / f"{name}-{self._temporaries}"
 
 
-def _conjuncts(expression: Expression | None) -> list[Expression]:
-    """Descompone la condición en los AND de primer nivel."""
-    if expression is None:
-        return []
-    if isinstance(expression, BinaryOperation) and expression.operator is BinaryOperator.AND:
-        return [*_conjuncts(expression.left), *_conjuncts(expression.right)]
-    return [expression]
+def _stored_key(table: Table, column: str, value: Value) -> Value | None:
+    """El literal de una igualdad como valor que la columna podría guardar.
 
-
-def _equi_join_keys(
-    condition: Expression, left: RowLayout, right: RowLayout
-) -> tuple[Expression, Expression]:
-    """Separa `a.x = b.y` en la clave de cada lado.
+    Devuelve `None` cuando ninguna fila puede tenerlo —un NULL, un texto más largo que la
+    columna, un real con decimales en una columna entera—: entonces no se usa el índice,
+    y el recorrido con su filtro responde lo mismo sin pedirle al índice una clave que no
+    sabe representar.
 
     Raises:
-        UnsupportedQueryError: si la condición del ON no es una igualdad simple.
+        ExpressionError: si el literal es de un tipo que no se compara con la columna.
     """
+    if value is None or not table.schema.has_field(column):
+        return None
+    field = table.schema.field_of(column)
+    key = column_literal(field, value)
+    try:
+        codec_for(field.type, field.length).to_slots(key)
+    except StorageError:
+        return None
+    return key
+
+
+def _bound(table: Table, column: str, value: Value | None) -> Value | None:
+    """Extremo de un rango, llevado al tipo de la columna; `None` si no hay extremo."""
+    if value is None:
+        return None
+    return column_literal(table.schema.field_of(column), value)
+
+
+def _split_join_condition(
+    condition: Expression, left: RowLayout, right: RowLayout
+) -> tuple[list[Expression], list[Expression], list[Expression]]:
+    """Separa el `ON` en las igualdades entre una columna de cada lado y el resto.
+
+    Devuelve las columnas de la izquierda, las de la derecha —emparejadas por posición—
+    y las condiciones que no son una igualdad de ese tipo.
+    """
+    left_keys: list[Expression] = []
+    right_keys: list[Expression] = []
+    rest: list[Expression] = []
+    for part in conjuncts(condition):
+        sides = _equated_columns(part, left, right)
+        if sides is None:
+            rest.append(part)
+            continue
+        left_keys.append(sides[0])
+        right_keys.append(sides[1])
+    return left_keys, right_keys, rest
+
+
+def _equated_columns(
+    condition: Expression, left: RowLayout, right: RowLayout
+) -> tuple[Expression, Expression] | None:
+    """Las dos columnas de `a.x = b.y`, la de la izquierda primero; `None` si no lo es."""
     if not isinstance(condition, BinaryOperation) or condition.operator is not BinaryOperator.EQUAL:
-        raise UnsupportedQueryError("el ON de un JOIN debe ser una igualdad entre columnas")
+        return None
     for first, second in ((condition.left, condition.right), (condition.right, condition.left)):
         if _belongs_to(first, left) and _belongs_to(second, right):
             return first, second
-    raise UnsupportedQueryError("el ON debe comparar una columna de cada tabla")
+    return None
+
+
+def _all_of(conditions: Sequence[Expression]) -> Expression | None:
+    """Las condiciones unidas por AND, o `None` si no hay ninguna."""
+    combined: Expression | None = None
+    for condition in conditions:
+        combined = (
+            condition
+            if combined is None
+            else BinaryOperation(BinaryOperator.AND, combined, condition)
+        )
+    return combined
 
 
 def _belongs_to(expression: Expression, layout: RowLayout) -> bool:
     return isinstance(expression, ColumnRef) and layout.has(expression.name, expression.qualifier)
 
 
-def _select_aliases(projections: Sequence[SqlProjection]) -> dict[str, Expression]:
-    return {
-        projection.alias.lower(): projection.expression
-        for projection in projections
-        if projection.alias is not None
-    }
+@dataclass(frozen=True, slots=True)
+class _Computed:
+    """Lo que una agrupación ya calculó, y con qué nombre de columna lo entrega.
+
+    Attributes:
+        aggregates: firma de cada agregación → columna que la contiene.
+        keys: cada clave de agrupación que es una expresión, con la columna que la
+            contiene. Es una lista y no un mapa porque una expresión con argumentos con
+            nombre no se puede usar de clave de diccionario; son pocas y se comparan.
+    """
+
+    aggregates: Mapping[str, str]
+    keys: Sequence[tuple[Expression, str]]
+
+    def reading(self, expression: Expression) -> Expression:
+        """La expresión, leyendo de esas columnas lo que la agrupación ya calculó.
+
+        Lo que queda fuera se evalúa después sobre cada grupo, así que el SELECT, el HAVING
+        y el ORDER BY pueden combinar agregaciones y claves en una misma expresión.
+        """
+        if not self.aggregates and not self.keys:
+            return expression
+        return rewritten(expression, self._column_of)
+
+    def _column_of(self, expression: Expression) -> Expression | None:
+        if isinstance(expression, FunctionCall) and _is_aggregate(expression):
+            return ColumnRef(self.aggregates[_signature(expression)])
+        for key, label in self.keys:
+            if key == expression:
+                return ColumnRef(label)
+        return None
 
 
-def _resolve_alias(
-    expression: Expression, aliases: Mapping[str, Expression], layout: RowLayout
-) -> Expression:
-    """Un ORDER BY puede nombrar un alias del SELECT; se sustituye por su expresión."""
-    if not isinstance(expression, ColumnRef) or expression.qualifier is not None:
-        return expression
-    if layout.has(expression.name):
-        return expression
-    replacement = aliases.get(expression.name.lower())
-    if replacement is None:
-        return expression
-    if isinstance(replacement, FunctionCall) and _is_aggregate(replacement):
-        return ColumnRef(expression.name)
-    return replacement
+def _grouped_expressions(keys: Sequence[Expression]) -> list[tuple[Expression, str]]:
+    """Claves de agrupación que no son una columna, con el nombre de la suya en el resultado."""
+    return [(key, grouping_label(key)) for key in keys if not isinstance(key, ColumnRef)]
 
 
 def _signature(call: FunctionCall) -> str:
-    argument = _describe_argument(call)
-    return f"{call.name.upper()}({argument})"
-
-
-def _describe_argument(call: FunctionCall) -> str:
+    """Texto que identifica una agregación: dos llamadas iguales se calculan una sola vez."""
     if not call.arguments or isinstance(call.arguments[0], Star):
-        return "*"
-    return _column_name(call.arguments[0])
+        return f"{call.name.upper()}(*)"
+    argument = call.arguments[0]
+    shown = argument.name if isinstance(argument, ColumnRef) else describe_expression(argument)
+    return f"{call.name.upper()}({shown})"
 
 
 def _aggregate_calls(expression: Expression | None) -> list[FunctionCall]:
     """Todas las llamadas de agregación que aparecen dentro de una expresión."""
     if expression is None:
         return []
-    if isinstance(expression, FunctionCall):
-        return [expression] if _is_aggregate(expression) else []
-    return [
-        call for child in _children(expression) for call in _aggregate_calls(child)
-    ]
-
-
-def _replace_aggregates(expression: Expression, labels: Mapping[str, str]) -> Expression:
-    """Sustituye cada agregación por la columna que la agrupación ya calculó."""
     if isinstance(expression, FunctionCall) and _is_aggregate(expression):
-        return ColumnRef(labels[_signature(expression)])
-    if isinstance(expression, BinaryOperation):
-        return BinaryOperation(
-            expression.operator,
-            _replace_aggregates(expression.left, labels),
-            _replace_aggregates(expression.right, labels),
-        )
-    if isinstance(expression, UnaryOperation):
-        return UnaryOperation(expression.operator, _replace_aggregates(expression.operand, labels))
-    if isinstance(expression, BetweenPredicate):
-        return BetweenPredicate(
-            _replace_aggregates(expression.operand, labels),
-            _replace_aggregates(expression.lower, labels),
-            _replace_aggregates(expression.upper, labels),
-            expression.negated,
-        )
-    return expression
-
-
-def _children(expression: Expression) -> list[Expression]:
-    if isinstance(expression, BinaryOperation):
-        return [expression.left, expression.right]
-    if isinstance(expression, UnaryOperation):
-        return [expression.operand]
-    if isinstance(expression, BetweenPredicate):
-        return [expression.operand, expression.lower, expression.upper]
-    return []
+        return [expression]
+    return [call for child in subexpressions(expression) for call in _aggregate_calls(child)]
 
 
 def _is_aggregate(call: FunctionCall) -> bool:
@@ -431,16 +588,14 @@ def _build_aggregate(call: FunctionCall, alias: str | None) -> Aggregate:
 
 
 def _aggregate_label(call: FunctionCall, alias: str | None) -> str:
-    if alias is not None:
-        return alias
-    if call.arguments and isinstance(call.arguments[0], ColumnRef):
-        return f"{call.name.upper()}({call.arguments[0].name})"
-    return f"{call.name.upper()}(*)"
+    return _signature(call) if alias is None else alias
 
 
 def _column_name(expression: Expression) -> str:
     if isinstance(expression, ColumnRef):
         return expression.name
-    if isinstance(expression, FunctionCall):
+    if isinstance(expression, FunctionCall) and _is_aggregate(expression):
         return _aggregate_label(expression, None)
-    return type(expression).__name__.lower()
+    if isinstance(expression, FunctionCall):
+        return expression.name.lower()
+    return describe_expression(expression)

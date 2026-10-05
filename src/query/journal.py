@@ -19,3 +19,16 @@ class Journal(Protocol):
     def record_delete(self, table: str, row: Record) -> None: ...
 
     def record_update(self, table: str, before: Record, after: Record) -> None: ...
+
+
+class DiscardingJournal:
+    """El journal de quien ejecuta sin transacción: recibe los cambios y no guarda ninguno."""
+
+    def record_insert(self, table: str, row: Record) -> None:
+        return
+
+    def record_delete(self, table: str, row: Record) -> None:
+        return
+
+    def record_update(self, table: str, before: Record, after: Record) -> None:
+        return

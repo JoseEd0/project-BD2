@@ -177,3 +177,60 @@ def test_a_limit_does_not_pull_one_row_too_many(engine: Engine):
 def test_explain_only_accepts_a_select(engine: Engine):
     with pytest.raises(SqlSyntaxError, match="EXPLAIN"):
         engine.execute("EXPLAIN DELETE FROM t")
+
+
+@pytest.fixture(params=["SEQ", "BTREE"])
+def ordenada(engine: Engine, request: pytest.FixtureRequest) -> Engine:
+    """Una tabla guardada por clave, cargada en desorden para que haya filas en la zona de
+    desbordamiento del secuencial y divisiones en el B+."""
+    engine.execute(f"CREATE TABLE t (id INT PRIMARY KEY INDEX {request.param}, v INT)")
+    keys = list(range(0, 600, 3)) + list(range(1, 600, 3)) + list(range(2, 600, 3))
+    for start in range(0, len(keys), 100):
+        values = ", ".join(f"({key}, {key % 7})" for key in keys[start : start + 100])
+        engine.execute(f"INSERT INTO t VALUES {values}")
+    return engine
+
+
+def test_ordering_by_the_key_of_an_ordered_table_does_not_sort(ordenada: Engine):
+    result = ordenada.execute("SELECT id FROM t ORDER BY id")
+    assert [row[0] for row in result.rows] == list(range(600))
+    assert result.plan is not None
+    plan = result.plan.render()
+    assert "OrderedScan" in plan and "ExternalSort" not in plan
+
+
+def test_a_key_range_already_comes_out_in_order(ordenada: Engine):
+    result = ordenada.execute("SELECT id FROM t WHERE id BETWEEN 100 AND 180 ORDER BY id")
+    assert [row[0] for row in result.rows] == list(range(100, 181))
+    assert result.plan is not None
+    plan = result.plan.render()
+    assert "PrimaryKeyRange" in plan and "ExternalSort" not in plan
+
+
+def test_a_limit_over_the_table_order_stops_reading_early(ordenada: Engine):
+    result = ordenada.execute("SELECT id FROM t WHERE v < 100 ORDER BY id LIMIT 5")
+    assert [row[0] for row in result.rows] == [0, 1, 2, 3, 4]
+    assert result.plan is not None
+    assert "OrderedScan" in result.plan.render() and "(filas=5," in result.plan.render()
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "SELECT id FROM t ORDER BY id DESC",
+        "SELECT v FROM t ORDER BY v",
+        "SELECT id FROM t ORDER BY id, v",
+        "SELECT v, COUNT(*) FROM t GROUP BY v ORDER BY v",
+        "SELECT a.id FROM t a JOIN t b ON a.id = b.id ORDER BY a.id",
+    ],
+)
+def test_any_other_order_still_sorts(ordenada: Engine, query: str):
+    result = ordenada.execute(query)
+    assert result.plan is not None
+    assert "ExternalSort" in result.plan.render()
+    values = [row[0] for row in result.rows]
+    assert values == sorted(values, reverse="DESC" in query)
+
+
+def test_a_heap_table_has_no_order_to_offer(alumnos: Engine):
+    assert "ExternalSort" in plan_of(alumnos, "SELECT * FROM alumnos ORDER BY id")

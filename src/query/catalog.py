@@ -81,18 +81,34 @@ def organization_for(method: IndexType) -> Organization:
 
 @dataclass(frozen=True, slots=True)
 class IndexDefinition:
-    """Índice secundario sobre una columna."""
+    """Índice secundario sobre una columna.
+
+    Attributes:
+        unique: si la columna se declaró `UNIQUE`; el índice es entonces lo que permite
+            comprobar, sin recorrer la tabla, que un valor no está ya en otra fila.
+    """
 
     name: str
     column: str
     method: IndexType
+    unique: bool = False
 
     def to_json(self) -> dict[str, Any]:
-        return {"name": self.name, "column": self.column, "method": self.method.value}
+        return {
+            "name": self.name,
+            "column": self.column,
+            "method": self.method.value,
+            "unique": self.unique,
+        }
 
     @classmethod
     def from_json(cls, raw: dict[str, Any]) -> IndexDefinition:
-        return cls(name=raw["name"], column=raw["column"], method=IndexType(raw["method"]))
+        return cls(
+            name=raw["name"],
+            column=raw["column"],
+            method=IndexType(raw["method"]),
+            unique=bool(raw.get("unique", False)),
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -274,17 +290,10 @@ class Catalog:
 
 
 def field_from_column(column: ColumnDefinition, config: EngineConfig) -> Field:
-    """Traduce una columna del `CREATE TABLE` a un campo del almacenamiento.
-
-    Raises:
-        CatalogError: si el tipo no tiene equivalente en el almacenamiento.
-    """
-    kind = column.data_type.kind
-    if kind not in SQL_TO_STORAGE_TYPE:
-        raise CatalogError(f"el tipo {kind.value} no se puede almacenar todavía")
+    """Traduce una columna del `CREATE TABLE` a un campo del almacenamiento."""
     return Field(
         name=column.name,
-        type=SQL_TO_STORAGE_TYPE[kind],
+        type=SQL_TO_STORAGE_TYPE[column.data_type.kind],
         length=_length_of(column, config),
         nullable=column.nullable and not column.primary_key,
     )

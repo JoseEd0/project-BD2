@@ -18,9 +18,8 @@ from pathlib import Path
 from types import TracebackType
 
 from config import EngineConfig
-from external.runs import RunReader, RunWriter, remove_if_empty
+from external.runs import RunReader, RunWriter, buffered_records, remove_if_empty
 from index.keys import Key
-from storage.page import slot_capacity
 
 RUN_PREFIX = "run"
 RUN_SUFFIX = ".tmp"
@@ -48,9 +47,7 @@ class ExternalSorter:
         self._record_size = record_size
         self._key_of = key_of
         self._config = config
-        self._buffer_records = config.sort_buffer_pages * slot_capacity(
-            config.page_size, record_size
-        )
+        self._buffer_records = buffered_records(config, record_size)
         self._fan_in = max(2, config.merge_fan_in)
         self._temporary: list[Path] = []
         self._created = 0
@@ -156,5 +153,4 @@ class ExternalSorter:
     def _discard(self, runs: list[Path]) -> None:
         for path in runs:
             path.unlink(missing_ok=True)
-            if path in self._temporary:
-                self._temporary.remove(path)
+            self._temporary.remove(path)

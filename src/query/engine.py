@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable, Iterator, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from types import TracebackType
 from typing import Any
@@ -24,13 +24,20 @@ from query.catalog import (
     field_from_column,
     organization_for,
 )
-from query.expressions import ExpressionEvaluator, RowLayout
-from query.journal import Journal
+from query.expressions import (
+    NO_COLUMNS,
+    NO_ROW,
+    ExpressionEvaluator,
+    RowLayout,
+    UnknownColumnError,
+)
+from query.journal import DiscardingJournal, Journal
 from query.loader import infer_schema, read_values
 from query.operators import UnsupportedQueryError
 from query.plan import PlanNode
 from query.planner import Planner
-from query.table import Table, primary_key_index_name
+from query.spatial import SpatialView, spatial_view
+from query.table import Table, discard_table_files, primary_key_index_name
 from sql import parse_script
 from sql.nodes import (
     Assignment,
@@ -52,11 +59,15 @@ from sql.nodes import (
     UpdateStatement,
 )
 from storage.record import Record
-from storage.schema import Schema
-from storage.types import Value
+from storage.schema import Field, Schema
+from storage.types import ORDERED_FIELD_TYPES, FieldType, Value
 
 MILLISECONDS = 1000.0
-EMPTY_ROW: Record = ()
+# Métodos que, declarados sobre una columna al cargar un archivo, la convierten en la clave
+# de la tabla. Un R-Tree no identifica filas: varias pueden compartir ubicación.
+KEY_INDEX_METHODS = frozenset({IndexType.SEQUENTIAL, IndexType.BTREE, IndexType.HASH})
+SECONDARY_INDEX_METHODS = frozenset({IndexType.BTREE, IndexType.HASH, IndexType.RTREE})
+NO_JOURNAL: Journal = DiscardingJournal()
 
 
 class EngineError(Exception):
@@ -78,6 +89,8 @@ class QueryResult:
         message: descripción de lo ocurrido para las sentencias sin filas.
         affected_rows: filas creadas, borradas o modificadas.
         elapsed_ms: tiempo de ejecución medido.
+        spatial: tabla, columna y figuras que el panel de mapa debe dibujar, si la consulta
+            toca alguna columna POINT.
     """
 
     columns: tuple[str, ...] = ()
@@ -86,6 +99,7 @@ class QueryResult:
     message: str = ""
     affected_rows: int = 0
     elapsed_ms: float = 0.0
+    spatial: SpatialView | None = None
 
 
 @dataclass
@@ -115,19 +129,18 @@ class Engine:
     def run(self, statement: Statement, journal: Journal | None = None) -> QueryResult:
         """Ejecuta una sentencia ya parseada y mide cuánto tarda."""
         started = time.perf_counter()
-        result = self._dispatch(statement, journal)
+        result = self._dispatch(statement, NO_JOURNAL if journal is None else journal)
         elapsed = (time.perf_counter() - started) * MILLISECONDS
-        return QueryResult(
-            columns=result.columns,
-            rows=result.rows,
-            plan=result.plan,
-            message=result.message,
-            affected_rows=result.affected_rows,
-            elapsed_ms=elapsed,
-        )
+        return replace(result, elapsed_ms=elapsed)
 
     def table_names(self) -> list[str]:
         return self._catalog.table_names()
+
+    def table_of_index(self, name: str) -> str | None:
+        """Nombre de la tabla dueña de ese índice, o `None` si el índice no existe."""
+        if not self._catalog.has_index(name):
+            return None
+        return self._catalog.find_index(name)[0].name
 
     def table(self, name: str) -> Table:
         """Tabla abierta, abriéndola si hacía falta.
@@ -161,7 +174,7 @@ class Engine:
     ) -> None:
         self.close()
 
-    def _dispatch(self, statement: Statement, journal: Journal | None) -> QueryResult:
+    def _dispatch(self, statement: Statement, journal: Journal) -> QueryResult:
         if isinstance(statement, SelectStatement):
             return self._select(statement)
         if isinstance(statement, ExplainStatement):
@@ -196,7 +209,11 @@ class Engine:
         operator = Planner(tables, self.config).plan(statement)
         rows = tuple(operator.rows())
         return QueryResult(
-            columns=operator.layout.names, rows=rows, plan=operator.plan(), affected_rows=len(rows)
+            columns=operator.layout.names,
+            rows=rows,
+            plan=operator.plan(),
+            affected_rows=len(rows),
+            spatial=spatial_view(statement, tables),
         )
 
     def _explain(self, statement: ExplainStatement) -> QueryResult:
@@ -217,38 +234,28 @@ class Engine:
             affected_rows=produced,
         )
 
-    def _insert(self, statement: InsertStatement, journal: Journal | None) -> QueryResult:
+    def _insert(self, statement: InsertStatement, journal: Journal) -> QueryResult:
         table = self.table(statement.table)
-        for values in self._rows_to_insert(statement, table.schema):
-            table.insert(values)
-            if journal is not None:
-                journal.record_insert(table.name, values)
+        rows = list(self._rows_to_insert(statement, table.schema))
+        table.insert_all(rows, _JournalOf(journal, table.name))
         return QueryResult(
             message=f"{len(statement.rows)} fila(s) insertada(s) en '{table.name}'",
             affected_rows=len(statement.rows),
         )
 
-    def _delete(self, statement: DeleteStatement, journal: Journal | None) -> QueryResult:
+    def _delete(self, statement: DeleteStatement, journal: Journal) -> QueryResult:
         table = self.table(statement.table)
         matches = self._predicate_of(table, statement.where)
-        removed = self._collect(table, matches) if journal is not None else ()
-        count = table.delete_where(matches)
-        for row in removed:
-            assert journal is not None
-            journal.record_delete(table.name, row)
+        count = table.delete_where(matches, _JournalOf(journal, table.name))
         return QueryResult(
             message=f"{count} fila(s) borrada(s) de '{table.name}'", affected_rows=count
         )
 
-    def _update(self, statement: UpdateStatement, journal: Journal | None) -> QueryResult:
+    def _update(self, statement: UpdateStatement, journal: Journal) -> QueryResult:
         table = self.table(statement.table)
         matches = self._predicate_of(table, statement.where)
         transform = self._assignment_of(table, statement.assignments)
-        before = self._collect(table, matches) if journal is not None else ()
-        count = table.update_where(matches, transform)
-        for row in before:
-            assert journal is not None
-            journal.record_update(table.name, row, transform(row))
+        count = table.update_where(matches, transform, _JournalOf(journal, table.name))
         return QueryResult(
             message=f"{count} fila(s) actualizada(s) en '{table.name}'", affected_rows=count
         )
@@ -260,13 +267,16 @@ class Engine:
         primary_key = next(
             (column.name for column in statement.columns if column.primary_key), None
         )
-        organization = self._organization_of(statement)
+        if primary_key is not None:
+            _require_orderable_key(Schema(fields).field_of(primary_key))
+        key_method = _key_method_of(statement)
+        organization = Organization.HEAP if key_method is None else organization_for(key_method)
         definition = TableDefinition(
             name=statement.name,
             schema=Schema(fields),
             organization=organization,
             primary_key=primary_key,
-            indexes=self._declared_indexes(statement, organization, primary_key),
+            indexes=self._declared_indexes(statement, organization, key_method),
         )
         self._register(definition)
         return QueryResult(
@@ -278,13 +288,15 @@ class Engine:
             return QueryResult(message=f"la tabla '{statement.name}' ya existía")
         path = Path(statement.path)
         schema = infer_schema(path, self.config)
-        primary_key = statement.index.columns[0] if statement.index is not None else None
-        if primary_key is not None and not schema.has_field(primary_key):
-            raise CatalogError(f"la columna clave '{primary_key}' no está en '{path.name}'")
+        spec = statement.index
+        if spec is not None and not schema.has_field(spec.columns[0]):
+            raise CatalogError(f"la columna '{spec.columns[0]}' no está en '{path.name}'")
+        key_spec = spec if spec is not None and spec.method in KEY_INDEX_METHODS else None
+        primary_key = None if key_spec is None else key_spec.columns[0]
+        if primary_key is not None:
+            _require_orderable_key(schema.field_of(primary_key))
         organization = (
-            Organization.HEAP
-            if statement.index is None
-            else organization_for(statement.index.method)
+            Organization.HEAP if key_spec is None else organization_for(key_spec.method)
         )
         definition = TableDefinition(
             name=statement.name,
@@ -296,6 +308,8 @@ class Engine:
         self._register(definition)
         try:
             loaded = self._load_rows(self.table(definition.name), path, schema)
+            if spec is not None and key_spec is None:
+                self._add_index(self.table(definition.name), spec.columns[0], spec.method, None)
         except Exception:
             self._remove_table(definition.name)
             raise
@@ -311,11 +325,30 @@ class Engine:
             raise UnsupportedQueryError("todavía no hay índices sobre varias columnas")
         if not table.schema.has_field(column):
             raise CatalogError(f"la columna '{column}' no existe en '{table.name}'")
-        name = statement.name or f"idx_{table.name}_{column}"
         if statement.if_not_exists and table.definition.index_on(column) is not None:
             return QueryResult(message=f"la columna '{column}' ya tenía índice")
+        definition = self._add_index(table, column, statement.spec.method, statement.name)
+        return QueryResult(
+            message=f"índice '{definition.name}' creado sobre {table.name}.{column} "
+            f"({definition.method.value})"
+        )
+
+    def _add_index(
+        self, table: Table, column: str, method: IndexType, name: str | None
+    ) -> IndexDefinition:
+        """Registra un índice secundario y lo construye sobre las filas que ya existen.
+
+        Si la construcción falla, el índice se quita del catálogo y sus archivos se borran:
+        un índice a medias respondería consultas con filas de menos.
+
+        Raises:
+            CatalogError: si la tabla no es un heap file o el método no sirve para la columna.
+        """
         _require_heap_for_secondary_index(table.organization, column)
-        definition = IndexDefinition(name=name, column=column, method=statement.spec.method)
+        _require_method_for_column(table.schema.field_of(column), method)
+        definition = IndexDefinition(
+            name=name or f"idx_{table.name}_{column}", column=column, method=method
+        )
         self._catalog.add_index(table.name, definition)
         try:
             table.build_index(definition)
@@ -324,10 +357,7 @@ class Engine:
             table.discard_index_files(definition.name)
             raise
         self._reopen(table.name)
-        return QueryResult(
-            message=f"índice '{name}' creado sobre {table.name}.{column} "
-            f"({definition.method.value})"
-        )
+        return definition
 
     def _drop_table(self, statement: DropTableStatement) -> QueryResult:
         if statement.if_exists and not self._catalog.has_table(statement.name):
@@ -361,8 +391,19 @@ class Engine:
         self._catalog.drop_table(name)
 
     def _register(self, definition: TableDefinition) -> None:
+        """Da de alta la tabla y crea sus archivos.
+
+        Si los archivos no se pueden crear —una fila que no cabe en una página, una clave
+        demasiado larga para un nodo— la tabla no queda en el catálogo: registrada y sin
+        poder abrirse, no se podría consultar, volver a crear ni borrar.
+        """
         self._catalog.create_table(definition)
-        self._tables[definition.name.lower()] = Table(definition, self.config)
+        try:
+            self._tables[definition.name.lower()] = Table(definition, self.config)
+        except Exception:
+            self._catalog.drop_table(definition.name)
+            discard_table_files(self.config.data_directory, definition.name)
+            raise
 
     def _reopen(self, name: str) -> None:
         table = self._tables.pop(name.lower(), None)
@@ -370,37 +411,39 @@ class Engine:
             table.close()
         self._tables[name.lower()] = Table(self._catalog.table(name), self.config)
 
-    @staticmethod
-    def _organization_of(statement: CreateTableStatement) -> Organization:
-        for column in statement.columns:
-            if column.primary_key and column.index is not None:
-                return organization_for(column.index)
-        return Organization.HEAP
-
     def _declared_indexes(
         self,
         statement: CreateTableStatement,
         organization: Organization,
-        primary_key: str | None,
+        key_method: IndexType | None,
     ) -> tuple[IndexDefinition, ...]:
+        """Índices de la tabla recién declarada.
+
+        En un heap file la clave primaria lleva siempre un índice: el que se declaró
+        sobre ella (`INDEX HASH`) o, si no se declaró ninguno, un B+.
+        """
         indexes = []
-        if organization is Organization.HEAP and primary_key is not None:
-            indexes.append(
-                IndexDefinition(
-                    name=primary_key_index_name(statement.name),
-                    column=primary_key,
-                    method=IndexType.BTREE,
-                )
-            )
         for column in statement.columns:
-            if column.index is None or column.primary_key:
+            if column.primary_key and organization is Organization.HEAP:
+                indexes.append(
+                    IndexDefinition(
+                        name=primary_key_index_name(statement.name),
+                        column=column.name,
+                        method=key_method or IndexType.BTREE,
+                    )
+                )
+            if column.primary_key or (column.index is None and not column.unique):
                 continue
+            field = field_from_column(column, self.config)
+            method = column.index or _default_method_for(field)
             _require_heap_for_secondary_index(organization, column.name)
+            _require_method_for_column(field, method)
             indexes.append(
                 IndexDefinition(
                     name=f"idx_{statement.name}_{column.name}",
                     column=column.name,
-                    method=column.index,
+                    method=method,
+                    unique=column.unique,
                 )
             )
         return tuple(indexes)
@@ -429,9 +472,12 @@ class Engine:
     def _rows_to_insert(
         self, statement: InsertStatement, schema: Schema
     ) -> Iterator[tuple[Value, ...]]:
-        evaluator = ExpressionEvaluator(RowLayout.of_names(schema.names))
+        evaluator = ExpressionEvaluator(NO_COLUMNS)
         for row in statement.rows:
-            values = [evaluator.evaluate(expression, EMPTY_ROW) for expression in row]
+            try:
+                values = [evaluator.evaluate(expression, NO_ROW) for expression in row]
+            except UnknownColumnError as error:
+                raise EngineError(f"VALUES solo admite valores constantes: {error}") from error
             yield tuple(self._arrange(values, statement.columns, schema))
 
     @staticmethod
@@ -452,6 +498,7 @@ class Engine:
     @staticmethod
     def _predicate_of(table: Table, where: Expression | None) -> Callable[[Record], bool]:
         evaluator = ExpressionEvaluator(RowLayout.of_table(table.schema, table.name))
+        evaluator.validate(where)
 
         def matches(row: Record) -> bool:
             return evaluator.matches(where, row)
@@ -464,6 +511,8 @@ class Engine:
     ) -> Callable[[Record], Record]:
         evaluator = ExpressionEvaluator(RowLayout.of_table(table.schema, table.name))
         positions = [(table.schema.position_of(item.column), item.value) for item in assignments]
+        for _, expression in positions:
+            evaluator.validate(expression)
 
         def transform(row: Record) -> Record:
             updated = list(row)
@@ -473,9 +522,23 @@ class Engine:
 
         return transform
 
-    @staticmethod
-    def _collect(table: Table, matches: Callable[[Record], bool]) -> tuple[Record, ...]:
-        return tuple(row for row in table.scan() if matches(row))
+
+
+@dataclass(frozen=True, slots=True)
+class _JournalOf:
+    """Lleva al journal los cambios de una tabla: es el `RowChanges` que la tabla espera."""
+
+    journal: Journal
+    table: str
+
+    def inserted(self, row: Record) -> None:
+        self.journal.record_insert(self.table, row)
+
+    def deleted(self, row: Record) -> None:
+        self.journal.record_delete(self.table, row)
+
+    def updated(self, before: Record, after: Record) -> None:
+        self.journal.record_update(self.table, before, after)
 
 
 def _require_heap_for_secondary_index(organization: Organization, column: str) -> None:
@@ -490,4 +553,69 @@ def _require_heap_for_secondary_index(organization: Organization, column: str) -
         raise CatalogError(
             f"no se puede indexar '{column}': los índices secundarios necesitan una tabla "
             f"heap file y esta es {organization.value}"
+        )
+
+
+def _require_method_for_column(field: Field, method: IndexType) -> None:
+    """Un R-Tree indexa puntos y solo puntos; un B+ o un hash, cualquier cosa menos puntos.
+
+    Un punto no tiene un orden total que un B+ pueda aprovechar, y un hash solo serviría
+    para encontrar filas en unas coordenadas exactas.
+
+    Raises:
+        CatalogError: si el método no corresponde al tipo de la columna.
+    """
+    if method not in SECONDARY_INDEX_METHODS:
+        raise CatalogError(
+            f"el método {method.value} no sirve como índice secundario de '{field.name}': "
+            "los disponibles son BTREE, HASH y RTREE"
+        )
+    is_point = field.type is FieldType.POINT
+    if method is IndexType.RTREE and not is_point:
+        raise CatalogError(
+            f"un índice RTREE necesita una columna POINT y '{field.name}' es {field.type.value}"
+        )
+    if method is not IndexType.RTREE and is_point:
+        raise CatalogError(
+            f"la columna '{field.name}' es POINT: solo admite un índice RTREE, "
+            f"no {method.value}"
+        )
+
+
+def _default_method_for(field: Field) -> IndexType:
+    """Índice que recibe una columna `UNIQUE` que no declara ninguno.
+
+    Comprobar que un valor no se repite es una búsqueda por igualdad: un hash, salvo en
+    una columna POINT, que solo admite un R-Tree.
+    """
+    return IndexType.RTREE if field.type is FieldType.POINT else IndexType.HASH
+
+
+def _key_method_of(statement: CreateTableStatement) -> IndexType | None:
+    """Método declarado sobre la clave primaria, que decide la organización de la tabla.
+
+    Raises:
+        CatalogError: si ese método no sirve para identificar filas, como un R-Tree.
+    """
+    for column in statement.columns:
+        if not column.primary_key or column.index is None:
+            continue
+        if column.index not in KEY_INDEX_METHODS:
+            raise CatalogError(
+                f"la clave primaria '{column.name}' no admite un índice "
+                f"{column.index.value}: usa SEQ, BTREE o HASH"
+            )
+        return column.index
+    return None
+
+
+def _require_orderable_key(field: Field) -> None:
+    """La clave primaria ordena o reparte las filas, así que su tipo tiene que tener orden.
+
+    Raises:
+        CatalogError: si la columna es de un tipo sin orden, como POINT o VECTOR.
+    """
+    if field.type not in ORDERED_FIELD_TYPES:
+        raise CatalogError(
+            f"la columna '{field.name}' es {field.type.value} y no puede ser clave primaria"
         )

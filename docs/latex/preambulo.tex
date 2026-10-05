@@ -1,7 +1,7 @@
 % Preámbulo del informe: paquetes, colores, títulos, código y figuras.
 
 \usepackage[T1]{fontenc}
-\usepackage[spanish,es-noquoting,es-tabla]{babel}
+\usepackage[spanish,es-noquoting,es-tabla,es-nodecimaldot]{babel}
 \usepackage[a4paper,margin=2.1cm,top=2.3cm,bottom=2.2cm]{geometry}
 \usepackage{amsmath,amssymb}
 \usepackage{booktabs}
@@ -50,6 +50,8 @@
 % --- tablas ----------------------------------------------------------------
 % Columna de párrafo sin justificar: en celdas estrechas la justificación parte palabras.
 \newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
+% Columna numérica de ancho fijo: las tres columnas de tamaños miden lo mismo.
+\newcolumntype{R}[1]{>{\raggedleft\arraybackslash}p{#1}}
 
 % --- código ---------------------------------------------------------------
 \lstdefinestyle{consola}{
@@ -86,7 +88,7 @@
 
 % Una gráfica de benchmarks/figures con su pie: [ancho]{archivo}{etiqueta}{pie}.
 \newcommand{\grafica}[4][\textwidth]{%
-  \begin{figure}[!htb]
+  \begin{figure}[H]
     \centering
     \includegraphics[width=#1]{../../benchmarks/figures/#2}
     \caption{#4}

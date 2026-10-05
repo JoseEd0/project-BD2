@@ -1,13 +1,21 @@
 \section{Dominio de datos}
 
-Se trabaja con dos conjuntos de datos, uno por cada necesidad.
+Se usan dos conjuntos de datos.
 
-\paragraph{Un comercio electrónico, generado.} El dataset de demostración modela clientes
-que hacen pedidos de productos organizados en categorías, más una red de tiendas con
-ubicación en Lima: seis tablas y unas 30\,000 filas. \textbf{Cada tabla usa una organización
-física distinta}, para que las diferencias se vean funcionando sobre los mismos datos.
+\paragraph{Dataset de comercio electrónico (generado).} Modela clientes, pedidos, productos
+y categorías, además de tiendas con ubicación en Lima. Son seis tablas y cerca de
+30\,000 filas (tabla~\ref{tab:dataset}). Las tablas usan distintas organizaciones e
+índices, para poder mostrar todas las estructuras con los mismos datos.
 
-\begin{center}
+Los datos se generan con \texttt{demos/poblar\_ecommerce.py} a partir de una semilla fija,
+por lo que siempre salen iguales; el tamaño se cambia con la opción \texttt{-{}-escala}.
+Los seis CSV están en el repositorio y se pueden cargar desde la interfaz. Las tiendas se
+ubican dentro de doce distritos de Lima, lo que permite verificar consultas como
+\guillemotleft{}tiendas dentro de Miraflores\guillemotright{}.
+
+\begin{table}[H]
+\centering
+\caption{Tablas del dataset de demostración.}\label{tab:dataset}
 \small
 \begin{tabular}{@{}lrL{5.0cm}ll@{}}
 \toprule
@@ -21,26 +29,19 @@ física distinta}, para que las diferencias se vean funcionando sobre los mismos
 \texttt{tiendas}          & 3\,000  & id, nombre, rubro, distrito, ubicacion & heap file & R-Tree en \texttt{ubicacion} \\
 \bottomrule
 \end{tabular}
-\end{center}
+\end{table}
 
-Sale de un generador determinista (\texttt{demos/poblar\_ecommerce.py}): la misma semilla
-produce los mismos datos byte a byte, su tamaño se ajusta con \texttt{-{}-escala} y los
-seis CSV están versionados para cargarlos desde la interfaz. Las tiendas se generan dentro
-del contorno de doce distritos, de modo que \guillemotleft{}tiendas dentro de
-Miraflores\guillemotright{} tiene una respuesta comprobable.
+\paragraph{Lugares de OpenStreetMap (reales).} Para la parte espacial se necesitaban puntos
+con una distribución real y no uniforme. El script \texttt{demos/descargar\_lugares.py}
+descarga de Geofabrik los puntos de interés del Perú (colegios, restaurantes, farmacias,
+bancos, gasolineras, etc.) y genera un CSV con las columnas \texttt{id}, \texttt{nombre},
+\texttt{rubro} y \texttt{ubicacion}, donde la ubicación tiene el formato
+\texttt{POINT(latitud, longitud)}. En total son 128\,011 lugares con nombre, de los cuales
+26\,606 están en Lima y Callao. Este dataset se usa en el experimento espacial y en la
+demostración del mapa.
 
-\paragraph{Lugares reales de OpenStreetMap.} Para la parte espacial importa que los puntos
-estén repartidos como en el mundo y no como los reparte un generador. El guion
-\texttt{demos/descargar\_lugares.py} descarga los puntos de interés del Perú ---colegios,
-restaurantes, farmacias, bancos, gasolineras--- y los deja en un CSV que el gestor carga
-tal cual: \texttt{id, nombre, rubro, ubicacion}, con la ubicación como
-\texttt{POINT(latitud, longitud)}. Son \textbf{128\,011 lugares} con nombre en todo el país
-(26\,606 en Lima y Callao), en 128 rubros. Lee el extracto de Geofabrik pidiendo por HTTP
-solo los bytes de las capas que necesita y decodifica el shapefile con un lector propio.
-Es el dataset del experimento espacial y el que se usa en la demostración del mapa.
-
-\paragraph{Tipos.} El motor almacena enteros, reales, booleanos, fechas, texto de longitud
-fija, bytes y puntos. Al cargar un CSV, el tipo de cada columna se deduce de todos sus
-valores. Solo se comparan valores de la misma familia: \texttt{WHERE id = 'abc'} no
-devuelve cero filas en silencio, se rechaza nombrando la columna, y antes de leer ninguna
-fila.
+\paragraph{Tipos de datos.} El gestor soporta enteros, reales, booleanos, fechas, texto de
+longitud fija, bytes y puntos. Al cargar un CSV, el tipo de cada columna se infiere de sus
+valores. Las comparaciones solo se permiten entre tipos compatibles: por ejemplo,
+\texttt{WHERE id = 'abc'} da un error que indica la columna, en lugar de devolver cero
+filas.

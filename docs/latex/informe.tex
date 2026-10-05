@@ -4,7 +4,7 @@
 % --- datos del alumno y del repositorio ---------------------------------------
 % Lo único que hay que tocar aquí. Si \codigo queda vacío, su fila no se imprime.
 \newcommand{\alumno}{José Huamaní}
-\newcommand{\codigo}{}
+\newcommand{\codigo}{202310632}
 \newcommand{\carrera}{Ciencias de la Computación, UTEC}
 \newcommand{\curso}{Base de Datos 2 (2026-2)}
 \newcommand{\entrega}{Entrega parcial, semana 8}
@@ -12,7 +12,7 @@
 
 % --- cifras que se sincronizan con el repositorio -------------------------------
 % Número de pruebas automáticas y cobertura de líneas y ramas de src/.
-\newcommand{\totalpruebas}{1288}
+\newcommand{\totalpruebas}{1315}
 \newcommand{\coberturapruebas}{99}
 
 \begin{document}
@@ -36,22 +36,20 @@ Entrega     & \entrega \\
 Repositorio & \href{\repositorio}{\texttt{\repositorio}} \\
 \end{tabular}
 
-\vspace{6pt}
-\begin{resumen}
-Un gestor de base de datos construido desde cero en Python: sin ORM, sin motor externo y
-sin librerías que resuelvan las estructuras. Esta entrega cubre la \textbf{Parte~1}
----almacenamiento paginado, índices B+ y hash, algoritmos externos, SQL, transacciones e
-interfaz--- y la \textbf{Parte~2}: R-Tree sobre disco, consultas por radio, por cercanía y
-por polígono, dos métricas de distancia y panel de mapa. Todo lo que se afirma sobre
-rendimiento está \textbf{medido}: tres experimentos reproducibles con un comando, con
-resultados crudos y gráficas versionados. El índice espacial se contrastó con PostGIS sobre
-100\,000 lugares reales de OpenStreetMap: las 1\,800 consultas devuelven las mismas filas.
-\end{resumen}
+\vspace{8pt}
+Este informe corresponde a la entrega parcial del proyecto y cubre las Partes~1 y~2. El
+gestor está escrito en Python, sin ORM ni motor de base de datos externo: las estructuras
+de almacenamiento, los índices y los algoritmos que pide el enunciado están implementados
+en el proyecto. La Parte~1 incluye el almacenamiento en páginas, los índices B+ y hash, los
+algoritmos externos, el procesamiento de SQL, las transacciones y la interfaz. La Parte~2
+agrega el R-Tree, las consultas espaciales (por rango, k-NN y polígonos) y un panel de
+mapa. La sección~\ref{sec:experimentos} presenta los resultados experimentales; el
+experimento espacial usa lugares reales de OpenStreetMap y se compara con PostGIS.
 
 \input{informe/01-arquitectura}
 \input{informe/02-datos}
 \input{informe/03-algoritmos}
 \input{informe/04-experimentos}
-\input{informe/05-verificacion}
+\input{informe/05-pruebas}
 
 \end{document}

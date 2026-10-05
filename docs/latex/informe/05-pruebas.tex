@@ -1,0 +1,23 @@
+\section{Pruebas}
+
+El proyecto tiene \totalpruebas{} pruebas automáticas, que cubren el
+\coberturapruebas{}\,\% de las líneas y ramas del motor. El código pasa además
+\texttt{ruff} y \texttt{mypy} en modo estricto. Aparte de las pruebas por caso (estructura
+vacía, un solo elemento, división y fusión de nodos, desbordamiento de página), se usaron
+tres formas de verificación:
+
+\begin{itemize}[nosep, leftmargin=*]
+  \item \emph{Validadores de estructura.} Cada índice tiene una función que lo recorre
+        completo y comprueba sus invariantes. En el B+ revisa el orden de las claves, la
+        ocupación mínima y que todas las hojas estén al mismo nivel; en el hash, que cada
+        bucket tenga $2^{gd-ld}$ punteros; en el R-Tree, que cada MBR sea el mínimo.
+  \item \emph{Comparación contra un modelo.} A cada estructura se le aplican miles de
+        operaciones aleatorias y el resultado se compara con una lista ordenada o con una
+        búsqueda por fuerza bruta. Las consultas espaciales se ejecutan con y sin R-Tree y
+        deben devolver lo mismo.
+  \item \emph{Comparación con PostGIS.} Las 1\,800 consultas del experimento espacial
+        devuelven las mismas filas que PostGIS.
+\end{itemize}
+
+Las pruebas de almacenamiento usan páginas de 256 bytes para que con pocos registros ya
+haya varias páginas y se ejerciten las divisiones.

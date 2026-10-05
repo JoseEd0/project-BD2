@@ -1,12 +1,14 @@
 \section{Diseño arquitectónico}
 
-El sistema es un gestor de base de datos escrito desde cero en Python. \textbf{Ninguna
-estructura evaluada se delega en una librería}: las páginas, los árboles, el hash, los
-algoritmos externos, el parser y el índice espacial están implementados a mano. Las
-dependencias externas se limitan a lo que el enunciado no evalúa: el servidor web
-(FastAPI), la interfaz (React, Leaflet), las gráficas y las pruebas.
+El sistema está organizado en capas (figura~\ref{fig:capas}). Cada capa usa solamente a las
+que tiene debajo: el motor de consultas no conoce el API y el API no conoce la interfaz.
+Las estructuras que evalúa el enunciado (páginas, árbol B+, hash extendible, algoritmos
+externos, parser SQL y R-Tree) están implementadas en el proyecto. Las librerías externas
+se usan solo para el servidor web (FastAPI), la interfaz (React y Leaflet), las gráficas y
+las pruebas.
 
-\begin{center}
+\begin{figure}[H]
+\centering
 \begin{tikzpicture}[
   capa/.style={draw=acento, fill=acentoSuave, rounded corners=2pt, minimum height=6.2mm,
                minimum width=9.6cm, font=\footnotesize},
@@ -16,49 +18,54 @@ dependencias externas se limitan a lo que el enunciado no evalúa: el servidor w
   node distance=1.4mm]
   \node[capa] (ui)  {\texttt{frontend/} \quad React, TypeScript, Leaflet};
   \node[capa, below=of ui]  (api) {\texttt{api/} \quad REST (FastAPI), una sesión por pestaña};
-  \node[capa, below=of api] (txn) {\texttt{txn/} \quad sesiones, bloqueos en dos fases, deshacer};
+  \node[capa, below=of api] (txn) {\texttt{txn/} \quad transacciones, bloqueos, rollback};
   \node[capa, below=of txn] (qry) {\texttt{sql/} + \texttt{query/} \quad parser, catálogo,
                                    planificador, operadores};
   \node[capa, below=of qry] (idx) {\texttt{index/} \quad B+ agrupado y no agrupado, hash
                                    extendible, R-Tree};
-  \node[capa, below=of idx] (ext) {\texttt{external/} \quad ordenamiento, hashing y bucles
-                                   anidados externos};
+  \node[capa, below=of idx] (ext) {\texttt{external/} \quad external sort, external hash,
+                                   bucles anidados};
   \node[base, below=of ext] (sto) {\texttt{storage/} \quad registros, páginas, buffer pool,
                                    heap, secuencial};
-  \node[base, below=of sto] (spa) {\texttt{spatial/} \quad geometría y métricas (sin
-                                   dependencias)};
-  \node[nota] at ([xshift=2mm]ui.east)  {HTTP};
-  \node[nota] at ([xshift=2mm]txn.east) {aislamiento};
-  \node[nota] at ([xshift=2mm]qry.east) {de SQL a filas};
-  \node[nota] at ([xshift=2mm]idx.east) {caminos de acceso};
-  \node[nota] at ([xshift=2mm]sto.east) {bytes en disco};
+  \node[base, below=of sto] (spa) {\texttt{spatial/} \quad geometría y métricas de distancia};
+  \node[nota] at ([xshift=2mm]ui.east)  {interfaz web};
+  \node[nota] at ([xshift=2mm]api.east) {peticiones HTTP};
+  \node[nota] at ([xshift=2mm]txn.east) {concurrencia};
+  \node[nota] at ([xshift=2mm]qry.east) {consultas SQL};
+  \node[nota] at ([xshift=2mm]idx.east) {índices};
+  \node[nota] at ([xshift=2mm]sto.east) {archivos en disco};
 \end{tikzpicture}
-\end{center}
+\caption{Capas del sistema. Cada bloque es una carpeta del repositorio.}
+\label{fig:capas}
+\end{figure}
 
-\textbf{Cada capa solo conoce a la de abajo}: el motor no sabe qué es una transacción ni
-que existe un API, y el API no sabe nada de la interfaz. Cuatro decisiones atraviesan todas
-las capas:
+Hay cuatro decisiones de diseño que se aplican en todo el código:
 
 \begin{itemize}[nosep, leftmargin=*]
-  \item \textbf{Todo opera por páginas.} Ninguna estructura abre archivos por su cuenta:
-        piden páginas de 4\,096 bytes a un único paginador, con un \emph{buffer pool} LRU
-        de 128 páginas. Nada carga un archivo entero en memoria.
-  \item \textbf{Registros de tamaño fijo.} La posición de un registro en su página es una
-        multiplicación, no una búsqueda; la capacidad de un nodo se \emph{deduce} de dividir
-        el tamaño de página entre el de una entrada.
-  \item \textbf{Una sola implementación de cada cosa.} La serialización, el manejo de
-        páginas y las métricas de distancia viven en un único lugar: una consulta no puede
-        dar resultados distintos según el camino que elija el planificador.
-  \item \textbf{Nada incrustado.} Tamaño de página, umbrales, abanicos y particiones son
-        campos de \texttt{EngineConfig}; rutas y direcciones, variables de entorno; los
-        parámetros de los experimentos, argumentos de línea de comandos.
+  \item \emph{Acceso por páginas.} Todas las estructuras leen y escriben páginas de
+        4\,096 bytes a través del mismo paginador, que tiene un buffer pool LRU de 128
+        páginas. Ningún archivo se carga completo en memoria.
+  \item \emph{Registros de tamaño fijo.} Así la posición de un registro dentro de su página
+        se calcula directamente, y la capacidad de cada nodo sale de dividir el tamaño de
+        la página entre el de una entrada.
+  \item \emph{Código compartido.} La serialización de registros, el manejo de páginas y las
+        métricas de distancia están cada una en un solo módulo, que usan tanto los índices
+        como la búsqueda secuencial. Por eso una consulta devuelve lo mismo con índice o
+        sin él.
+  \item \emph{Parámetros configurables.} El tamaño de página, los umbrales y el número de
+        particiones son campos de la clase \texttt{EngineConfig}. Las rutas y los puertos
+        se leen de variables de entorno, y los parámetros de los experimentos se pasan por
+        línea de comandos.
 \end{itemize}
 
-\paragraph{El camino de una consulta.} Toda sentencia recorre la misma cadena, y su
-resultado lleva, además de las filas, el \textbf{plan de ejecución} con el camino de acceso
-elegido y ---con \texttt{EXPLAIN ANALYZE}--- las filas y el tiempo de cada operador.
+\paragraph{Ejecución de una consulta.} Una sentencia pasa por las etapas de la
+figura~\ref{fig:etapas}: el lexer y el parser generan el AST, se validan nombres y tipos,
+el planificador elige el camino de acceso y los operadores producen las filas. Junto con
+el resultado se devuelve el plan de ejecución, y con \texttt{EXPLAIN ANALYZE} también las
+filas y el tiempo de cada operador.
 
-\begin{center}
+\begin{figure}[H]
+\centering
 \begin{tikzpicture}[
   paso/.style={draw=acento, fill=acentoSuave, rounded corners=2pt, minimum height=7mm,
                font=\scriptsize, align=center, inner sep=3pt},
@@ -72,22 +79,25 @@ elegido y ---con \texttt{EXPLAIN ANALYZE}--- las filas y el tiempo de cada opera
   \node[paso, right=of f] (g) {filas\\+ plan};
   \foreach \x/\y in {a/b, b/c, c/d, d/e, e/f, f/g} \draw[flecha] (\x) -- (\y);
 \end{tikzpicture}
-\end{center}
+\caption{Etapas por las que pasa una sentencia SQL.}
+\label{fig:etapas}
+\end{figure}
 
-\paragraph{API e interfaz.} El API expone el motor sin lógica propia: ejecuta guiones SQL,
-lista el catálogo, describe la estructura física de una tabla y de sus índices, y crea
-tablas a partir de un CSV. Cada pestaña del navegador es una sesión, de modo que dos
-pestañas bastan para demostrar bloqueos. La interfaz (figura~\ref{fig:interfaz}) muestra a
-la vez los cuatro paneles del enunciado ---archivos, consultas, resultados y plan--- y,
-para la Parte~2, un mapa con el resultado, la figura de la consulta y los MBR del R-Tree.
+\paragraph{API e interfaz.} El API REST ejecuta sentencias SQL, lista las tablas, muestra
+la estructura física de una tabla y de sus índices, y permite crear tablas a partir de un
+archivo CSV. Cada pestaña del navegador tiene su propia sesión, lo que permite probar los
+bloqueos con dos pestañas. La interfaz (figura~\ref{fig:interfaz}) tiene los cuatro paneles
+que pide el enunciado (archivos, consultas, resultados y plan de ejecución) y, para la
+Parte~2, un mapa que muestra el resultado, el centro y el radio de la consulta y los MBR
+del R-Tree.
 
-\begin{figure}[!htb]
+\begin{figure}[H]
   \centering
   \includegraphics[width=0.94\textwidth]{figuras/interfaz.png}
-  \caption{La interfaz tras pedir las 10 tiendas más cercanas a un punto. A la izquierda, los
-           archivos con su organización y sus índices; arriba, el editor SQL con los atajos de
-           ejemplo; en el centro, el resultado sobre el mapa, con los rectángulos (MBR) de las
-           hojas del R-Tree; a la derecha, el plan de ejecución, que usó el índice y abrió 4
-           de sus 20 nodos.}
+  \caption{Interfaz después de consultar las 10 tiendas más cercanas a un punto. A la
+           izquierda están las tablas con su organización y sus índices; arriba, el editor
+           SQL y las consultas de ejemplo; al centro, el resultado en el mapa con los MBR de
+           las hojas del R-Tree; a la derecha, el plan de ejecución, que indica que se
+           visitaron 4 de los 20 nodos del índice.}
   \label{fig:interfaz}
 \end{figure}

@@ -1,12 +1,12 @@
+import { API_URL } from "./config";
 import type {
   FileUpload,
   QueryFailure,
   QueryResponse,
   TableInfo,
+  TablePoints,
   TableStructure,
 } from "./types";
-
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 
 export class ApiError extends Error {
   readonly failure: QueryFailure;
@@ -96,6 +96,15 @@ export async function uploadFileOnly(file: File, name: string): Promise<FileUplo
 
 export async function fetchStructure(table: string): Promise<TableStructure> {
   const response = await fetch(`${API_URL}/tables/${encodeURIComponent(table)}/structure`);
+  if (!response.ok) {
+    return parseFailure(response);
+  }
+  return response.json();
+}
+
+export async function fetchTablePoints(table: string, column: string): Promise<TablePoints> {
+  const query = new URLSearchParams({ column });
+  const response = await fetch(`${API_URL}/tables/${encodeURIComponent(table)}/points?${query}`);
   if (!response.ok) {
     return parseFailure(response);
   }

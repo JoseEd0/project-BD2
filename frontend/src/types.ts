@@ -5,6 +5,7 @@ export interface ColumnInfo {
   nullable: boolean;
   primary_key: boolean;
   indexed_with: string | null;
+  unique: boolean;
 }
 
 export interface TableInfo {
@@ -24,7 +25,38 @@ export interface PlanInfo {
   actual_ms: number | null;
 }
 
-export type CellValue = string | number | boolean | null;
+/** Punto geográfico en grados decimales, tal como lo entrega el API. */
+export interface GeoPoint {
+  lat: number;
+  lon: number;
+}
+
+export type CellValue = string | number | boolean | null | GeoPoint;
+
+/** Figura de una consulta espacial que el mapa dibuja sobre los puntos. */
+export interface Overlay {
+  kind: "radius" | "nearest" | "polygon";
+  center: GeoPoint | null;
+  radius: number | null;
+  metric: string | null;
+  unit: string | null;
+  vertices: GeoPoint[];
+}
+
+/** Tabla y columna POINT que toca una consulta, con sus figuras. */
+export interface SpatialInfo {
+  table: string;
+  column: string;
+  overlays: Overlay[];
+}
+
+/** Puntos de una tabla para el fondo del mapa: pares `[latitud, longitud]`. */
+export interface TablePoints {
+  table: string;
+  column: string;
+  total: number;
+  points: [number, number][];
+}
 
 export interface StatementOutcome {
   sql: string;
@@ -43,6 +75,7 @@ export interface QueryResponse {
   affected_rows: number;
   elapsed_ms: number;
   in_transaction: boolean;
+  spatial: SpatialInfo | null;
 }
 
 export interface QueryFailure {
@@ -92,6 +125,30 @@ export interface HashStructure {
   buckets: HashBucket[];
 }
 
+/** MBR de un nodo: `[lat mínima, lon mínima, lat máxima, lon máxima]`. */
+export type Bounds = [number, number, number, number];
+
+export interface RTreeLevel {
+  kind: string;
+  node_count: number;
+  entry_count: number;
+  nodes: { bounds: Bounds | null; entry_count: number }[];
+}
+
+export interface RTreeStructure {
+  kind: "rtree";
+  height: number;
+  entries: number;
+  nodes: number;
+  pages: number;
+  leaf_capacity: number;
+  branch_capacity: number;
+  minimum_fill: number;
+  levels: RTreeLevel[];
+}
+
+export type IndexStructure = TreeStructure | HashStructure | RTreeStructure;
+
 export interface HeapStorage {
   kind: "heap";
   pages: number;
@@ -118,6 +175,6 @@ export interface TableStructure {
     name: string;
     column: string;
     method: string;
-    structure: TreeStructure | HashStructure;
+    structure: IndexStructure;
   }[];
 }

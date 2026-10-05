@@ -6,13 +6,22 @@ interface PlanPanelProps {
 
 const ACCESS_OPERATIONS = new Set([
   "SequentialScan",
+  "OrderedScan",
   "IndexLookup",
   "IndexRange",
   "PrimaryKeyLookup",
   "PrimaryKeyRange",
+  "SpatialRangeScan",
+  "SpatialNearestScan",
+  "SpatialPolygonScan",
 ]);
 
-const EXTERNAL_OPERATIONS = new Set(["ExternalSort", "HashAggregate", "HashJoin"]);
+const EXTERNAL_OPERATIONS = new Set([
+  "ExternalSort",
+  "HashAggregate",
+  "HashJoin",
+  "NestedLoopJoin",
+]);
 
 function operationClass(operation: string): string {
   if (ACCESS_OPERATIONS.has(operation)) return "plan__op plan__op--access";
@@ -66,7 +75,8 @@ export default function PlanPanel({ plan }: PlanPanelProps) {
               </p>
               <p>
                 <span className="legend-dot legend-dot--access" /> camino de acceso —
-                recorrido completo, índice hash, índice B+ o el orden propio de la tabla.
+                recorrido completo, índice hash, índice B+, R-Tree o el orden propio de la
+                tabla. Un acceso por R-Tree dice además cuántos nodos del árbol abrió.
               </p>
               <p>
                 <span className="legend-dot legend-dot--external" /> algoritmo externo —

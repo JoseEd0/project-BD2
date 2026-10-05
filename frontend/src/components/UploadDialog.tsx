@@ -15,35 +15,50 @@ interface UploadDialogProps {
 
 type Mode = UploadValues["mode"];
 
-const ORGANIZATIONS = [
+/**
+ * Formas de guardar la tabla. `organization` es lo que entiende el API; `keyed` dice si la
+ * estructura se apoya en una columna clave. «Sin índice» es un heap file sin clave: la
+ * línea base contra la que se compara cualquier índice que se cree después.
+ */
+const STRUCTURES = [
+  {
+    value: "plain",
+    organization: "heap",
+    label: "Sin índice",
+    hint: "Heap file sin clave ni índices: toda búsqueda recorre la tabla. Los índices se crean después con CREATE INDEX.",
+    keyed: false,
+  },
   {
     value: "heap",
-    label: "Heap file",
-    hint: "Filas en orden de llegada; se consulta por índice.",
-    keyRequired: false,
+    organization: "heap",
+    label: "Heap file + índice hash",
+    hint: "Filas en orden de llegada y un índice hash sobre la clave primaria.",
+    keyed: true,
   },
   {
     value: "clustered_btree",
+    organization: "clustered_btree",
     label: "B+ agrupado",
     hint: "Las filas viven en las hojas del árbol, ordenadas por la clave.",
-    keyRequired: true,
+    keyed: true,
   },
   {
     value: "sequential",
+    organization: "sequential",
     label: "Archivo secuencial",
     hint: "Ordenado por la clave, con zona de desbordamiento y reorganización.",
-    keyRequired: true,
+    keyed: true,
   },
 ];
+const DEFAULT_STRUCTURE = "heap";
 
 const CSV_EXTENSION = ".csv";
 const BYTES_PER_KIB = 1024;
 const PREFERRED_KEY = "id";
 const NO_KEY = "";
 
-function defaultKey(columns: string[], keyRequired: boolean): string {
-  if (columns.includes(PREFERRED_KEY)) return PREFERRED_KEY;
-  return keyRequired ? (columns[0] ?? NO_KEY) : NO_KEY;
+function defaultKey(columns: string[]): string {
+  return columns.includes(PREFERRED_KEY) ? PREFERRED_KEY : (columns[0] ?? NO_KEY);
 }
 
 export default function UploadDialog({ busy, onSubmit, onClose }: UploadDialogProps) {
@@ -51,17 +66,17 @@ export default function UploadDialog({ busy, onSubmit, onClose }: UploadDialogPr
   const [file, setFile] = useState<File | null>(null);
   const [columns, setColumns] = useState<string[]>([]);
   const [name, setName] = useState("");
-  const [organization, setOrganization] = useState(ORGANIZATIONS[0].value);
+  const [structure, setStructure] = useState(DEFAULT_STRUCTURE);
   const [keyColumn, setKeyColumn] = useState(NO_KEY);
   const [dragging, setDragging] = useState(false);
 
-  const chosen = ORGANIZATIONS.find((option) => option.value === organization) ?? ORGANIZATIONS[0];
+  const chosen = STRUCTURES.find((option) => option.value === structure) ?? STRUCTURES[0];
 
   useEffect(() => {
-    setKeyColumn(defaultKey(columns, chosen.keyRequired));
-  }, [columns, chosen.keyRequired]);
+    setKeyColumn(defaultKey(columns));
+  }, [columns]);
 
-  const keyMissing = mode === "create" && chosen.keyRequired && keyColumn === NO_KEY;
+  const keyMissing = mode === "create" && chosen.keyed && keyColumn === NO_KEY;
   const ready = file !== null && name.trim().length > 0 && !keyMissing;
 
   async function pick(candidate: File | null) {
@@ -88,8 +103,8 @@ export default function UploadDialog({ busy, onSubmit, onClose }: UploadDialogPr
       mode,
       file,
       name: name.trim(),
-      organization,
-      keyColumn: keyColumn === NO_KEY ? null : keyColumn,
+      organization: chosen.organization,
+      keyColumn: chosen.keyed ? keyColumn : null,
     });
   }
 
@@ -123,6 +138,10 @@ export default function UploadDialog({ busy, onSubmit, onClose }: UploadDialogPr
               <>
                 <span className="dropzone__title">Arrastra un CSV aquí</span>
                 <span className="dropzone__hint">o haz clic para elegirlo · debe tener cabecera</span>
+                <span className="dropzone__hint">
+                  Los tipos se deducen del contenido. Un punto se escribe{" "}
+                  <code>POINT(latitud, longitud)</code>.
+                </span>
               </>
             ) : (
               <>
@@ -179,15 +198,15 @@ export default function UploadDialog({ busy, onSubmit, onClose }: UploadDialogPr
               <fieldset className="field">
                 <legend className="field__label">Organización física</legend>
                 <div className="choices">
-                  {ORGANIZATIONS.map((option) => (
+                  {STRUCTURES.map((option) => (
                     <label
-                      className={organization === option.value ? "choice choice--active" : "choice"}
+                      className={structure === option.value ? "choice choice--active" : "choice"}
                       key={option.value}
                     >
                       <input
-                        checked={organization === option.value}
-                        name="organization"
-                        onChange={() => setOrganization(option.value)}
+                        checked={structure === option.value}
+                        name="structure"
+                        onChange={() => setStructure(option.value)}
                         type="radio"
                         value={option.value}
                       />
@@ -198,32 +217,34 @@ export default function UploadDialog({ busy, onSubmit, onClose }: UploadDialogPr
                 </div>
               </fieldset>
 
-              <label className="field">
-                <span className="field__label">Clave primaria</span>
-                <select
-                  className="field__input"
-                  disabled={columns.length === 0}
-                  onChange={(event) => setKeyColumn(event.target.value)}
-                  value={keyColumn}
-                >
-                  {columns.length === 0 && <option value={NO_KEY}>Elige primero un archivo</option>}
-                  {columns.length > 0 && !chosen.keyRequired && (
-                    <option value={NO_KEY}>Sin clave primaria</option>
-                  )}
-                  {columns.map((column) => (
-                    <option key={column} value={column}>
-                      {column}
-                    </option>
-                  ))}
-                </select>
-                <span className="field__hint">
-                  {chosen.keyRequired
-                    ? "Obligatoria: la estructura ordena las filas por ella."
-                    : keyColumn === NO_KEY
-                      ? "Sin clave: las filas solo se identifican por su dirección (página, ranura) y nada impide valores repetidos. Buscar por id recorre la tabla hasta que le crees un índice."
-                      : "La clave recibe un índice hash y no admite repetidos."}
-                </span>
-              </label>
+              {chosen.keyed ? (
+                <label className="field">
+                  <span className="field__label">Clave primaria</span>
+                  <select
+                    className="field__input"
+                    disabled={columns.length === 0}
+                    onChange={(event) => setKeyColumn(event.target.value)}
+                    value={keyColumn}
+                  >
+                    {columns.length === 0 && <option value={NO_KEY}>Elige primero un archivo</option>}
+                    {columns.map((column) => (
+                      <option key={column} value={column}>
+                        {column}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="field__hint">
+                    No admite valores repetidos: la carga se rechaza entera si el archivo trae alguno.
+                  </span>
+                </label>
+              ) : (
+                <p className="modal__note">
+                  La tabla queda <strong>sin clave primaria y sin ningún índice</strong>: las filas
+                  solo se identifican por su dirección (página, ranura) y nada impide valores
+                  repetidos. Es el punto de partida para comparar: ejecuta una consulta, crea un
+                  índice con <code>CREATE INDEX</code> y vuelve a ejecutarla.
+                </p>
+              )}
             </>
           )}
         </div>

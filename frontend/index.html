@@ -8,6 +8,18 @@
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%234d9fff'/%3E%3Cellipse cx='16' cy='9' rx='9' ry='3.6' fill='%230b1220'/%3E%3Cpath d='M7 9v14c0 2 4 3.6 9 3.6s9-1.6 9-3.6V9c0 2-4 3.6-9 3.6S7 11 7 9z' fill='%230b1220'/%3E%3C/svg%3E"
     />
     <title>Minigestor de Base de Datos</title>
+    <script>
+      // El tema se fija antes de pintar: el guardado (ver hooks/useTheme.ts) o, si no hay
+      // o el navegador bloquea el almacenamiento, el del sistema.
+      let stored = null;
+      try {
+        stored = window.localStorage.getItem("minigestor.theme");
+      } catch {
+        stored = null;
+      }
+      const system = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      document.documentElement.dataset.theme = stored === "dark" || stored === "light" ? stored : system;
+    </script>
   </head>
   <body>
     <div id="root"></div>

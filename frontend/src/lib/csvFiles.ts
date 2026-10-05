@@ -53,6 +53,7 @@ export function createFromFileSql(name: string, path: string, columns: string[])
 --   USING INDEX BTREE("${key}")   B+ agrupado: las filas viven en el árbol
 --   USING INDEX SEQ("${key}")     archivo secuencial ordenado por la clave
 --   USING INDEX HASH("${key}")    heap file + índice hash sobre la clave
+--   USING INDEX RTREE("columna") heap file sin clave + R-Tree sobre una columna POINT
 --   (sin USING INDEX)            heap file sin clave
 CREATE TABLE ${name} FROM FILE '${path}'
   USING INDEX BTREE("${key}");`;

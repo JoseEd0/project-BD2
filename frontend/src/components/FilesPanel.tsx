@@ -28,6 +28,7 @@ function ColumnRow({ column }: { column: ColumnInfo }) {
       <span className="column__key">{column.primary_key ? "PK" : ""}</span>
       <span className="column__name">{column.name}</span>
       {column.indexed_with && <span className="column__index">{column.indexed_with}</span>}
+      {column.unique && <span className="column__null">UNIQUE</span>}
       {!column.nullable && <span className="column__null">NOT NULL</span>}
       <span className="column__type">{typeLabel(column)}</span>
     </li>
@@ -67,7 +68,7 @@ function TableGroup({
         <button
           className="icon-button"
           onClick={onInspect}
-          title="Estructura física: niveles del B+, cubetas del hash"
+          title="Estructura física: niveles del B+, cubetas del hash, MBR del R-Tree"
           type="button"
         >
           ⌬

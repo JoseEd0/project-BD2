@@ -1,14 +1,19 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
+import type { Theme } from "../hooks/useTheme";
 import { downloadCsv, toClipboardTable, toCsv } from "../lib/exporting";
-import type { CellValue, QueryFailure, QueryResponse } from "../types";
+import { formatPoint, isGeoPoint } from "../lib/points";
+import type { CellValue, QueryFailure, QueryResponse, TableInfo } from "../types";
+import MapPanel from "./MapPanel";
 
 interface ResultsPanelProps {
   result: QueryResponse | null;
   failure: QueryFailure | null;
+  tables: TableInfo[];
+  theme: Theme;
 }
 
-type Tab = "filas" | "mensajes";
+type Tab = "filas" | "mensajes" | "mapa";
 
 /** Milisegundos que el botón muestra «Copiado» antes de volver a su texto. */
 const COPIED_FEEDBACK_MS = 1500;
@@ -27,6 +32,7 @@ function renderCell(value: CellValue) {
   if (value === null) return "NULL";
   if (typeof value === "boolean") return value ? "true" : "false";
   if (typeof value === "number") return formatNumber(value);
+  if (isGeoPoint(value)) return formatPoint(value);
   return String(value);
 }
 
@@ -81,10 +87,23 @@ function Messages({ result }: { result: QueryResponse }) {
   );
 }
 
-export default function ResultsPanel({ result, failure }: ResultsPanelProps) {
+export default function ResultsPanel({ result, failure, tables, theme }: ResultsPanelProps) {
   const [tab, setTab] = useState<Tab>("filas");
   const [copied, setCopied] = useState(false);
   const hasRows = result !== null && result.columns.length > 0;
+  const spatial = failure === null ? (result?.spatial ?? null) : null;
+
+  // Una consulta espacial que devuelve puntos se entiende mejor en el mapa, así que se
+  // abre sola. Y si el resultado siguiente no trae puntos que situar, se vuelve a las
+  // filas: un mapa sin nada resaltado escondería lo que la consulta sí devolvió.
+  useEffect(() => {
+    const drawsFigures = (spatial?.overlays.length ?? 0) > 0;
+    const locatesRows = result?.rows.some((row) => row.some(isGeoPoint)) ?? false;
+    setTab((current) => {
+      if (drawsFigures && locatesRows) return "mapa";
+      return current === "mapa" && !locatesRows ? "filas" : current;
+    });
+  }, [result, spatial]);
 
   async function copyRows() {
     if (!result) return;
@@ -116,6 +135,15 @@ export default function ResultsPanel({ result, failure }: ResultsPanelProps) {
               <span className="tab__count">{result.statements.length}</span>
             )}
           </button>
+          {spatial !== null && (
+            <button
+              className={tab === "mapa" ? "tab tab--active" : "tab"}
+              onClick={() => setTab("mapa")}
+              type="button"
+            >
+              Mapa
+            </button>
+          )}
         </div>
         <div className="panel__actions">
           {hasRows && (
@@ -137,8 +165,11 @@ export default function ResultsPanel({ result, failure }: ResultsPanelProps) {
           )}
         </div>
       </header>
-      <div className="panel__body">
+      <div className={tab === "mapa" && spatial !== null ? "panel__body panel__body--map" : "panel__body"}>
         {failure !== null && <Failure failure={failure} />}
+        {result !== null && spatial !== null && tab === "mapa" && (
+          <MapPanel result={result} spatial={spatial} tables={tables} theme={theme} />
+        )}
         {failure === null && result === null && (
           <p className="panel__empty">Ejecuta una consulta para ver aquí sus filas.</p>
         )}

@@ -34,7 +34,7 @@ const TYPES = new Set([
 
 const FUNCTIONS = new Set([
   "COUNT", "SUM", "AVG", "MIN", "MAX", "MATCH", "SCORE", "SIMILAR_TO",
-  "SIMILARITY_SCORE", "DISTANCIA",
+  "SIMILARITY_SCORE", "DISTANCIA", "INTERSECTA", "POLYGON",
 ]);
 
 const PATTERNS: { kind: TokenKind; regex: RegExp }[] = [

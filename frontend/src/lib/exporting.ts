@@ -1,11 +1,13 @@
 import type { CellValue } from "../types";
+import { cellText } from "./points";
 
 const SEPARATOR = ",";
 const NEWLINE = "\n";
+const NULL_IN_CSV = "";
+const NULL_IN_CLIPBOARD = "NULL";
 
 function escape(value: CellValue): string {
-  if (value === null) return "";
-  const text = String(value);
+  const text = cellText(value, NULL_IN_CSV);
   return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
@@ -18,7 +20,7 @@ export function toCsv(columns: string[], rows: CellValue[][]): string {
 
 /** Formato tabular con tabuladores, que es lo que espera una hoja de cálculo al pegar. */
 export function toClipboardTable(columns: string[], rows: CellValue[][]): string {
-  const cell = (value: CellValue) => (value === null ? "NULL" : String(value));
+  const cell = (value: CellValue) => cellText(value, NULL_IN_CLIPBOARD);
   return [columns.join("\t"), ...rows.map((row) => row.map(cell).join("\t"))].join(NEWLINE);
 }
 

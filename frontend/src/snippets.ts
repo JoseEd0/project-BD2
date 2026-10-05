@@ -13,6 +13,9 @@ export interface SnippetGroup {
  * Guion de demostración sobre el dataset de e-commerce (`demos/poblar_ecommerce.py`, o sus
  * CSV de `demos/samples/`). Los grupos siguen el orden de la exposición y cada atajo se
  * puede lanzar varias veces sin error: los que crean o borran algo usan IF [NOT] EXISTS.
+ *
+ * Los del grupo «Espacial» usan la tabla `tiendas`. Sus coordenadas son las del generador:
+ * la Plaza de Armas de Lima, el Parque Kennedy y el contorno simplificado de Miraflores.
  */
 export const SNIPPET_GROUPS: SnippetGroup[] = [
   {
@@ -118,6 +121,25 @@ WHERE c.ciudad = 'Cusco'
 ORDER BY p.total DESC
 LIMIT 5;`,
       },
+      {
+        label: "ORDER BY sin ordenar",
+        description:
+          "pedidos es un archivo secuencial: ya está en orden de clave, así que el plan no lleva ExternalSort",
+        sql: `EXPLAIN ANALYZE
+SELECT id, fecha, total
+FROM pedidos
+ORDER BY id
+LIMIT 10;`,
+      },
+      {
+        label: "Constantes",
+        description:
+          "Una expresión constante vale como un literal: el rango se calcula una vez y va al índice",
+        sql: `EXPLAIN ANALYZE
+SELECT id, cliente_id, total
+FROM pedidos
+WHERE id BETWEEN 10 * 10 AND 10 * 10 + 20;`,
+      },
     ],
   },
   {
@@ -165,6 +187,39 @@ WHERE c.ciudad = 'Arequipa'
 ORDER BY d.precio_unitario DESC
 LIMIT 25;`,
       },
+      {
+        label: "LEFT JOIN",
+        description:
+          "Clientes sin ningún pedido: la reunión externa los conserva con NULL y COUNT no los cuenta",
+        sql: `SELECT c.id, c.nombre, c.ciudad, COUNT(p.id) AS pedidos
+FROM clientes AS c
+LEFT JOIN pedidos AS p ON p.cliente_id = c.id
+GROUP BY c.id, c.nombre, c.ciudad
+HAVING COUNT(p.id) = 0
+ORDER BY c.id
+LIMIT 25;`,
+      },
+      {
+        label: "JOIN sin igualdad",
+        description:
+          "Sin una igualdad no hay clave de hash: bucles anidados en bloques (NestedLoopJoin en el plan)",
+        sql: `SELECT a.nombre AS categoria, b.nombre AS siguiente
+FROM categorias AS a
+JOIN categorias AS b ON a.id < b.id AND b.id <= a.id + 2
+ORDER BY a.id, b.id;`,
+      },
+      {
+        label: "GROUP BY expresión",
+        description:
+          "Se agrupa por una expresión, nombrada por su posición; las agregaciones se combinan entre sí",
+        sql: `SELECT total >= 1000 AS pedido_grande,
+       COUNT(*) AS pedidos,
+       SUM(total) / COUNT(*) AS ticket_medio,
+       MAX(total) - MIN(total) AS amplitud
+FROM pedidos
+GROUP BY 1
+ORDER BY 1;`,
+      },
     ],
   },
   {
@@ -182,8 +237,50 @@ LIMIT 30;`,
       },
       {
         label: "DISTINCT",
-        description: "Elimina repetidos comparando la fila completa",
+        description: "La primera aparición de cada resultado, en su orden; en disco si no caben en memoria",
         sql: "SELECT DISTINCT ciudad FROM clientes ORDER BY ciudad;",
+      },
+      {
+        label: "Fechas",
+        description: "Una fecha se escribe como texto ISO y se compara como fecha, no como texto",
+        sql: `SELECT id, cliente_id, fecha, total
+FROM pedidos
+WHERE fecha BETWEEN '2025-01-01' AND '2025-01-31'
+ORDER BY fecha
+LIMIT 30;`,
+      },
+      {
+        label: "NULL e índices",
+        description:
+          "Un NULL se guarda aunque la columna tenga índice: el índice lo deja fuera e IS NULL lo encuentra",
+        sql: `DELETE FROM clientes WHERE id = 900001;
+INSERT INTO clientes VALUES (900001, 'Cliente sin ciudad', 'prueba@correo.pe', NULL, '2026-03-15');
+
+SELECT id, nombre, ciudad, fecha_alta FROM clientes WHERE ciudad IS NULL;
+
+DELETE FROM clientes WHERE id = 900001;`,
+      },
+      {
+        label: "UNIQUE y clave",
+        description:
+          "Una columna UNIQUE no se repite (varios NULL sí); un UPDATE puede cambiar la clave de todas las filas a la vez",
+        sql: `DROP TABLE IF EXISTS usuarios;
+
+CREATE TABLE usuarios (
+  id     INT PRIMARY KEY,
+  correo VARCHAR(40) UNIQUE,
+  alias  VARCHAR(20)
+);
+
+INSERT INTO usuarios VALUES
+  (1, 'ana@correo.pe', 'ana'),
+  (2, 'luis@correo.pe', 'luis'),
+  (3, NULL, 'sin correo'),
+  (4, NULL, 'tampoco');
+
+UPDATE usuarios SET id = id + 1;
+
+SELECT * FROM usuarios ORDER BY id;`,
       },
       {
         label: "UPDATE y DELETE",
@@ -223,6 +320,119 @@ SELECT id, nombre, stock FROM productos WHERE id = 1;`,
           "En una segunda pestaña, con la primera en BEGIN + UPDATE: espera el bloqueo de tabla",
         sql: `UPDATE productos SET stock = 99 WHERE id = 2;
 SELECT id, nombre, stock FROM productos WHERE id = 2;`,
+      },
+    ],
+  },
+  {
+    name: "Espacial",
+    snippets: [
+      {
+        label: "Tabla con puntos",
+        description:
+          "Columna POINT con índice R-Tree declarado al crearla; POINT(latitud, longitud)",
+        sql: `DROP TABLE IF EXISTS sedes;
+
+CREATE TABLE sedes (
+  id INT PRIMARY KEY,
+  nombre VARCHAR(30),
+  ubicacion POINT INDEX RTREE
+);
+
+INSERT INTO sedes VALUES
+  (1, 'UTEC', POINT(-12.1352, -77.0222)),
+  (2, 'Plaza de Armas', POINT(-12.0464, -77.0428)),
+  (3, 'Aeropuerto Jorge Chávez', POINT(-12.0219, -77.1143));
+
+SELECT nombre, ubicacion,
+       distancia(ubicacion, POINT(-12.1352, -77.0222)) AS metros
+FROM sedes
+ORDER BY metros;`,
+      },
+      {
+        label: "Radio 5 km",
+        description:
+          "Tiendas a menos de 5 km de la Plaza de Armas: SpatialRangeScan y nodos visitados",
+        sql: `SELECT id, nombre, distrito, ubicacion
+FROM tiendas
+WHERE distancia(ubicacion, POINT(-12.0464, -77.0428)) < 5000;`,
+      },
+      {
+        label: "10 más cercanas",
+        description: "k-NN: el R-Tree entrega las filas por cercanía, sin ordenar nada",
+        sql: `SELECT nombre, rubro,
+       distancia(ubicacion, POINT(-12.0464, -77.0428)) AS metros,
+       ubicacion
+FROM tiendas
+ORDER BY metros
+LIMIT 10;`,
+      },
+      {
+        label: "Gasolineras cercanas",
+        description:
+          "k-NN con filtro, desde el Parque Kennedy: el índice da el orden y el WHERE descarta",
+        sql: `SELECT nombre, distrito,
+       distancia(ubicacion, POINT(-12.1211, -77.0297)) AS metros,
+       ubicacion
+FROM tiendas
+WHERE rubro = 'gasolinera'
+ORDER BY metros
+LIMIT 10;`,
+      },
+      {
+        label: "Dentro de Miraflores",
+        description: "Intersección con un polígono: SpatialPolygonScan",
+        sql: `SELECT id, nombre, distrito, ubicacion
+FROM tiendas
+WHERE intersecta(ubicacion, POLYGON(
+  (-12.112, -77.046), (-12.112, -77.010), (-12.136, -77.008),
+  (-12.136, -77.026), (-12.126, -77.036)));`,
+      },
+      {
+        label: "Tiendas por distrito",
+        description: "El filtro espacial alimenta un GROUP BY: R-Tree más hashing externo",
+        sql: `SELECT distrito, COUNT(*) AS tiendas
+FROM tiendas
+WHERE distancia(ubicacion, POINT(-12.0464, -77.0428)) < 5000
+GROUP BY distrito
+ORDER BY tiendas DESC;`,
+      },
+      {
+        label: "Haversine y euclidiana",
+        description: "Las dos métricas sobre las mismas filas: metros frente a grados",
+        sql: `SELECT nombre,
+       distancia(ubicacion, POINT(-12.0464, -77.0428)) AS metros,
+       distancia(ubicacion, POINT(-12.0464, -77.0428), metrica='euclidiana') AS grados,
+       ubicacion
+FROM tiendas
+WHERE distancia(ubicacion, POINT(-12.0464, -77.0428), metrica='euclidiana') < 0.02;`,
+      },
+      {
+        label: "Sin R-Tree",
+        description: "Se quita el índice y la misma consulta recorre toda la tabla",
+        sql: `DROP INDEX IF EXISTS idx_tiendas_ubicacion;
+
+SELECT id, nombre, distrito, ubicacion
+FROM tiendas
+WHERE distancia(ubicacion, POINT(-12.0464, -77.0428)) < 5000;`,
+      },
+      {
+        label: "Crear R-Tree",
+        description: "Carga masiva del índice y la misma consulta: vuelve SpatialRangeScan",
+        sql: `CREATE INDEX IF NOT EXISTS idx_tiendas_ubicacion
+  ON tiendas USING RTREE (ubicacion);
+
+SELECT id, nombre, distrito, ubicacion
+FROM tiendas
+WHERE distancia(ubicacion, POINT(-12.0464, -77.0428)) < 5000;`,
+      },
+      {
+        label: "EXPLAIN k-NN",
+        description: "Nodos del R-Tree abiertos para encontrar 10 vecinos",
+        sql: `EXPLAIN ANALYZE
+SELECT nombre, ubicacion
+FROM tiendas
+ORDER BY distancia(ubicacion, POINT(-12.0464, -77.0428))
+LIMIT 10;`,
       },
     ],
   },

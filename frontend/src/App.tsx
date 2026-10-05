@@ -20,6 +20,7 @@ import StructureDialog from "./components/StructureDialog";
 import UploadDialog from "./components/UploadDialog";
 import type { UploadValues } from "./components/UploadDialog";
 import { useSplitter } from "./hooks/useSplitter";
+import { useTheme } from "./hooks/useTheme";
 import { createFromFileSql } from "./lib/csvFiles";
 import { SNIPPET_GROUPS } from "./snippets";
 import type { QueryFailure, QueryResponse, TableInfo } from "./types";
@@ -57,6 +58,7 @@ export default function App() {
   const [confirmEmpty, setConfirmEmpty] = useState(false);
   const [inspected, setInspected] = useState<TableInfo | null>(null);
 
+  const { theme, toggleTheme } = useTheme();
   const sidebar = useSplitter(SIDEBAR.initial, SIDEBAR.min, SIDEBAR.max, "x");
   const editor = useSplitter(EDITOR.initial, EDITOR.min, EDITOR.max, "y");
 
@@ -228,6 +230,16 @@ export default function App() {
         <button className="action" onClick={() => void refreshTables()} type="button">
           Actualizar
         </button>
+        <button
+          aria-label={theme === "dark" ? "Cambiar a tema claro" : "Cambiar a tema oscuro"}
+          aria-pressed={theme === "dark"}
+          className="action action--icon"
+          onClick={toggleTheme}
+          title={theme === "dark" ? "Cambiar a tema claro" : "Cambiar a tema oscuro"}
+          type="button"
+        >
+          {theme === "dark" ? "☀" : "☾"}
+        </button>
       </header>
 
       <div className="workbench__body">
@@ -263,7 +275,7 @@ export default function App() {
               role="separator"
             />
             <div className="workbench__output">
-              <ResultsPanel failure={failure} result={result} />
+              <ResultsPanel failure={failure} result={result} tables={tables} theme={theme} />
               <PlanPanel plan={result?.plan ?? null} />
             </div>
           </div>

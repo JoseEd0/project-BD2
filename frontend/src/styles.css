@@ -1,4 +1,8 @@
-/* Tema claro de IDE: superficies escalonadas, un acento por función y tipografía legible. */
+/*
+ * Tema de IDE: superficies escalonadas, un acento por función y tipografía legible.
+ * Los colores viven en variables; el tema oscuro solo las redefine, así que ningún
+ * componente necesita saber en qué tema está.
+ */
 
 :root {
   color-scheme: light;
@@ -57,6 +61,49 @@
   --code-padding: 12px;
 }
 
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --surface-0: #101319;
+  --surface-1: #161a22;
+  --surface-2: #1d222c;
+  --surface-3: #262c38;
+  --border: #2a3140;
+  --border-strong: #3a4354;
+
+  --text: #e8ecf4;
+  --text-muted: #9daaba;
+  --text-faint: #6d7889;
+
+  --accent: #58a6ff;
+  --accent-hover: #79bbff;
+  --accent-soft: rgba(88, 166, 255, 0.14);
+  --on-accent: #0b1220;
+  --selection: rgba(88, 166, 255, 0.28);
+  --success: #56d364;
+  --success-soft: rgba(86, 211, 100, 0.09);
+  --success-border: rgba(86, 211, 100, 0.35);
+  --success-text: #bbf7d0;
+  --warning: #e3b341;
+  --warning-soft: rgba(227, 179, 65, 0.12);
+  --warning-border: rgba(227, 179, 65, 0.5);
+  --danger: #f85149;
+  --danger-hover: #ff6b62;
+  --danger-soft: rgba(248, 81, 73, 0.1);
+  --danger-border: rgba(248, 81, 73, 0.42);
+  --danger-text: #ffc9c9;
+  --on-danger: #1b0b0b;
+  --key: #bc8cff;
+  --teal: #39c5cf;
+  --orange: #ffa657;
+
+  --inset: rgba(0, 0, 0, 0.3);
+  --overlay: rgba(4, 6, 10, 0.66);
+  --shadow-small: 0 8px 24px rgba(0, 0, 0, 0.35);
+  --shadow-menu: 0 12px 32px rgba(0, 0, 0, 0.45);
+  --shadow-modal: 0 24px 64px rgba(0, 0, 0, 0.55);
+}
+
 * {
   box-sizing: border-box;
 }
@@ -81,6 +128,17 @@ button {
   font-family: inherit;
   font-size: 14px;
   cursor: pointer;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+  }
 }
 
 code {
@@ -349,6 +407,14 @@ code {
   font-family: var(--mono);
   font-size: 11.5px;
   opacity: 0.72;
+}
+
+.action--icon {
+  width: 34px;
+  justify-content: center;
+  padding: 6px 0;
+  font-size: 15px;
+  line-height: 1.3;
 }
 
 .icon-button {
@@ -1563,3 +1629,202 @@ select.field__input:disabled {
   padding: 5px 12px;
 }
 
+/* ---------- panel de mapa ---------- */
+
+.panel__body--map {
+  overflow: hidden;
+}
+
+/* Leaflet apila sus capas con z-index de hasta 1000; aislarlas evita que tapen los
+   diálogos y los menús del resto de la interfaz. */
+.map {
+  position: relative;
+  height: 100%;
+  isolation: isolate;
+}
+
+.map__canvas,
+.map__surface {
+  height: 100%;
+}
+
+.map__surface {
+  background: var(--surface-2);
+  font-family: var(--sans);
+}
+
+.map__legend {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  z-index: 1000;
+  max-width: min(360px, calc(100% - 24px));
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-strong);
+  background: var(--surface-1);
+  box-shadow: var(--shadow-small);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.map__key,
+.map__note,
+.map__toggle {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+}
+
+.map__note {
+  display: block;
+  padding-left: 18px;
+  color: var(--text-muted);
+}
+
+.map__toggle {
+  margin-top: 3px;
+  padding-top: 7px;
+  border-top: 1px solid var(--border);
+  cursor: pointer;
+}
+
+.map__toggle input {
+  margin: 0;
+  align-self: center;
+  accent-color: var(--teal);
+}
+
+.map__dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  transform: translateY(1px);
+}
+
+.map__dot--result {
+  background: var(--accent);
+  box-shadow: 0 0 0 1.5px var(--surface-1), 0 0 0 2.5px var(--accent);
+}
+
+.map__dot--context {
+  background: var(--text-faint);
+  opacity: 0.7;
+}
+
+.map__dot--figure {
+  border-radius: 2px;
+  background: var(--key);
+  transform: translateY(1px) rotate(45deg);
+}
+
+.map__dot--boxes {
+  border-radius: 2px;
+  border: 1.5px solid var(--teal);
+}
+
+/* El punto de la consulta es un rombo: se distingue de los resultados por la forma, no
+   solo por el color. */
+.map-pin__shape {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 3px;
+  border: 2px solid var(--surface-1);
+  background: var(--key);
+  box-shadow: var(--shadow-small);
+  rotate: 45deg;
+}
+
+.map-card {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 3px 12px;
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.map-card dt {
+  color: var(--text-muted);
+}
+
+.map-card dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.map .leaflet-popup-content-wrapper,
+.map .leaflet-popup-tip,
+.map .leaflet-tooltip,
+.map .leaflet-bar a,
+.map .leaflet-control-attribution {
+  background: var(--surface-1);
+  color: var(--text);
+}
+
+.map .leaflet-popup-content-wrapper,
+.map .leaflet-tooltip {
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-small);
+}
+
+.map .leaflet-tooltip::before {
+  display: none;
+}
+
+.map .leaflet-bar,
+.map .leaflet-bar a {
+  border-color: var(--border-strong);
+}
+
+.map .leaflet-bar a:hover {
+  background: var(--surface-3);
+  color: var(--accent);
+}
+
+.map .leaflet-control-attribution {
+  font-size: 10.5px;
+  color: var(--text-muted);
+}
+
+.map .leaflet-control-attribution a,
+.map .leaflet-popup-close-button {
+  color: var(--accent);
+}
+
+/* Las teselas son imágenes claras: en el tema oscuro se invierten y se les devuelve el
+   tono, que es lo que deja el agua azul y la tierra oscura sin pedir otro servidor. */
+:root[data-theme="dark"] .map .leaflet-tile-pane {
+  filter: invert(1) hue-rotate(180deg) saturate(0.45) brightness(0.9) contrast(0.86);
+}
+
+/* ---------- MBR del R-Tree ---------- */
+
+.mbr {
+  width: 100%;
+  max-height: 440px;
+  padding: 10px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+.mbr__box {
+  fill: var(--accent-soft);
+  stroke: var(--accent);
+  stroke-width: 1.6;
+  vector-effect: non-scaling-stroke;
+}
+
+.mbr__box--leaf {
+  fill: var(--success-soft);
+  stroke: var(--success);
+  stroke-width: 1;
+}

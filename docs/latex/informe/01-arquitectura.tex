@@ -77,6 +77,17 @@ elegido y ---con \texttt{EXPLAIN ANALYZE}--- las filas y el tiempo de cada opera
 \paragraph{API e interfaz.} El API expone el motor sin lógica propia: ejecuta guiones SQL,
 lista el catálogo, describe la estructura física de una tabla y de sus índices, y crea
 tablas a partir de un CSV. Cada pestaña del navegador es una sesión, de modo que dos
-pestañas bastan para demostrar bloqueos. La interfaz muestra a
+pestañas bastan para demostrar bloqueos. La interfaz (figura~\ref{fig:interfaz}) muestra a
 la vez los cuatro paneles del enunciado ---archivos, consultas, resultados y plan--- y,
 para la Parte~2, un mapa con el resultado, la figura de la consulta y los MBR del R-Tree.
+
+\begin{figure}[!htb]
+  \centering
+  \includegraphics[width=0.94\textwidth]{figuras/interfaz.png}
+  \caption{La interfaz tras pedir las 10 tiendas más cercanas a un punto. A la izquierda, los
+           archivos con su organización y sus índices; arriba, el editor SQL con los atajos de
+           ejemplo; en el centro, el resultado sobre el mapa, con los rectángulos (MBR) de las
+           hojas del R-Tree; a la derecha, el plan de ejecución, que usó el índice y abrió 4
+           de sus 20 nodos.}
+  \label{fig:interfaz}
+\end{figure}

@@ -6,9 +6,9 @@
 comando, recibe sus parámetros por línea de comandos ---tamaños, número de consultas,
 semilla--- y guarda sus resultados crudos en \texttt{benchmarks/results/}; de esos archivos
 salen las gráficas y \emph{todas las cifras de esta sección}. Los tamaños son los del
-enunciado: 1\,000, 10\,000 y 100\,000 registros. Las técnicas comparadas reciben los mismos
-datos y las mismas consultas. Entorno: macOS, Python~3.12, páginas de 4~KB; para el
-experimento espacial, PostgreSQL~17 con PostGIS~3.6.
+enunciado: tablas de 1\,000, 10\,000 y 100\,000 registros. Las técnicas comparadas reciben
+los mismos datos y las mismas consultas. Entorno: macOS, Python~3.12, páginas de 4~KB; para
+el experimento espacial, PostgreSQL~17 con PostGIS~3.6.
 
 \begin{lstlisting}
 python -m benchmarks.storage_benchmark --sizes 1000 10000 100000 --queries 100
@@ -17,39 +17,58 @@ python -m benchmarks.spatial_benchmark --sizes 1000 10000 100000 --queries 100 \
        --points-file data/datasets/lugares_peru.csv
 \end{lstlisting}
 
-En las gráficas, cada panel es una operación, con el número de filas en horizontal y una
-línea por técnica. \textbf{Los dos ejes son logarítmicos}: la pendiente dice cómo escala la
-técnica (plana: no depende del tamaño; a 45°: crece en proporción a él). El número junto
-al último punto es el valor con 100\,000 filas.
+\begin{resumen}
+\textbf{Cómo leer las gráficas y las tablas.}
+\begin{itemize}[nosep, leftmargin=*]
+  \item Cada gráfica tiene un panel por operación. El eje horizontal es el \textbf{tamaño de
+        la tabla} (1\,000, 10\,000 y 100\,000 filas); el vertical, lo que se mide, con su
+        unidad: \textbf{ms} son milisegundos y \textbf{KiB}, kibibytes (1\,024 bytes). Hay una
+        línea por técnica, y \textbf{cuanto más abajo, mejor}.
+  \item Los dos ejes son \textbf{logarítmicos}: cada marca vale diez veces la anterior. Una
+        línea plana significa que el coste no depende del tamaño; una que sube en diagonal,
+        que crece en proporción a él.
+  \item El número escrito al final de cada línea es su valor con la tabla de 100\,000 filas.
+        Las tablas traen los tres tamaños; en negrita va el mejor valor de cada columna.
+\end{itemize}
+\end{resumen}
 
 \subsection{Experimento 1: heap file frente a archivo secuencial}
 
-Se mide inserción, búsqueda por clave primaria (total de 100 búsquedas), espacio en disco y
-reorganización.
+Sobre la misma tabla se mide cuánto tarda insertar todas las filas, cuánto tardan 100
+búsquedas por clave primaria, cuánto ocupa el archivo y cuánto tarda reorganizarlo
+(figura~\ref{fig:almacenamiento} y tabla~\ref{tab:almacenamiento}).
 
-\grafica[0.72\textwidth]{almacenamiento.png}{fig:almacenamiento}{Heap file frente a archivo
-secuencial: inserción, búsqueda por clave, espacio y reorganización.}
+\grafica[0.78\textwidth]{almacenamiento.png}{fig:almacenamiento}{Heap file frente a archivo
+secuencial. En la búsqueda se ve el cruce: el heap sube en diagonal y el secuencial es casi
+plano.}
 
-\begin{center}
+\begin{table}[H]
+\centering
+\caption{Heap file frente a archivo secuencial. Tiempos en milisegundos (ms) y espacio en KiB: \textbf{menos es mejor}, y en negrita va el mejor valor de cada tamaño.}\label{tab:almacenamiento}
 \small
 \begin{tabular}{@{}llrrr@{}}
 \toprule
+ & & \multicolumn{3}{c}{\textbf{Número de filas de la tabla}} \\
+\cmidrule(lr){3-5}
 \textbf{Operación} & \textbf{Técnica} & \textbf{1\,000} & \textbf{10\,000} & \textbf{100\,000} \\
 \midrule
-Inserción (ms) & heap & \textbf{7.66} & \textbf{71.8} & \textbf{744} \\
- & secuencial & 25.3 & 265 & 3\,838 \\
-Búsqueda por clave (ms) & heap & \textbf{1.08} & 10.6 & 97.2 \\
- & secuencial & 4.62 & \textbf{4.54} & \textbf{5.74} \\
-Espacio (KiB) & heap & \textbf{64.0} & \textbf{576} & \textbf{5\,720} \\
- & secuencial & 100 & 964 & 9\,608 \\
-Reorganización (ms) & secuencial & 2.63 & 19.3 & 194 \\
+Insertar todas las filas & heap file & \textbf{7.66} & \textbf{71.8} & \textbf{744} \\
+{\footnotesize\color{gris}tiempo total, en ms} & archivo secuencial & 25.3 & 265 & 3\,838 \\
+\addlinespace[3pt]
+100 búsquedas por clave & heap file & \textbf{1.08} & 10.6 & 97.2 \\
+{\footnotesize\color{gris}tiempo total, en ms} & archivo secuencial & 4.62 & \textbf{4.54} & \textbf{5.74} \\
+\addlinespace[3pt]
+Espacio que ocupa el archivo & heap file & \textbf{64.0} & \textbf{576} & \textbf{5\,720} \\
+{\footnotesize\color{gris}en KiB} & archivo secuencial & 100 & 964 & 9\,608 \\
+\addlinespace[3pt]
+Reorganizar el archivo {\footnotesize\color{gris}(ms)} & archivo secuencial & 2.63 & 19.3 & 194 \\
 \bottomrule
 \end{tabular}
-\end{center}
+\end{table}
 
 \begin{itemize}[nosep, leftmargin=*]
-  \item \textbf{El cruce está entre 1\,000 y 10\,000 filas.} Con 1\,000 registros el recorrido
-        completo del heap (1.08 ms) gana a la búsqueda binaria del secuencial
+  \item \textbf{El cruce está entre 1\,000 y 10\,000 filas.} Con 1\,000 registros, recorrer el
+        heap entero (1.08 ms las 100 búsquedas) gana a la búsqueda binaria del secuencial
         (4.62 ms). A partir de ahí el heap crece de forma lineal y el secuencial casi no se
         mueve: con 100\,000 filas \textbf{el secuencial busca 17 veces más rápido}.
   \item \textbf{El orden se paga al escribir.} Insertar cuesta 5.2 veces más en el secuencial:
@@ -63,40 +82,51 @@ Reorganización (ms) & secuencial & 2.63 & 19.3 & 194 \\
 
 \subsection{Experimento 2: B+ agrupado, B+ no agrupado y hash extendible}
 
-Se mide construcción, igualdad y rango (100 consultas cada una), recorrido ordenado,
-inserciones y borrados, y espacio. Las búsquedas de los índices no agrupados
-\textbf{incluyen el salto al heap}, que es el coste real de usarlos.
+Se mide cuánto tarda construir el índice, 100 búsquedas por igualdad, 100 consultas por
+rango, recorrer la tabla entera en orden, y borrar y reinsertar el 10\,\% de las filas; y
+cuánto ocupa (figura~\ref{fig:indices} y tabla~\ref{tab:indices}). Las búsquedas de los
+índices no agrupados \textbf{incluyen el salto al heap}, que es el coste real de usarlos.
 
-\grafica{indices.png}{fig:indices}{B+ agrupado, B+ no agrupado y hash extendible. En rango y
-recorrido ordenado falta la línea del hash: no puede hacer ninguna de las dos cosas.}
+\grafica{indices.png}{fig:indices}{B+ agrupado, B+ no agrupado y hash extendible. En el
+rango y en el recorrido ordenado falta la línea del hash: no puede hacer ninguna de las dos
+cosas.}
 
-\begin{center}
+\begin{table}[H]
+\centering
+\caption{Los tres índices. Tiempos en milisegundos (ms) y espacio en KiB: \textbf{menos es mejor}, y en negrita va el mejor valor de cada tamaño. \emph{No soportado}: la técnica no puede resolver esa operación.}\label{tab:indices}
 \small
 \begin{tabular}{@{}llrrr@{}}
 \toprule
+ & & \multicolumn{3}{c}{\textbf{Número de filas de la tabla}} \\
+\cmidrule(lr){3-5}
 \textbf{Operación} & \textbf{Técnica} & \textbf{1\,000} & \textbf{10\,000} & \textbf{100\,000} \\
 \midrule
-Construcción (ms) & B+ agrupado & 32.6 & 584 & 9\,259 \\
- & B+ no agrupado & 319 & 3\,790 & 49\,742 \\
- & hash & \textbf{27.1} & \textbf{339} & \textbf{3\,464} \\
-Igualdad (ms) & B+ agrupado & \textbf{1.72} & \textbf{6.23} & \textbf{7.98} \\
- & B+ no agrupado & 23.9 & 24.2 & 33.6 \\
- & hash & 12.5 & 9.59 & 11.1 \\
-Rango (ms) & B+ agrupado & \textbf{3.41} & \textbf{8.66} & \textbf{11.0} \\
- & B+ no agrupado & 34.3 & 36.3 & 53.5 \\
- & hash & \multicolumn{3}{c}{\emph{no soportado}} \\
-Recorrido ordenado (ms) & B+ agrupado & \textbf{0.31} & \textbf{3.50} & \textbf{36.9} \\
- & B+ no agrupado & 2.13 & 22.8 & 390 \\
- & hash & \multicolumn{3}{c}{\emph{no soportado}} \\
-Inserción y borrado (ms) & B+ agrupado & \textbf{7.61} & 174 & 2\,295 \\
- & B+ no agrupado & 79.5 & 911 & 9\,622 \\
- & hash & 15.0 & \textbf{111} & \textbf{1\,464} \\
-Espacio (KiB) & B+ agrupado & 100 & 924 & 9\,312 \\
- & B+ no agrupado & \textbf{24.0} & \textbf{220} & 2\,060 \\
- & hash & 28.0 & 264 & \textbf{2\,056} \\
+Construir el índice & B+ agrupado & 32.6 & 584 & 9\,259 \\
+{\footnotesize\color{gris}tiempo total, en ms} & B+ no agrupado & 319 & 3\,790 & 49\,742 \\
+ & hash extendible & \textbf{27.1} & \textbf{339} & \textbf{3\,464} \\
+\addlinespace[3pt]
+100 búsquedas por igualdad & B+ agrupado & \textbf{1.72} & \textbf{6.23} & \textbf{7.98} \\
+{\footnotesize\color{gris}tiempo total, en ms} & B+ no agrupado & 23.9 & 24.2 & 33.6 \\
+ & hash extendible & 12.5 & 9.59 & 11.1 \\
+\addlinespace[3pt]
+100 consultas por rango & B+ agrupado & \textbf{3.41} & \textbf{8.66} & \textbf{11.0} \\
+{\footnotesize\color{gris}tiempo total, en ms} & B+ no agrupado & 34.3 & 36.3 & 53.5 \\
+ & hash extendible & \multicolumn{3}{c}{\emph{no soportado}} \\
+\addlinespace[3pt]
+Recorrer toda la tabla en orden & B+ agrupado & \textbf{0.31} & \textbf{3.50} & \textbf{36.9} \\
+{\footnotesize\color{gris}tiempo total, en ms} & B+ no agrupado & 2.13 & 22.8 & 390 \\
+ & hash extendible & \multicolumn{3}{c}{\emph{no soportado}} \\
+\addlinespace[3pt]
+Borrar y reinsertar el 10\,\% & B+ agrupado & \textbf{7.61} & 174 & 2\,295 \\
+{\footnotesize\color{gris}tiempo total, en ms} & B+ no agrupado & 79.5 & 911 & 9\,622 \\
+ & hash extendible & 15.0 & \textbf{111} & \textbf{1\,464} \\
+\addlinespace[3pt]
+Espacio que ocupa el índice & B+ agrupado & 100 & 924 & 9\,312 \\
+{\footnotesize\color{gris}en KiB} & B+ no agrupado & \textbf{24.0} & \textbf{220} & 2\,060 \\
+ & hash extendible & 28.0 & 264 & \textbf{2\,056} \\
 \bottomrule
 \end{tabular}
-\end{center}
+\end{table}
 
 \begin{itemize}[nosep, leftmargin=*]
   \item \textbf{El B+ agrupado gana en consultas.} Responde 100 igualdades en
@@ -107,7 +137,7 @@ Espacio (KiB) & B+ agrupado & 100 & 924 & 9\,312 \\
         100\,000 filas tarda 36.9 ms en el agrupado y 390 ms en el no agrupado:
         11 veces más con la misma estructura. La diferencia son 100\,000 accesos sueltos.
   \item \textbf{El hash gana al escribir} ---construye 14 veces más rápido que el B+ no
-        agrupado y es el más rápido insertando y borrando--- \textbf{pero no admite rangos ni
+        agrupado y es el más rápido borrando y reinsertando--- \textbf{pero no admite rangos ni
         orden}: no es un cero de rendimiento, es una limitación de la técnica.
   \item \textbf{El espacio va al revés.} El agrupado ocupa 4.5 veces más que los otros dos
         porque guarda las filas; por eso solo puede haber uno por tabla y tantos secundarios
@@ -120,9 +150,9 @@ Espacio (KiB) & B+ agrupado & 100 & 924 & 9\,312 \\
 
 Las tres técnicas responden las mismas consultas sobre los mismos puntos: \textbf{lugares
 reales de OpenStreetMap} del Perú, de los que se toman muestras de 1\,000, 10\,000 y
-100\,000. Las consultas son las del enunciado: por radio de 1, 5 y 10~km y los $k$ vecinos
-más cercanos con $k$ = 10, 50 y 100, cien de cada una, centradas junto a puntos de la
-muestra. Las dos técnicas del motor se miden con el mismo SQL de punta a punta; GiST, con
+100\,000. Las consultas son las del enunciado: los lugares a menos de 1, 5 y 10~km de un
+punto, y los 10, 50 y 100 más cercanos a él; cien de cada una, centradas junto a puntos de
+la muestra. Las dos técnicas del motor se miden con el mismo SQL de punta a punta; GiST, con
 PostGIS sobre una columna \texttt{geography}, \texttt{ST\_DWithin} y el operador
 \texttt{<->}.
 
@@ -132,113 +162,133 @@ de las del recorrido, y anota cuántas consultas de PostGIS coinciden con el mot
 \textbf{las 1\,800 consultas coinciden, fila por fila}, y PostgreSQL confirma con
 \texttt{EXPLAIN} que usa el índice en todas.
 
-\grafica{espacial-radio.png}{fig:radio}{Consultas por radio: tiempo medio por consulta.}
+\grafica{espacial-radio.png}{fig:radio}{Consultas por radio. La línea del recorrido
+secuencial es la misma en los tres paneles: no depende del radio.}
 
-\begin{center}
+\begin{table}[H]
+\centering
+\caption{Consultas por radio: tiempo medio de \emph{una} consulta, en milisegundos (promedio de 100). Menos es mejor; en negrita, el mejor valor de cada tamaño. La última columna es cuántos lugares devuelve de media cada consulta sobre la tabla de 100\,000.}\label{tab:radio}
 \small
 \begin{tabular}{@{}llrrrr@{}}
 \toprule
-\textbf{Radio} & \textbf{Técnica} & \textbf{1\,000} & \textbf{10\,000} & \textbf{100\,000} & \textbf{Filas (100\,000)} \\
+ & & \multicolumn{3}{c}{\textbf{Número de puntos de la tabla}} & \\
+\cmidrule(lr){3-5}
+\textbf{Consulta} & \textbf{Técnica} & \textbf{1\,000} & \textbf{10\,000} & \textbf{100\,000} & \textbf{Lugares devueltos} \\
 \midrule
-1 km & secuencial & 3.67 & 34.5 & 353 & 64.1 \\
- & R-Tree & 0.25 & 0.40 & 1.07 & \\
- & GiST & \textbf{0.051} & \textbf{0.045} & \textbf{0.25} & \\
-5 km & secuencial & 3.60 & 34.4 & 357 & 544 \\
- & R-Tree & 0.29 & 0.75 & 5.49 & \\
- & GiST & \textbf{0.045} & \textbf{0.061} & \textbf{0.50} & \\
-10 km & secuencial & 3.63 & 34.9 & 353 & 1\,577 \\
- & R-Tree & 0.38 & 1.30 & 11.5 & \\
- & GiST & \textbf{0.051} & \textbf{0.10} & \textbf{1.00} & \\
+A menos de 1 km & búsqueda secuencial & 3.67 & 34.5 & 353 & 64.1 \\
+{\footnotesize\color{gris}tiempo por consulta, en ms} & R-Tree & 0.25 & 0.40 & 1.07 & \\
+ & GiST (PostgreSQL) & \textbf{0.051} & \textbf{0.045} & \textbf{0.25} & \\
+\addlinespace[3pt]
+A menos de 5 km & búsqueda secuencial & 3.60 & 34.4 & 357 & 544 \\
+{\footnotesize\color{gris}tiempo por consulta, en ms} & R-Tree & 0.29 & 0.75 & 5.49 & \\
+ & GiST (PostgreSQL) & \textbf{0.045} & \textbf{0.061} & \textbf{0.50} & \\
+\addlinespace[3pt]
+A menos de 10 km & búsqueda secuencial & 3.63 & 34.9 & 353 & 1\,577 \\
+{\footnotesize\color{gris}tiempo por consulta, en ms} & R-Tree & 0.38 & 1.30 & 11.5 & \\
+ & GiST (PostgreSQL) & \textbf{0.051} & \textbf{0.10} & \textbf{1.00} & \\
 \bottomrule
 \end{tabular}
+\end{table}
 
-{\footnotesize\color{gris} Milisegundos por consulta. La última columna es la media de filas que devuelve cada consulta.}
-\end{center}
+\grafica{espacial-knn.png}{fig:knn}{Vecinos más cercanos. El R-Tree y GiST son casi planos:
+su coste apenas depende del tamaño de la tabla.}
 
-\grafica{espacial-knn.png}{fig:knn}{Vecinos más cercanos: tiempo medio por consulta.}
-
-\begin{center}
+\begin{table}[H]
+\centering
+\caption{Vecinos más cercanos: tiempo medio de \emph{una} consulta, en milisegundos (promedio de 100). Menos es mejor; en negrita, el mejor valor de cada tamaño.}\label{tab:knn}
 \small
 \begin{tabular}{@{}llrrr@{}}
 \toprule
-\textbf{Vecinos} & \textbf{Técnica} & \textbf{1\,000} & \textbf{10\,000} & \textbf{100\,000} \\
+ & & \multicolumn{3}{c}{\textbf{Número de puntos de la tabla}} \\
+\cmidrule(lr){3-5}
+\textbf{Consulta} & \textbf{Técnica} & \textbf{1\,000} & \textbf{10\,000} & \textbf{100\,000} \\
 \midrule
-$k$ = 10 & secuencial & 7.75 & 75.6 & 1\,302 \\
- & R-Tree & 0.31 & 0.42 & 0.64 \\
- & GiST & \textbf{0.058} & \textbf{0.056} & \textbf{0.13} \\
-$k$ = 50 & secuencial & 8.02 & 76.2 & 1\,304 \\
- & R-Tree & 0.49 & 0.65 & 1.02 \\
- & GiST & \textbf{0.10} & \textbf{0.096} & \textbf{0.21} \\
-$k$ = 100 & secuencial & 8.14 & 76.1 & 1\,308 \\
- & R-Tree & 0.73 & 0.97 & 1.37 \\
- & GiST & \textbf{0.12} & \textbf{0.13} & \textbf{0.28} \\
+Los 10 más cercanos & búsqueda secuencial & 7.75 & 75.6 & 1\,302 \\
+{\footnotesize\color{gris}tiempo por consulta, en ms} & R-Tree & 0.31 & 0.42 & 0.64 \\
+ & GiST (PostgreSQL) & \textbf{0.058} & \textbf{0.056} & \textbf{0.13} \\
+\addlinespace[3pt]
+Los 50 más cercanos & búsqueda secuencial & 8.02 & 76.2 & 1\,304 \\
+{\footnotesize\color{gris}tiempo por consulta, en ms} & R-Tree & 0.49 & 0.65 & 1.02 \\
+ & GiST (PostgreSQL) & \textbf{0.10} & \textbf{0.096} & \textbf{0.21} \\
+\addlinespace[3pt]
+Los 100 más cercanos & búsqueda secuencial & 8.14 & 76.1 & 1\,308 \\
+{\footnotesize\color{gris}tiempo por consulta, en ms} & R-Tree & 0.73 & 0.97 & 1.37 \\
+ & GiST (PostgreSQL) & \textbf{0.12} & \textbf{0.13} & \textbf{0.28} \\
 \bottomrule
 \end{tabular}
-\end{center}
+\end{table}
 
 \paragraph{Por qué: los nodos que abre cada consulta.} El plan de ejecución dice cuántos
-nodos del R-Tree visitó cada búsqueda. El árbol pasa de 8 a 610 nodos y el
-$k$-NN de $k$ = 10 pasa de abrir 2.3 a abrir 4.1.
+nodos del R-Tree visitó cada búsqueda (figura~\ref{fig:nodos} y tabla~\ref{tab:nodos}). El árbol pasa de 8 a
+610 nodos, y buscar los 10 más cercanos pasa de abrir 2.3 nodos a abrir 4.1: por eso
+el tiempo casi no crece.
 
-\begin{figure}[H]
-  \centering
-  \begin{minipage}[c]{0.50\textwidth}
-    \includegraphics[width=\textwidth]{../../benchmarks/figures/espacial-nodos.png}
-  \end{minipage}\hfill
-  \begin{minipage}[c]{0.46\textwidth}
-    \small
-    \begin{tabular}{@{}lrrr@{}}
-    \toprule
-    \textbf{Consulta} & \textbf{1\,000} & \textbf{10\,000} & \textbf{100\,000} \\
-    \midrule
-radio 1 km & 2.0 & 2.2 & 4.5 \\
-radio 5 km & 2.1 & 3.0 & 9.6 \\
-radio 10 km & 2.2 & 3.8 & 17.4 \\
-$k$-NN, $k$ = 10 & 2.3 & 2.5 & 4.1 \\
-$k$-NN, $k$ = 50 & 2.8 & 3.2 & 5.0 \\
-$k$-NN, $k$ = 100 & 3.4 & 4.3 & 5.9 \\
-    \midrule
-    nodos del árbol & 8 & 62 & 610 \\
-    \bottomrule
-    \end{tabular}
-  \end{minipage}
-  \caption{Nodos del R-Tree que abre cada consulta (media de 100), frente al total del árbol.}
-  \label{fig:nodos}
-\end{figure}
+\grafica[0.74\textwidth]{espacial-nodos.png}{fig:nodos}{Nodos del R-Tree que abre de media cada
+consulta, frente a todos los que tiene el árbol (línea gris discontinua).}
 
-\grafica[0.86\textwidth]{espacial-indice.png}{fig:indice}{Tiempo de construcción, espacio del índice y
-memoria al consultar.}
+\begin{table}[H]
+\centering
+\caption{Nodos del R-Tree que abre de media cada consulta (promedio de 100), y nodos que tiene el
+árbol. Cuantos menos abre, menos páginas lee de disco.}\label{tab:nodos}
+\small
+\begin{tabular}{@{}lrrr@{}}
+\toprule
+ & \multicolumn{3}{c}{\textbf{Número de puntos de la tabla}} \\
+\cmidrule(l){2-4}
+\textbf{Consulta} & \textbf{1\,000} & \textbf{10\,000} & \textbf{100\,000} \\
+\midrule
+    A menos de 1 km & 2.0 & 2.2 & 4.5 \\
+    A menos de 5 km & 2.1 & 3.0 & 9.6 \\
+    A menos de 10 km & 2.2 & 3.8 & 17.4 \\
+    Los 10 más cercanos & 2.3 & 2.5 & 4.1 \\
+    Los 50 más cercanos & 2.8 & 3.2 & 5.0 \\
+    Los 100 más cercanos & 3.4 & 4.3 & 5.9 \\
+\midrule
+Nodos que tiene el árbol & 8 & 62 & 610 \\
+\bottomrule
+\end{tabular}
+\end{table}
 
-\begin{center}
+\grafica[0.90\textwidth]{espacial-indice.png}{fig:indice}{Construir el índice, guardarlo y
+consultarlo. La línea discontinua es el mismo R-Tree construido insertando los puntos de
+uno en uno en vez de con carga masiva.}
+
+\begin{table}[H]
+\centering
+\caption{Lo que cuesta tener el índice espacial. Tiempos en milisegundos (ms), espacio y memoria en KiB: \textbf{menos es mejor}, y en negrita va el mejor valor de cada tamaño.}\label{tab:indice}
 \small
 \begin{tabular}{@{}llrrr@{}}
 \toprule
+ & & \multicolumn{3}{c}{\textbf{Número de puntos de la tabla}} \\
+\cmidrule(lr){3-5}
 \textbf{Medida} & \textbf{Técnica} & \textbf{1\,000} & \textbf{10\,000} & \textbf{100\,000} \\
 \midrule
-Construcción (ms) & R-Tree, carga masiva & 5.52 & 46.1 & 687 \\
- & R-Tree, inserción & 132 & 1\,746 & 20\,922 \\
- & GiST & \textbf{1.78} & \textbf{16.7} & \textbf{199} \\
-Espacio del índice (KiB) & R-Tree, carga masiva & \textbf{36.0} & \textbf{252} & \textbf{2\,444} \\
- & R-Tree, inserción & 40.0 & 340 & 3\,264 \\
- & GiST & 88.0 & 752 & 7\,664 \\
-Memoria al consultar (KiB) & secuencial & 200 & 592 & \textbf{1\,837} \\
- & R-Tree & \textbf{94.4} & \textbf{166} & 2\,204 \\
+Construir el índice & R-Tree, carga masiva & 5.52 & 46.1 & 687 \\
+{\footnotesize\color{gris}tiempo total, en ms} & R-Tree, inserción uno a uno & 132 & 1\,746 & 20\,922 \\
+ & GiST (PostgreSQL) & \textbf{1.78} & \textbf{16.7} & \textbf{199} \\
+\addlinespace[3pt]
+Espacio que ocupa el índice & R-Tree, carga masiva & \textbf{36.0} & \textbf{252} & \textbf{2\,444} \\
+{\footnotesize\color{gris}en KiB} & R-Tree, inserción uno a uno & 40.0 & 340 & 3\,264 \\
+ & GiST (PostgreSQL) & 88.0 & 752 & 7\,664 \\
+\addlinespace[3pt]
+Memoria máxima al consultar & búsqueda secuencial & 200 & 592 & \textbf{1\,837} \\
+{\footnotesize\color{gris}en KiB} & R-Tree & \textbf{94.4} & \textbf{166} & 2\,204 \\
 \bottomrule
 \end{tabular}
-\end{center}
+\end{table}
 
 \paragraph{Conclusiones del experimento espacial.}
 \begin{itemize}[nosep, leftmargin=*]
   \item \textbf{El recorrido crece con la tabla; el índice, con la respuesta.} La búsqueda
         secuencial tarda lo mismo pida 1~km o 10 (353 y 353 ms con 100\,000
         puntos), porque siempre mide la distancia a todos. El R-Tree tarda 1.07 ms para
-        1~km y 11.5 ms para 10: lo que le cuesta son las filas que devuelve.
+        1~km y 11.5 ms para 10: lo que le cuesta son los lugares que devuelve.
   \item \textbf{Cuanto más selectiva la consulta, más gana el índice:} 328 veces más
         rápido que recorrer para 1~km, 65 para 5~km y 31 para 10~km, donde cada
         consulta devuelve ya el 1.6\,\% de la tabla.
-  \item \textbf{En el $k$-NN la diferencia es de tres órdenes de magnitud.} Sin índice hay que
-        medir los 100\,000 puntos y ordenarlos: 1\,302 ms. El R-Tree abre los nodos del más
-        cercano al más lejano y se detiene al tener diez: 0.64 ms,
+  \item \textbf{En los vecinos más cercanos la diferencia es de tres órdenes de magnitud.} Sin
+        índice hay que medir los 100\,000 puntos y ordenarlos: 1\,302 ms. El R-Tree abre
+        los nodos del más cercano al más lejano y se detiene al tener diez: 0.64 ms,
         \textbf{2\,022 veces menos}. Y casi no depende del tamaño: de 1\,000 a 100\,000
         puntos el recorrido se multiplica por 168 y el R-Tree por 2.1.
   \item \textbf{GiST es entre 4.4 y 13 veces más rápido que el R-Tree, y escala igual.}
@@ -261,8 +311,8 @@ Memoria al consultar (KiB) & secuencial & 200 & 592 & \textbf{1\,837} \\
   \item \textbf{El coste que domina es el acceso a disco, y el que se olvida es el salto al
         heap:} la misma estructura, el B+, tarda 11 veces más en un recorrido ordenado
         cuando sus hojas apuntan a las filas en vez de contenerlas.
-  \item \textbf{Un índice vale lo que deja de leer.} El R-Tree responde un $k$-NN sobre
-        100\,000 lugares abriendo de media 4.1 de sus 610 nodos.
+  \item \textbf{Un índice vale lo que deja de leer.} El R-Tree encuentra los 10 lugares más
+        cercanos entre 100\,000 abriendo de media 4.1 de sus 610 nodos.
   \item \textbf{Medir cambia las conclusiones.} Sin los experimentos no se habría visto que
         el heap gana al secuencial con 1\,000 filas, que el hash pierde frente al B+ agrupado
         en igualdad por el salto al heap, ni cuánto mejora el árbol la carga masiva.

@@ -235,7 +235,7 @@ están en [`.env.example`](.env.example); las de la interfaz, en
 ```bash
 .venv/bin/ruff check                          # estilo
 .venv/bin/mypy                                # tipos, en modo estricto
-.venv/bin/python -m pytest -q                 # 1287 tests
+.venv/bin/python -m pytest -q                 # 1288 tests
 npm --prefix frontend run build               # tipos y bundle de la interfaz
 ```
 

@@ -154,8 +154,9 @@ benchmarks/output/
 
 # --- Documentación de trabajo (no se versiona) ---
 /docs/extra/
-# El informe entregable sí se versiona, con su fuente en docs/latex/.
+# El informe entregable sí se versiona, con su fuente en docs/latex/ y sus capturas.
 !/docs/informe.pdf
+!/docs/latex/figuras/*.png
 
 
 # --- Editores e IDEs ---

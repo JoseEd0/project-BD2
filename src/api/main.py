@@ -6,7 +6,9 @@ Expone lo justo para que el frontend funcione:
 |---|---|---|
 | `GET` | `/health` | comprobar que el servidor responde |
 | `GET` | `/tables` | panel de archivos: tablas, columnas e índices |
-| `POST` | `/query` | panel de consultas: ejecuta SQL y devuelve filas y plan |
+| `GET` | `/tables/{name}/structure` | forma física de la tabla y de sus índices |
+| `GET` | `/tables/{name}/points` | panel de mapa: puntos de una columna POINT |
+| `POST` | `/query` | panel de consultas: ejecuta SQL y devuelve filas, plan y figuras |
 | `DELETE` | `/sessions/{id}` | cierra una sesión y aborta lo que tuviera abierto |
 
 Las sentencias sin `session_id` van en autocommit. Enviando un `session_id` estable, el
@@ -18,22 +20,26 @@ from __future__ import annotations
 
 import os
 import re
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated, Any
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.schemas import (
     ColumnInfo,
     FileUploadResponse,
+    OverlayInfo,
     PlanInfo,
+    PointInfo,
     QueryRequest,
     QueryResponse,
+    SpatialInfo,
     StatementOutcome,
     TableInfo,
+    TablePoints,
 )
 from config import EngineConfig
 from query.catalog import CatalogError, Organization
@@ -42,6 +48,8 @@ from query.expressions import ExpressionError
 from query.loader import LoaderError, read_header
 from query.operators import UnsupportedQueryError
 from query.plan import PlanNode
+from query.spatial import SpatialView
+from spatial.geometry import Point
 from sql import parse_script
 from sql.errors import SqlError, SqlPositionError
 from sql.nodes import (
@@ -51,7 +59,8 @@ from sql.nodes import (
     IndexType,
     Statement,
 )
-from storage.types import StorageError, Value
+from storage.schema import Field
+from storage.types import FieldType, StorageError, Value
 from txn import LockManager, Session, SessionError, TransactionManager
 from txn.lock_manager import LockError
 from txn.transaction import TransactionError
@@ -120,6 +129,25 @@ class Service:
         for name in self.engine.table_names():
             yield self._describe(name)
 
+    def points(self, name: str, column: str | None, limit: int | None) -> TablePoints:
+        """Puntos de la tabla, como mucho `map_points` de la configuración.
+
+        Raises:
+            CatalogError: si la tabla no existe o no tiene ninguna columna POINT.
+        """
+        table = self.engine.table(name)
+        chosen = column or _first_point_column(table.definition.schema.fields)
+        if chosen is None:
+            raise CatalogError(f"la tabla '{table.name}' no tiene ninguna columna POINT")
+        allowed = min(limit or self.config.map_points, self.config.map_points)
+        sample = table.sample_points(chosen, allowed)
+        return TablePoints(
+            table=table.name,
+            column=table.schema.field_of(chosen).name,
+            total=table.row_count,
+            points=[(point.lat, point.lon) for point in sample],
+        )
+
     def close(self) -> None:
         for session in self._sessions.values():
             session.close()
@@ -142,6 +170,7 @@ class Service:
                     nullable=item.nullable,
                     primary_key=item.name == definition.primary_key,
                     indexed_with=_index_method(definition, item.name),
+                    unique=_is_unique(definition, item.name),
                 )
                 for item in definition.schema
             ],
@@ -149,9 +178,18 @@ class Service:
         )
 
 
+def _first_point_column(fields: Iterable[Field]) -> str | None:
+    return next((field.name for field in fields if field.type is FieldType.POINT), None)
+
+
 def _index_method(definition: Any, column: str) -> str | None:
     index = definition.index_on(column)
     return None if index is None else index.method.value
+
+
+def _is_unique(definition: Any, column: str) -> bool:
+    index = definition.index_on(column)
+    return index is not None and index.unique
 
 
 def build_config() -> EngineConfig:
@@ -203,6 +241,22 @@ def create_app(config: EngineConfig | None = None) -> FastAPI:
         profundidad global y cubetas del hash."""
         try:
             return service.engine.describe_table(name)
+        except DOMAIN_ERRORS as error:
+            raise _as_http_error(error, None, None) from error
+
+    @app.get("/tables/{name}/points", response_model=TablePoints)
+    def table_points(
+        name: str,
+        column: Annotated[str | None, Query(description="Columna POINT")] = None,
+        limit: Annotated[int | None, Query(ge=1, description="Máximo de puntos")] = None,
+    ) -> TablePoints:
+        """Puntos de una columna POINT para el panel de mapa; sin `column`, la primera.
+
+        Con más filas que `limit` devuelve una muestra tomada a intervalos regulares, para
+        que el mapa siga siendo fluido y la muestra no se concentre en una zona.
+        """
+        try:
+            return service.points(name, column, limit)
         except DOMAIN_ERRORS as error:
             raise _as_http_error(error, None, None) from error
 
@@ -400,7 +454,36 @@ def _as_response(
         affected_rows=last_query.affected_rows,
         elapsed_ms=total,
         in_transaction=in_transaction,
+        spatial=_as_spatial(last_query.spatial),
     )
+
+
+def _as_spatial(view: SpatialView | None) -> SpatialInfo | None:
+    if view is None:
+        return None
+    overlays = [
+        OverlayInfo(
+            kind="radius",
+            center=_as_point(search.target.center),
+            radius=search.radius,
+            metric=search.target.metric.name,
+            unit=search.target.metric.unit,
+        )
+        for search in view.radius_searches
+    ]
+    overlays.extend(
+        OverlayInfo(kind="nearest", center=_as_point(target.center), metric=target.metric.name)
+        for target in view.nearest_searches
+    )
+    overlays.extend(
+        OverlayInfo(kind="polygon", vertices=[_as_point(v) for v in search.polygon.vertices])
+        for search in view.polygon_searches
+    )
+    return SpatialInfo(table=view.table, column=view.column, overlays=overlays)
+
+
+def _as_point(point: Point) -> PointInfo:
+    return PointInfo(lat=point.lat, lon=point.lon)
 
 
 def _as_plan(node: PlanNode | None) -> PlanInfo | None:
@@ -416,9 +499,11 @@ def _as_plan(node: PlanNode | None) -> PlanInfo | None:
 
 
 def _as_json(value: Value) -> Any:
-    """Los tipos que JSON no conoce viajan como texto."""
+    """Los tipos que JSON no conoce viajan como texto; un punto, como `{lat, lon}`."""
     if isinstance(value, bytes):
         return value.decode("utf-8", errors="replace")
+    if isinstance(value, Point):
+        return {"lat": value.lat, "lon": value.lon}
     if isinstance(value, int | float | bool | str) or value is None:
         return value
     if isinstance(value, tuple):

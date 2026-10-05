@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -26,6 +26,7 @@ class ColumnInfo(BaseModel):
     nullable: bool = True
     primary_key: bool = False
     indexed_with: str | None = None
+    unique: bool = False
 
 
 class TableInfo(BaseModel):
@@ -49,6 +50,45 @@ class PlanInfo(BaseModel):
     actual_ms: float | None = None
 
 
+class PointInfo(BaseModel):
+    """Un punto geográfico en grados decimales."""
+
+    lat: float
+    lon: float
+
+
+class OverlayInfo(BaseModel):
+    """Una figura de la consulta que el panel de mapa dibuja sobre los puntos.
+
+    `radius` lleva centro, radio y métrica; `nearest`, el punto de referencia de un
+    `ORDER BY distancia(…)`; `polygon`, sus vértices.
+    """
+
+    kind: Literal["radius", "nearest", "polygon"]
+    center: PointInfo | None = None
+    radius: float | None = None
+    metric: str | None = None
+    unit: str | None = None
+    vertices: list[PointInfo] = Field(default_factory=list)
+
+
+class SpatialInfo(BaseModel):
+    """Qué tabla y qué columna POINT toca la consulta, y sus figuras."""
+
+    table: str
+    column: str
+    overlays: list[OverlayInfo] = Field(default_factory=list)
+
+
+class TablePoints(BaseModel):
+    """Puntos de una tabla para pintarla en el mapa; una muestra si la tabla es grande."""
+
+    table: str
+    column: str
+    total: int = Field(description="Filas de la tabla")
+    points: list[tuple[float, float]] = Field(description="Pares (latitud, longitud)")
+
+
 class StatementOutcome(BaseModel):
     """Qué pasó con una de las sentencias de un script."""
 
@@ -70,6 +110,7 @@ class QueryResponse(BaseModel):
     affected_rows: int = 0
     elapsed_ms: float = 0.0
     in_transaction: bool = False
+    spatial: SpatialInfo | None = None
 
 
 class FileUploadResponse(BaseModel):

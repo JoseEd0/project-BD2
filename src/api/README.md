@@ -18,6 +18,8 @@ Documentación interactiva generada por FastAPI en `http://localhost:8000/docs`.
 | `MINIGESTOR_CORS_ORIGINS` | orígenes permitidos, separados por comas | `http://localhost:5173` |
 | `MINIGESTOR_LOCK_TIMEOUT` | segundos que una transacción espera un bloqueo | `5` |
 
+Están recogidas en [`.env.example`](../../.env.example), en la raíz del repositorio.
+
 Ninguna ruta ni puerto está escrito en el código.
 
 ## Rutas
@@ -29,7 +31,8 @@ Ninguna ruta ni puerto está escrito en el código.
 | `POST` | `/query` | ejecuta un script y devuelve filas, mensajes y plan |
 | `POST` | `/tables/upload` | crea una tabla a partir de un CSV subido |
 | `POST` | `/files/upload` | solo guarda el CSV; devuelve su ruta y su cabecera para usarla en `CREATE TABLE ... FROM FILE` |
-| `GET` | `/tables/{name}/structure` | estructura física: páginas del archivo, niveles del B+, profundidad global y cubetas del hash |
+| `GET` | `/tables/{name}/structure` | estructura física: páginas del archivo, niveles del B+, profundidad global y cubetas del hash, MBR de cada nodo del R-Tree |
+| `GET` | `/tables/{name}/points` | panel de mapa: los puntos de una columna `POINT` |
 | `DELETE` | `/tables` | borra todas las tablas y sus archivos (dejar la BD vacía) |
 | `DELETE` | `/sessions/{id}` | cierra una sesión y aborta lo que tuviera abierto |
 
@@ -72,13 +75,44 @@ y el plan de la última consulta**, que es lo que el editor enseña.
 }
 ```
 
+### Consultas espaciales y el panel de mapa
+
+Un punto viaja como `{"lat": -12.0464, "lon": -77.0428}`. Cuando la consulta toca una
+columna `POINT`, la respuesta de `/query` añade `spatial`: de qué tabla y columna salen los
+puntos y las **figuras** de la consulta, que el mapa dibuja encima.
+
+```jsonc
+// SELECT * FROM tiendas WHERE distancia(ubicacion, POINT(-12.0464, -77.0428)) < 5000
+"spatial": {
+  "table": "tiendas",
+  "column": "ubicacion",
+  "overlays": [
+    { "kind": "radius", "center": { "lat": -12.0464, "lon": -77.0428 },
+      "radius": 5000.0, "metric": "haversine", "unit": "m", "vertices": [] }
+  ]
+}
+```
+
+| `kind` | De dónde sale | Qué trae |
+|---|---|---|
+| `radius` | `distancia(col, punto) < r` en el `WHERE` | centro, radio, métrica y unidad |
+| `nearest` | `ORDER BY distancia(col, punto)` | el punto de referencia |
+| `polygon` | `intersecta(col, POLYGON(…))` en el `WHERE` | los vértices |
+
+Las figuras describen **la consulta, no el plan**: salen igual con índice que sin él.
+
+`GET /tables/{name}/points?column=ubicacion&limit=5000` devuelve los puntos de la tabla
+para pintarlos de fondo. Con más filas que `limit` entrega una muestra tomada a intervalos
+regulares —no las primeras—, para que no se concentre en una zona. El máximo es
+`EngineConfig.map_points`.
+
 ### Carga de CSV
 
 `POST /tables/upload` recibe un formulario *multipart*:
 
 | Campo | Qué es |
 |---|---|
-| `file` | el CSV, con cabecera; los tipos se deducen leyendo el archivo entero |
+| `file` | el CSV, con cabecera; los tipos se deducen leyendo el archivo entero. Una celda `POINT(lat, lon)` hace de su columna una columna `POINT` |
 | `name` | nombre de la tabla; solo se admite un identificador |
 | `organization` | `heap`, `sequential` o `clustered_btree` |
 | `key_column` | columna clave: obligatoria en `sequential` y `clustered_btree`; opcional en `heap`, donde recibe un índice hash |

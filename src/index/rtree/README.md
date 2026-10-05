@@ -124,7 +124,7 @@ empate, todos los demás ya están dentro.
 
 Es **incremental**: entrega los vecinos de uno en uno, del más cercano al más lejano. Quien
 quiere `k` deja de pedir tras el k-ésimo y el resto del árbol no se llega a abrir. Por eso
-un `LIMIT 10` sobre 100 000 puntos abre de media 4.2 nodos de 610, y por eso un filtro encima
+un `LIMIT 10` sobre 100 000 puntos abre de media 4.1 nodos de 610, y por eso un filtro encima
 (`WHERE rubro = 'gasolinera'`) funciona sin más: se siguen pidiendo vecinos hasta juntar
 los que pasan el filtro.
 
@@ -171,8 +171,8 @@ el ordenamiento externo de la Parte 1, así que en memoria solo hay una franja a
 Las hojas se llenan al 90 % (`EngineConfig.rtree_bulk_fill`) para que las inserciones
 posteriores no las dividan de inmediato.
 
-Medido con 100 000 puntos: **0.6 s** con carga masiva frente a **19 s** insertando, y un
-árbol de 610 nodos en vez de 807.
+Medido con 100 000 puntos: **0.7 s** con carga masiva frente a **21 s** insertando, y un
+árbol de 610 nodos en vez de 815.
 
 ## Las dos métricas
 

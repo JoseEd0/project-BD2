@@ -1,9 +1,11 @@
-"""Hash extendible: índice de igualdad que crece sin reconstruirse.
+"""Hash extendible: índice de igualdad que crece y encoge sin reconstruirse.
 
 La idea: un **directorio** de `2^profundidad_global` punteros y unos **cubetas** que solo se
 parten cuando se llenan. Cada cubeta recuerda con cuántos bits se llegó a ella
 (*profundidad local*), así que duplicar el directorio no obliga a mover ni un registro de
-las cubetas que no se partieron.
+las cubetas que no se partieron. Al borrar se recorre el camino inverso: dos cubetas
+gemelas que quedan holgadas se funden, y el directorio se reduce a la mitad cuando ya
+ninguna cubeta necesita su último bit.
 
 Ver `README.md` para el recorrido paso a paso de una división y una duplicación.
 """
@@ -46,7 +48,8 @@ class ExtendibleHashIndex:
 
     * búsqueda, inserción y borrado por igualdad: `O(1)` accesos a página — uno al
       directorio y uno a la cubeta;
-    * duplicar el directorio: `O(2^profundidad_global)` escrituras, sin tocar las cubetas;
+    * duplicar o reducir el directorio: `O(2^profundidad_global)` accesos al
+      directorio, sin tocar las cubetas;
     * **no ordena**: no admite consultas por rango.
 
     Admite claves repetidas. Si muchísimas filas comparten clave, la cubeta deja de poder
@@ -59,12 +62,13 @@ class ExtendibleHashIndex:
     def __init__(
         self, path: Path, key_codec: KeyCodec, value_size: int, config: EngineConfig
     ) -> None:
-        self._pager = Pager(path, config)
-        self._directory = Pager(path.with_name(path.name + DIRECTORY_SUFFIX), config)
         self._key_codec = key_codec
         self._value_size = value_size
         self._entry_size = key_codec.size + value_size
         self._bucket_capacity = slot_capacity(config.page_size, self._entry_size)
+        self._pager = Pager(path, config)
+        self._directory = Pager(path.with_name(path.name + DIRECTORY_SUFFIX), config)
+        self._merge_limit = int(self._bucket_capacity * config.hash_merge_fill)
         self._entries_per_directory_page = config.page_size // DIRECTORY_ENTRY.size
         self._global_depth: int
         self._free_head: int
@@ -130,23 +134,12 @@ class ExtendibleHashIndex:
 
     def delete(self, key: Key) -> int:
         """Borra todas las entradas con esa clave y devuelve cuántas."""
-        raw_key = self._key_codec.pack(key)
-        bucket_id = self._directory_entry(self._directory_index(key))
-        removed = 0
-        for page_id, page in self._chain_pages(bucket_id):
-            slots = [
-                slot
-                for slot in page.live_slots()
-                if page.read(slot)[: self._key_codec.size] == raw_key
-            ]
-            for slot in slots:
-                page.free(slot)
-            if slots:
-                self._store(page_id, page)
-                removed += len(slots)
-        self._entry_count -= removed
-        self._write_header()
-        return removed
+        return self._remove(key, self._key_codec.pack(key))
+
+    def delete_entry(self, key: Key, value: bytes) -> bool:
+        """Borra la entrada que asocia esa clave con ese valor. Devuelve si existía."""
+        self._check_value(value)
+        return self._remove(key, self._key_codec.pack(key) + value) > 0
 
     def scan(self) -> Iterator[tuple[Key, bytes]]:
         """Todas las entradas, sin ningún orden garantizado."""
@@ -208,6 +201,92 @@ class ExtendibleHashIndex:
         traceback: TracebackType | None,
     ) -> None:
         self.close()
+
+    def _remove(self, key: Key, prefix: bytes) -> int:
+        """Quita de la cubeta de `key` las entradas que empiezan por `prefix`."""
+        directory_index = self._directory_index(key)
+        removed = 0
+        for page_id, page in self._chain_pages(self._directory_entry(directory_index)):
+            slots = [slot for slot in page.live_slots() if page.read(slot).startswith(prefix)]
+            for slot in slots:
+                page.free(slot)
+            if slots:
+                self._store(page_id, page)
+                removed += len(slots)
+        if removed:
+            self._entry_count -= removed
+            self._compact_chain(self._directory_entry(directory_index))
+            self._shrink(directory_index)
+            self._write_header()
+        return removed
+
+    def _compact_chain(self, bucket_id: int) -> None:
+        """Reescribe una cubeta con desbordamiento para devolver las páginas que el borrado
+        dejó vacías o a medio llenar."""
+        bucket = self._load(bucket_id)
+        if bucket.next_page == NO_PAGE:
+            return
+        entries = list(self._entries_of(bucket_id))
+        self._release_chain(bucket_id)
+        self._write_bucket(bucket_id, entries, bucket.flags)
+
+    def _shrink(self, directory_index: int) -> None:
+        """Funde la cubeta con su gemela mientras quepan holgadas, y reduce el directorio.
+
+        Es la división al revés. La gemela de una cubeta de profundidad local `ld` es la
+        que se separó de ella por el bit `ld - 1`: se llega cambiando ese bit en el
+        índice del directorio. Solo se pueden fundir si la gemela no se ha vuelto a
+        partir, es decir, si tiene la misma profundidad local.
+        """
+        merged = False
+        while self._merge_with_twin(directory_index):
+            merged = True
+        if merged:
+            self._halve_directory()
+
+    def _merge_with_twin(self, directory_index: int) -> bool:
+        """Decide contando ranuras, sin leer las entradas: casi ningún borrado acaba en
+        fusión, y leer la cubeta entera para descubrirlo doblaría el coste de borrar."""
+        bucket_id = self._directory_entry(directory_index)
+        bucket = self._load(bucket_id)
+        local_depth = bucket.flags
+        if local_depth <= INITIAL_GLOBAL_DEPTH or bucket.next_page != NO_PAGE:
+            return False
+        room = self._merge_limit - bucket.live_count()
+        if room < 0:
+            return False
+        twin_bit = 1 << (local_depth - 1)
+        twin_id = self._directory_entry(directory_index ^ twin_bit)
+        twin = self._load(twin_id)
+        if twin.flags != local_depth or twin.next_page != NO_PAGE or twin.live_count() > room:
+            return False
+        entries = [*self._entries_of(bucket_id), *self._entries_of(twin_id)]
+        self._release(twin_id)
+        self._write_bucket(bucket_id, entries, local_depth - 1)
+        self._point_directory(directory_index & (twin_bit - 1), twin_bit - 1, bucket_id)
+        return True
+
+    def _point_directory(self, low_bits: int, mask: int, bucket_id: int) -> None:
+        """Todas las entradas cuyos bits bajos son `low_bits` pasan a apuntar a la cubeta."""
+        for index in range(self.directory_size):
+            if index & mask == low_bits:
+                self._set_directory_entry(index, bucket_id)
+
+    def _halve_directory(self) -> None:
+        """Reduce el directorio mientras sus dos mitades sean iguales.
+
+        Que lo sean significa que ninguna cubeta usa el bit más alto: toda entrada apunta
+        a lo mismo que la que solo difiere de ella en ese bit. Las páginas del archivo
+        del directorio que sobran se quedan; volver a crecer las reutiliza.
+        """
+        while self._global_depth > INITIAL_GLOBAL_DEPTH:
+            half = self.directory_size // 2
+            if any(
+                self._directory_entry(index) != self._directory_entry(index + half)
+                for index in range(half)
+            ):
+                return
+            self._global_depth -= 1
 
     def _split(self, directory_index: int) -> bool:
         """Parte la cubeta apuntada por esa entrada. Devuelve si el reparto sirvió de algo.

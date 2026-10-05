@@ -4,7 +4,7 @@ from collections.abc import Callable
 import pytest
 
 from config import EngineConfig
-from index.bplustree.node import NodeCapacityError
+from index.bplustree.node import CorruptNodeError, NodeCapacityError
 from index.bplustree.tree import BPlusTree, DuplicateKeyError, TreeFormatError
 from index.keys import ScalarKeyCodec
 from storage.types import StorageError
@@ -206,3 +206,24 @@ def test_page_too_small_is_rejected(config: EngineConfig, key_codec: ScalarKeyCo
     cramped = EngineConfig(page_size=32, data_directory=config.data_directory)
     with pytest.raises(NodeCapacityError):
         BPlusTree(cramped.data_directory / "c.bpt", key_codec, 64, cramped)
+
+
+def test_a_file_that_is_not_a_tree_is_rejected(config: EngineConfig, key_codec: ScalarKeyCodec):
+    path = config.data_directory / "ajeno.bpt"
+    path.write_bytes(b"x" * config.page_size)
+    with pytest.raises(TreeFormatError, match="no es un árbol"):
+        BPlusTree(path, key_codec, VALUE_SIZE, config)
+
+
+def test_a_page_that_is_not_a_node_is_reported_as_corrupt(
+    config: EngineConfig, key_codec: ScalarKeyCodec
+):
+    """La cabecera está intacta, pero las páginas de los nodos se han pisado con basura."""
+    path = config.data_directory / "roto.bpt"
+    with BPlusTree(path, key_codec, VALUE_SIZE, config) as tree:
+        tree.insert(1, payload(1))
+    raw = path.read_bytes()
+    header = raw[: config.page_size]
+    path.write_bytes(header + b"\xff" * (len(raw) - len(header)))
+    with BPlusTree(path, key_codec, VALUE_SIZE, config) as tree, pytest.raises(CorruptNodeError):
+        tree.search(1)

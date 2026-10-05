@@ -76,3 +76,26 @@ def test_many_rows_share_one_value(index: UnclusteredBPlusIndex, serializer: Rec
     for address in addresses:
         index.insert(row(serializer, address.slot, "lima"), address)
     assert sorted(index.search("lima")) == sorted(addresses)
+
+
+def test_rows_with_a_null_value_are_left_out(
+    index: UnclusteredBPlusIndex, serializer: RecordSerializer
+):
+    """Un NULL no tiene sitio en el orden y ninguna búsqueda lo devuelve: no se indexa."""
+    without_city = serializer.pack((1, "n1", None))
+    index.insert(without_city, RecordId(1, 0))
+    index.insert(row(serializer, 2, "lima"), RecordId(1, 1))
+    assert index.entry_count == 1
+    assert [city for city, _ in index.scan()] == ["lima"]
+    assert not index.delete(without_city, RecordId(1, 0))
+    assert index.entry_count == 1
+
+
+def test_searching_for_null_finds_nothing(
+    index: UnclusteredBPlusIndex, serializer: RecordSerializer
+):
+    """NULL no es un valor del índice: buscarlo no puede confundirse con «sin límite»."""
+    index.insert(row(serializer, 1, "lima"), RecordId(page_id=1, slot=0))
+    index.insert(serializer.pack((2, "n2", None)), RecordId(page_id=1, slot=1))
+    assert index.search(None) == []
+    assert len(list(index.range_search(None, None))) == 1

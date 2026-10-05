@@ -61,8 +61,8 @@ class BPlusTree:
         value_size: int,
         config: EngineConfig,
     ) -> None:
-        self._pager = Pager(path, config)
         self._codec = NodeCodec(key_codec, value_size, config.page_size)
+        self._pager = Pager(path, config)
         self._key_codec = key_codec
         self._value_size = value_size
         self._root: int

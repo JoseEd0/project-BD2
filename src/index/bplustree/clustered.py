@@ -47,10 +47,6 @@ class ClusteredBPlusIndex:
     def height(self) -> int:
         return self._tree.height
 
-    @property
-    def page_count(self) -> int:
-        return self._tree.page_count
-
     def insert(self, record: bytes) -> None:
         self._tree.insert(self._key_of(record), record)
 

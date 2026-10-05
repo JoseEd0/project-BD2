@@ -12,7 +12,7 @@ extra a la página donde vive la fila.
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 from types import TracebackType
 from typing import Any
@@ -30,7 +30,11 @@ HIGHEST_RECORD_ID = RecordId(page_id=0xFFFFFFFF, slot=0xFFFF)
 
 
 class UnclusteredBPlusIndex:
-    """Índice secundario que apunta a las filas de otro archivo."""
+    """Índice secundario que apunta a las filas de otro archivo.
+
+    Las filas cuyo campo indexado es NULL no entran en el índice: ninguna búsqueda por
+    igualdad o por rango puede devolverlas, y un NULL no tiene sitio en el orden.
+    """
 
     def __init__(
         self,
@@ -53,15 +57,23 @@ class UnclusteredBPlusIndex:
     def height(self) -> int:
         return self._tree.height
 
-    @property
-    def page_count(self) -> int:
-        return self._tree.page_count
+    def build(self, rows: Iterable[tuple[bytes, RecordId]]) -> None:
+        """Indexa de una vez todas las filas de la tabla."""
+        for record, record_id in rows:
+            self.insert(record, record_id)
 
     def insert(self, record: bytes, record_id: RecordId) -> None:
-        self._tree.insert((self._key_of(record), record_id), EMPTY_VALUE)
+        key = self._key_of(record)
+        if key is not None:
+            self._tree.insert((key, record_id), EMPTY_VALUE)
 
     def search(self, value: Key) -> list[RecordId]:
-        """Direcciones de todas las filas cuyo campo indexado vale `value`."""
+        """Direcciones de todas las filas cuyo campo indexado vale `value`.
+
+        Ninguna si `value` es NULL: esas filas no están en el índice.
+        """
+        if value is None:
+            return []
         return [record_id for _, record_id in self._range(value, value)]
 
     def range_search(self, low: Key | None, high: Key | None) -> Iterator[tuple[Key, RecordId]]:
@@ -72,7 +84,8 @@ class UnclusteredBPlusIndex:
         return self._range(None, None)
 
     def delete(self, record: bytes, record_id: RecordId) -> bool:
-        return self._tree.delete((self._key_of(record), record_id))
+        key = self._key_of(record)
+        return key is not None and self._tree.delete((key, record_id))
 
     def describe(self) -> dict[str, Any]:
         return self._tree.describe()

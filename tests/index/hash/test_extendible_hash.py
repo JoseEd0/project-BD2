@@ -148,3 +148,136 @@ def test_opening_with_another_value_size_is_rejected(
         pass
     with pytest.raises(HashFormatError):
         ExtendibleHashIndex(path, key_codec, VALUE_SIZE + 1, config)
+
+
+def test_delete_entry_removes_only_that_value(index: ExtendibleHashIndex):
+    for value in range(5):
+        index.insert(7, payload(value))
+    assert index.delete_entry(7, payload(3))
+    assert sorted(index.search(7)) == [payload(value) for value in (0, 1, 2, 4)]
+    assert not index.delete_entry(7, payload(3))
+    assert not index.delete_entry(8, payload(0))
+    assert index.entry_count == 4
+
+
+def test_deleting_everything_merges_the_buckets_and_shrinks_the_directory(
+    index: ExtendibleHashIndex, assert_hash_is_valid: HashValidator
+):
+    """El camino de vuelta de las divisiones: al vaciarse, el índice recupera su forma
+    inicial de dos cubetas y un directorio de dos punteros."""
+    keys = list(range(index.bucket_capacity * 40))
+    for key in keys:
+        index.insert(key, payload(key))
+    grown_depth, grown_buckets = index.global_depth, index.bucket_count
+    assert grown_depth > 1 and grown_buckets > 2
+    random.Random(SHUFFLE_SEED).shuffle(keys)
+    remaining = list(keys)
+    for position, key in enumerate(keys):
+        assert index.delete(key) == 1
+        remaining.remove(key)
+        if position % 25 == 0:
+            assert_hash_is_valid(index, remaining)
+    assert_hash_is_valid(index, [])
+    assert index.global_depth == 1
+    assert index.bucket_count == 2
+
+
+def test_the_index_shrinks_step_by_step_as_it_empties(
+    index: ExtendibleHashIndex, assert_hash_is_valid: HashValidator
+):
+    keys = list(range(index.bucket_capacity * 40))
+    for key in keys:
+        index.insert(key, payload(key))
+    full_buckets = index.bucket_count
+    for key in keys[: len(keys) * 3 // 4]:
+        index.delete(key)
+    kept = keys[len(keys) * 3 // 4 :]
+    assert_hash_is_valid(index, kept)
+    assert index.bucket_count < full_buckets
+    for key in kept:
+        assert index.search(key) == [payload(key)]
+
+
+def test_pages_freed_by_merging_are_reused(
+    index: ExtendibleHashIndex, assert_hash_is_valid: HashValidator
+):
+    keys = list(range(index.bucket_capacity * 30))
+    for key in keys:
+        index.insert(key, payload(key))
+    pages = index.page_count
+    for _ in range(3):
+        for key in keys:
+            index.delete(key)
+        for key in keys:
+            index.insert(key, payload(key))
+    assert_hash_is_valid(index, keys)
+    assert index.page_count == pages
+
+
+def test_twin_buckets_merge_only_when_they_fit_with_room_to_spare(
+    config: EngineConfig, key_codec: ScalarKeyCodec, assert_hash_is_valid: HashValidator
+):
+    """Fundir dos cubetas que juntas quedan llenas haría que la siguiente inserción las
+    partiera otra vez: solo se funden por debajo de `hash_merge_fill`."""
+    path = config.data_directory / "m.hash"
+    with ExtendibleHashIndex(path, key_codec, VALUE_SIZE, config) as index:
+        keys = list(range(index.bucket_capacity * 20))
+        for key in keys:
+            index.insert(key, payload(key))
+        for key in keys[::2]:
+            index.delete(key)
+        kept = keys[1::2]
+        assert_hash_is_valid(index, kept)
+        buckets = index.bucket_count
+        for key in keys[::2][:3]:
+            index.insert(key, payload(key))
+        assert index.bucket_count == buckets
+        assert_hash_is_valid(index, sorted([*kept, *keys[::2][:3]]))
+
+
+def test_overflow_chains_are_released_when_their_keys_go(
+    index: ExtendibleHashIndex, assert_hash_is_valid: HashValidator
+):
+    repeated = index.bucket_capacity * 5
+    for value in range(repeated):
+        index.insert(7, payload(value))
+    for key in range(100, 140):
+        index.insert(key, payload(key))
+    assert index.describe()["buckets"] and any(
+        bucket["overflow_pages"] for bucket in index.describe()["buckets"]
+    )
+    assert index.delete(7) == repeated
+    assert_hash_is_valid(index, list(range(100, 140)))
+    assert not any(bucket["overflow_pages"] for bucket in index.describe()["buckets"])
+    for value in range(repeated):
+        index.insert(7, payload(value))
+    assert len(index.search(7)) == repeated
+    assert_hash_is_valid(index, [*range(100, 140), *([7] * repeated)])
+
+
+def test_a_shrunk_index_survives_reopening(
+    config: EngineConfig, key_codec: ScalarKeyCodec, assert_hash_is_valid: HashValidator
+):
+    path = config.data_directory / "s.hash"
+    with ExtendibleHashIndex(path, key_codec, VALUE_SIZE, config) as index:
+        capacity = index.bucket_capacity
+        for key in range(capacity * 40):
+            index.insert(key, payload(key))
+        for key in range(10, capacity * 40):
+            index.delete(key)
+        depth = index.global_depth
+    with ExtendibleHashIndex(path, key_codec, VALUE_SIZE, config) as index:
+        assert index.global_depth == depth
+        assert_hash_is_valid(index, list(range(10)))
+        for key in range(10, capacity * 10):
+            index.insert(key, payload(key))
+        assert_hash_is_valid(index, list(range(capacity * 10)))
+
+
+def test_a_file_that_is_not_a_hash_index_is_rejected(
+    config: EngineConfig, key_codec: ScalarKeyCodec
+):
+    path = config.data_directory / "ajeno.hash"
+    path.write_bytes(b"x" * config.page_size)
+    with pytest.raises(HashFormatError, match="no es un índice hash"):
+        ExtendibleHashIndex(path, key_codec, VALUE_SIZE, config)

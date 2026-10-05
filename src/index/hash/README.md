@@ -75,11 +75,38 @@ directorio —comprueba si el reparto movería algo— y, si no, encadena una p�
 desbordamiento a la cubeta. Sin esa comprobación, insertar 300 filas con la misma clave
 duplicaría el directorio 300 veces.
 
-### Borrar
+### Borrar: la división al revés
 
-Se libera la ranura y la reutiliza la siguiente inserción. Esta implementación **no fusiona
-cubetas ni reduce el directorio**: es una decisión deliberada, porque encoger obliga a
-comprobar la cubeta gemela en cada borrado y la mayoría de gestores tampoco lo hacen.
+Borrar libera la ranura y, si la cubeta quedó holgada, **deshace la división** que la creó:
+
+```
+  borrar una entrada de la cubeta B (profundidad local ld)
+  su GEMELA es la que se separó de ella por el bit ld−1:
+      se llega cambiando ese bit en el índice del directorio
+
+  si la gemela tiene la misma ld            (no se ha vuelto a partir)
+  y entre las dos caben holgadas            (≤ 50 % de una cubeta)
+      se FUNDEN en una sola de profundidad ld − 1
+      el directorio repunta las entradas de las dos a la que queda
+      la página de la gemela se libera y se reutiliza
+  se repite mientras se pueda
+
+  si las dos mitades del directorio quedaron iguales
+      el directorio se REDUCE a la mitad (gd − 1), las veces que haga falta
+```
+
+El umbral del 50 % (`hash_merge_fill`) es deliberado: fundir en cuanto caben justas haría
+que la siguiente inserción volviera a partir la cubeta, y un índice que oscila entre partir
+y fundir escribe mucho para nada. Con la mitad de holgura, tras fundir queda sitio.
+
+Si la cubeta tenía páginas de desbordamiento y el borrado las dejó vacías o a medias, se
+reescribe la cadena y las páginas sobrantes se devuelven. Llenar el índice hasta que tenga
+decenas de cubetas y borrarlo todo lo deja como recién creado: dos cubetas y un directorio
+de dos punteros (hay un test que lo comprueba validando la estructura por el camino).
+
+Hay dos formas de borrar: `delete(clave)` quita todas las entradas de esa clave, y
+`delete_entry(clave, valor)` quita solo la que apunta a una fila concreta, que es lo que
+necesita un índice secundario con valores repetidos.
 
 ## Por qué el hash no es el de Python
 
@@ -93,7 +120,8 @@ ataques de colisión). Un índice construido con él sería ilegible al reabrirl
 |---|---|
 | Búsqueda por igualdad | `O(1)` — 1 lectura de directorio + 1 de cubeta |
 | Inserción | `O(1)` amortizado |
-| Borrado | `O(1)` |
+| Borrado | `O(1)`; `O(c)` más si funde con la gemela |
+| Reducir el directorio | `O(2^gd)` lecturas, solo tras una fusión |
 | Partir una cubeta | `O(c)`, c = entradas por cubeta |
 | Duplicar el directorio | `O(2^gd)` escrituras, **0 lecturas de cubetas** |
 | Búsqueda por rango | **imposible** — el hash destruye el orden |
@@ -129,6 +157,8 @@ with ExtendibleHashIndex(path, ScalarKeyCodec(campo), value_size=6, config=confi
 
 El validador de `conftest.py` comprueba los invariantes de verdad: que la profundidad local
 nunca supere a la global, que **toda clave esté en la cubeta que le toca según sus `ld` bits
-bajos**, y que cada cubeta reciba exactamente `2^(gd−ld)` punteros del directorio. Se
-ejecuta tras provocar divisiones, duplicaciones del directorio, el caso degenerado de claves
-repetidas y ciclos de borrado y reinserción.
+bajos**, que cada cubeta reciba exactamente `2^(gd−ld)` punteros del directorio y que **las
+páginas del archivo cuadren**: cada una es una cubeta, parte de una cadena o está en la
+lista de libres. Se ejecuta tras provocar divisiones, duplicaciones del directorio, el caso
+degenerado de claves repetidas, fusiones de cubetas, reducciones del directorio y ciclos de
+borrado y reinserción.

@@ -14,9 +14,13 @@ from typing import Any
 
 from storage.record_id import RECORD_ID_SIZE, RecordId
 from storage.schema import Field
-from storage.types import codec_for
+from storage.types import StorageError, codec_for
 
 Key = Any
+
+
+class KeyShapeError(StorageError):
+    """La clave no tiene los componentes que el códec espera."""
 
 
 class KeyCodec(ABC):
@@ -59,7 +63,7 @@ class CompositeKeyCodec(KeyCodec):
 
     def __init__(self, codecs: Sequence[KeyCodec]) -> None:
         if not codecs:
-            raise ValueError("una clave compuesta necesita al menos un componente")
+            raise KeyShapeError("una clave compuesta necesita al menos un componente")
         self._codecs = tuple(codecs)
         self._offsets = self._compute_offsets()
         self._size = sum(codec.size for codec in self._codecs)
@@ -70,7 +74,7 @@ class CompositeKeyCodec(KeyCodec):
 
     def pack(self, key: Key) -> bytes:
         if len(key) != len(self._codecs):
-            raise ValueError(
+            raise KeyShapeError(
                 f"la clave tiene {len(key)} componentes y el índice espera {len(self._codecs)}"
             )
         return b"".join(codec.pack(part) for codec, part in zip(self._codecs, key, strict=True))

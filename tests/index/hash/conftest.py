@@ -6,6 +6,7 @@ import pytest
 
 from index.hash.extendible_hash import ExtendibleHashIndex, stable_hash
 from index.keys import Key
+from storage.page import NO_PAGE
 
 HashValidator = Callable[[ExtendibleHashIndex, list[Key]], None]
 
@@ -32,3 +33,18 @@ def _assert_hash_is_valid(index: ExtendibleHashIndex, expected_keys: list[Key]) 
         )
     assert sorted(key for key, _ in index.scan()) == sorted(expected_keys)
     assert index.entry_count == len(expected_keys)
+    _assert_every_page_is_accounted_for(index)
+
+
+def _assert_every_page_is_accounted_for(index: ExtendibleHashIndex) -> None:
+    """Cabecera, cubetas con sus cadenas y lista de libres suman el archivo entero: una
+    página que no está en ninguno de los tres sitios se ha perdido."""
+    buckets = {index._directory_entry(position) for position in range(index.directory_size)}
+    in_use = {page_id for bucket_id in buckets for page_id, _ in index._chain_pages(bucket_id)}
+    free: set[int] = set()
+    page_id = index._free_head
+    while page_id != NO_PAGE:
+        assert page_id not in free and page_id not in in_use, "página libre y en uso a la vez"
+        free.add(page_id)
+        page_id = index._load(page_id).next_page
+    assert len(in_use) + len(free) + 1 == index.page_count, "hay páginas perdidas"

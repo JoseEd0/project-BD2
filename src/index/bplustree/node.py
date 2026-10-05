@@ -85,14 +85,6 @@ class NodeCodec:
         )
         self._validate_capacity()
 
-    @property
-    def key_codec(self) -> KeyCodec:
-        return self._key_codec
-
-    @property
-    def value_size(self) -> int:
-        return self._value_size
-
     def pack(self, node: Node) -> bytes:
         raw = bytearray(self._page_size)
         HEADER_FORMAT.pack_into(raw, 0, int(node.kind), len(node.keys), node.next_leaf)

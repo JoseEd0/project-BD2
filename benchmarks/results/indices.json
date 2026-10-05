@@ -1,0 +1,492 @@
+{
+  "name": "indices",
+  "parameters": {
+    "sizes": [
+      1000,
+      10000,
+      100000
+    ],
+    "queries": 100,
+    "seed": 20260827,
+    "page_size": 4096
+  },
+  "measurements": [
+    {
+      "technique": "B+ agrupado",
+      "operation": "construcción",
+      "dataset_size": 1000,
+      "milliseconds": 32.55158301908523,
+      "extra": {}
+    },
+    {
+      "technique": "B+ agrupado",
+      "operation": "igualdad",
+      "dataset_size": 1000,
+      "milliseconds": 1.7215840052813292,
+      "extra": {
+        "consultas": 100
+      }
+    },
+    {
+      "technique": "B+ agrupado",
+      "operation": "rango",
+      "dataset_size": 1000,
+      "milliseconds": 3.413291065953672,
+      "extra": {
+        "ancho": 50
+      }
+    },
+    {
+      "technique": "B+ agrupado",
+      "operation": "recorrido ordenado",
+      "dataset_size": 1000,
+      "milliseconds": 0.31233392655849457,
+      "extra": {}
+    },
+    {
+      "technique": "B+ agrupado",
+      "operation": "espacio",
+      "dataset_size": 1000,
+      "milliseconds": 0.0,
+      "extra": {
+        "kib": 100.0,
+        "altura": 2,
+        "nota": "incluye las filas: el índice es la tabla"
+      }
+    },
+    {
+      "technique": "B+ agrupado",
+      "operation": "inserciones/eliminaciones",
+      "dataset_size": 1000,
+      "milliseconds": 7.613874971866608,
+      "extra": {
+        "operaciones": 200
+      }
+    },
+    {
+      "technique": "B+ no agrupado",
+      "operation": "construcción",
+      "dataset_size": 1000,
+      "milliseconds": 318.7815829878673,
+      "extra": {}
+    },
+    {
+      "technique": "B+ no agrupado",
+      "operation": "igualdad",
+      "dataset_size": 1000,
+      "milliseconds": 23.862959002144635,
+      "extra": {
+        "consultas": 100,
+        "nota": "incluye el salto al heap"
+      }
+    },
+    {
+      "technique": "B+ no agrupado",
+      "operation": "rango",
+      "dataset_size": 1000,
+      "milliseconds": 34.28549994714558,
+      "extra": {
+        "ancho": 50
+      }
+    },
+    {
+      "technique": "B+ no agrupado",
+      "operation": "recorrido ordenado",
+      "dataset_size": 1000,
+      "milliseconds": 2.126125036738813,
+      "extra": {}
+    },
+    {
+      "technique": "B+ no agrupado",
+      "operation": "espacio",
+      "dataset_size": 1000,
+      "milliseconds": 0.0,
+      "extra": {
+        "kib": 24.0,
+        "altura": 2,
+        "nota": "solo el índice; las filas están en el heap"
+      }
+    },
+    {
+      "technique": "B+ no agrupado",
+      "operation": "inserciones/eliminaciones",
+      "dataset_size": 1000,
+      "milliseconds": 79.46149993222207,
+      "extra": {
+        "operaciones": 200
+      }
+    },
+    {
+      "technique": "hash extendible",
+      "operation": "construcción",
+      "dataset_size": 1000,
+      "milliseconds": 27.09537500049919,
+      "extra": {}
+    },
+    {
+      "technique": "hash extendible",
+      "operation": "igualdad",
+      "dataset_size": 1000,
+      "milliseconds": 12.482500053010881,
+      "extra": {
+        "consultas": 100,
+        "nota": "incluye el salto al heap"
+      }
+    },
+    {
+      "technique": "hash extendible",
+      "operation": "rango",
+      "dataset_size": 1000,
+      "milliseconds": 0.0,
+      "extra": {
+        "nota": "no soportado: el hash no guarda orden"
+      }
+    },
+    {
+      "technique": "hash extendible",
+      "operation": "recorrido ordenado",
+      "dataset_size": 1000,
+      "milliseconds": 0.0,
+      "extra": {
+        "nota": "no soportado: haría falta ordenar"
+      }
+    },
+    {
+      "technique": "hash extendible",
+      "operation": "espacio",
+      "dataset_size": 1000,
+      "milliseconds": 0.0,
+      "extra": {
+        "kib": 28.0,
+        "profundidad_global": 3
+      }
+    },
+    {
+      "technique": "hash extendible",
+      "operation": "inserciones/eliminaciones",
+      "dataset_size": 1000,
+      "milliseconds": 14.986125053837895,
+      "extra": {
+        "operaciones": 200
+      }
+    },
+    {
+      "technique": "B+ agrupado",
+      "operation": "construcción",
+      "dataset_size": 10000,
+      "milliseconds": 583.8377919280902,
+      "extra": {}
+    },
+    {
+      "technique": "B+ agrupado",
+      "operation": "igualdad",
+      "dataset_size": 10000,
+      "milliseconds": 6.230916944332421,
+      "extra": {
+        "consultas": 100
+      }
+    },
+    {
+      "technique": "B+ agrupado",
+      "operation": "rango",
+      "dataset_size": 10000,
+      "milliseconds": 8.656500023789704,
+      "extra": {
+        "ancho": 50
+      }
+    },
+    {
+      "technique": "B+ agrupado",
+      "operation": "recorrido ordenado",
+      "dataset_size": 10000,
+      "milliseconds": 3.4965419908985496,
+      "extra": {}
+    },
+    {
+      "technique": "B+ agrupado",
+      "operation": "espacio",
+      "dataset_size": 10000,
+      "milliseconds": 0.0,
+      "extra": {
+        "kib": 924.0,
+        "altura": 2,
+        "nota": "incluye las filas: el índice es la tabla"
+      }
+    },
+    {
+      "technique": "B+ agrupado",
+      "operation": "inserciones/eliminaciones",
+      "dataset_size": 10000,
+      "milliseconds": 174.0668750135228,
+      "extra": {
+        "operaciones": 2000
+      }
+    },
+    {
+      "technique": "B+ no agrupado",
+      "operation": "construcción",
+      "dataset_size": 10000,
+      "milliseconds": 3789.564250037074,
+      "extra": {}
+    },
+    {
+      "technique": "B+ no agrupado",
+      "operation": "igualdad",
+      "dataset_size": 10000,
+      "milliseconds": 24.235208984464407,
+      "extra": {
+        "consultas": 100,
+        "nota": "incluye el salto al heap"
+      }
+    },
+    {
+      "technique": "B+ no agrupado",
+      "operation": "rango",
+      "dataset_size": 10000,
+      "milliseconds": 36.27566702198237,
+      "extra": {
+        "ancho": 50
+      }
+    },
+    {
+      "technique": "B+ no agrupado",
+      "operation": "recorrido ordenado",
+      "dataset_size": 10000,
+      "milliseconds": 22.796332952566445,
+      "extra": {}
+    },
+    {
+      "technique": "B+ no agrupado",
+      "operation": "espacio",
+      "dataset_size": 10000,
+      "milliseconds": 0.0,
+      "extra": {
+        "kib": 220.0,
+        "altura": 2,
+        "nota": "solo el índice; las filas están en el heap"
+      }
+    },
+    {
+      "technique": "B+ no agrupado",
+      "operation": "inserciones/eliminaciones",
+      "dataset_size": 10000,
+      "milliseconds": 911.2540420610458,
+      "extra": {
+        "operaciones": 2000
+      }
+    },
+    {
+      "technique": "hash extendible",
+      "operation": "construcción",
+      "dataset_size": 10000,
+      "milliseconds": 338.79929094109684,
+      "extra": {}
+    },
+    {
+      "technique": "hash extendible",
+      "operation": "igualdad",
+      "dataset_size": 10000,
+      "milliseconds": 9.587792097590864,
+      "extra": {
+        "consultas": 100,
+        "nota": "incluye el salto al heap"
+      }
+    },
+    {
+      "technique": "hash extendible",
+      "operation": "rango",
+      "dataset_size": 10000,
+      "milliseconds": 0.0,
+      "extra": {
+        "nota": "no soportado: el hash no guarda orden"
+      }
+    },
+    {
+      "technique": "hash extendible",
+      "operation": "recorrido ordenado",
+      "dataset_size": 10000,
+      "milliseconds": 0.0,
+      "extra": {
+        "nota": "no soportado: haría falta ordenar"
+      }
+    },
+    {
+      "technique": "hash extendible",
+      "operation": "espacio",
+      "dataset_size": 10000,
+      "milliseconds": 0.0,
+      "extra": {
+        "kib": 264.0,
+        "profundidad_global": 6
+      }
+    },
+    {
+      "technique": "hash extendible",
+      "operation": "inserciones/eliminaciones",
+      "dataset_size": 10000,
+      "milliseconds": 110.66258407663554,
+      "extra": {
+        "operaciones": 2000
+      }
+    },
+    {
+      "technique": "B+ agrupado",
+      "operation": "construcción",
+      "dataset_size": 100000,
+      "milliseconds": 9259.223541012034,
+      "extra": {}
+    },
+    {
+      "technique": "B+ agrupado",
+      "operation": "igualdad",
+      "dataset_size": 100000,
+      "milliseconds": 7.9757500207051635,
+      "extra": {
+        "consultas": 100
+      }
+    },
+    {
+      "technique": "B+ agrupado",
+      "operation": "rango",
+      "dataset_size": 100000,
+      "milliseconds": 11.007666937075555,
+      "extra": {
+        "ancho": 50
+      }
+    },
+    {
+      "technique": "B+ agrupado",
+      "operation": "recorrido ordenado",
+      "dataset_size": 100000,
+      "milliseconds": 36.85054194647819,
+      "extra": {}
+    },
+    {
+      "technique": "B+ agrupado",
+      "operation": "espacio",
+      "dataset_size": 100000,
+      "milliseconds": 0.0,
+      "extra": {
+        "kib": 9312.0,
+        "altura": 3,
+        "nota": "incluye las filas: el índice es la tabla"
+      }
+    },
+    {
+      "technique": "B+ agrupado",
+      "operation": "inserciones/eliminaciones",
+      "dataset_size": 100000,
+      "milliseconds": 2294.769125059247,
+      "extra": {
+        "operaciones": 20000
+      }
+    },
+    {
+      "technique": "B+ no agrupado",
+      "operation": "construcción",
+      "dataset_size": 100000,
+      "milliseconds": 49742.15579207521,
+      "extra": {}
+    },
+    {
+      "technique": "B+ no agrupado",
+      "operation": "igualdad",
+      "dataset_size": 100000,
+      "milliseconds": 33.567833015695214,
+      "extra": {
+        "consultas": 100,
+        "nota": "incluye el salto al heap"
+      }
+    },
+    {
+      "technique": "B+ no agrupado",
+      "operation": "rango",
+      "dataset_size": 100000,
+      "milliseconds": 53.455624962225556,
+      "extra": {
+        "ancho": 50
+      }
+    },
+    {
+      "technique": "B+ no agrupado",
+      "operation": "recorrido ordenado",
+      "dataset_size": 100000,
+      "milliseconds": 389.78029193822294,
+      "extra": {}
+    },
+    {
+      "technique": "B+ no agrupado",
+      "operation": "espacio",
+      "dataset_size": 100000,
+      "milliseconds": 0.0,
+      "extra": {
+        "kib": 2060.0,
+        "altura": 3,
+        "nota": "solo el índice; las filas están en el heap"
+      }
+    },
+    {
+      "technique": "B+ no agrupado",
+      "operation": "inserciones/eliminaciones",
+      "dataset_size": 100000,
+      "milliseconds": 9622.10649996996,
+      "extra": {
+        "operaciones": 20000
+      }
+    },
+    {
+      "technique": "hash extendible",
+      "operation": "construcción",
+      "dataset_size": 100000,
+      "milliseconds": 3463.579082977958,
+      "extra": {}
+    },
+    {
+      "technique": "hash extendible",
+      "operation": "igualdad",
+      "dataset_size": 100000,
+      "milliseconds": 11.129999998956919,
+      "extra": {
+        "consultas": 100,
+        "nota": "incluye el salto al heap"
+      }
+    },
+    {
+      "technique": "hash extendible",
+      "operation": "rango",
+      "dataset_size": 100000,
+      "milliseconds": 0.0,
+      "extra": {
+        "nota": "no soportado: el hash no guarda orden"
+      }
+    },
+    {
+      "technique": "hash extendible",
+      "operation": "recorrido ordenado",
+      "dataset_size": 100000,
+      "milliseconds": 0.0,
+      "extra": {
+        "nota": "no soportado: haría falta ordenar"
+      }
+    },
+    {
+      "technique": "hash extendible",
+      "operation": "espacio",
+      "dataset_size": 100000,
+      "milliseconds": 0.0,
+      "extra": {
+        "kib": 2056.0,
+        "profundidad_global": 9
+      }
+    },
+    {
+      "technique": "hash extendible",
+      "operation": "inserciones/eliminaciones",
+      "dataset_size": 100000,
+      "milliseconds": 1463.5999590391293,
+      "extra": {
+        "operaciones": 20000
+      }
+    }
+  ]
+}

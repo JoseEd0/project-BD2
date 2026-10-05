@@ -1,0 +1,219 @@
+{
+  "name": "almacenamiento",
+  "parameters": {
+    "sizes": [
+      1000,
+      10000,
+      100000
+    ],
+    "queries": 100,
+    "seed": 20260827,
+    "page_size": 4096
+  },
+  "measurements": [
+    {
+      "technique": "heap file",
+      "operation": "inserción",
+      "dataset_size": 1000,
+      "milliseconds": 7.65641697216779,
+      "extra": {}
+    },
+    {
+      "technique": "heap file",
+      "operation": "búsqueda por clave",
+      "dataset_size": 1000,
+      "milliseconds": 1.0762499878183007,
+      "extra": {
+        "consultas": 100
+      }
+    },
+    {
+      "technique": "heap file",
+      "operation": "espacio en disco",
+      "dataset_size": 1000,
+      "milliseconds": 0.0,
+      "extra": {
+        "kib": 64.0
+      }
+    },
+    {
+      "technique": "heap file",
+      "operation": "reorganización",
+      "dataset_size": 1000,
+      "milliseconds": 0.0,
+      "extra": {
+        "nota": "no aplica: el heap reutiliza las ranuras libres al vuelo"
+      }
+    },
+    {
+      "technique": "archivo secuencial",
+      "operation": "inserción",
+      "dataset_size": 1000,
+      "milliseconds": 25.252915918827057,
+      "extra": {}
+    },
+    {
+      "technique": "archivo secuencial",
+      "operation": "búsqueda por clave",
+      "dataset_size": 1000,
+      "milliseconds": 4.6153750736266375,
+      "extra": {
+        "consultas": 100
+      }
+    },
+    {
+      "technique": "archivo secuencial",
+      "operation": "espacio en disco",
+      "dataset_size": 1000,
+      "milliseconds": 0.0,
+      "extra": {
+        "kib": 100.0
+      }
+    },
+    {
+      "technique": "archivo secuencial",
+      "operation": "reorganización",
+      "dataset_size": 1000,
+      "milliseconds": 2.626249915920198,
+      "extra": {
+        "desperdicio_previo": 0.121
+      }
+    },
+    {
+      "technique": "heap file",
+      "operation": "inserción",
+      "dataset_size": 10000,
+      "milliseconds": 71.84550003148615,
+      "extra": {}
+    },
+    {
+      "technique": "heap file",
+      "operation": "búsqueda por clave",
+      "dataset_size": 10000,
+      "milliseconds": 10.639332933351398,
+      "extra": {
+        "consultas": 100
+      }
+    },
+    {
+      "technique": "heap file",
+      "operation": "espacio en disco",
+      "dataset_size": 10000,
+      "milliseconds": 0.0,
+      "extra": {
+        "kib": 576.0
+      }
+    },
+    {
+      "technique": "heap file",
+      "operation": "reorganización",
+      "dataset_size": 10000,
+      "milliseconds": 0.0,
+      "extra": {
+        "nota": "no aplica: el heap reutiliza las ranuras libres al vuelo"
+      }
+    },
+    {
+      "technique": "archivo secuencial",
+      "operation": "inserción",
+      "dataset_size": 10000,
+      "milliseconds": 265.41783404536545,
+      "extra": {}
+    },
+    {
+      "technique": "archivo secuencial",
+      "operation": "búsqueda por clave",
+      "dataset_size": 10000,
+      "milliseconds": 4.53541602473706,
+      "extra": {
+        "consultas": 100
+      }
+    },
+    {
+      "technique": "archivo secuencial",
+      "operation": "espacio en disco",
+      "dataset_size": 10000,
+      "milliseconds": 0.0,
+      "extra": {
+        "kib": 964.0
+      }
+    },
+    {
+      "technique": "archivo secuencial",
+      "operation": "reorganización",
+      "dataset_size": 10000,
+      "milliseconds": 19.306457950733602,
+      "extra": {
+        "desperdicio_previo": 0.069
+      }
+    },
+    {
+      "technique": "heap file",
+      "operation": "inserción",
+      "dataset_size": 100000,
+      "milliseconds": 743.6254170024768,
+      "extra": {}
+    },
+    {
+      "technique": "heap file",
+      "operation": "búsqueda por clave",
+      "dataset_size": 100000,
+      "milliseconds": 97.24395908415318,
+      "extra": {
+        "consultas": 100
+      }
+    },
+    {
+      "technique": "heap file",
+      "operation": "espacio en disco",
+      "dataset_size": 100000,
+      "milliseconds": 0.0,
+      "extra": {
+        "kib": 5720.0
+      }
+    },
+    {
+      "technique": "heap file",
+      "operation": "reorganización",
+      "dataset_size": 100000,
+      "milliseconds": 0.0,
+      "extra": {
+        "nota": "no aplica: el heap reutiliza las ranuras libres al vuelo"
+      }
+    },
+    {
+      "technique": "archivo secuencial",
+      "operation": "inserción",
+      "dataset_size": 100000,
+      "milliseconds": 3837.8220830345526,
+      "extra": {}
+    },
+    {
+      "technique": "archivo secuencial",
+      "operation": "búsqueda por clave",
+      "dataset_size": 100000,
+      "milliseconds": 5.736500024795532,
+      "extra": {
+        "consultas": 100
+      }
+    },
+    {
+      "technique": "archivo secuencial",
+      "operation": "espacio en disco",
+      "dataset_size": 100000,
+      "milliseconds": 0.0,
+      "extra": {
+        "kib": 9608.0
+      }
+    },
+    {
+      "technique": "archivo secuencial",
+      "operation": "reorganización",
+      "dataset_size": 100000,
+      "milliseconds": 194.46762499865144,
+      "extra": {
+        "desperdicio_previo": 0.072
+      }
+    }
+  ]
+}

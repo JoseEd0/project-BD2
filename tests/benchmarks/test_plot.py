@@ -9,7 +9,9 @@ from pathlib import Path
 import pytest
 from benchmarks.plot import (
     BLUE,
+    DISK_SPACE,
     FIGURES,
+    TOTAL_TIME,
     Figure,
     Line,
     Style,
@@ -81,17 +83,28 @@ def test_every_figure_has_a_distinct_file_and_fits_its_grid():
         assert all(panel.lines for panel in figure.panels)
 
 
+def test_every_panel_says_what_it_measures_and_in_which_unit():
+    """Un panel se lee solo: el eje vertical nombra la magnitud y, si tiene unidad, es la
+    misma que acompaña a cada valor rotulado."""
+    for figure in FIGURES:
+        assert figure.rows_label
+        for panel in figure.panels:
+            assert panel.title and panel.measure.axis and panel.measure.unit
+            assert panel.measure.unit in panel.measure.axis
+
+
 def test_a_figure_is_written_to_disk(tmp_path: Path):
     pytest.importorskip("matplotlib")
     figure = Figure(
         filename="prueba",
         report="prueba",
         title="Título",
-        subtitle="Subtítulo",
+        subtitle="Subtítulo\nen dos líneas",
+        rows_label="filas",
         columns=2,
         panels=(
-            compare("leer", "Leer", "ms", (("a", STYLE), ("b", Style(BLUE, "s")))),
-            compare("espacio", "Espacio", "KiB", (("a", STYLE),), field="kib", note="nota"),
+            compare("leer", "Leer", TOTAL_TIME, (("a", STYLE), ("b", Style(BLUE, "s")))),
+            compare("espacio", "Espacio", DISK_SPACE, (("a", STYLE),), field="kib", note="nota"),
         ),
     )
     path = draw(figure, REPORT, tmp_path)

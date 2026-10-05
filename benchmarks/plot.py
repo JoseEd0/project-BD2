@@ -7,6 +7,10 @@ Lee los JSON de `results/` y escribe en `figures/` una imagen por comparación d
 enunciado. Cada imagen es una fila de paneles pequeños, uno por operación, con el tamaño
 del conjunto de datos en el eje horizontal y una línea por técnica.
 
+Cada panel se tiene que entender solo: su título dice la operación, el eje vertical dice
+qué se mide y en qué unidad, y el valor que se rotula al final de cada línea lleva esa
+misma unidad.
+
 Los dos ejes son logarítmicos: los tamaños van de 1 000 a 100 000 y los tiempos cubren
 cuatro órdenes de magnitud, así que en escala lineal solo se vería la técnica más lenta.
 En un eje logarítmico una recta es una ley de potencia y su pendiente dice cómo escala la
@@ -48,28 +52,33 @@ DARK_BLUE = "#104281"
 
 FONT_FAMILY = ["Helvetica Neue", "Helvetica", "Arial", "DejaVu Sans"]
 DPI = 170
-PANEL_WIDTH = 3.5
-PANEL_HEIGHT = 2.95
-HEADER_HEIGHT = 1.05
-LEGEND_ROW_HEIGHT = 0.24
+PANEL_WIDTH = 3.45
+PANEL_HEIGHT = 3.05
+HEADER_HEIGHT = 1.12
+SUBTITLE_LINE_HEIGHT = 0.21
+LEGEND_ROW_HEIGHT = 0.26
 # Entradas de leyenda que caben en una fila por cada columna de paneles.
 LEGEND_ENTRIES_PER_COLUMN = 2
 LINE_WIDTH = 2.0
 MARKER_SIZE = 7.5
 MARKER_RING = 1.6
-LABEL_SIZE = 8.5
-TITLE_SIZE = 13.0
+LABEL_SIZE = 10.0
+TITLE_SIZE = 14.5
 END_LABEL_OFFSET = 9.0
-END_LABEL_GAP = 11.0
+END_LABEL_GAP = 12.5
 LEADER_THRESHOLD = 3.0
 LEADER_EXTRA = 4.0
-RIGHT_MARGIN_FACTOR = 3.4
+# Sitio a la derecha del último punto para su rótulo, que lleva el valor y la unidad.
+RIGHT_MARGIN_FACTOR = 6.5
 # Con menos de este número de décadas en el eje vertical, una marca por década dejaría el
 # panel con una sola referencia; se añaden las marcas 2 y 5 de cada década.
 DECADES_NEEDING_SUBTICKS = 2.0
 SPARSE_TICKS = (1.0,)
 DENSE_TICKS = (1.0, 2.0, 5.0)
 LEFT_MARGIN_FACTOR = 0.72
+# Parte del alto del eje, en décadas, que se deja libre arriba cuando el panel lleva una
+# nota: así la nota no pisa ninguna línea.
+NOTE_HEADROOM = 0.30
 DASHES = (4.0, 2.2)
 THOUSANDS = "\N{NARROW NO-BREAK SPACE}"
 
@@ -99,21 +108,45 @@ class Line:
 
 
 @dataclass(frozen=True, slots=True)
+class Measure:
+    """Lo que representa el eje vertical de un panel.
+
+    Attributes:
+        axis: rótulo del eje, con la magnitud y su unidad: `tiempo total (ms)`.
+        unit: unidad que acompaña a cada valor rotulado: `ms`.
+    """
+
+    axis: str
+    unit: str
+
+
+TOTAL_TIME = Measure("tiempo total (ms)", "ms")
+QUERY_TIME = Measure("tiempo por consulta (ms)", "ms")
+DISK_SPACE = Measure("espacio en disco (KiB)", "KiB")
+MEMORY = Measure("memoria (KiB)", "KiB")
+NODES = Measure("número de nodos", "nodos")
+
+
+@dataclass(frozen=True, slots=True)
 class Panel:
     title: str
-    unit: str
+    measure: Measure
     lines: tuple[Line, ...]
     note: str = ""
 
 
 @dataclass(frozen=True, slots=True)
 class Figure:
-    """Una imagen: el informe del que sale y los paneles que la componen."""
+    """Una imagen: el informe del que sale y los paneles que la componen.
+
+    `rows_label` dice qué cuenta el eje horizontal: filas de una tabla, puntos indexados.
+    """
 
     filename: str
     report: str
     title: str
     subtitle: str
+    rows_label: str
     columns: int
     panels: tuple[Panel, ...]
 
@@ -121,14 +154,14 @@ class Figure:
 def compare(
     operation: str,
     title: str,
-    unit: str,
+    measure: Measure,
     techniques: Sequence[tuple[str, Style]],
     field: str | None = None,
     note: str = "",
 ) -> Panel:
     """Panel con una línea por técnica para una misma operación."""
     lines = tuple(Line(name, style, name, operation, field) for name, style in techniques)
-    return Panel(title, unit, lines, note)
+    return Panel(title, measure, lines, note)
 
 
 HEAP = ("heap file", Style(BLUE, "o"))
@@ -148,7 +181,13 @@ RTREE_INSERTED = ("R-Tree (inserción)", Style(ORANGE, "D", dashed=True))
 SPATIAL = (SCAN, RTREE, GIST)
 SPATIAL_INDEXES = (RTREE, RTREE_INSERTED, GIST)
 
-TIME_AXES = "Los dos ejes son logarítmicos. Más abajo es mejor."
+# Lo que hay que saber para leer cualquiera de las figuras, en dos líneas.
+READING_GUIDE = (
+    "Ejes logarítmicos: cada marca vale diez veces la anterior. Más abajo es mejor.\n"
+    "El valor rotulado al final de cada línea es el de la tabla más grande (100 000)."
+)
+TABLE_ROWS = "número de filas de la tabla"
+TABLE_POINTS = "número de puntos de la tabla"
 
 
 def _visited(label: str, operation: str, color: str, marker: str) -> Line:
@@ -160,16 +199,17 @@ FIGURES: tuple[Figure, ...] = (
         filename="almacenamiento",
         report="almacenamiento",
         title="Heap file frente a archivo secuencial",
-        subtitle=f"Coste de cada operación según el número de filas. {TIME_AXES}",
+        subtitle=f"Cuánto cuesta cada operación según el tamaño de la tabla.\n{READING_GUIDE}",
+        rows_label=TABLE_ROWS,
         columns=2,
         panels=(
-            compare("inserción", "Insertar todas las filas", "ms", STORAGE),
-            compare("búsqueda por clave", "100 búsquedas por clave", "ms", STORAGE),
-            compare("espacio en disco", "Espacio en disco", "KiB", STORAGE, field="kib"),
+            compare("inserción", "Insertar todas las filas", TOTAL_TIME, STORAGE),
+            compare("búsqueda por clave", "100 búsquedas por clave", TOTAL_TIME, STORAGE),
+            compare("espacio en disco", "Espacio que ocupa el archivo", DISK_SPACE, STORAGE, "kib"),
             compare(
                 "reorganización",
                 "Reorganizar el archivo",
-                "ms",
+                TOTAL_TIME,
                 (SEQUENTIAL_FILE,),
                 note="El heap no se reorganiza:\nreutiliza los huecos al insertar.",
             ),
@@ -179,30 +219,31 @@ FIGURES: tuple[Figure, ...] = (
         filename="indices",
         report="indices",
         title="B+ agrupado, B+ no agrupado y hash extendible",
-        subtitle=f"Coste de cada operación según el número de filas. {TIME_AXES}",
+        subtitle=f"Cuánto cuesta cada operación según el tamaño de la tabla.\n{READING_GUIDE}",
+        rows_label=TABLE_ROWS,
         columns=3,
         panels=(
-            compare("construcción", "Construir el índice", "ms", INDEXES),
-            compare("igualdad", "100 búsquedas por igualdad", "ms", INDEXES),
+            compare("construcción", "Construir el índice", TOTAL_TIME, INDEXES),
+            compare("igualdad", "100 búsquedas por igualdad", TOTAL_TIME, INDEXES),
             compare(
                 "rango",
                 "100 consultas por rango",
-                "ms",
+                TOTAL_TIME,
                 ORDERED_INDEXES,
                 note="El hash no admite rangos:\nno guarda orden.",
             ),
             compare(
                 "recorrido ordenado",
-                "Recorrer todo en orden",
-                "ms",
+                "Recorrer toda la tabla en orden",
+                TOTAL_TIME,
                 ORDERED_INDEXES,
                 note="El hash no puede:\nhabría que ordenar aparte.",
             ),
-            compare("espacio", "Espacio en disco", "KiB", INDEXES, field="kib"),
+            compare("espacio", "Espacio que ocupa el índice", DISK_SPACE, INDEXES, field="kib"),
             compare(
                 "inserciones/eliminaciones",
-                "Insertar y borrar el 10 % de las filas",
-                "ms",
+                "Borrar y reinsertar el 10 %",
+                TOTAL_TIME,
                 INDEXES,
             ),
         ),
@@ -211,39 +252,48 @@ FIGURES: tuple[Figure, ...] = (
         filename="espacial-radio",
         report="espacial",
         title="Consultas por radio: recorrido secuencial, R-Tree y GiST",
-        subtitle=f"Tiempo medio por consulta, sobre 100 consultas. {TIME_AXES}",
+        subtitle=f"Tiempo medio de una consulta (promedio de 100).\n{READING_GUIDE}",
+        rows_label=TABLE_POINTS,
         columns=3,
         panels=(
-            compare("radio 1 km", "Radio de 1 km", "ms por consulta", SPATIAL),
-            compare("radio 5 km", "Radio de 5 km", "ms por consulta", SPATIAL),
-            compare("radio 10 km", "Radio de 10 km", "ms por consulta", SPATIAL),
+            compare("radio 1 km", "Lugares a menos de 1 km", QUERY_TIME, SPATIAL),
+            compare("radio 5 km", "Lugares a menos de 5 km", QUERY_TIME, SPATIAL),
+            compare("radio 10 km", "Lugares a menos de 10 km", QUERY_TIME, SPATIAL),
         ),
     ),
     Figure(
         filename="espacial-knn",
         report="espacial",
         title="Vecinos más cercanos: recorrido secuencial, R-Tree y GiST",
-        subtitle=f"Tiempo medio por consulta, sobre 100 consultas. {TIME_AXES}",
+        subtitle=f"Tiempo medio de una consulta (promedio de 100).\n{READING_GUIDE}",
+        rows_label=TABLE_POINTS,
         columns=3,
         panels=(
-            compare("k-NN k=10", "Los 10 más cercanos", "ms por consulta", SPATIAL),
-            compare("k-NN k=50", "Los 50 más cercanos", "ms por consulta", SPATIAL),
-            compare("k-NN k=100", "Los 100 más cercanos", "ms por consulta", SPATIAL),
+            compare("k-NN k=10", "Los 10 lugares más cercanos", QUERY_TIME, SPATIAL),
+            compare("k-NN k=50", "Los 50 lugares más cercanos", QUERY_TIME, SPATIAL),
+            compare("k-NN k=100", "Los 100 lugares más cercanos", QUERY_TIME, SPATIAL),
         ),
     ),
     Figure(
         filename="espacial-indice",
         report="espacial",
         title="Lo que cuesta tener el índice espacial",
-        subtitle=f"Construcción, espacio y memoria según el número de puntos. {TIME_AXES}",
+        subtitle=f"Construirlo, guardarlo y consultarlo, según el tamaño.\n{READING_GUIDE}",
+        rows_label=TABLE_POINTS,
         columns=3,
         panels=(
-            compare("construcción", "Construir el índice", "ms", SPATIAL_INDEXES),
-            compare("espacio del índice", "Espacio del índice", "KiB", SPATIAL_INDEXES, "kib"),
+            compare("construcción", "Construir el índice", TOTAL_TIME, SPATIAL_INDEXES),
+            compare(
+                "espacio del índice",
+                "Espacio que ocupa el índice",
+                DISK_SPACE,
+                SPATIAL_INDEXES,
+                field="kib",
+            ),
             compare(
                 "memoria pico",
-                "Memoria pico al consultar",
-                "KiB",
+                "Memoria máxima al consultar",
+                MEMORY,
                 (SCAN, RTREE),
                 field="kib",
                 note="Solo el motor propio:\nmedido con tracemalloc.",
@@ -255,14 +305,15 @@ FIGURES: tuple[Figure, ...] = (
         report="espacial",
         title="Nodos del R-Tree que abre cada consulta",
         subtitle=(
-            "Media sobre 100 consultas, comparada con el total de nodos del árbol. "
-            "Los dos ejes son logarítmicos."
+            "Promedio de 100 consultas, frente a todos los nodos que tiene el árbol.\n"
+            "Ejes logarítmicos. El valor rotulado es el de la tabla más grande (100 000)."
         ),
+        rows_label=TABLE_POINTS,
         columns=2,
         panels=(
             Panel(
                 "Consultas por radio",
-                "nodos",
+                NODES,
                 (
                     _visited("radio 1 km", "radio 1 km", LIGHT_BLUE, "o"),
                     _visited("radio 5 km", "radio 5 km", BLUE, "s"),
@@ -278,7 +329,7 @@ FIGURES: tuple[Figure, ...] = (
             ),
             Panel(
                 "Vecinos más cercanos",
-                "nodos",
+                NODES,
                 (
                     _visited("k = 10", "k-NN k=10", LIGHT_BLUE, "o"),
                     _visited("k = 50", "k-NN k=50", BLUE, "s"),
@@ -376,18 +427,23 @@ def draw(figure: Figure, report: dict[str, Any], output: Path) -> Path:
     rows = -(-len(figure.panels) // figure.columns)
     legend_columns = LEGEND_ENTRIES_PER_COLUMN * figure.columns
     legend_rows = -(-len(_legend_labels(figure)) // legend_columns)
-    header = HEADER_HEIGHT + LEGEND_ROW_HEIGHT * (legend_rows - 1)
+    subtitle_lines = figure.subtitle.count("\n") + 1
+    header = (
+        HEADER_HEIGHT
+        + SUBTITLE_LINE_HEIGHT * (subtitle_lines - 1)
+        + LEGEND_ROW_HEIGHT * (legend_rows - 1)
+    )
     width = PANEL_WIDTH * figure.columns
     height = PANEL_HEIGHT * rows + header
     canvas, grid = plt.subplots(rows, figure.columns, figsize=(width, height), squeeze=False)
     canvas.set_facecolor(SURFACE)
     axes = [axis for row in grid for axis in row]
     for axis, panel in zip(axes, figure.panels, strict=False):
-        _draw_panel(axis, panel, report)
+        _draw_panel(axis, panel, report, figure.rows_label)
     for axis in axes[len(figure.panels) :]:
         axis.set_visible(False)
     _draw_header(canvas, figure, height, legend_columns)
-    canvas.tight_layout(rect=(0.0, 0.0, 1.0, 1.0 - header / height), w_pad=1.6, h_pad=1.9)
+    canvas.tight_layout(rect=(0.0, 0.0, 1.0, 1.0 - header / height), w_pad=1.8, h_pad=2.2)
     for axis, panel in zip(axes, figure.panels, strict=False):
         _label_ends(axis, panel, report)
     output.mkdir(parents=True, exist_ok=True)
@@ -416,7 +472,10 @@ def _draw_header(canvas: Any, figure: Figure, height: float, legend_columns: int
         color=SECONDARY_INK,
         fontsize=LABEL_SIZE + 0.5,
         va="top",
+        linespacing=1.4,
     )
+    subtitle_lines = figure.subtitle.count("\n") + 1
+    legend_top = top - (0.52 + SUBTITLE_LINE_HEIGHT * (subtitle_lines - 1)) / height
     handles: dict[str, Any] = {}
     for axis in canvas.axes:
         for handle, label in zip(*axis.get_legend_handles_labels(), strict=True):
@@ -425,7 +484,7 @@ def _draw_header(canvas: Any, figure: Figure, height: float, legend_columns: int
         handles.values(),
         handles.keys(),
         loc="upper left",
-        bbox_to_anchor=(0.004, top - 0.52 / height),
+        bbox_to_anchor=(0.004, legend_top),
         ncols=min(len(handles), legend_columns),
         frameon=False,
         fontsize=LABEL_SIZE + 0.5,
@@ -435,7 +494,7 @@ def _draw_header(canvas: Any, figure: Figure, height: float, legend_columns: int
     )
 
 
-def _draw_panel(axis: Any, panel: Panel, report: dict[str, Any]) -> None:
+def _draw_panel(axis: Any, panel: Panel, report: dict[str, Any], rows_label: str) -> None:
     from math import log10
 
     from matplotlib.ticker import FixedLocator, FuncFormatter, LogLocator, NullLocator
@@ -468,6 +527,9 @@ def _draw_panel(axis: Any, panel: Panel, report: dict[str, Any]) -> None:
         axis.set_xlim(min(sizes) * LEFT_MARGIN_FACTOR, max(sizes) * RIGHT_MARGIN_FACTOR)
     axis.margins(y=0.16)
     low, high = axis.get_ylim()
+    if panel.note:
+        high *= (high / low) ** NOTE_HEADROOM
+        axis.set_ylim(low, high)
     crowded = log10(high / low) >= DECADES_NEEDING_SUBTICKS
     axis.xaxis.set_major_locator(FixedLocator(sorted(sizes)))
     axis.yaxis.set_major_locator(LogLocator(subs=SPARSE_TICKS if crowded else DENSE_TICKS))
@@ -481,10 +543,9 @@ def _draw_panel(axis: Any, panel: Panel, report: dict[str, Any]) -> None:
         axis.spines[side].set_visible(False)
     axis.spines["bottom"].set_color(AXIS)
     axis.tick_params(axis="both", colors=MUTED_INK, length=0, labelsize=LABEL_SIZE)
-    axis.set_title(
-        f"{panel.title} ({panel.unit})", loc="left", color=INK, fontsize=LABEL_SIZE + 1.5, pad=9
-    )
-    axis.set_xlabel("filas", color=MUTED_INK, fontsize=LABEL_SIZE, labelpad=3)
+    axis.set_title(panel.title, loc="left", color=INK, fontsize=LABEL_SIZE + 1.5, pad=9)
+    axis.set_xlabel(rows_label, color=SECONDARY_INK, fontsize=LABEL_SIZE, labelpad=4)
+    axis.set_ylabel(panel.measure.axis, color=SECONDARY_INK, fontsize=LABEL_SIZE, labelpad=5)
     if panel.note:
         axis.text(
             0.04,
@@ -516,7 +577,7 @@ def _label_ends(axis: Any, panel: Panel, report: dict[str, Any]) -> None:
         displacement = height - anchor
         moved = abs(displacement) > LEADER_THRESHOLD
         axis.annotate(
-            format_number(end[1]),
+            f"{format_number(end[1])} {panel.measure.unit}",
             xy=end,
             xycoords="data",
             xytext=(END_LABEL_OFFSET + (LEADER_EXTRA if moved else 0.0), displacement),
@@ -524,6 +585,7 @@ def _label_ends(axis: Any, panel: Panel, report: dict[str, Any]) -> None:
             color=SECONDARY_INK,
             fontsize=LABEL_SIZE,
             va="center",
+            bbox={"facecolor": SURFACE, "edgecolor": "none", "pad": 1.2},
             arrowprops={"arrowstyle": "-", "color": AXIS, "linewidth": 0.8} if moved else None,
             zorder=4,
         )

@@ -29,9 +29,17 @@ def test_has_field(schema: Schema):
     assert not schema.has_field("apellido")
 
 
-def test_projection_keeps_the_requested_order(schema: Schema):
-    assert schema.project(["nota", "id"]).names == ("nota", "id")
-
-
 def test_schemas_with_the_same_fields_are_equal(schema: Schema):
     assert Schema(list(schema.fields)) == schema
+
+
+def test_equal_schemas_hash_alike_and_differ_from_anything_else(schema: Schema):
+    twin = Schema(list(schema.fields))
+    assert hash(twin) == hash(schema)
+    assert len({twin, schema}) == 1
+    assert schema != Schema([Field("id", FieldType.INT)])
+    assert schema != "id, nombre, nota"
+
+
+def test_a_schema_shows_its_fields(schema: Schema):
+    assert all(name in repr(schema) for name in schema.names)

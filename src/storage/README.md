@@ -27,14 +27,17 @@ fijo, sin excepción:
 
 | Tipo | Bytes | Representación |
 |---|---|---|
-| `INT` | 8 | entero con signo |
+| `INT` | 8 | entero con signo de 64 bits; admite un real sin decimales (`10.0`) |
 | `FLOAT` | 8 | doble precisión |
 | `BOOL` | 1 | 0 / 1 |
-| `DATE` | 4 | días desde 1970-01-01 (preserva el orden) |
+| `DATE` | 4 | días desde 1970-01-01 (preserva el orden); se acepta como texto ISO `AAAA-MM-DD` |
 | `STRING(n)` | n | UTF-8 rellenado con ceros |
 | `BYTES(n)` | n | crudo rellenado con ceros |
 | `POINT` | 16 | dos dobles (lat, lon) |
 | `VECTOR(n)` | 4n | n flotantes de precisión simple |
+
+Un valor que no cabe se rechaza con un error del almacenamiento, nunca se trunca: un texto
+más largo que el campo, un entero fuera de los 64 bits, un real con decimales en un `INT`.
 
 **¿Por qué tamaño fijo?** Porque hace que la posición de cualquier registro dentro de una
 página sea una multiplicación, no una búsqueda. Sin eso, el archivo secuencial no podría

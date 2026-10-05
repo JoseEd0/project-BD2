@@ -13,7 +13,12 @@ from datetime import date, timedelta
 from enum import Enum, unique
 from typing import Any
 
+from spatial.geometry import GeometryError, Point, geographic_point
+
 EPOCH = date(1970, 1, 1)
+INT_BITS = 64
+MIN_INT = -(1 << (INT_BITS - 1))
+MAX_INT = (1 << (INT_BITS - 1)) - 1
 STRING_PADDING = b"\x00"
 TEXT_ENCODING = "utf-8"
 
@@ -82,12 +87,20 @@ class FieldCodec(ABC):
 
 
 class IntCodec(FieldCodec):
+    """Entero de 64 bits. Admite un real sin decimales, como el `10.0` que da `20 / 2`."""
+
     format = "q"
     slots = 1
 
     def to_slots(self, value: Value) -> tuple[Any, ...]:
+        if isinstance(value, float) and value.is_integer():
+            value = int(value)
         if isinstance(value, bool) or not isinstance(value, int):
             raise InvalidValueError(f"se esperaba un entero, llegó {value!r}")
+        if not MIN_INT <= value <= MAX_INT:
+            raise ValueTooLargeError(
+                f"un entero de {len(str(abs(value)))} cifras no cabe en {INT_BITS} bits"
+            )
         return (value,)
 
     def from_slots(self, slots: tuple[Any, ...]) -> Value:
@@ -104,7 +117,7 @@ class FloatCodec(FieldCodec):
     def to_slots(self, value: Value) -> tuple[Any, ...]:
         if isinstance(value, bool) or not isinstance(value, int | float):
             raise InvalidValueError(f"se esperaba un número, llegó {value!r}")
-        return (float(value),)
+        return (real_from(value),)
 
     def from_slots(self, slots: tuple[Any, ...]) -> Value:
         return float(slots[0])
@@ -136,9 +149,7 @@ class DateCodec(FieldCodec):
     slots = 1
 
     def to_slots(self, value: Value) -> tuple[Any, ...]:
-        if not isinstance(value, date):
-            raise InvalidValueError(f"se esperaba una fecha, llegó {value!r}")
-        return ((value - EPOCH).days,)
+        return ((date_from(value) - EPOCH).days,)
 
     def from_slots(self, slots: tuple[Any, ...]) -> Value:
         return EPOCH + timedelta(days=int(slots[0]))
@@ -197,20 +208,33 @@ class BytesCodec(FieldCodec):
 
 
 class PointCodec(FieldCodec):
+    """Guarda un punto geográfico como dos dobles: latitud y longitud.
+
+    Todo punto pasa por aquí antes de llegar al disco, así que es el lugar donde se
+    comprueba que las coordenadas son válidas: el R-Tree y la distancia Haversine dan por
+    hecho que lo son.
+    """
+
     format = "dd"
     slots = 2
     COORDINATES = 2
 
     def to_slots(self, value: Value) -> tuple[Any, ...]:
         if not isinstance(value, tuple) or len(value) != self.COORDINATES:
-            raise InvalidValueError(f"se esperaba un par de coordenadas, llegó {value!r}")
-        return (float(value[0]), float(value[1]))
+            raise InvalidValueError(f"se esperaba un punto (latitud, longitud), llegó {value!r}")
+        lat, lon = value
+        if not _is_number(lat) or not _is_number(lon):
+            raise InvalidValueError(f"las coordenadas de un punto son números, llegó {value!r}")
+        try:
+            return tuple(geographic_point(lat, lon))
+        except GeometryError as error:
+            raise InvalidValueError(str(error)) from error
 
     def from_slots(self, slots: tuple[Any, ...]) -> Value:
-        return (float(slots[0]), float(slots[1]))
+        return Point(float(slots[0]), float(slots[1]))
 
     def neutral_value(self) -> Value:
-        return (0.0, 0.0)
+        return Point(0.0, 0.0)
 
 
 class VectorCodec(FieldCodec):
@@ -231,6 +255,40 @@ class VectorCodec(FieldCodec):
 
     def neutral_value(self) -> Value:
         return (0.0,) * self.dimension
+
+
+def date_from(value: Value) -> date:
+    """Fecha a partir de un `date` o de su texto ISO, `AAAA-MM-DD`.
+
+    Raises:
+        InvalidValueError: si el valor no es una fecha ni un texto con ese formato.
+    """
+    if isinstance(value, date):
+        return value
+    if isinstance(value, str):
+        try:
+            return date.fromisoformat(value.strip())
+        except ValueError:
+            raise InvalidValueError(f"'{value}' no es una fecha AAAA-MM-DD") from None
+    raise InvalidValueError(f"se esperaba una fecha, llegó {value!r}")
+
+
+def real_from(value: int | float) -> float:
+    """El número como real de doble precisión.
+
+    Raises:
+        ValueTooLargeError: si es un entero demasiado grande para un doble.
+    """
+    try:
+        return float(value)
+    except OverflowError:
+        raise ValueTooLargeError(
+            f"un entero de {len(str(abs(value)))} cifras no cabe en un real"
+        ) from None
+
+
+def _is_number(value: object) -> bool:
+    return isinstance(value, int | float) and not isinstance(value, bool)
 
 
 _UNSIZED_CODECS: dict[FieldType, FieldCodec] = {

@@ -99,15 +99,6 @@ class Schema:
     def has_field(self, name: str) -> bool:
         return name.lower() in self._positions
 
-    def project(self, names: Sequence[str]) -> Schema:
-        """Esquema con solo los campos indicados, en el orden dado."""
-        return Schema([self.field_of(name) for name in names])
-
-
-def single_field_schema(field: Field) -> Schema:
-    """Esquema de un solo campo, usado por los índices para serializar claves."""
-    return Schema([field])
-
 
 __all__ = [
     "DuplicateFieldError",
@@ -115,5 +106,4 @@ __all__ = [
     "FieldType",
     "Schema",
     "UnknownFieldError",
-    "single_field_schema",
 ]

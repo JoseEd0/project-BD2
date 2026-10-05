@@ -185,3 +185,131 @@ def test_opening_with_another_schema_is_rejected(
     other = RecordSerializer(Schema([Field("id", FieldType.INT)]))
     with pytest.raises(SequentialFormatError):
         SequentialFile(path, other, "id", config)
+
+
+def test_an_empty_file_answers_ranges_and_deletes(sequential: SequentialFile):
+    assert list(sequential.range_search(1, 100)) == []
+    assert sequential.delete(5) == 0
+
+
+def test_an_inverted_range_is_empty(sequential: SequentialFile, serializer: RecordSerializer):
+    for key in range(10):
+        sequential.insert(row(serializer, key))
+    assert list(sequential.range_search(7, 3)) == []
+
+
+def test_deleting_a_key_twice_removes_it_once(
+    sequential: SequentialFile, serializer: RecordSerializer
+):
+    """La lápida conserva la clave en su sitio, así que el segundo borrado la encuentra y
+    tiene que reconocer que ya no hay nada vigente que quitar."""
+    for key in range(10):
+        sequential.insert(row(serializer, key))
+    assert sequential.delete(4) == 1
+    assert sequential.delete(4) == 0
+    assert sequential.record_count == 9
+    assert keys_of(list(sequential.range_search(3, 5)), serializer) == [3, 5]
+
+
+def test_a_file_that_is_not_sequential_is_rejected(
+    config: EngineConfig, serializer: RecordSerializer
+):
+    path = config.data_directory / "ajeno.seq"
+    path.write_bytes(b"x" * config.page_size)
+    with pytest.raises(SequentialFormatError, match="no es un archivo secuencial"):
+        SequentialFile(path, serializer, "id", config)
+
+
+def test_keys_below_the_first_one_are_found_in_the_overflow_of_the_first_page(
+    config: EngineConfig, serializer: RecordSerializer
+):
+    """Con la primera página llena, una clave menor que todas va a su desbordamiento. La
+    primera clave de esa página deja entonces de ser la menor del archivo, y ni la
+    búsqueda ni el rango pueden descartarla mirándola."""
+    lenient = EngineConfig(
+        page_size=config.page_size,
+        sequential_waste_ratio=0.95,
+        data_directory=config.data_directory,
+    )
+    with SequentialFile(lenient.data_directory / "bajo.seq", serializer, "id", lenient) as file:
+        for key in range(100, 100 + file.slots_per_page * 2):
+            file.insert(row(serializer, key))
+        file.insert(row(serializer, 7))
+        file.insert(row(serializer, 5))
+        assert keys_of(file.search(5), serializer) == [5]
+        assert keys_of(list(file.range_search(1, 50)), serializer) == [5, 7]
+        assert keys_of(list(file.range_search(6, 100)), serializer) == [7, 100]
+        assert keys_of(list(file.scan()), serializer)[:3] == [5, 7, 100]
+        assert file.delete(5) == 1
+        assert keys_of(list(file.range_search(1, 50)), serializer) == [7]
+
+
+@pytest.mark.parametrize(("low", "high"), [(None, 12), (40, None), (None, None), (None, -1)])
+def test_a_range_can_be_open_on_either_side(
+    sequential: SequentialFile, serializer: RecordSerializer, low: int | None, high: int | None
+):
+    keys = list(range(0, 60, 2))
+    for key in keys:
+        sequential.insert(row(serializer, key))
+    expected = [
+        key for key in keys if (low is None or key >= low) and (high is None or key <= high)
+    ]
+    assert keys_of(list(sequential.range_search(low, high)), serializer) == expected
+
+
+def test_a_key_repeated_across_several_pages_is_found_whole(
+    sequential: SequentialFile, serializer: RecordSerializer
+):
+    """Tras reorganizar, las copias de una misma clave quedan seguidas y pueden cruzar de
+    una página a la siguiente: buscar, recorrer un rango y borrar tienen que verlas todas,
+    no solo las de la página donde la búsqueda binaria aterriza."""
+    copies = sequential.slots_per_page
+    for key in (1, 2, 3):
+        for _ in range(copies):
+            sequential.insert(row(serializer, key))
+    sequential.reorganize()
+    assert sequential.main_page_count > 3
+    for key in (1, 2, 3):
+        assert len(sequential.search(key)) == copies
+        assert len(list(sequential.range_search(key, key))) == copies
+    assert len(list(sequential.range_search(2, 3))) == copies * 2
+    assert sequential.delete(2) == copies
+    assert sequential.search(2) == []
+    assert sequential.record_count == copies * 2
+    assert keys_of(list(sequential.scan()), serializer) == [1] * copies + [3] * copies
+
+
+def test_the_file_matches_a_sorted_list_through_random_operations(
+    config: EngineConfig, serializer: RecordSerializer
+):
+    """Inserciones, borrados y reorganizaciones al azar, con claves repetidas y claves por
+    debajo de la primera: tras cada tanda, el archivo responde como una lista ordenada."""
+    generator = random.Random(SHUFFLE_SEED)
+    model: list[int] = []
+    with SequentialFile(config.data_directory / "azar.seq", serializer, "id", config) as file:
+        for _ in range(60):
+            for _ in range(20):
+                key = generator.randint(-30, 120)
+                if generator.random() < 0.7:
+                    file.insert(row(serializer, key))
+                    model.append(key)
+                else:
+                    assert file.delete(key) == model.count(key)
+                    model = [kept for kept in model if kept != key]
+            if generator.random() < 0.1:
+                file.reorganize()
+            model.sort()
+            assert keys_of(list(file.scan()), serializer) == model
+            assert file.record_count == len(model)
+            probe = generator.randint(-30, 120)
+            assert len(file.search(probe)) == model.count(probe)
+            low, high = sorted((generator.randint(-40, 130), generator.randint(-40, 130)))
+            assert keys_of(list(file.range_search(low, high)), serializer) == [
+                key for key in model if low <= key <= high
+            ]
+            assert keys_of(list(file.range_search(low, None)), serializer) == [
+                key for key in model if key >= low
+            ]
+            assert keys_of(list(file.range_search(None, high)), serializer) == [
+                key for key in model if key <= high
+            ]

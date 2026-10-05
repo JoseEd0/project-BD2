@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import struct
 from bisect import bisect_left, bisect_right
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from types import TracebackType
 from typing import Any
@@ -127,27 +127,27 @@ class SequentialFile:
 
     def search(self, key: Key) -> list[bytes]:
         """Todos los registros vigentes con esa clave."""
-        if self._main_page_count == 0:
-            return []
-        page_id = self._locate_page(key)
-        page = self._load_main(page_id)
-        matches = [record for _, record in self._page_matches(page, key)]
-        matches.extend(record for _, record in self._chain_matches(page.next_page, key))
+        matches: list[bytes] = []
+        for _, page in self._pages_holding(key):
+            matches.extend(record for _, record in self._page_matches(page, key))
+            matches.extend(record for _, record in self._chain_matches(page.next_page, key))
         return matches
 
-    def range_search(self, low: Key, high: Key) -> Iterator[bytes]:
-        """Registros vigentes con `low <= clave <= high`, en orden de clave."""
-        if self._main_page_count == 0 or low > high:
-            return
-        for page_id in range(self._locate_page(low), self._main_page_count + 1):
-            page = self._load_main(page_id)
-            first_key = self._first_key(page)
-            if first_key is not None and first_key > high:
-                return
-            for key, record in self._sorted_page_records(page):
-                if key > high:
+    def range_search(self, low: Key | None, high: Key | None) -> Iterator[bytes]:
+        """Registros vigentes con `low <= clave <= high`, en orden de clave.
+
+        Un extremo `None` deja el rango abierto por ese lado.
+
+        La primera clave de una página no sirve para descartarla: el desbordamiento de la
+        primera página puede guardar claves menores que todas las del espacio principal.
+        Se corta al encontrar el primer registro que se pasa de `high`.
+        """
+        first_page = FIRST_MAIN_PAGE if low is None else self._first_page_holding(low)
+        for page_id in range(first_page, self._main_page_count + 1):
+            for key, record in self._sorted_page_records(self._load_main(page_id)):
+                if high is not None and key > high:
                     return
-                if key >= low:
+                if low is None or key >= low:
                     yield record
 
     def scan(self) -> Iterator[bytes]:
@@ -159,14 +159,12 @@ class SequentialFile:
 
     def delete(self, key: Key) -> int:
         """Marca como borrados todos los registros con esa clave y devuelve cuántos."""
-        if self._main_page_count == 0:
-            return 0
-        page_id = self._locate_page(key)
-        page = self._load_main(page_id)
-        removed = self._tombstone_in_page(page, key)
-        if removed:
-            self._store_main(page_id, page)
-        removed += self._tombstone_in_chain(page.next_page, key)
+        removed = 0
+        for page_id, page in self._pages_holding(key):
+            in_page = self._tombstone_in_page(page, key)
+            if in_page:
+                self._store_main(page_id, page)
+            removed += in_page + self._tombstone_in_chain(page.next_page, key)
         if removed == 0:
             return 0
         self._live_count -= removed
@@ -205,7 +203,7 @@ class SequentialFile:
         self.close()
 
     def _insert_into_main(self, key: Key, record: bytes) -> None:
-        page_id = self._locate_page(key)
+        page_id = self._last_page_starting(lambda first_key: bool(first_key <= key))
         page = self._load_main(page_id)
         if page.used_slots < self._capacity:
             page.insert_at(self._insert_position(page, key), record)
@@ -242,19 +240,47 @@ class SequentialFile:
         self._store_main(page_id, page)
         self._main_page_count += 1
 
-    def _locate_page(self, key: Key) -> int:
-        """Última página principal cuya primera clave no supera a `key`."""
+    def _last_page_starting(self, admits: Callable[[Key], bool]) -> int:
+        """Última página principal cuya primera clave cumple `admits`, por búsqueda binaria.
+
+        `admits` tiene que cumplirse en las primeras páginas y dejar de cumplirse a partir
+        de una, como «no supera a la clave». Si no lo cumple ninguna, devuelve la primera,
+        que es donde va —al espacio principal o a su desbordamiento— una clave menor que
+        todas.
+        """
         low, high = FIRST_MAIN_PAGE, self._main_page_count
         result = FIRST_MAIN_PAGE
         while low <= high:
             middle = (low + high) // 2
-            first_key = self._first_key(self._load_main(middle))
-            if first_key is None or first_key <= key:
+            if admits(self._first_key(self._load_main(middle))):
                 result = middle
                 low = middle + 1
             else:
                 high = middle - 1
         return result
+
+    def _first_page_holding(self, key: Key) -> int:
+        """Primera página principal que puede guardar esa clave.
+
+        Es la última que empieza por una clave **menor**: si empezara por la misma, la
+        anterior podría terminar con ella.
+        """
+        return self._last_page_starting(lambda first_key: bool(first_key < key))
+
+    def _pages_holding(self, key: Key) -> Iterator[tuple[int, RecordPage]]:
+        """Páginas principales que pueden guardar esa clave, con su número.
+
+        Casi siempre es una. Son varias cuando la clave está repetida tantas veces que sus
+        registros cruzan de una página a la siguiente.
+        """
+        first_page = self._first_page_holding(key)
+        for page_id in range(first_page, self._main_page_count + 1):
+            page = self._load_main(page_id)
+            if page_id > first_page and self._first_key(page) > key:
+                return
+            yield page_id, page
+            if self._last_key(page) > key:
+                return
 
     def _insert_position(self, page: RecordPage, key: Key) -> int:
         return bisect_right(self._page_keys(page), key)
@@ -321,9 +347,9 @@ class SequentialFile:
         """Claves de todas las ranuras ocupadas, incluidas las lápidas, en orden."""
         return [self._key_of(page.record_at(slot)) for slot in range(page.used_slots)]
 
-    def _first_key(self, page: RecordPage) -> Key | None:
-        if page.used_slots == 0:
-            return None
+    def _first_key(self, page: RecordPage) -> Key:
+        """Clave de la primera ranura. Una página principal nunca está vacía: nace con un
+        registro y borrar deja una lápida en su sitio."""
         return self._key_of(page.record_at(0))
 
     def _last_key(self, page: RecordPage) -> Key:

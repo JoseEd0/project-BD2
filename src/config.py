@@ -16,12 +16,16 @@ DEFAULT_SEQUENTIAL_FILL_FACTOR = 0.80
 DEFAULT_SORT_BUFFER_PAGES = 16
 DEFAULT_MERGE_FAN_IN = 8
 DEFAULT_HASH_PARTITIONS = 16
+DEFAULT_HASH_MERGE_FILL = 0.50
+DEFAULT_RTREE_MIN_FILL = 0.40
+DEFAULT_RTREE_BULK_FILL = 0.90
 DEFAULT_TEXT_LENGTH = 256
 DEFAULT_BLOB_LENGTH = 256
 DEFAULT_LOCK_TIMEOUT_SECONDS = 5.0
 DEFAULT_CSV_DELIMITER = ","
 DEFAULT_CSV_ENCODING = "utf-8"
 DEFAULT_MAX_UPLOAD_BYTES = 64 * 1024 * 1024
+DEFAULT_MAP_POINTS = 5000
 FALLBACK_DATA_DIRECTORY = "data"
 
 
@@ -39,12 +43,20 @@ class EngineConfig:
         sort_buffer_pages: páginas que el ordenamiento externo mantiene en memoria por run.
         merge_fan_in: número de runs que el k-way merge combina en cada pasada.
         hash_partitions: particiones que genera el hashing externo.
+        hash_merge_fill: fracción de una cubeta del hash extendible que pueden sumar dos
+            cubetas gemelas para fundirse tras un borrado. Por debajo de 1 deja hueco, y
+            así la siguiente inserción no las vuelve a partir.
+        rtree_min_fill: fracción mínima de ocupación de un nodo del R-Tree; por debajo de
+            ella el nodo se disuelve y sus entradas se reinsertan.
+        rtree_bulk_fill: fracción de cada nodo que llena la carga masiva del R-Tree,
+            dejando hueco para inserciones futuras.
         text_length: longitud fija que se asigna a las columnas TEXT.
         blob_length: longitud fija que se asigna a las columnas BLOB.
         lock_timeout_seconds: espera máxima de una transacción por un bloqueo.
         csv_delimiter: separador de los archivos que carga `CREATE TABLE ... FROM FILE`.
         csv_encoding: codificación de esos archivos.
         max_upload_bytes: tamaño máximo de un archivo subido por el API.
+        map_points: puntos que el API entrega como máximo para dibujar una tabla en el mapa.
         data_directory: raíz donde viven los archivos del gestor.
     """
 
@@ -55,10 +67,14 @@ class EngineConfig:
     sort_buffer_pages: int = DEFAULT_SORT_BUFFER_PAGES
     merge_fan_in: int = DEFAULT_MERGE_FAN_IN
     hash_partitions: int = DEFAULT_HASH_PARTITIONS
+    hash_merge_fill: float = DEFAULT_HASH_MERGE_FILL
+    rtree_min_fill: float = DEFAULT_RTREE_MIN_FILL
+    rtree_bulk_fill: float = DEFAULT_RTREE_BULK_FILL
     text_length: int = DEFAULT_TEXT_LENGTH
     blob_length: int = DEFAULT_BLOB_LENGTH
     lock_timeout_seconds: float = DEFAULT_LOCK_TIMEOUT_SECONDS
     csv_delimiter: str = DEFAULT_CSV_DELIMITER
     csv_encoding: str = DEFAULT_CSV_ENCODING
     max_upload_bytes: int = DEFAULT_MAX_UPLOAD_BYTES
+    map_points: int = DEFAULT_MAP_POINTS
     data_directory: Path = Path(FALLBACK_DATA_DIRECTORY)

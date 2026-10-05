@@ -9,7 +9,7 @@ archivo. Ver `README.md` para el diseño y las complejidades.
 from __future__ import annotations
 
 import struct
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 from types import TracebackType
 
@@ -44,17 +44,13 @@ class HeapFile:
     """
 
     def __init__(self, path: Path, record_size: int, config: EngineConfig) -> None:
-        self._pager = Pager(path, config)
         self._record_size = record_size
         self._capacity = slot_capacity(config.page_size, record_size)
+        self._pager = Pager(path, config)
         if self._pager.page_count == 0:
             self._create_header()
         self._magic, self._version, stored_size, self._free_head, self._count = self._read_header()
         self._validate(stored_size)
-
-    @property
-    def record_size(self) -> int:
-        return self._record_size
 
     @property
     def record_count(self) -> int:
@@ -74,7 +70,7 @@ class HeapFile:
         page = self._load(page_id)
         slot = page.insert(record)
         if page.first_free_slot() is None:
-            self._unlink_free_page(page_id, page)
+            self._unlink_free_head(page)
         self._store(page_id, page)
         self._count += 1
         self._write_header()
@@ -91,6 +87,26 @@ class HeapFile:
             return page.read(record_id.slot)
         except StorageError as error:
             raise RecordNotFoundError(f"no hay registro en {record_id}") from error
+
+    def read_many(self, record_ids: Iterable[RecordId]) -> Iterator[bytes]:
+        """Registros de varias direcciones, en el orden en que se piden.
+
+        Dos direcciones seguidas de la misma página comparten una sola lectura: quien las
+        pida ordenadas por página lee cada página una vez, por muchas filas que tenga.
+
+        Raises:
+            RecordNotFoundError: si alguna ranura está libre o borrada.
+        """
+        loaded = NO_PAGE
+        page: RecordPage | None = None
+        for record_id in record_ids:
+            if page is None or record_id.page_id != loaded:
+                page = self._load_data_page(record_id.page_id)
+                loaded = record_id.page_id
+            try:
+                yield page.read(record_id.slot)
+            except StorageError as error:
+                raise RecordNotFoundError(f"no hay registro en {record_id}") from error
 
     def update(self, record_id: RecordId, record: bytes) -> None:
         """Reemplaza el registro en su sitio, sin cambiar su dirección.
@@ -148,23 +164,21 @@ class HeapFile:
     def _grow(self) -> int:
         page_id = self._pager.allocate()
         page = RecordPage.create(self._pager.page_size, self._record_size)
-        if self._capacity > 1:
-            self._link_free_page(page_id, page)
+        self._link_free_page(page_id, page)
         self._store(page_id, page)
         return page_id
 
     def _link_free_page(self, page_id: int, page: RecordPage) -> None:
-        if page.flags & IN_FREE_LIST:
-            return
+        """Pone a la cabeza de la lista una página que acaba de ganar una ranura libre."""
         page.next_page = self._free_head
         page.flags |= IN_FREE_LIST
         self._free_head = page_id
 
-    def _unlink_free_page(self, page_id: int, page: RecordPage) -> None:
-        if not page.flags & IN_FREE_LIST:
-            return
-        if self._free_head != page_id:
-            raise StorageError("la página con espacio libre no está a la cabeza de la lista")
+    def _unlink_free_head(self, page: RecordPage) -> None:
+        """Saca de la lista la página que se acaba de llenar.
+
+        Es siempre la cabeza: `insert` no toma espacio de ninguna otra.
+        """
         self._free_head = page.next_page
         page.next_page = NO_PAGE
         page.flags &= ~IN_FREE_LIST

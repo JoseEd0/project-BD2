@@ -148,3 +148,18 @@ def test_next_page_and_flags_survive_serialization(page: RecordPage):
     assert restored.next_page == 7
     assert restored.flags == 3
     assert restored.read(0) == record(1)
+
+
+def test_remove_at_an_empty_position_is_rejected(page: RecordPage):
+    page.insert(record(1))
+    with pytest.raises(SlotOutOfRangeError):
+        page.remove_at(1)
+
+
+def test_live_count_ignores_freed_and_deleted_slots(page: RecordPage):
+    for marker in (1, 2, 3, 4):
+        page.insert(record(marker))
+    page.free(0)
+    page.tombstone(2)
+    assert page.live_count() == 2
+    assert page.used_slots == 4

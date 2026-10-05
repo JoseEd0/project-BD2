@@ -13,9 +13,14 @@ from typing import Any
 HASH_DIGEST_BYTES = 8
 
 
-def stable_hash(raw: bytes) -> int:
-    """Entero reproducible derivado de los bytes de una clave."""
-    return int.from_bytes(blake2b(raw, digest_size=HASH_DIGEST_BYTES).digest(), "little")
+def stable_hash(raw: bytes, salt: bytes = b"") -> int:
+    """Entero reproducible derivado de los bytes de una clave.
+
+    Cada `salt` da una función de hash distinta: dos claves que coinciden con una no
+    tienen por qué coincidir con otra.
+    """
+    digest = blake2b(raw, digest_size=HASH_DIGEST_BYTES, salt=salt).digest()
+    return int.from_bytes(digest, "little")
 
 
 def canonical_key_bytes(key: Any) -> bytes:

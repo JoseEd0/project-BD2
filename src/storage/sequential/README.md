@@ -23,9 +23,21 @@ ESPACIO PRINCIPAL (tabla.seq)            ESPACIO AUXILIAR (tabla.seq.overflow)
 │ pág 3: 60 71 79              │  │
 └──────────────────────────────┘  └────► −1 (sin desbordamiento)
 
-Invariante: toda clave de la página p (y de su cadena) es menor que la primera clave
-de la página p+1. Por eso la búsqueda binaria sobre las páginas es correcta.
+Invariante: toda clave de la página p (y de su cadena) es menor o igual que la primera
+clave de la página p+1. Por eso la búsqueda binaria sobre las páginas es correcta.
 ```
+
+Dos casos de borde salen de ese invariante, y los dos tienen su test:
+
+- **Claves por debajo de la primera.** Si la primera página está llena y llega una clave
+  menor que todas, va al desbordamiento de esa página. La primera clave de la página 1
+  deja entonces de ser la menor del archivo: una búsqueda por rango no puede descartar
+  esa página mirando solo su primera clave.
+- **Una clave repetida que cruza de página.** El «menor **o igual**» importa: tras una
+  reorganización, las copias de una misma clave quedan seguidas y pueden ocupar el final
+  de una página y el principio de la siguiente. Buscar, recorrer un rango y borrar empiezan
+  en la última página que comienza por una clave **estrictamente menor** y siguen mientras
+  las páginas empiecen por esa clave.
 
 ### Insertar
 
@@ -44,7 +56,17 @@ de la página p+1. Por eso la búsqueda binaria sobre las páginas es correcta.
 
 1. Búsqueda binaria hasta la página, `O(log P)`.
 2. Búsqueda binaria dentro de la página (sus ranuras están ordenadas).
-3. Si no aparece, recorrido lineal de su cadena de desbordamiento.
+3. Recorrido lineal de su cadena de desbordamiento.
+4. Si la página termina justo en esa clave, se mira también la siguiente; casi nunca
+   hace falta, y cuando la clave es única cuesta como mucho una página más.
+
+### Buscar por rango
+
+Se localiza la página donde empezaría el extremo inferior y se avanza leyendo cada página
+con su cadena, ya ordenadas, hasta el primer registro que se pasa del extremo superior.
+Cualquiera de los dos extremos puede faltar: `id >= 500` empieza en su página y llega al
+final, y `id <= 500` empieza en la primera, sin recorrer antes el archivo para averiguar
+dónde acaba.
 
 El recorrido ordenado (`scan`) va página por página y, en cada una, mezcla en memoria las
 ranuras de la página con las de su cadena y las ordena. La cadena es corta por
@@ -109,7 +131,7 @@ from storage.sequential import SequentialFile
 with SequentialFile(path, serializer, key_field="id", config=config) as archivo:
     archivo.insert(serializer.pack((10, "ana", 4.5)))
     filas = archivo.search(10)
-    for raw in archivo.range_search(10, 50):
+    for raw in archivo.range_search(10, 50):      # (10, None) o (None, 50): rango abierto
         ...
     archivo.delete(10)
     archivo.reorganize()          # también se dispara sola al superar el umbral
@@ -123,5 +145,12 @@ with SequentialFile(path, serializer, key_field="id", config=config) as archivo:
 
 Cubren: archivo vacío, un registro, inserción desordenada que debe leerse ordenada, carga
 ordenada sin desbordamiento, inserción en medio de una página llena que **sí** genera
-desbordamiento, rangos, claves duplicadas, borrado lazy, umbral de desperdicio que dispara
-la reorganización, reorganización manual y persistencia al reabrir.
+desbordamiento, rangos cerrados, abiertos por cualquier lado e invertidos, claves
+duplicadas —también cuando cruzan de una página a la siguiente—, claves menores que la
+primera del archivo, borrado lazy y borrado repetido, umbral de desperdicio que dispara la
+reorganización, reorganización manual, persistencia al reabrir y archivos que no son de
+este formato.
+
+Además, una prueba aleatoria compara el archivo con una lista ordenada a lo largo de más
+de mil inserciones, borrados y reorganizaciones, con claves repetidas y negativas: tras
+cada tanda, `scan`, `search` y los tres tipos de rango tienen que coincidir con la lista.

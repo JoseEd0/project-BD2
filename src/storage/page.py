@@ -88,10 +88,6 @@ class RecordPage:
         return self._capacity
 
     @property
-    def record_size(self) -> int:
-        return self._record_size
-
-    @property
     def used_slots(self) -> int:
         """Ranuras ocupadas, incluidas las marcadas como borradas."""
         return self._header()[0]
@@ -128,6 +124,10 @@ class RecordPage:
         for slot in range(self.used_slots):
             if self._raw[self._offset(slot)] == SlotState.USED:
                 yield slot
+
+    def live_count(self) -> int:
+        """Número de registros vigentes, contado sin leer ninguno."""
+        return sum(1 for _ in self.live_slots())
 
     def deleted_slots(self) -> int:
         states = (self._raw[self._offset(slot)] for slot in range(self.used_slots))

@@ -114,8 +114,3 @@ class Token:
     text: str
     line: int
     column: int
-
-    def __str__(self) -> str:
-        if self.type in (TokenType.EOF,):
-            return str(self.type.value)
-        return f"{self.type.value} '{self.text}'"

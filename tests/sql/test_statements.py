@@ -377,3 +377,41 @@ def test_second_statement_error_points_at_the_extra_statement():
     with pytest.raises(SqlSyntaxError) as error:
         parse("SELECT * FROM a; SELECT * FROM b")
     assert error.value.column == 18
+
+
+def test_group_by_takes_several_expressions():
+    statement = select("SELECT a, b + 1, COUNT(*) FROM t GROUP BY a, b + 1")
+    assert len(statement.group_by) == 2
+    assert statement.group_by[0] == ColumnRef("a")
+
+
+def test_option_values_can_be_false_null_or_negative():
+    statement = select("SELECT * FROM t WITH (exact = FALSE, seed = NULL, k = -3)")
+    assert statement.options == {"exact": False, "seed": None, "k": -3}
+
+
+@pytest.mark.parametrize(
+    ("source", "message"),
+    [
+        ("SELECT * FROM t WITH (k = -abc)", "expected a number after '-'"),
+        ("SELECT * FROM t WITH (k = )", "expected an option value"),
+        ("CREATE VIEW v", "expected TABLE or INDEX after CREATE"),
+        ("DROP VIEW v", "expected TABLE or INDEX after DROP"),
+        ("CREATE TABLE t FROM FILE datos", "expected a file path"),
+        ("", "expected a statement, found end of input"),
+    ],
+)
+def test_what_the_dialect_does_not_have_is_a_syntax_error(source: str, message: str):
+    with pytest.raises(SqlSyntaxError, match=message):
+        parse(source)
+
+
+def test_a_column_can_be_declared_nullable_explicitly():
+    statement = parse("CREATE TABLE t (a INT NULL, b INT NOT NULL, c INT)")
+    assert isinstance(statement, CreateTableStatement)
+    assert [column.nullable for column in statement.columns] == [True, False, True]
+
+
+def test_an_empty_script_has_no_statements():
+    assert parse_script("") == []
+    assert parse_script(" ;; ") == []

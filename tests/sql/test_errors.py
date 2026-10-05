@@ -49,3 +49,10 @@ def test_lexical_error_is_raised_before_parsing():
 def test_pathological_nesting_fails_as_a_syntax_error(condition: str):
     with pytest.raises(SqlSyntaxError, match="nests deeper"):
         parse(f"SELECT * FROM t WHERE {condition}")
+
+
+def test_an_error_in_an_empty_text_has_no_line_to_show():
+    with pytest.raises(SqlSyntaxError) as error:
+        parse("")
+    assert error.value.source_line == ""
+    assert str(error.value) == "expected a statement, found end of input (line 1, column 1)"

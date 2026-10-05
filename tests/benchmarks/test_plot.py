@@ -4,23 +4,40 @@ Dibujar de verdad solo se prueba si matplotlib está instalado, que es opcional.
 """
 
 from itertools import pairwise
+from math import log10
 from pathlib import Path
 
 import pytest
+from benchmarks.common import RESULTS_DIRECTORY
 from benchmarks.plot import (
+    BASELINE_CLEARANCE,
     BLUE,
     DISK_SPACE,
     FIGURES,
+    NODES,
     TOTAL_TIME,
     Figure,
     Line,
     Style,
+    Technique,
+    by_rows,
     compare,
+    compose,
     draw,
     format_number,
+    horizontal_limits,
+    load,
     points_of,
     spread_labels,
+    ticks_between,
+    vertical_scale,
 )
+
+RESULTS = Path(__file__).parents[2] / "benchmarks" / RESULTS_DIRECTORY
+# Holgura, en píxeles, al comprobar que un texto cabe: lo que redondea el dibujo.
+SLACK = 1.0
+# Aire mínimo, en píxeles, entre una nota y la línea más alta de la rejilla.
+NOTE_CLEARANCE = 4.0
 
 REPORT = {
     "name": "prueba",
@@ -51,10 +68,78 @@ def test_unsupported_operations_and_zeros_are_left_out():
 
 @pytest.mark.parametrize(
     ("value", "text"),
-    [(47623.26, "47\N{NARROW NO-BREAK SPACE}623"), (751.4, "751"), (95.37, "95.4"), (8.03, "8.03"), (4.2, "4.2"), (0.134, "0.134")],
+    [
+        (47623.26, "47\N{NARROW NO-BREAK SPACE}623"),
+        (751.4, "751"),
+        (95.37, "95.4"),
+        (11.0, "11.0"),
+        (8.03, "8.03"),
+        (4.2, "4.20"),
+        (0.644, "0.64"),
+        (0.058, "0.058"),
+    ],
 )
-def test_numbers_keep_three_readable_figures(value: float, text: str):
+def test_numbers_are_written_like_in_the_report_tables(value: float, text: str):
     assert format_number(value) == text
+
+
+@pytest.mark.parametrize(("value", "text"), [(610.0, "610 nodos"), (17.42, "17.4 nodos"), (5.0, "5.0 nodos")])
+def test_an_average_count_keeps_one_decimal(value: float, text: str):
+    assert NODES.label(value) == text
+
+
+def test_a_value_is_labelled_with_its_unit():
+    assert TOTAL_TIME.label(3838.2) == "3\N{NARROW NO-BREAK SPACE}838 ms"
+    assert DISK_SPACE.label(64.0) == "64.0 KiB"
+
+
+def test_ticks_are_the_round_numbers_inside_the_limits():
+    assert ticks_between(3.0, 2500.0, (1.0,)) == (10.0, 100.0, 1000.0)
+    assert ticks_between(0.8, 30.0, (1.0, 2.0, 5.0)) == (1.0, 2.0, 5.0, 10.0, 20.0)
+
+
+def test_the_vertical_scale_holds_every_value_with_room_to_spare():
+    scale = vertical_scale([7.66, 744.0, 3838.0], headroom=0.0)
+    assert scale.low < 7.66 and scale.high > 3838.0
+    assert scale.ticks == (10.0, 100.0, 1000.0, 10000.0)
+
+
+def test_a_narrow_range_gets_intermediate_ticks():
+    assert vertical_scale([3.41, 53.5], headroom=0.0).ticks == (5.0, 10.0, 20.0, 50.0)
+
+
+def test_a_single_value_still_gets_a_whole_decade():
+    scale = vertical_scale([64.0], headroom=0.0)
+    assert log10(scale.high / scale.low) >= 1.0
+    assert scale.low < 64.0 < scale.high
+
+
+def test_the_lowest_tick_never_sits_on_the_baseline():
+    """27.1 con margen deja la base un poco por debajo de 10: se baja hasta separarla."""
+    scale = vertical_scale([27.1, 49742.0], headroom=0.0)
+    assert scale.ticks[0] == 10.0
+    gap = log10(scale.ticks[0] / scale.low) / log10(scale.high / scale.low)
+    assert gap == pytest.approx(BASELINE_CLEARANCE)
+
+
+def test_headroom_adds_a_band_without_ticks_above_the_values():
+    plain = vertical_scale([2.63, 194.0], headroom=0.0)
+    roomy = vertical_scale([2.63, 194.0], headroom=0.34)
+    assert roomy.low == plain.low and roomy.high > plain.high
+    assert roomy.ticks == plain.ticks
+    assert max(roomy.ticks) <= plain.high
+
+
+def test_the_last_point_leaves_the_asked_share_of_the_axis_free():
+    low, high = horizontal_limits(1_000, 100_000, 0.4)
+    assert low < 1_000
+    assert log10(high / 100_000) / log10(high / low) == pytest.approx(0.4)
+
+
+def test_a_grid_filled_by_columns_reads_by_rows():
+    """Con 7 entradas en 4 columnas, matplotlib llena columnas de 2, 2, 2 y 1."""
+    assert by_rows(list("abcdefg"), 4) == list("aebfcgd")
+    assert by_rows(list("abc"), 3) == list("abc")
 
 
 def test_labels_that_do_not_collide_stay_where_they_are():
@@ -93,6 +178,11 @@ def test_every_panel_says_what_it_measures_and_in_which_unit():
             assert panel.measure.unit in panel.measure.axis
 
 
+def test_a_technique_can_be_named_differently_in_the_legend():
+    panel = compare("leer", "Leer", TOTAL_TIME, (Technique("a", STYLE, "la técnica a"),))
+    assert panel.lines == (Line("la técnica a", STYLE, "a", "leer"),)
+
+
 def test_a_figure_is_written_to_disk(tmp_path: Path):
     pytest.importorskip("matplotlib")
     figure = Figure(
@@ -103,10 +193,55 @@ def test_a_figure_is_written_to_disk(tmp_path: Path):
         rows_label="filas",
         columns=2,
         panels=(
-            compare("leer", "Leer", TOTAL_TIME, (("a", STYLE), ("b", Style(BLUE, "s")))),
-            compare("espacio", "Espacio", DISK_SPACE, (("a", STYLE),), field="kib", note="nota"),
+            compare("leer", "Leer", TOTAL_TIME, (Technique("a", STYLE), Technique("b", Style(BLUE, "s")))),
+            compare("espacio", "Espacio", DISK_SPACE, (Technique("a", STYLE),), field="kib", note="nota"),
+            compare("borrar", "Nadie lo midió", TOTAL_TIME, (Technique("a", STYLE),)),
         ),
     )
     path = draw(figure, REPORT, tmp_path)
     assert path == tmp_path / "prueba.png"
     assert path.stat().st_size > 10_000
+
+
+@pytest.mark.parametrize("figure", FIGURES, ids=lambda figure: figure.filename)
+def test_no_text_is_cut_off_or_runs_into_the_next_panel(figure: Figure):
+    """Con los resultados versionados: todo texto cabe en la imagen, y lo que se escribe
+    dentro de un panel —título, nota, valores— no pasa de su borde derecho."""
+    pytest.importorskip("matplotlib")
+    from matplotlib import pyplot
+    from matplotlib.text import Text
+
+    canvas = compose(figure, load(RESULTS / f"{figure.report}.json"))
+    canvas.canvas.draw()
+    renderer = canvas.canvas.get_renderer()
+    width, height = canvas.canvas.get_width_height()
+    for text in canvas.findobj(Text):
+        if not text.get_text().strip() or not text.get_visible():
+            continue
+        box = Text.get_window_extent(text, renderer)
+        assert box.x0 >= -SLACK and box.x1 <= width + SLACK, text.get_text()
+        assert box.y0 >= -SLACK and box.y1 <= height + SLACK, text.get_text()
+    for axis in canvas.axes:
+        edge = axis.get_window_extent(renderer).x1
+        for text in axis.texts:
+            assert Text.get_window_extent(text, renderer).x1 <= edge + SLACK, text.get_text()
+    pyplot.close(canvas)
+
+
+@pytest.mark.parametrize("figure", FIGURES, ids=lambda figure: figure.filename)
+def test_a_note_stays_clear_of_the_grid(figure: Figure):
+    """La nota de un panel va en una franja sin marcas: queda por encima de la rejilla."""
+    pytest.importorskip("matplotlib")
+    from matplotlib import pyplot
+    from matplotlib.text import Text
+
+    canvas = compose(figure, load(RESULTS / f"{figure.report}.json"))
+    canvas.canvas.draw()
+    renderer = canvas.canvas.get_renderer()
+    for axis, panel in zip(canvas.axes, figure.panels, strict=True):
+        notes = [text for text in axis.texts if panel.note and text.get_text() == panel.note]
+        highest_tick = max(axis.get_yticks())
+        grid_line = axis.transData.transform((axis.get_xlim()[0], highest_tick))[1]
+        for note in notes:
+            assert Text.get_window_extent(note, renderer).y0 > grid_line + NOTE_CLEARANCE
+    pyplot.close(canvas)

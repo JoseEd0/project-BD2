@@ -53,10 +53,11 @@ consulta, sus filas y cómo se ejecutó.
 - **Consultas** — editor con **numeración de líneas y resaltado de sintaxis**, `⌘↵` /
   `Ctrl↵` para ejecutar, `Tab` para indentar e historial de las últimas 25 consultas.
   Admite **varias sentencias separadas por `;`**: se ejecutan en orden y el panel muestra
-  las filas de la última consulta. Debajo, **41 atajos** agrupados por bloque de la
-  exposición —*Carga*, *Índices*, *Plan*, *Externos*, *SQL*, *Transacciones* y
-  *Espacial*—; un clic escribe la consulta en el editor. Todos se pueden lanzar varias veces sin error, porque los que
-  crean o borran algo usan `IF [NOT] EXISTS`. Para editarlos, ver
+  las filas de la última consulta. Debajo, **50 atajos** agrupados por bloque de la
+  exposición —*Carga*, *Índices*, *Plan*, *Externos*, *SQL*, *Borrar*, *Transacciones*
+  y *Espacial*—; un clic escribe la consulta en el editor. Todos se pueden lanzar varias veces sin error: los que
+  crean o borran tablas usan `IF [NOT] EXISTS`, y los de *Borrar* trabajan sobre filas de
+  prueba que insertan ellos mismos, así que no tocan el dataset. Para editarlos, ver
   [`src/snippets.ts`](src/snippets.ts).
 - **Resultados** — *Filas* con la tabla de resultados (números alineados a la
   derecha, `NULL` en cursiva, cabecera fija al hacer scroll y columna `#` fija a la

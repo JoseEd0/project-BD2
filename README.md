@@ -204,7 +204,7 @@ Los seis CSV del dataset están en [`demos/samples/`](demos/samples/):
 | `pedidos.csv` | Archivo secuencial | `id` |
 
 Después, el atajo **Carga → Índices tras cargar CSV** crea los dos índices secundarios del
-e-commerce, y **Espacial → Crear R-Tree**, el de `tiendas.ubicacion`. Con eso los 41 atajos
+e-commerce, y **Espacial → Crear R-Tree**, el de `tiendas.ubicacion`. Con eso los 50 atajos
 del editor quedan listos para usarse.
 
 **Datos espaciales reales.** Para probar el R-Tree con lugares de verdad —unos 128 000

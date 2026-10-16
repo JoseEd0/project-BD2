@@ -32,6 +32,17 @@ CREATE INDEX IF NOT EXISTS idx_detalle_pedidos_pedido_id
   ON detalle_pedidos USING BTREE (pedido_id);`,
       },
       {
+        label: "Crear desde CSV",
+        description:
+          "CREATE TABLE ... FROM FILE: carga un CSV del repositorio y elige la organización con USING INDEX",
+        sql: `DROP TABLE IF EXISTS clientes_copia;
+
+CREATE TABLE clientes_copia FROM FILE 'demos/samples/clientes.csv'
+  USING INDEX HASH("id");
+
+SELECT * FROM clientes_copia WHERE id = 10;`,
+      },
+      {
         label: "Crear tabla",
         description:
           "Una tabla heap por SQL: su clave recibe un B+ automático y producto_id un B+ secundario",
@@ -290,6 +301,105 @@ SELECT id, nombre, stock FROM productos WHERE id BETWEEN 1 AND 10;
 
 DELETE FROM pedidos WHERE estado = 'cancelado';
 SELECT estado, COUNT(*) AS pedidos FROM pedidos GROUP BY estado;`,
+      },
+    ],
+  },
+  {
+    name: "Borrar",
+    snippets: [
+      {
+        label: "Borrar una fila (heap)",
+        description:
+          "Inserta un cliente de prueba y lo borra por su clave: libera la ranura del heap y lo quita de sus índices",
+        sql: `DELETE FROM clientes WHERE id = 900010;
+INSERT INTO clientes VALUES (900010, 'Cliente temporal', 'temporal@correo.pe', 'Lima', '2026-10-16');
+SELECT * FROM clientes WHERE id = 900010;
+
+DELETE FROM clientes WHERE id = 900010;
+SELECT * FROM clientes WHERE id = 900010;`,
+      },
+      {
+        label: "Borrar en el B+ agrupado",
+        description:
+          "La fila sale de la hoja del árbol; si la hoja queda a menos de la mitad, pide prestado o se fusiona",
+        sql: `DELETE FROM productos WHERE id = 900010;
+INSERT INTO productos VALUES (900010, 'Producto temporal', 1, 10.0, 1);
+SELECT * FROM productos WHERE id = 900010;
+
+DELETE FROM productos WHERE id = 900010;
+SELECT * FROM productos WHERE id = 900010;`,
+      },
+      {
+        label: "Borrado lazy (secuencial)",
+        description:
+          "En pedidos borrar solo marca una lápida; el botón ⌬ muestra las lápidas y el % de desperdicio",
+        sql: `DELETE FROM pedidos WHERE id = 900010;
+INSERT INTO pedidos VALUES (900010, 1, '2026-10-16', 'pendiente', 10.0);
+SELECT * FROM pedidos WHERE id = 900010;
+
+DELETE FROM pedidos WHERE id = 900010;
+SELECT * FROM pedidos WHERE id = 900010;`,
+      },
+      {
+        label: "Borrar con condición",
+        description:
+          "DELETE con WHERE borra todas las filas que cumplen la condición, y el índice hash de ciudad se actualiza",
+        sql: `DELETE FROM clientes WHERE ciudad = 'Temporal';
+INSERT INTO clientes VALUES
+  (900011, 'Prueba Uno', 'uno@correo.pe', 'Temporal', '2026-10-16'),
+  (900012, 'Prueba Dos', 'dos@correo.pe', 'Temporal', '2026-10-16'),
+  (900013, 'Prueba Tres', 'tres@correo.pe', 'Temporal', '2026-10-16');
+SELECT * FROM clientes WHERE ciudad = 'Temporal';
+
+DELETE FROM clientes WHERE ciudad = 'Temporal';
+SELECT COUNT(*) AS quedan FROM clientes WHERE ciudad = 'Temporal';`,
+      },
+      {
+        label: "Borrar puntos",
+        description:
+          "DELETE con una condición espacial: la fila sale del heap y su punto del R-Tree",
+        sql: `DELETE FROM tiendas WHERE id = 900010;
+INSERT INTO tiendas VALUES
+  (900010, 'Tienda temporal', 'librería', 'Barranco', POINT(-12.1352, -77.0222));
+
+DELETE FROM tiendas
+WHERE id = 900010 AND distancia(ubicacion, POINT(-12.1352, -77.0222)) < 10;
+
+SELECT id, nombre FROM tiendas
+WHERE distancia(ubicacion, POINT(-12.1352, -77.0222)) < 10;`,
+      },
+      {
+        label: "Vaciar una tabla",
+        description:
+          "DELETE sin WHERE borra todas las filas y deja la tabla vacía (lo que en otros motores hace TRUNCATE)",
+        sql: `DROP TABLE IF EXISTS papelera;
+
+CREATE TABLE papelera (
+  id INT PRIMARY KEY,
+  nota VARCHAR(20)
+);
+
+INSERT INTO papelera VALUES (1, 'uno'), (2, 'dos'), (3, 'tres');
+
+DELETE FROM papelera;
+SELECT COUNT(*) AS filas FROM papelera;`,
+      },
+      {
+        label: "Borrar una tabla",
+        description:
+          "DROP TABLE la quita del catálogo y borra sus archivos: el heap y sus índices (crea papelera con el atajo anterior)",
+        sql: "DROP TABLE IF EXISTS papelera;",
+      },
+      {
+        label: "Deshacer un borrado",
+        description:
+          "Borra cinco productos dentro de una transacción y ROLLBACK los devuelve",
+        sql: `BEGIN TRANSACTION;
+DELETE FROM productos WHERE id BETWEEN 1 AND 5;
+SELECT COUNT(*) AS dentro_de_la_transaccion FROM productos WHERE id BETWEEN 1 AND 5;
+
+ROLLBACK;
+SELECT COUNT(*) AS tras_el_rollback FROM productos WHERE id BETWEEN 1 AND 5;`,
       },
     ],
   },

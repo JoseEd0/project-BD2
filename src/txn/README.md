@@ -116,6 +116,11 @@ with Session(engine, locks, manager) as session:
 Cada usuario concurrente necesita **su propia sesión**; el motor y el gestor de bloqueos se
 comparten.
 
+Los bloqueos de tabla protegen las filas, pero dos lecturas corren a la vez. Por eso el motor
+no comparte entre consultas nada que se escriba: cada operador que se apoya en disco
+(ordenamiento, `JOIN`, `GROUP BY`, `DISTINCT`) usa un directorio temporal con nombre
+aleatorio, y un lock propio del motor serializa el DDL y la apertura de tablas.
+
 ## Decisiones de alcance
 
 - **El bloqueo es por tabla.** Es el grano más simple que garantiza el aislamiento, y el

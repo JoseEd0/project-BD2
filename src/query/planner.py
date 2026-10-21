@@ -10,6 +10,7 @@ WHERE, o un ORDER BY por distancia, se resuelven con el índice si la columna lo
 
 from __future__ import annotations
 
+import uuid
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -90,7 +91,6 @@ class Planner:
     def __init__(self, tables: Mapping[str, Table], config: EngineConfig) -> None:
         self._tables = tables
         self._config = config
-        self._temporaries = 0
         self._single_source = True
 
     def plan(self, statement: SelectStatement) -> Operator:
@@ -431,12 +431,12 @@ class Planner:
     def _temporary(self, name: str) -> Path:
         """Directorio propio para cada operador que se apoya en disco.
 
-        Dos operadores del mismo plan —dos JOIN encadenados, por ejemplo— escribirían
-        particiones con el mismo nombre y se pisarían: el de arriba sobrescribe los
-        archivos que el de abajo todavía está leyendo.
+        Dos operadores que compartieran directorio escribirían particiones con el mismo
+        nombre y se pisarían, tanto dentro de un plan —dos JOIN encadenados— como entre
+        consultas de sesiones distintas que se ejecutan a la vez. Un nombre aleatorio no
+        se repite entre planes, ni entre hilos, ni entre procesos.
         """
-        self._temporaries += 1
-        return self._config.data_directory / f"{name}-{self._temporaries}"
+        return self._config.data_directory / f"{name}-{uuid.uuid4().hex}"
 
 
 def _stored_key(table: Table, column: str, value: Value) -> Value | None:

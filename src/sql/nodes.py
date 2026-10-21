@@ -221,6 +221,12 @@ class Statement:
     __slots__ = ()
 
 
+class DefinitionStatement(Statement):
+    """Marker base class for the statements that change the catalog (DDL)."""
+
+    __slots__ = ()
+
+
 @dataclass(frozen=True, slots=True)
 class SelectStatement(Statement):
     projections: tuple[Projection, ...]
@@ -258,7 +264,7 @@ class DeleteStatement(Statement):
 
 
 @dataclass(frozen=True, slots=True)
-class CreateTableStatement(Statement):
+class CreateTableStatement(DefinitionStatement):
     name: str
     columns: tuple[ColumnDefinition, ...]
     if_not_exists: bool = False
@@ -272,7 +278,7 @@ class IndexSpec:
 
 
 @dataclass(frozen=True, slots=True)
-class CreateTableFromFileStatement(Statement):
+class CreateTableFromFileStatement(DefinitionStatement):
     """`CREATE TABLE t FROM FILE "path" USING INDEX BTREE("id")`.
 
     The schema is inferred from the file header by the loader, so this node only
@@ -286,7 +292,7 @@ class CreateTableFromFileStatement(Statement):
 
 
 @dataclass(frozen=True, slots=True)
-class CreateIndexStatement(Statement):
+class CreateIndexStatement(DefinitionStatement):
     table: str
     spec: IndexSpec
     name: str | None = None
@@ -294,13 +300,13 @@ class CreateIndexStatement(Statement):
 
 
 @dataclass(frozen=True, slots=True)
-class DropTableStatement(Statement):
+class DropTableStatement(DefinitionStatement):
     name: str
     if_exists: bool = False
 
 
 @dataclass(frozen=True, slots=True)
-class DropIndexStatement(Statement):
+class DropIndexStatement(DefinitionStatement):
     name: str
     table: str | None = None
     if_exists: bool = False

@@ -7,6 +7,7 @@ que le pasen, si le pasan alguno.
 
 from __future__ import annotations
 
+import threading
 import time
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass, field, replace
@@ -46,6 +47,7 @@ from sql.nodes import (
     CreateIndexStatement,
     CreateTableFromFileStatement,
     CreateTableStatement,
+    DefinitionStatement,
     DeleteStatement,
     DropIndexStatement,
     DropTableStatement,
@@ -104,11 +106,18 @@ class QueryResult:
 
 @dataclass
 class Engine:
-    """Ejecuta sentencias SQL sobre las tablas del catálogo."""
+    """Ejecuta sentencias SQL sobre las tablas del catálogo.
+
+    Varias sesiones lo usan a la vez desde hilos distintos. Los bloqueos de tabla de la
+    sesión protegen las filas, pero no el catálogo ni el diccionario de tablas abiertas, que
+    son de todas: `_guard` serializa el DDL y la apertura de tablas. Sin él, dos hilos
+    abrirían la misma tabla dos veces, con dos buffers distintos sobre el mismo archivo.
+    """
 
     config: EngineConfig
     _catalog: Catalog = field(init=False)
     _tables: dict[str, Table] = field(default_factory=dict, init=False)
+    _guard: threading.RLock = field(default_factory=threading.RLock, init=False)
 
     def __post_init__(self) -> None:
         self.config.data_directory.mkdir(parents=True, exist_ok=True)
@@ -129,18 +138,24 @@ class Engine:
     def run(self, statement: Statement, journal: Journal | None = None) -> QueryResult:
         """Ejecuta una sentencia ya parseada y mide cuánto tarda."""
         started = time.perf_counter()
-        result = self._dispatch(statement, NO_JOURNAL if journal is None else journal)
+        if isinstance(statement, DefinitionStatement):
+            with self._guard:
+                result = self._define(statement)
+        else:
+            result = self._dispatch(statement, NO_JOURNAL if journal is None else journal)
         elapsed = (time.perf_counter() - started) * MILLISECONDS
         return replace(result, elapsed_ms=elapsed)
 
     def table_names(self) -> list[str]:
-        return self._catalog.table_names()
+        with self._guard:
+            return self._catalog.table_names()
 
     def table_of_index(self, name: str) -> str | None:
         """Nombre de la tabla dueña de ese índice, o `None` si el índice no existe."""
-        if not self._catalog.has_index(name):
-            return None
-        return self._catalog.find_index(name)[0].name
+        with self._guard:
+            if not self._catalog.has_index(name):
+                return None
+            return self._catalog.find_index(name)[0].name
 
     def table(self, name: str) -> Table:
         """Tabla abierta, abriéndola si hacía falta.
@@ -149,19 +164,20 @@ class Engine:
             UnknownTableError: si no está en el catálogo.
         """
         key = name.lower()
-        if key not in self._tables:
-            definition = self._catalog.table(name)
-            self._tables[key] = Table(definition, self.config)
-        return self._tables[key]
+        with self._guard:
+            if key not in self._tables:
+                self._tables[key] = Table(self._catalog.table(name), self.config)
+            return self._tables[key]
 
     def describe_table(self, name: str) -> dict[str, Any]:
         """Estructura física de la tabla y de sus índices (ver `Table.describe_structure`)."""
         return self.table(name).describe_structure()
 
     def close(self) -> None:
-        for table in self._tables.values():
-            table.close()
-        self._tables.clear()
+        with self._guard:
+            for table in self._tables.values():
+                table.close()
+            self._tables.clear()
 
     def __enter__(self) -> Engine:
         return self
@@ -185,6 +201,16 @@ class Engine:
             return self._delete(statement, journal)
         if isinstance(statement, UpdateStatement):
             return self._update(statement, journal)
+        if isinstance(
+            statement,
+            BeginTransactionStatement | CommitTransactionStatement | RollbackTransactionStatement,
+        ):
+            raise TransactionStatementError(
+                "BEGIN, COMMIT y ROLLBACK los atiende la sesión, no el motor"
+            )
+        raise EngineError(f"sentencia no soportada: {type(statement).__name__}")
+
+    def _define(self, statement: DefinitionStatement) -> QueryResult:
         if isinstance(statement, CreateTableStatement):
             return self._create_table(statement)
         if isinstance(statement, CreateTableFromFileStatement):
@@ -195,13 +221,6 @@ class Engine:
             return self._drop_table(statement)
         if isinstance(statement, DropIndexStatement):
             return self._drop_index(statement)
-        if isinstance(
-            statement,
-            BeginTransactionStatement | CommitTransactionStatement | RollbackTransactionStatement,
-        ):
-            raise TransactionStatementError(
-                "BEGIN, COMMIT y ROLLBACK los atiende la sesión, no el motor"
-            )
         raise EngineError(f"sentencia no soportada: {type(statement).__name__}")
 
     def _select(self, statement: SelectStatement) -> QueryResult:

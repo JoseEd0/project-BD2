@@ -78,13 +78,25 @@ def test_a_single_group(few_partitions: EngineConfig, serializer: RecordSerializ
     assert len(groups[0][1]) == 100
 
 
-def test_partitions_are_used(few_partitions: EngineConfig, serializer: RecordSerializer, id_of):
-    records = [serializer.pack((index, "lima")) for index in range(200)]
+def test_an_input_that_fits_is_grouped_in_memory(
+    few_partitions: EngineConfig, serializer: RecordSerializer, id_of
+):
+    records = [serializer.pack((index % 7, "lima")) for index in range(50)]
+    directory = few_partitions.data_directory / "g"
+    with ExternalHashGrouper(directory, serializer.size, id_of, few_partitions) as grouper:
+        groups = dict(grouper.reduce(records, int, count))
+        assert grouper.levels == 0
+        assert not directory.exists()
+    assert sum(groups.values()) == 50
+
+
+def test_partitions_are_used(small_buffer: EngineConfig, serializer: RecordSerializer, id_of):
+    records = [serializer.pack((index, "lima")) for index in range(MANY_KEYS)]
     with ExternalHashGrouper(
-        few_partitions.data_directory / "g", serializer.size, id_of, few_partitions
+        small_buffer.data_directory / "g", serializer.size, id_of, small_buffer
     ) as grouper:
         list(grouper.reduce(records, int, count))
-        assert sum(grouper.partition_sizes) == 200
+        assert sum(grouper.partition_sizes) == MANY_KEYS
         assert sum(1 for size in grouper.partition_sizes if size > 0) > 1
 
 
@@ -425,7 +437,7 @@ def test_many_rows_with_a_null_key_are_set_aside_instead_of_joined_by_blocks(
             serializer, joiner.join(map(serializer.pack, left), map(serializer.pack, right))
         )
         assert joiner.block_joins == 0
-        assert joiner.levels == 1
+        assert joiner.levels == 0
     assert found == brute_force_pairs(left, right, Unmatched.BOTH)
     assert sum(found.values()) == HEAVY_KEY_ROWS + 2
     assert not (small_buffer.data_directory / "j").exists()
@@ -465,3 +477,19 @@ def test_keys_python_does_not_call_equal_still_end_up_in_one_group(
         groups = list(grouper.reduce(records, int, count))
     assert len(groups) == 1
     assert groups[0][1] == MANY_KEYS
+
+
+def test_a_join_whose_left_side_fits_partitions_nothing(
+    few_partitions: EngineConfig, serializer: RecordSerializer, city_of
+):
+    left = [(index, CITIES[index % len(CITIES)]) for index in range(5)]
+    right = [(100 + index, CITIES[index % len(CITIES)]) for index in range(60)]
+    directory = few_partitions.data_directory / "j"
+    with ExternalHashJoin(
+        directory, serializer.size, serializer.size, city_of, city_of, few_partitions
+    ) as joiner:
+        found = joined_ids(
+            serializer, joiner.join(map(serializer.pack, left), map(serializer.pack, right))
+        )
+        assert joiner.levels == 0
+    assert found == brute_force_pairs(left, right, Unmatched.NONE)

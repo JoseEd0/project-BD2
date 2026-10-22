@@ -268,3 +268,28 @@ def test_in_on_an_indexed_column_looks_up_each_value(alumnos: Engine):
 def test_in_with_repeated_values_and_null_returns_each_row_once(alumnos: Engine):
     rows = alumnos.execute("SELECT id FROM alumnos WHERE id IN (2, 2, NULL) ORDER BY id").rows
     assert rows == ((2,),)
+
+
+def test_grouping_and_joining_say_whether_they_needed_disk(config: EngineConfig):
+    queries = {
+        "HashAggregate": "SELECT v, COUNT(*) FROM t GROUP BY v",
+        "HashJoin": "SELECT a.id FROM t a JOIN t b ON a.v = b.v",
+    }
+    with Engine(config) as small:
+        small.execute("CREATE TABLE t (id INT PRIMARY KEY, v INT)")
+        small.execute("INSERT INTO t VALUES (1, 1), (2, 1), (3, 2)")
+        for operator, query in queries.items():
+            plan = small.execute(f"EXPLAIN ANALYZE {query}").plan.render()
+            assert f"{operator}:" in plan and "en memoria" in plan
+    tight_config = replace(
+        config,
+        sort_buffer_pages=1,
+        hash_partitions=4,
+        data_directory=config.data_directory / "ajustado",
+    )
+    with Engine(tight_config) as tight:
+        tight.execute("CREATE TABLE t (id INT PRIMARY KEY, v INT)")
+        tight.execute("INSERT INTO t VALUES " + ", ".join(f"({i}, {i})" for i in range(300)))
+        for query in queries.values():
+            plan = tight.execute(f"EXPLAIN ANALYZE {query}").plan.render()
+            assert "nivel(es) de particiones" in plan

@@ -15,6 +15,7 @@ separa las claves que con la primera coincidían. Ver `README.md` para el análi
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Iterator
+from itertools import chain, islice
 from pathlib import Path
 from types import TracebackType
 from typing import TypeVar
@@ -108,7 +109,8 @@ class ExternalHashGrouper:
 
     Lo que sí tiene que caber en memoria son los estados de una partición. Si una trae más
     grupos de los que caben en el buffer, se vuelve a repartir con otra función de hash,
-    las veces que haga falta: cada nivel divide sus grupos entre `P`.
+    las veces que haga falta: cada nivel divide sus grupos entre `P`. Una entrada que cabe
+    entera en el buffer no se reparte: se agrupa en memoria.
 
     Complejidad, con `N` registros, `G` grupos, `P` particiones y `B` grupos en el buffer:
 
@@ -144,9 +146,16 @@ class ExternalHashGrouper:
         """Pares `(clave, estado)`.
 
         El estado de un grupo es `step` aplicado a cada uno de sus registros, en el orden
-        en que llegaron, partiendo de `start()`.
+        en que llegaron, partiendo de `start()`. Si la entrada cabe en el buffer se agrupa
+        en memoria, sin escribir ninguna partición: `levels` queda en cero.
         """
-        return self._reduce_level(records, start, step, 0)
+        stream = iter(records)
+        head = list(islice(stream, self._memory_groups + 1))
+        if len(head) <= self._memory_groups:
+            groups = self._groups_of(head, start, step)
+            if groups is not None:
+                return iter(groups)
+        return self._reduce_level(chain(head, stream), start, step, 0)
 
     def close(self) -> None:
         while self._open:
@@ -223,7 +232,8 @@ class ExternalHashJoin:
 
     Se particionan **las dos** entradas con el mismo hash. Como las claves iguales caen en
     la misma partición, basta con cargar en memoria la partición izquierda y recorrer la
-    derecha comparando.
+    derecha comparando. Si la izquierda entera cabe en el buffer, no se particiona nada: se
+    carga y se recorre la derecha una sola vez.
 
     Una partición izquierda que no cabe en el buffer se vuelve a repartir, junto con su
     pareja derecha, con otra función de hash. Si la nueva función tampoco separa nada es
@@ -291,7 +301,11 @@ class ExternalHashJoin:
             rights = _keyed_only(
                 right_records, self._right_key_of, self._keeper(Unmatched.RIGHT, right_nulls)
             )
-            yield from self._join_level(lefts, rights, 0)
+            head = list(islice(lefts, self._memory_records + 1))
+            if len(head) <= self._memory_records:
+                yield from self._join_in_memory(head, rights)
+            else:
+                yield from self._join_level(chain(head, lefts), rights, 0)
         with RunReader(left_path, self._left_record_size, self._config) as left_unmatched:
             yield from ((record, None) for record in left_unmatched)
         with RunReader(right_path, self._right_record_size, self._config) as right_unmatched:

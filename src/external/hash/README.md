@@ -28,6 +28,13 @@ Como todas las filas de una misma clave están en la misma partición, ningún g
 partido entre dos particiones. El resultado **no sale ordenado**: quien necesite orden pide
 además un ordenamiento externo.
 
+Si la entrada entera cabe en el buffer, **no se reparte nada**: se agrupa en memoria y no
+se escribe ninguna partición. Escribir dieciséis archivos para tres filas era trabajo de
+más; con 200 consultas sobre una tabla de 200 filas, agrupar pasó de 850 ms a 203 ms. Lo
+mismo en el `JOIN`: si el lado izquierdo cabe, se carga y se recorre el derecho una sola
+vez (de 1 833 ms a 465 ms). `EXPLAIN ANALYZE` dice en cada caso si hizo falta disco: «en
+memoria» o «2 nivel(es) de particiones».
+
 ### De cada grupo se guarda un estado, no sus filas
 
 `reduce(registros, start, step)` no junta las filas de un grupo en una lista: les aplica

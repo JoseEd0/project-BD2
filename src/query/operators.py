@@ -398,6 +398,7 @@ class HashAggregate(Operator):
             self._evaluator.validate(expression)
         self._layout = self._build_layout()
         self._schema = self._build_schema()
+        self._grouper: ExternalHashGrouper | None = None
 
     @property
     def layout(self) -> RowLayout:
@@ -414,6 +415,7 @@ class HashAggregate(Operator):
         grouper = ExternalHashGrouper(
             self._directory, self._input_serializer.size, self._group_key, self._config
         )
+        self._grouper = grouper
         with grouper:
             packed = (self._input_serializer.pack(row) for row in self._child.rows())
             groups = grouper.reduce(packed, self._accumulators, self._absorb_record)
@@ -421,9 +423,13 @@ class HashAggregate(Operator):
                 yield (*_as_tuple(key), *_results_of(accumulators))
 
     def _plan_node(self) -> PlanNode:
+        """Tras ejecutar, el detalle dice si agrupar necesitó disco y cuántos niveles."""
         keys = ", ".join(map(describe_expression, self._group_by)) or "(sin GROUP BY)"
         functions = ", ".join(item.label for item in self._aggregates)
-        return PlanNode("HashAggregate", f"{keys} → {functions}", (self._child.plan(),))
+        detail = f"{keys} → {functions}"
+        if self._grouper is not None and self._actual_rows is not None:
+            detail = f"{detail} · {_disk_use(self._grouper.levels, 0)}"
+        return PlanNode("HashAggregate", detail, (self._child.plan(),))
 
     def _accumulators(self) -> list[Accumulator]:
         return [accumulator_for(aggregate) for aggregate in self._aggregates]
@@ -567,6 +573,7 @@ class HashJoin(JoinOperator):
         self._config = config
         self._left_evaluator = ExpressionEvaluator(left.layout)
         self._right_evaluator = ExpressionEvaluator(right.layout)
+        self._joiner: ExternalHashJoin | None = None
 
     def _produce(self) -> Iterator[Record]:
         joiner = ExternalHashJoin(
@@ -579,6 +586,7 @@ class HashJoin(JoinOperator):
             any_pair if self._condition is None else self._accepts,
             UNMATCHED_BY_KIND[self._kind],
         )
+        self._joiner = joiner
         with joiner:
             yield from self._rows_of(joiner.join(*self._inputs()))
 
@@ -590,6 +598,8 @@ class HashJoin(JoinOperator):
         if self._condition is not None:
             equalities.append(describe_expression(self._condition))
         detail = self._described(" AND ".join(equalities))
+        if self._joiner is not None and self._actual_rows is not None:
+            detail = f"{detail} · {_disk_use(self._joiner.levels, self._joiner.block_joins)}"
         return PlanNode("HashJoin", detail, (self._left.plan(), self._right.plan()))
 
     @staticmethod
@@ -834,6 +844,14 @@ class _NullsFirst:
         if other.value is None:
             return False
         return bool(self.value < other.value)
+
+
+def _disk_use(levels: int, block_joins: int) -> str:
+    """Cuánto disco necesitó un algoritmo de hashing externo, para el plan."""
+    if levels == 0:
+        return "en memoria"
+    by_blocks = f", {block_joins} por bloques" if block_joins else ""
+    return f"{levels} nivel(es) de particiones{by_blocks}"
 
 
 def _described_keys(keys: Sequence[Key]) -> str:

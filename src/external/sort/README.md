@@ -19,6 +19,10 @@ runs en disco        [3 7 9] [1 5 8] [2 4 6]
 
 Con `N` registros y buffer de `B`, salen `⌈N/B⌉` runs.
 
+Si toda la entrada cabe en el buffer no se escribe ningún run: se ordena en memoria y se
+entrega tal cual. Escribir un único run para volver a leerlo no ordena nada. El plan lo
+muestra como `ExternalSort: … · en memoria`.
+
 ## Fase 2 — mezcla k-vías
 
 Se abren `k` runs a la vez (`merge_fan_in`) y se saca siempre el menor de sus cabezas. Un

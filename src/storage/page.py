@@ -127,7 +127,7 @@ class RecordPage:
 
     def live_count(self) -> int:
         """Número de registros vigentes, contado sin leer ninguno."""
-        return sum(1 for _ in self.live_slots())
+        return self._states().count(SlotState.USED)
 
     def deleted_slots(self) -> int:
         states = (self._raw[self._offset(slot)] for slot in range(self.used_slots))
@@ -135,9 +135,9 @@ class RecordPage:
 
     def first_free_slot(self) -> int | None:
         """Primera ranura reutilizable, o `None` si la página está llena."""
-        for slot in range(self.used_slots):
-            if self._raw[self._offset(slot)] == SlotState.EMPTY:
-                return slot
+        hole = self._states().find(SlotState.EMPTY)
+        if hole >= 0:
+            return hole
         if self.used_slots < self._capacity:
             return self.used_slots
         return None
@@ -225,6 +225,13 @@ class RecordPage:
         if self.state_of(slot) is not SlotState.USED:
             raise EmptySlotError(f"la ranura {slot} no contiene un registro vigente")
         self._raw[self._offset(slot)] = SlotState.DELETED
+
+    def _states(self) -> bytes:
+        """El byte de estado de cada ranura ocupada, tomado de una vez con un salto del
+        tamaño de la ranura: buscar un hueco o contar registros no recorre la página en
+        Python, ranura por ranura, en cada inserción."""
+        end = self._offset(self.used_slots)
+        return bytes(self._raw[HEADER_SIZE:end : self._slot_size])
 
     def _header(self) -> tuple[int, int, int]:
         used, next_page, reserved = HEADER_FORMAT.unpack_from(self._raw, 0)

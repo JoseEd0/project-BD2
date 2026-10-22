@@ -140,6 +140,9 @@ aleatorio, y un lock propio del motor serializa el DDL y la apertura de tablas.
   borrada.
 - **Terminar una transacción siempre suelta sus bloqueos**, aunque el deshacer falle; si
   falla el deshacer de una sola sentencia, se aborta la transacción entera.
+- **Deshacer busca cada fila por su clave primaria**, que es una búsqueda por índice: un
+  ROLLBACK de `m` cambios cuesta `m` búsquedas y no `m` recorridos. Solo una tabla sin
+  clave primaria recorre el heap para encontrar la fila.
 - **La espera por un bloqueo tiene un plazo fijo** (`lock_timeout_seconds`), que no se
   reinicia cuando otras transacciones sueltan bloqueos ajenos.
 

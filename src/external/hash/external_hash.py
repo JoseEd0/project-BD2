@@ -29,6 +29,7 @@ from index.keys import Key
 GROUP_PREFIX = "group"
 LEFT_PREFIX = "left"
 RIGHT_PREFIX = "right"
+NULL_KEYS_SUFFIX = "-null.run"
 BLOCKS_DIRECTORY = "blocks"
 PARTITION_SUFFIX = ".part"
 SALT_BYTES = 2
@@ -230,6 +231,11 @@ class ExternalHashJoin:
     por bucles anidados en bloques, que no necesita tenerla entera en memoria.
 
     Una clave con NULL no es igual a ninguna, ni a otro NULL: esas filas nunca emparejan.
+    Por eso no se reparten. Repartirlas las juntaría todas en una partición —comparten
+    hash— que, si fueran muchas, habría que reunir por bloques comparando cada una con
+    todas las de enfrente para nada. Se apartan al pasar y, si la reunión las conserva,
+    salen al final sin pareja.
+
     `accepts` añade condiciones a la igualdad de claves, y `unmatched` dice qué filas
     sin pareja se entregan de todos modos, que es lo que distingue un `LEFT`, un `RIGHT`
     o un `FULL JOIN` de uno interno.
@@ -263,17 +269,45 @@ class ExternalHashJoin:
         self._unmatched = unmatched
         self._memory_records = buffered_records(config, left_record_size)
         self._open: list[HashPartitioner] = []
+        self._set_aside = [
+            directory / f"{LEFT_PREFIX}{NULL_KEYS_SUFFIX}",
+            directory / f"{RIGHT_PREFIX}{NULL_KEYS_SUFFIX}",
+        ]
         self.levels = 0
         self.block_joins = 0
 
     def join(self, left_records: Iterable[bytes], right_records: Iterable[bytes]) -> Iterator[Pair]:
         """Pares `(fila izquierda, fila derecha)` con la misma clave, y las filas sin pareja
         que la reunión conserva, con `None` en el otro lado."""
-        return self._join_level(left_records, right_records, 0)
+        self._directory.mkdir(parents=True, exist_ok=True)
+        left_path, right_path = self._set_aside
+        with (
+            RunWriter(left_path, self._left_record_size, self._config) as left_nulls,
+            RunWriter(right_path, self._right_record_size, self._config) as right_nulls,
+        ):
+            lefts = _keyed_only(
+                left_records, self._left_key_of, self._keeper(Unmatched.LEFT, left_nulls)
+            )
+            rights = _keyed_only(
+                right_records, self._right_key_of, self._keeper(Unmatched.RIGHT, right_nulls)
+            )
+            yield from self._join_level(lefts, rights, 0)
+        with RunReader(left_path, self._left_record_size, self._config) as left_unmatched:
+            yield from ((record, None) for record in left_unmatched)
+        with RunReader(right_path, self._right_record_size, self._config) as right_unmatched:
+            yield from ((None, record) for record in right_unmatched)
 
     def close(self) -> None:
         while self._open:
             self._open.pop().close()
+        for path in self._set_aside:
+            path.unlink(missing_ok=True)
+        remove_if_empty(self._directory)
+
+    def _keeper(self, side: Unmatched, writer: RunWriter) -> Callable[[bytes], None]:
+        """Qué hacer con una fila de clave NULL de ese lado: guardarla, si la reunión
+        conserva sus filas sin pareja, o descartarla."""
+        return writer.append if side in self._unmatched else _discard
 
     def __enter__(self) -> ExternalHashJoin:
         return self
@@ -331,14 +365,11 @@ class ExternalHashJoin:
             return
         table: dict[Key, list[int]] = {}
         for position, record in enumerate(lefts):
-            key = self._left_key_of(record)
-            if not _has_null(key):
-                table.setdefault(key, []).append(position)
+            table.setdefault(self._left_key_of(record), []).append(position)
         paired = bytearray(len(lefts))
         for probe in right_records:
-            key = self._right_key_of(probe)
             found = False
-            for position in () if _has_null(key) else table.get(key, ()):
+            for position in table.get(self._right_key_of(probe), ()):
                 if self._accepts(lefts[position], probe):
                     found = True
                     paired[position] = True
@@ -370,10 +401,24 @@ class ExternalHashJoin:
             yield from joiner.join(left_records, right_records)
 
     def _same_key_and_accepted(self, left: bytes, right: bytes) -> bool:
-        key = self._left_key_of(left)
-        if _has_null(key) or key != self._right_key_of(right):
+        if self._left_key_of(left) != self._right_key_of(right):
             return False
         return self._accepts(left, right)
+
+
+def _keyed_only(
+    records: Iterable[bytes], key_of: Callable[[bytes], Key], set_aside: Callable[[bytes], None]
+) -> Iterator[bytes]:
+    """Las filas cuya clave no tiene NULL; las demás se entregan a `set_aside` al pasar."""
+    for record in records:
+        if _has_null(key_of(record)):
+            set_aside(record)
+        else:
+            yield record
+
+
+def _discard(_: bytes) -> None:
+    """Para las filas de clave NULL que una reunión no conserva."""
 
 
 def _has_null(key: Key) -> bool:

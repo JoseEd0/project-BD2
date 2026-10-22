@@ -55,6 +55,7 @@ from query.operators import (
     Projection,
     SequentialScan,
     Sort,
+    TableOperator,
     UnsupportedQueryError,
     grouping_label,
 )
@@ -69,6 +70,7 @@ from sql.nodes import (
     Expression,
     FunctionCall,
     IndexType,
+    InPredicate,
     Join,
     SelectStatement,
     SortDirection,
@@ -87,6 +89,11 @@ MIRRORED_OPERATORS = {
     BinaryOperator.GREATER_EQUAL: BinaryOperator.LESS_EQUAL,
 }
 RANGE_OPERATORS = frozenset(MIRRORED_OPERATORS)
+# Preferencia entre caminos de acceso, de mejor a peor (ver `Planner._access_path`).
+EQUALITY_RANK = 0
+SPATIAL_RANK = 1
+CLOSED_RANGE_RANK = 2
+OPEN_RANGE_RANK = 3
 
 
 class Planner:
@@ -144,24 +151,56 @@ class Planner:
         alias = reference.alias or reference.name
         return self._access_path(table, alias, where)
 
-    def _access_path(self, table: Table, alias: str, where: Expression | None) -> Operator:
-        """Elige entre índice y recorrido completo mirando las condiciones del WHERE."""
+    def access_path(self, table: Table, where: Expression | None) -> TableOperator:
+        """Camino de acceso para las filas de una sola tabla que cumplen `where`.
+
+        Es el que usa un SELECT sobre esa tabla, y el que usan UPDATE y DELETE para
+        encontrar las filas que cambian.
+        """
+        return self._access_path(table, table.name, where)
+
+    def _access_path(self, table: Table, alias: str, where: Expression | None) -> TableOperator:
+        """El mejor camino que ofrezcan las condiciones del WHERE; sin ninguno, el recorrido.
+
+        Las cotas sobre una misma columna se juntan antes de elegir: `id > 1 AND id < 9` es
+        un solo rango. Se prefiere, por este orden, una igualdad —una clave o un `IN`—, una
+        búsqueda espacial, un rango con las dos cotas y un rango abierto; entre dos del
+        mismo tipo gana el primero que aparece. El planificador es por reglas, no por
+        costos: no sabe cuántas filas deja pasar cada condición, y por eso el filtro del
+        WHERE se aplica igual sobre lo que devuelva el camino elegido.
+        """
+        candidates: list[tuple[int, TableOperator]] = []
+        ranges: dict[str, tuple[str, Value | None, Value | None]] = {}
         for condition in conjuncts(where):
-            path = self._path_for(table, alias, condition)
-            if path is not None:
-                return path
-        return SequentialScan(table, alias)
+            lookup = self._lookup_on_column(condition, alias)
+            if lookup is not None:
+                path = self._equality_path(table, alias, *lookup)
+                if path is not None:
+                    candidates.append((EQUALITY_RANK, path))
+                continue
+            interval = self._range_on_column(condition, alias)
+            if interval is not None:
+                column, low, high = interval
+                if table.schema.has_field(column):
+                    previous = ranges.get(column.lower())
+                    narrowed = _narrowed(table, column, previous, low, high)
+                    ranges[column.lower()] = (column, *narrowed)
+                continue
+            spatial = self._spatial_path(table, alias, condition)
+            if spatial is not None:
+                candidates.append((SPATIAL_RANK, spatial))
+        for column, low, high in ranges.values():
+            ranged = self._range_path(table, alias, column, low, high)
+            if ranged is not None:
+                rank = CLOSED_RANGE_RANK if None not in (low, high) else OPEN_RANGE_RANK
+                candidates.append((rank, ranged))
+        if not candidates:
+            return SequentialScan(table, alias)
+        return min(candidates, key=lambda candidate: candidate[0])[1]
 
-    def _path_for(self, table: Table, alias: str, condition: Expression) -> Operator | None:
-        equality = self._equality_on_column(condition, alias)
-        if equality is not None:
-            return self._equality_path(table, alias, *equality)
-        interval = self._range_on_column(condition, alias)
-        if interval is not None:
-            return self._range_path(table, alias, *interval)
-        return self._spatial_path(table, alias, condition)
-
-    def _spatial_path(self, table: Table, alias: str, condition: Expression) -> Operator | None:
+    def _spatial_path(
+        self, table: Table, alias: str, condition: Expression
+    ) -> TableOperator | None:
         """Búsqueda por radio o por polígono, si la columna tiene un R-Tree."""
         radius = radius_search(condition)
         if radius is not None:
@@ -230,7 +269,19 @@ class Planner:
         index = table.definition.index_on(name)
         return index if index is not None and index.method is IndexType.RTREE else None
 
-    def _equality_on_column(self, condition: Expression, alias: str) -> tuple[str, Value] | None:
+    def _lookup_on_column(
+        self, condition: Expression, alias: str
+    ) -> tuple[str, list[Value]] | None:
+        """La columna y los valores de `col = constante` o de `col IN (constantes)`.
+
+        Un NULL de la lista no iguala ninguna fila, así que no hace falta buscarlo.
+        """
+        if isinstance(condition, InPredicate) and not condition.negated:
+            column = self._column_named(condition.operand, alias)
+            values = [constant_value(option) for option in condition.values]
+            if column is None or NOT_CONSTANT in values:
+                return None
+            return column, [value for value in values if value is not None]
         if not isinstance(condition, BinaryOperation):
             return None
         if condition.operator is not BinaryOperator.EQUAL:
@@ -240,7 +291,7 @@ class Planner:
             column = self._column_named(column_side, alias)
             value = constant_value(value_side)
             if column is not None and value is not NOT_CONSTANT:
-                return column, value
+                return column, [value]
         return None
 
     def _range_on_column(
@@ -287,26 +338,28 @@ class Planner:
         return expression.name if expression.qualifier.lower() == alias.lower() else None
 
     def _equality_path(
-        self, table: Table, alias: str, column: str, value: Value
-    ) -> Operator | None:
+        self, table: Table, alias: str, column: str, values: Sequence[Value]
+    ) -> TableOperator | None:
         """Un índice explícito gana a la organización: en un heap file buscar por clave
-        primaria sin índice sería un recorrido completo."""
-        key = _stored_key(table, column, value)
-        if key is None:
+        primaria sin índice sería un recorrido completo.
+
+        Un valor del tipo correcto que la columna no podría guardar —un texto más largo
+        que el `VARCHAR`— no iguala ninguna fila, así que no se busca.
+        """
+        if not table.schema.has_field(column):
             return None
+        stored = [_stored_key(table, column, value) for value in values]
+        keys = [key for key in stored if key is not None]
         index = table.definition.index_on(column)
         if index is not None:
-            return IndexLookup(table, alias, index.name, key)
+            return IndexLookup(table, alias, index.name, keys)
         if self._is_primary_key(table, column):
-            return PrimaryKeyLookup(table, alias, key)
+            return PrimaryKeyLookup(table, alias, keys)
         return None
 
     def _range_path(
         self, table: Table, alias: str, column: str, low: Value | None, high: Value | None
-    ) -> Operator | None:
-        if not table.schema.has_field(column):
-            return None
-        low, high = _bound(table, column, low), _bound(table, column, high)
+    ) -> TableOperator | None:
         if self._is_primary_key(table, column) and table.organization in ORDERED_ORGANIZATIONS:
             return PrimaryKeyRange(table, alias, low, high)
         index = table.definition.index_on(column)
@@ -464,6 +517,27 @@ def _stored_key(table: Table, column: str, value: Value) -> Value | None:
     except StorageError:
         return None
     return key
+
+
+def _narrowed(
+    table: Table,
+    column: str,
+    current: tuple[str, Value | None, Value | None] | None,
+    low: Value | None,
+    high: Value | None,
+) -> tuple[Value | None, Value | None]:
+    """El rango de una columna tras sumarle otras cotas: la mayor de las inferiores y la
+    menor de las superiores, ya en el tipo de la columna.
+
+    Las cotas se toman siempre cerradas; el filtro del WHERE descarta después los extremos
+    que una desigualdad estricta deja fuera.
+    """
+    low, high = _bound(table, column, low), _bound(table, column, high)
+    if current is None:
+        return low, high
+    lows = [bound for bound in (current[1], low) if bound is not None]
+    highs = [bound for bound in (current[2], high) if bound is not None]
+    return (max(lows) if lows else None), (min(highs) if highs else None)
 
 
 def _bound(table: Table, column: str, value: Value | None) -> Value | None:

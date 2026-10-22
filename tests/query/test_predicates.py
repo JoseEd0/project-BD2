@@ -235,8 +235,8 @@ def test_explain_shows_the_operators_before_they_run(datos: Engine):
         "ExternalSort",
         "SequentialScan",
     ]
-    assert "run(s)" not in rendered
+    assert "en memoria" not in rendered
     assert "filas=" not in rendered
     analyzed = datos.execute("EXPLAIN ANALYZE SELECT DISTINCT s FROM t ORDER BY s").plan.render()
-    assert "run(s)" in analyzed
-    assert "en memoria" in analyzed
+    assert "ExternalSort: s ASC · en memoria" in analyzed
+    assert "Distinct: en memoria" in analyzed

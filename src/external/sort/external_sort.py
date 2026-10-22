@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import heapq
 from collections.abc import Callable, Iterable, Iterator
+from itertools import chain, islice
 from pathlib import Path
 from types import TracebackType
 
@@ -34,6 +35,9 @@ class ExternalSorter:
     * pasadas de mezcla: `⌈log_k(N/B)⌉`;
     * coste total de E/S: `O(N · log_k(N/B))`;
     * memoria: `B` registros en la fase 1 y `k` páginas en la fase 2.
+
+    Si la entrada cabe en el buffer, se ordena en memoria y no se toca el disco: escribir
+    un único run para volver a leerlo no ordena nada.
     """
 
     def __init__(
@@ -60,8 +64,13 @@ class ExternalSorter:
         return self._fan_in
 
     def sort(self, records: Iterable[bytes]) -> Iterator[bytes]:
-        """Devuelve los registros en orden de clave, apoyándose en disco."""
-        runs = self._write_runs(records)
+        """Devuelve los registros en orden de clave, apoyándose en disco si no caben."""
+        stream = iter(records)
+        head = list(islice(stream, self._buffer_records + 1))
+        if len(head) <= self._buffer_records:
+            head.sort(key=self._key_of)
+            return iter(head)
+        runs = self._write_runs(chain(head, stream))
         self.run_count = len(runs)
         if not runs:
             return iter(())

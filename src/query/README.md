@@ -146,11 +146,12 @@ NULL—, así que si el ensayo falla es por algo que ninguna fila va a arreglar.
 ## Planificador (`planner.py`)
 
 Su decisión interesante es **el camino de acceso**. Recorre los `AND` del `WHERE` buscando
-una condición aprovechable:
+condiciones aprovechables:
 
 | Condición | Con índice adecuado | Sin él |
 |---|---|---|
 | `col = valor` | `IndexLookup` (hash, B+ o, para un punto exacto, R-Tree) | `SequentialScan` |
+| `col IN (v1, v2, …)` | `IndexLookup` o `PrimaryKeyLookup` con cada valor | `SequentialScan` |
 | `col BETWEEN a AND b`, `col < v`, `v > col` | `IndexRange` (solo B+) o `PrimaryKeyRange` | `SequentialScan` |
 | `a = 1 OR b = 2` | — | `SequentialScan` |
 | `distancia(col, POINT(…)) < r` | `SpatialRangeScan` (R-Tree) | `SequentialScan` |
@@ -161,6 +162,18 @@ una condición aprovechable:
 El valor puede ser cualquier expresión constante (`id = -5`, `id BETWEEN 10 * 10 AND 120`,
 `ubicacion = POINT(-12.05, -77.04)`) y la comparación puede escribirse en cualquiera de los
 dos sentidos (`5 < id` es `id > 5`).
+
+Las cotas sobre una misma columna se **juntan** antes de elegir: `id > 1 AND id < 9` es un
+solo `IndexRange` entre 1 y 9, no un rango abierto que lee hasta el final. Si hay varios
+caminos posibles se prefiere, por este orden, una igualdad, una búsqueda espacial, un rango
+con las dos cotas y un rango abierto; entre dos del mismo tipo gana el primero. Es un
+planificador **por reglas**: no estima cuántas filas deja pasar cada condición. Por eso el
+filtro del `WHERE` se aplica siempre sobre lo que devuelve el camino elegido, que solo acota.
+
+`UPDATE` y `DELETE` buscan sus filas **por el mismo camino** que un `SELECT` con su
+`WHERE`: cada acceso entrega las filas con su dirección (`addressed`), y la escritura usa
+la dirección para cambiarlas. `DELETE FROM t WHERE id = 5` va por el índice de la clave en
+vez de recorrer la tabla; con 20 000 filas, 200 borrados por clave pasaron de 8 s a 0,2 s.
 
 Un índice explícito gana a la organización: en un heap file, "buscar por clave primaria"
 sin índice sería un recorrido completo. Es lo que ocurre si se borra el índice de la clave

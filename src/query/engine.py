@@ -39,7 +39,7 @@ from query.operators import UnsupportedQueryError
 from query.plan import PlanNode
 from query.planner import Planner
 from query.spatial import SpatialView, spatial_view
-from query.table import Table, discard_table_files, primary_key_index_name
+from query.table import AddressedRecord, Table, discard_table_files, primary_key_index_name
 from sql import parse_script
 from sql.nodes import (
     Assignment,
@@ -267,7 +267,8 @@ class Engine:
     def _delete(self, statement: DeleteStatement, journal: Journal) -> QueryResult:
         table = self.table(statement.table)
         matches = self._predicate_of(table, statement.where)
-        count = table.delete_where(matches, _JournalOf(journal, table.name))
+        candidates = self._candidates(table, statement.where)
+        count = table.delete_where(candidates, matches, _JournalOf(journal, table.name))
         return QueryResult(
             message=f"{count} fila(s) borrada(s) de '{table.name}'", affected_rows=count
         )
@@ -276,7 +277,10 @@ class Engine:
         table = self.table(statement.table)
         matches = self._predicate_of(table, statement.where)
         transform = self._assignment_of(table, statement.assignments)
-        count = table.update_where(matches, transform, _JournalOf(journal, table.name))
+        candidates = self._candidates(table, statement.where)
+        count = table.update_where(
+            candidates, matches, transform, _JournalOf(journal, table.name)
+        )
         return QueryResult(
             message=f"{count} fila(s) actualizada(s) en '{table.name}'", affected_rows=count
         )
@@ -491,6 +495,12 @@ class Engine:
                 method=method,
             ),
         )
+
+    def _candidates(self, table: Table, where: Expression | None) -> Iterator[AddressedRecord]:
+        """Filas donde buscar las que cambia un UPDATE o un DELETE: las del camino de acceso
+        que el planificador elegiría para un SELECT con ese WHERE."""
+        planner = Planner({table.name.lower(): table}, self.config)
+        return planner.access_path(table, where).addressed()
 
     def _tables_of(self, statement: SelectStatement) -> dict[str, Table]:
         names = [statement.source.name, *(join.table.name for join in statement.joins)]

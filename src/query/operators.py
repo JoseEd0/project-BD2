@@ -39,7 +39,7 @@ from query.expressions import (
 )
 from query.functions import AggregateKind
 from query.plan import PlanNode
-from query.table import Table
+from query.table import AddressedRecord, Table
 from sql.nodes import ColumnRef, Expression, JoinKind, SortDirection
 from storage.record import Record, RecordSerializer
 from storage.schema import Field, Schema
@@ -139,7 +139,13 @@ class Operator(ABC):
 
 
 class TableOperator(Operator):
-    """Base de los accesos a una tabla."""
+    """Base de los accesos a una tabla.
+
+    Cada acceso entrega las filas con su dirección (`addressed`). Un SELECT solo usa las
+    filas; un UPDATE o un DELETE usan también la dirección, así que una escritura recorre
+    el mismo camino que el planificador elegiría para leer: `DELETE … WHERE id = 5` va
+    por el índice de `id` en vez de recorrer la tabla.
+    """
 
     def __init__(self, table: Table, alias: str) -> None:
         self._table = table
@@ -154,12 +160,20 @@ class TableOperator(Operator):
     def schema(self) -> Schema:
         return self._schema
 
+    @abstractmethod
+    def addressed(self) -> Iterator[AddressedRecord]:
+        """Las filas de este acceso tal como están guardadas, con su dirección."""
+
+    def _produce(self) -> Iterator[Record]:
+        for _, record in self.addressed():
+            yield self._table.unpack(record)
+
 
 class SequentialScan(TableOperator):
     """Recorre la tabla entera. Es el plan de referencia contra el que se comparan los índices."""
 
-    def _produce(self) -> Iterator[Record]:
-        return self._table.scan()
+    def addressed(self) -> Iterator[AddressedRecord]:
+        return self._table.addressed_scan()
 
     def _plan_node(self) -> PlanNode:
         return PlanNode(
@@ -184,19 +198,19 @@ class OrderedScan(SequentialScan):
 
 
 class PrimaryKeyLookup(TableOperator):
-    """Busca por clave primaria usando la organización de la tabla."""
+    """Busca una o varias claves primarias usando la organización de la tabla."""
 
-    def __init__(self, table: Table, alias: str, key: Key) -> None:
+    def __init__(self, table: Table, alias: str, keys: Sequence[Key]) -> None:
         super().__init__(table, alias)
-        self._key = key
+        self._keys = tuple(keys)
 
-    def _produce(self) -> Iterator[Record]:
-        return self._table.search_primary_key(self._key)
+    def addressed(self) -> Iterator[AddressedRecord]:
+        return self._table.addressed_by_primary_key(self._keys)
 
     def _plan_node(self) -> PlanNode:
         return PlanNode(
             "PrimaryKeyLookup",
-            f"{self._table.name}.{self._table.primary_key} = {describe_value(self._key)} "
+            f"{self._table.name}.{self._table.primary_key} {_described_keys(self._keys)} "
             f"({self._table.organization.value})",
         )
 
@@ -209,8 +223,8 @@ class PrimaryKeyRange(TableOperator):
         self._low = low
         self._high = high
 
-    def _produce(self) -> Iterator[Record]:
-        return self._table.range_primary_key(self._low, self._high)
+    def addressed(self) -> Iterator[AddressedRecord]:
+        return self._table.addressed_by_primary_key_range(self._low, self._high)
 
     def _plan_node(self) -> PlanNode:
         bounds = _described_range(self._low, self._high)
@@ -222,21 +236,21 @@ class PrimaryKeyRange(TableOperator):
 
 
 class IndexLookup(TableOperator):
-    """Busca por igualdad usando un índice secundario."""
+    """Busca uno o varios valores por igualdad usando un índice secundario."""
 
-    def __init__(self, table: Table, alias: str, index_name: str, value: Key) -> None:
+    def __init__(self, table: Table, alias: str, index_name: str, values: Sequence[Key]) -> None:
         super().__init__(table, alias)
         self._index_name = index_name
-        self._value = value
+        self._values = tuple(values)
 
-    def _produce(self) -> Iterator[Record]:
-        return self._table.search_index(self._index_name, self._value)
+    def addressed(self) -> Iterator[AddressedRecord]:
+        return self._table.addressed_by_index(self._index_name, self._values)
 
     def _plan_node(self) -> PlanNode:
         definition = self._table.definition.index_on_name(self._index_name)
         return PlanNode(
             "IndexLookup",
-            f"{self._table.name}.{definition.column} = {describe_value(self._value)} "
+            f"{self._table.name}.{definition.column} {_described_keys(self._values)} "
             f"(índice {self._index_name}, {definition.method.value})",
         )
 
@@ -252,8 +266,8 @@ class IndexRange(TableOperator):
         self._low = low
         self._high = high
 
-    def _produce(self) -> Iterator[Record]:
-        return self._table.range_index(self._index_name, self._low, self._high)
+    def addressed(self) -> Iterator[AddressedRecord]:
+        return self._table.addressed_by_index_range(self._index_name, self._low, self._high)
 
     def _plan_node(self) -> PlanNode:
         definition = self._table.definition.index_on_name(self._index_name)
@@ -345,6 +359,8 @@ class Sort(Operator):
         )
         if self._actual_rows is None:
             return PlanNode("ExternalSort", keys, (self._child.plan(),))
+        if self._runs == 0:
+            return PlanNode("ExternalSort", f"{keys} · en memoria", (self._child.plan(),))
         detail = f"{keys} · {self._runs} run(s), {self._passes} pasada(s) de mezcla"
         return PlanNode("ExternalSort", detail, (self._child.plan(),))
 
@@ -818,6 +834,13 @@ class _NullsFirst:
         if other.value is None:
             return False
         return bool(self.value < other.value)
+
+
+def _described_keys(keys: Sequence[Key]) -> str:
+    """Las claves buscadas como condición: `= 5` o `IN (5, 7)`."""
+    if len(keys) == 1:
+        return f"= {describe_value(keys[0])}"
+    return f"IN ({', '.join(map(describe_value, keys))})"
 
 
 def _described_range(low: Key | None, high: Key | None) -> str:

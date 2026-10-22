@@ -14,8 +14,7 @@ from index.rtree import SearchStats
 from query.operators import TableOperator
 from query.plan import PlanNode
 from query.spatial import DistanceTarget, PolygonSearch, RadiusSearch
-from query.table import Table
-from storage.record import Record
+from query.table import AddressedRecord, Table
 
 
 class SpatialScan(TableOperator):
@@ -43,9 +42,9 @@ class SpatialRangeScan(SpatialScan):
         super().__init__(table, alias, index_name)
         self._search = search
 
-    def _produce(self) -> Iterator[Record]:
+    def addressed(self) -> Iterator[AddressedRecord]:
         target = self._search.target
-        return self._table.rows_within_radius(
+        return self._table.addressed_within_radius(
             self._index_name, target.center, self._search.radius, target.metric, self._stats
         )
 
@@ -69,8 +68,8 @@ class SpatialNearestScan(SpatialScan):
         super().__init__(table, alias, index_name)
         self._target = target
 
-    def _produce(self) -> Iterator[Record]:
-        return self._table.rows_by_distance(
+    def addressed(self) -> Iterator[AddressedRecord]:
+        return self._table.addressed_by_distance(
             self._index_name, self._target.center, self._target.metric, self._stats
         )
 
@@ -86,8 +85,10 @@ class SpatialPolygonScan(SpatialScan):
         super().__init__(table, alias, index_name)
         self._search = search
 
-    def _produce(self) -> Iterator[Record]:
-        return self._table.rows_within_polygon(self._index_name, self._search.polygon, self._stats)
+    def addressed(self) -> Iterator[AddressedRecord]:
+        return self._table.addressed_within_polygon(
+            self._index_name, self._search.polygon, self._stats
+        )
 
     def _plan_node(self) -> PlanNode:
         what = f"dentro de un polígono de {len(self._search.polygon.vertices)} vértices"

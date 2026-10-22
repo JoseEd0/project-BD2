@@ -35,6 +35,8 @@ SEQUENTIAL_SUFFIX = ".seq"
 CLUSTERED_SUFFIX = ".bpt"
 INDEX_SUFFIX = ".idx"
 PRIMARY_KEY_INDEX_PREFIX = "pk_"
+# Una fila tal como está guardada, con su dirección si la tabla es un heap file.
+AddressedRecord = tuple[RecordId | None, bytes]
 # Lo que había antes en el lugar de una fila que se inserta: nada, distinto de cualquier valor.
 _NO_ROW = object()
 OWNED_SUFFIXES = (
@@ -239,32 +241,40 @@ class Table:
 
     def scan(self) -> Iterator[Record]:
         """Todas las filas. El orden depende de la organización."""
-        for _, record in self._scan_raw():
-            yield self._serializer.unpack(record)
+        return self._unpacked(self.addressed_scan())
 
-    def search_primary_key(self, key: Key) -> Iterator[Record]:
-        """Filas cuya clave primaria vale `key`, por el camino más corto que haya.
+    def addressed_scan(self) -> Iterator[AddressedRecord]:
+        """Todas las filas guardadas, con su dirección en un heap file (`None` en las demás
+        organizaciones, que localizan una fila por su clave)."""
+        if isinstance(self._storage, HeapFile):
+            yield from self._storage.scan()
+            return
+        for record in self._storage.scan():
+            yield None, record
+
+    def addressed_by_primary_key(self, keys: Sequence[Key]) -> Iterator[AddressedRecord]:
+        """Filas cuya clave primaria es una de `keys`, por el camino más corto que haya.
 
         Un heap file no ordena nada, así que sin índice esto es un recorrido completo. Como
-        toda tabla con clave primaria recibe un índice B+ sobre ella, el caso normal es que
+        toda tabla con clave primaria recibe un índice sobre ella, el caso normal es que
         aquí se use ese índice: sin esto, cada inserción pagaría un recorrido entero al
         comprobar que la clave no se repite, y cargar N filas costaría O(N²).
         """
+        wanted = list(dict.fromkeys(keys))
         if isinstance(self._storage, HeapFile):
             index = self._primary_key_index()
             if index is None:
-                yield from self._filter_scan(key)
+                yield from self._filter_scan(wanted)
             else:
-                yield from self.search_index(index.name, key)
-        elif isinstance(self._storage, SequentialFile):
-            for record in self._storage.search(key):
-                yield self._serializer.unpack(record)
-        else:
-            found = self._storage.search(key)
-            if found is not None:
-                yield self._serializer.unpack(found)
+                yield from self.addressed_by_index(index.name, wanted)
+            return
+        for key in wanted:
+            for record in self._records_with_key(key):
+                yield None, record
 
-    def range_primary_key(self, low: Key | None, high: Key | None) -> Iterator[Record]:
+    def addressed_by_primary_key_range(
+        self, low: Key | None, high: Key | None
+    ) -> Iterator[AddressedRecord]:
         """Filas con la clave primaria en el rango, en orden. Solo si la organización ordena.
 
         Raises:
@@ -273,13 +283,20 @@ class Table:
         if isinstance(self._storage, HeapFile):
             raise UnsupportedIndexError(f"'{self.name}' no guarda las filas en orden de clave")
         for record in self._storage.range_search(low, high):
-            yield self._serializer.unpack(record)
+            yield None, record
 
-    def search_index(self, index_name: str, value: Key) -> Iterator[Record]:
-        """Filas que el índice indicado asocia a ese valor."""
-        return self._rows_at(self._indexes[index_name].search(value))
+    def addressed_by_index(
+        self, index_name: str, values: Sequence[Key]
+    ) -> Iterator[AddressedRecord]:
+        """Filas que el índice indicado asocia a alguno de esos valores."""
+        index = self._indexes[index_name]
+        return self._addressed_at(
+            address for value in dict.fromkeys(values) for address in index.search(value)
+        )
 
-    def range_index(self, index_name: str, low: Key | None, high: Key | None) -> Iterator[Record]:
+    def addressed_by_index_range(
+        self, index_name: str, low: Key | None, high: Key | None
+    ) -> Iterator[AddressedRecord]:
         """Filas del índice en un rango de valores. Solo para índices B+.
 
         Raises:
@@ -288,7 +305,7 @@ class Table:
         index = self._indexes[index_name]
         if not isinstance(index, UnclusteredBPlusIndex):
             raise UnsupportedIndexError(f"el índice '{index_name}' no admite consultas por rango")
-        return self._rows_at(address for _, address in index.range_search(low, high))
+        return self._addressed_at(address for _, address in index.range_search(low, high))
 
     def spatial_index(self, index_name: str) -> SpatialIndex:
         """Índice R-Tree con ese nombre.
@@ -301,24 +318,24 @@ class Table:
             raise UnsupportedIndexError(f"el índice '{index_name}' no es un índice espacial")
         return index
 
-    def rows_within_radius(
+    def addressed_within_radius(
         self,
         index_name: str,
         center: Point,
         radius: float,
         metric: Metric,
         stats: SearchStats | None = None,
-    ) -> Iterator[Record]:
+    ) -> Iterator[AddressedRecord]:
         """Filas a distancia menor o igual que `radius` del centro, por el R-Tree.
 
-        Salen en orden físico, no de distancia: ver `_rows_in_page_order`.
+        Salen en orden físico, no de distancia: ver `_addressed_in_page_order`.
         """
         found = self.spatial_index(index_name).within_radius(center, radius, metric, stats)
-        return self._rows_in_page_order(neighbor.record_id for neighbor in found)
+        return self._addressed_in_page_order(neighbor.record_id for neighbor in found)
 
-    def rows_by_distance(
+    def addressed_by_distance(
         self, index_name: str, center: Point, metric: Metric, stats: SearchStats | None = None
-    ) -> Iterator[Record]:
+    ) -> Iterator[AddressedRecord]:
         """Filas de la más cercana a la más lejana. Es perezoso: quien solo quiere las `k`
         primeras deja de pedir y el resto del R-Tree no se llega a abrir.
 
@@ -328,16 +345,19 @@ class Table:
         """
         index = self.spatial_index(index_name)
         column = self._definition.index_on_name(index_name).column
-        yield from self._rows_with_null(column, self.row_count - index.entry_count)
+        yield from self._with_null(column, self.row_count - index.entry_count)
         found = index.nearest(center, metric, stats)
-        yield from self._rows_at(neighbor.record_id for neighbor in found)
+        yield from self._addressed_at(neighbor.record_id for neighbor in found)
 
-    def rows_within_polygon(
+    def addressed_within_polygon(
         self, index_name: str, polygon: Polygon, stats: SearchStats | None = None
-    ) -> Iterator[Record]:
+    ) -> Iterator[AddressedRecord]:
         """Filas cuyo punto cae dentro del polígono, por el R-Tree, en orden físico."""
         found = self.spatial_index(index_name).within_polygon(polygon, stats)
-        return self._rows_in_page_order(found)
+        return self._addressed_in_page_order(found)
+
+    def unpack(self, record: bytes) -> Record:
+        return self._serializer.unpack(record)
 
     def sample_points(self, column: str, limit: int) -> list[Point]:
         """Hasta `limit` puntos de la columna, tomados a intervalos regulares de la tabla.
@@ -352,14 +372,23 @@ class Table:
         stride = max(1, ceil(self.row_count / limit))
         points = [
             self._serializer.unpack_field(record, position)
-            for number, (_, record) in enumerate(self._scan_raw())
+            for number, (_, record) in enumerate(self.addressed_scan())
             if number % stride == 0
         ]
         return [point for point in points if isinstance(point, Point)]
 
-    def delete_where(self, matches: Callable[[Record], bool], changes: RowChanges) -> int:
-        """Borra las filas que cumplen el predicado y devuelve cuántas."""
-        victims = self._matching(matches)
+    def delete_where(
+        self,
+        candidates: Iterable[AddressedRecord],
+        matches: Callable[[Record], bool],
+        changes: RowChanges,
+    ) -> int:
+        """Borra las filas que cumplen el predicado y devuelve cuántas.
+
+        `candidates` son las filas donde buscarlas: toda la tabla, o lo que haya devuelto el
+        camino de acceso que eligió el planificador para el WHERE.
+        """
+        victims = self._matching(candidates, matches)
         for address, record, row in victims:
             self._delete_one(address, record)
             changes.deleted(row)
@@ -367,6 +396,7 @@ class Table:
 
     def update_where(
         self,
+        candidates: Iterable[AddressedRecord],
         matches: Callable[[Record], bool],
         transform: Callable[[Record], Record],
         changes: RowChanges,
@@ -388,7 +418,7 @@ class Table:
             DuplicateValueError: si coincidirían en una columna `UNIQUE`.
             StorageError: si algún valor nuevo no corresponde a su columna.
         """
-        victims = self._matching(matches)
+        victims = self._matching(candidates, matches)
         replacements = [self._serializer.pack(transform(row)) for _, _, row in victims]
         moving = self._rows_changing_key([record for _, record, _ in victims], replacements)
         for position, (address, record, row) in enumerate(victims):
@@ -419,7 +449,7 @@ class Table:
 
     def delete_first(self, target: Record) -> bool:
         """Borra una sola fila igual a `target`. Lo usa el deshacer de una inserción."""
-        for address, record in self._scan_raw():
+        for address, record in self._addressed_like(target):
             if self._serializer.unpack(record) == target:
                 self._delete_one(address, record)
                 return True
@@ -427,7 +457,7 @@ class Table:
 
     def update_first(self, target: Record, replacement: Record) -> bool:
         """Reemplaza una sola fila igual a `target`. Lo usa el deshacer de un UPDATE."""
-        for address, record in self._scan_raw():
+        for address, record in self._addressed_like(target):
             if self._serializer.unpack(record) == target:
                 self._update_one(address, record, self._serializer.pack(replacement))
                 return True
@@ -510,12 +540,16 @@ class Table:
         self.close()
         discard_table_files(self._directory, self.name)
 
-    def _rows_at(self, addresses: Iterable[RecordId]) -> Iterator[Record]:
-        """El salto al heap: la fila que vive en cada dirección que devolvió un índice."""
-        for record in self._require_heap().read_many(addresses):
+    def _unpacked(self, rows: Iterable[AddressedRecord]) -> Iterator[Record]:
+        for _, record in rows:
             yield self._serializer.unpack(record)
 
-    def _rows_with_null(self, column: str, expected: int) -> Iterator[Record]:
+    def _addressed_at(self, addresses: Iterable[RecordId]) -> Iterator[AddressedRecord]:
+        """El salto al heap: la fila que vive en cada dirección que devolvió un índice."""
+        wanted = list(addresses)
+        return zip(wanted, self._require_heap().read_many(wanted), strict=True)
+
+    def _with_null(self, column: str, expected: int) -> Iterator[AddressedRecord]:
         """Las `expected` filas cuyo valor en la columna es NULL, recorriendo la tabla.
 
         Quien llama sabe cuántas hay sin leer nada —las que le faltan a su índice—, así
@@ -526,15 +560,17 @@ class Table:
             return
         position = self.schema.position_of(column)
         pending = expected
-        for _, record in self._scan_raw():
+        for address, record in self.addressed_scan():
             if self._serializer.unpack_field(record, position) is not None:
                 continue
-            yield self._serializer.unpack(record)
+            yield address, record
             pending -= 1
             if pending == 0:
                 return
 
-    def _rows_in_page_order(self, addresses: Iterable[RecordId]) -> Iterator[Record]:
+    def _addressed_in_page_order(
+        self, addresses: Iterable[RecordId]
+    ) -> Iterator[AddressedRecord]:
         """El salto al heap con las direcciones ordenadas por página.
 
         Un índice espacial devuelve las filas de una zona, repartidas al azar por el heap:
@@ -542,20 +578,19 @@ class Table:
         página se lee una sola vez. Es la idea del *bitmap heap scan* de PostgreSQL, y
         solo vale cuando el orden del resultado no importa; el k-NN no puede usarla.
         """
-        return self._rows_at(sorted(addresses))
+        return self._addressed_at(sorted(addresses))
 
-    def _scan_raw(self) -> Iterator[tuple[RecordId | None, bytes]]:
-        if isinstance(self._storage, HeapFile):
-            yield from self._storage.scan()
-        elif isinstance(self._storage, SequentialFile):
-            for record in self._storage.scan():
-                yield None, record
-        else:
-            for record in self._storage.scan():
-                yield None, record
+    def _addressed_like(self, target: Record) -> Iterator[AddressedRecord]:
+        """Dónde buscar una fila igual a `target`: por su clave primaria si la tiene, que es
+        una búsqueda por índice, y recorriendo la tabla si no. Así deshacer una transacción
+        de `m` cambios cuesta `m` búsquedas, no `m` recorridos."""
+        key = self._definition.primary_key
+        if key is None:
+            return self.addressed_scan()
+        return self.addressed_by_primary_key([target[self.schema.position_of(key)]])
 
     def _matching(
-        self, matches: Callable[[Record], bool]
+        self, candidates: Iterable[AddressedRecord], matches: Callable[[Record], bool]
     ) -> list[tuple[RecordId | None, bytes, Record]]:
         """Filas que cumplen el predicado, con su dirección y sus bytes.
 
@@ -563,11 +598,18 @@ class Table:
         que el recorrido viera sus propios cambios.
         """
         found = []
-        for address, record in self._scan_raw():
+        for address, record in candidates:
             row = self._serializer.unpack(record)
             if matches(row):
                 found.append((address, record, row))
         return found
+
+    def _records_with_key(self, key: Key) -> list[bytes]:
+        """Registros de un archivo secuencial o de un B+ agrupado con esa clave."""
+        if isinstance(self._storage, SequentialFile):
+            return self._storage.search(key)
+        found = self._require_clustered().search(key)
+        return [] if found is None else [found]
 
     def _store(self, record: bytes) -> None:
         if not isinstance(self._storage, HeapFile):
@@ -593,11 +635,11 @@ class Table:
             return None
         return self._definition.index_on(self._definition.primary_key)
 
-    def _filter_scan(self, key: Key) -> Iterator[Record]:
+    def _filter_scan(self, keys: Sequence[Key]) -> Iterator[AddressedRecord]:
         position = self._primary_key_position()
-        for _, record in self._scan_raw():
-            if self._serializer.unpack_field(record, position) == key:
-                yield self._serializer.unpack(record)
+        for address, record in self.addressed_scan():
+            if self._serializer.unpack_field(record, position) in keys:
+                yield address, record
 
     def _reject_repeated_values(self, records: Sequence[bytes]) -> None:
         """Comprueba que unas filas nuevas no repiten la clave ni un valor `UNIQUE`."""
@@ -685,7 +727,7 @@ class Table:
         return DuplicatePrimaryKeyError(f"la clave primaria {key!r} ya existe en '{self.name}'")
 
     def _has_key(self, key: Key) -> bool:
-        return next(iter(self.search_primary_key(key)), None) is not None
+        return next(iter(self.addressed_by_primary_key([key])), None) is not None
 
     def _primary_key_of(self, record: bytes) -> Key:
         return self._serializer.unpack_field(record, self._primary_key_position())
@@ -694,6 +736,11 @@ class Table:
         if self._definition.primary_key is None:
             raise TableError(f"'{self.name}' no declara clave primaria")
         return self.schema.position_of(self._definition.primary_key)
+
+    def _require_clustered(self) -> ClusteredBPlusIndex:
+        if not isinstance(self._storage, ClusteredBPlusIndex):
+            raise UnsupportedIndexError(f"'{self.name}' no es un B+ agrupado")
+        return self._storage
 
     def _require_heap(self) -> HeapFile:
         if not isinstance(self._storage, HeapFile):

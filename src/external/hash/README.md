@@ -75,7 +75,10 @@ filas dentro de la misma partición, y dentro de ella la búsqueda es por diccio
 coste baja a `O(N + M)`.
 
 La clave puede ser **compuesta** (`ON a.x = b.x AND a.y = b.y`), y una clave con NULL no
-empareja con ninguna, ni con otro NULL. Dos parámetros completan la reunión:
+empareja con ninguna, ni con otro NULL. Por eso esas filas **no se reparten**: compartirían
+hash y, si fueran muchas, llenarían una partición que habría que reunir por bloques
+comparándolas con todo para nada. Se apartan a un archivo al pasar y, si la reunión las
+conserva, salen al final sin pareja. Dos parámetros completan la reunión:
 
 - `accepts`, una condición adicional sobre cada par de claves iguales: el resto del `ON`
   (`… AND a.precio < b.tope`). Un par que no la cumple cuenta como no emparejado.

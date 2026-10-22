@@ -48,13 +48,14 @@ def test_single_record(config: EngineConfig, serializer: RecordSerializer, id_of
     assert keys == [7]
 
 
-def test_input_that_fits_in_the_buffer_makes_one_run(
+def test_input_that_fits_in_the_buffer_is_sorted_in_memory(
     config: EngineConfig, serializer: RecordSerializer, id_of
 ):
     keys, sorter = sorted_keys(config, serializer, id_of, rows(serializer, [3, 1, 2]))
     assert keys == [1, 2, 3]
-    assert sorter.run_count == 1
-    assert sorter.merge_passes == 1
+    assert sorter.run_count == 0
+    assert sorter.merge_passes == 0
+    assert not (config.data_directory / "sort").exists()
 
 
 def test_already_sorted_input(config: EngineConfig, serializer: RecordSerializer, id_of):

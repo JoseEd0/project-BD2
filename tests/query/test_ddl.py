@@ -257,5 +257,5 @@ def test_no_index_holds_the_rows_whose_value_is_null(tabla: Engine, method: str,
     tabla.execute("INSERT INTO t VALUES (9, NULL, NULL, NULL)")
     tabla.execute(f"CREATE INDEX i ON t USING {method} ({column})")
     table = tabla.table("t")
-    assert list(table.search_index("i", None)) == []
+    assert list(table.addressed_by_index("i", [None])) == []
     assert tabla.execute(f"SELECT id FROM t WHERE {column} IS NULL ORDER BY id").rows[-1] == (9,)

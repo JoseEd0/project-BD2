@@ -1,5 +1,7 @@
 """Elección del camino de acceso: es la decisión que el plan muestra al usuario."""
 
+from dataclasses import replace
+
 import pytest
 
 from config import EngineConfig
@@ -137,13 +139,22 @@ def test_pushing_the_condition_down_keeps_the_same_rows(engine: Engine):
     assert result.rows == ((10,), (12,))
 
 
-def test_the_sort_plan_reports_runs_and_merge_passes(engine: Engine):
+def test_a_small_sort_is_done_in_memory(engine: Engine):
     engine.execute("CREATE TABLE t (id INT PRIMARY KEY, v INT)")
     engine.execute("INSERT INTO t VALUES (1, 30), (2, 10), (3, 20)")
     result = engine.execute("SELECT v FROM t ORDER BY v LIMIT 1")
     assert result.rows == ((10,),)
-    assert "run(s)" in result.plan.render()
-    assert "pasada(s)" in result.plan.render()
+    assert "en memoria" in result.plan.render()
+
+
+def test_the_sort_plan_reports_runs_and_merge_passes(config: EngineConfig):
+    with Engine(replace(config, sort_buffer_pages=1)) as engine:
+        engine.execute("CREATE TABLE t (id INT PRIMARY KEY, v INT)")
+        engine.execute("INSERT INTO t VALUES " + ", ".join(f"({i}, {-i})" for i in range(200)))
+        result = engine.execute("SELECT v FROM t ORDER BY v LIMIT 1")
+        assert result.rows == ((-199,),)
+        assert "run(s)" in result.plan.render()
+        assert "pasada(s)" in result.plan.render()
 
 
 def test_explain_returns_the_plan_without_running_the_query(engine: Engine):
@@ -234,3 +245,26 @@ def test_any_other_order_still_sorts(ordenada: Engine, query: str):
 
 def test_a_heap_table_has_no_order_to_offer(alumnos: Engine):
     assert "ExternalSort" in plan_of(alumnos, "SELECT * FROM alumnos ORDER BY id")
+
+
+def test_two_bounds_on_a_column_form_a_single_range(alumnos: Engine):
+    plan = plan_of(alumnos, "SELECT * FROM alumnos WHERE id > 1 AND nota > 0 AND id < 5")
+    assert "IndexRange" in plan
+    assert "entre 1 y 5" in plan
+
+
+def test_an_equality_beats_a_range_written_before_it(alumnos: Engine):
+    plan = plan_of(alumnos, "SELECT * FROM alumnos WHERE id > 1 AND ciudad = 'lima'")
+    assert "IndexLookup" in plan
+    assert "ciudad" in plan
+
+
+def test_in_on_an_indexed_column_looks_up_each_value(alumnos: Engine):
+    plan = plan_of(alumnos, "SELECT * FROM alumnos WHERE id IN (2, 4)")
+    assert "IndexLookup" in plan
+    assert "IN (2, 4)" in plan
+
+
+def test_in_with_repeated_values_and_null_returns_each_row_once(alumnos: Engine):
+    rows = alumnos.execute("SELECT id FROM alumnos WHERE id IN (2, 2, NULL) ORDER BY id").rows
+    assert rows == ((2,),)

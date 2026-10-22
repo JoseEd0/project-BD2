@@ -404,11 +404,12 @@ def test_abandoning_a_join_leaves_no_files_behind(
     assert not directory.exists()
 
 
-def test_many_rows_with_a_null_key_never_match_even_when_joined_by_blocks(
+def test_many_rows_with_a_null_key_are_set_aside_instead_of_joined_by_blocks(
     small_buffer: EngineConfig, serializer: RecordSerializer, city_of
 ):
-    """Las claves NULL comparten hash como cualquier otro valor repetido, así que su
-    partición también se resuelve por bloques; ahí tampoco pueden emparejar."""
+    """Las claves NULL compartirían hash como cualquier otro valor repetido, y su partición
+    habría que resolverla por bloques para no emparejar nada. No se reparten: se apartan y
+    salen sin pareja, sin comparaciones ni niveles extra."""
     left = [(index, None) for index in range(HEAVY_KEY_ROWS)]
     right = [(1000, None), (1001, None)]
     with ExternalHashJoin(
@@ -423,9 +424,32 @@ def test_many_rows_with_a_null_key_never_match_even_when_joined_by_blocks(
         found = joined_ids(
             serializer, joiner.join(map(serializer.pack, left), map(serializer.pack, right))
         )
-        assert joiner.block_joins == 1
+        assert joiner.block_joins == 0
+        assert joiner.levels == 1
     assert found == brute_force_pairs(left, right, Unmatched.BOTH)
     assert sum(found.values()) == HEAVY_KEY_ROWS + 2
+    assert not (small_buffer.data_directory / "j").exists()
+
+
+@pytest.mark.parametrize("unmatched", [Unmatched.NONE, Unmatched.LEFT, Unmatched.RIGHT])
+def test_null_keys_follow_what_the_join_keeps(
+    few_partitions: EngineConfig, serializer: RecordSerializer, city_of, unmatched: Unmatched
+):
+    left = [(1, "lima"), (2, None), (3, None)]
+    right = [(10, "lima"), (11, None)]
+    with ExternalHashJoin(
+        few_partitions.data_directory / "j",
+        serializer.size,
+        serializer.size,
+        city_of,
+        city_of,
+        few_partitions,
+        unmatched=unmatched,
+    ) as joiner:
+        found = joined_ids(
+            serializer, joiner.join(map(serializer.pack, left), map(serializer.pack, right))
+        )
+    assert found == brute_force_pairs(left, right, unmatched)
 
 
 def test_keys_python_does_not_call_equal_still_end_up_in_one_group(

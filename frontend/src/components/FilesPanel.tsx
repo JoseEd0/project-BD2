@@ -156,7 +156,8 @@ export default function FilesPanel({
               <code>demos/samples/</code>, o crea una tabla con <code>CREATE TABLE</code>.
             </p>
             <p>
-              También puedes poblarla entera desde la terminal:
+              También puedes poblarla entera desde la terminal, con el servidor detenido (un
+              directorio de datos lo abre un solo motor a la vez):
               <br />
               <code>python demos/poblar_ecommerce.py --data-dir ./data</code>
             </p>

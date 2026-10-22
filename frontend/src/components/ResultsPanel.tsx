@@ -13,6 +13,7 @@ interface ResultsPanelProps {
   tables: TableInfo[];
   theme: Theme;
   sessionId: string;
+  onBackgroundFailure: (error: unknown) => void;
 }
 
 type Tab = "filas" | "mensajes" | "mapa";
@@ -71,11 +72,20 @@ function Messages({ result }: { result: QueryResponse }) {
   );
 }
 
-export default function ResultsPanel({ result, failure, tables, theme, sessionId }: ResultsPanelProps) {
-  const [tab, setTab] = useState<Tab>("filas");
+export default function ResultsPanel({
+  result,
+  failure,
+  tables,
+  theme,
+  sessionId,
+  onBackgroundFailure,
+}: ResultsPanelProps) {
+  const [chosenTab, setTab] = useState<Tab>("filas");
   const [copied, setCopied] = useState(false);
   const hasRows = result !== null && result.columns.length > 0;
   const spatial = failure === null ? (result?.spatial ?? null) : null;
+  // Sin datos espaciales no hay pestaña «Mapa»: quedarse en ella dejaría el panel vacío.
+  const tab: Tab = chosenTab === "mapa" && spatial === null ? "filas" : chosenTab;
 
   // Una consulta espacial que devuelve puntos se entiende mejor en el mapa, así que se
   // abre sola. Y si el resultado siguiente no trae puntos que situar, se vuelve a las
@@ -149,11 +159,12 @@ export default function ResultsPanel({ result, failure, tables, theme, sessionId
           )}
         </div>
       </header>
-      <div className={tab === "mapa" && spatial !== null ? "panel__body panel__body--map" : "panel__body"}>
+      <div className={tab === "mapa" ? "panel__body panel__body--map" : "panel__body"}>
         {failure !== null && <Failure failure={failure} />}
         {result !== null && spatial !== null && tab === "mapa" && (
           <MapPanel
             result={result}
+            onBackgroundFailure={onBackgroundFailure}
             sessionId={sessionId}
             spatial={spatial}
             tables={tables}

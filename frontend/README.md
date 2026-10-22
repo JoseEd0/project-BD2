@@ -135,10 +135,15 @@ Lo que la interfaz cuida además:
   con `sendBeacon` al irse, que es la única petición que el navegador garantiza enviar
   mientras descarga la página.
 - **Transacciones**: si un error del motor aborta la transacción —un interbloqueo, una espera
-  agotada—, el indicador «Transacción abierta» se apaga, porque el error lo dice.
+  agotada—, el indicador «Transacción abierta» se apaga, porque el error lo dice. Vale
+  también para las lecturas de fondo que van por la sesión: la estructura física (⌬) y los
+  puntos y MBR del mapa.
+- **Una petición a la vez**: mientras una sentencia corre, ni ⌘↵ ni la vista previa ni una
+  subida lanzan otra; una sentencia que espera un bloqueo no se envía dos veces.
 - **Resultados grandes**: el API envía como mucho 10 000 filas; la tabla avisa «Mostrando N
   de M filas» cuando hay más.
-- **Accesibilidad**: los diálogos son modales de verdad (`aria-modal`, se cierran con Escape
+- **Accesibilidad**: los diálogos son modales de verdad (`aria-modal`, Tab da la vuelta
+  dentro del diálogo, se cierran con Escape o con un clic que empieza y termina en el fondo,
   y devuelven el foco), los botones ✕ tienen nombre y los divisores entre paneles se mueven
   también con las flechas del teclado.
 

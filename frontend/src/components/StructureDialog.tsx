@@ -19,6 +19,7 @@ interface StructureDialogProps {
   table: TableInfo;
   sessionId: string;
   onClose: () => void;
+  onFailure: (error: unknown) => void;
 }
 
 const PERCENT = 100;
@@ -241,17 +242,23 @@ function FileView({ storage }: { storage: HeapStorage | SequentialStorage }) {
   );
 }
 
-export default function StructureDialog({ table, sessionId, onClose }: StructureDialogProps) {
+export default function StructureDialog({
+  table,
+  sessionId,
+  onClose,
+  onFailure,
+}: StructureDialogProps) {
   const [structure, setStructure] = useState<TableStructure | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchStructure(table.name, sessionId)
       .then(setStructure)
-      .catch((reason: unknown) =>
-        setError(reason instanceof ApiError ? reason.failure.error : "No se pudo leer la estructura"),
-      );
-  }, [table.name, sessionId]);
+      .catch((reason: unknown) => {
+        setError(reason instanceof ApiError ? reason.failure.error : "No se pudo leer la estructura");
+        onFailure(reason);
+      });
+  }, [table.name, sessionId, onFailure]);
 
   return (
     <Modal onClose={onClose} title={`Estructura física de «${table.name}»`} width="wide">

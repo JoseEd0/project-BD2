@@ -27,6 +27,7 @@ interface MapPanelProps {
   tables: TableInfo[];
   theme: Theme;
   sessionId: string;
+  onBackgroundFailure: (error: unknown) => void;
 }
 
 /** Puntos del resultado que se resaltan como mucho; más allá el mapa deja de ser legible. */
@@ -178,17 +179,21 @@ function useTablePoints(
   spatial: SpatialInfo,
   rowCount: number,
   sessionId: string,
+  onFailure: (error: unknown) => void,
 ): TablePoints | null {
   const [points, setPoints] = useState<TablePoints | null>(null);
   useEffect(() => {
     let current = true;
     fetchTablePoints(spatial.table, spatial.column, sessionId)
       .then((loaded) => current && setPoints(loaded))
-      .catch(() => current && setPoints(null));
+      .catch((reason: unknown) => {
+        if (current) setPoints(null);
+        onFailure(reason);
+      });
     return () => {
       current = false;
     };
-  }, [spatial.table, spatial.column, rowCount, sessionId]);
+  }, [spatial.table, spatial.column, rowCount, sessionId, onFailure]);
   return points;
 }
 
@@ -198,6 +203,7 @@ function useSpatialTree(
   wanted: boolean,
   rowCount: number,
   sessionId: string,
+  onFailure: (error: unknown) => void,
 ): RTreeStructure | null {
   const [tree, setTree] = useState<RTreeStructure | null>(null);
   useEffect(() => {
@@ -213,15 +219,25 @@ function useSpatialTree(
           setTree(index.structure);
         }
       })
-      .catch(() => current && setTree(null));
+      .catch((reason: unknown) => {
+        if (current) setTree(null);
+        onFailure(reason);
+      });
     return () => {
       current = false;
     };
-  }, [spatial.table, spatial.column, wanted, rowCount, sessionId]);
+  }, [spatial.table, spatial.column, wanted, rowCount, sessionId, onFailure]);
   return tree;
 }
 
-export default function MapPanel({ result, spatial, tables, theme, sessionId }: MapPanelProps) {
+export default function MapPanel({
+  result,
+  spatial,
+  tables,
+  theme,
+  sessionId,
+  onBackgroundFailure,
+}: MapPanelProps) {
   const container = useRef<HTMLDivElement>(null);
   const legend = useRef<HTMLDivElement>(null);
   const map = useLeafletMap(container);
@@ -235,8 +251,14 @@ export default function MapPanel({ result, spatial, tables, theme, sessionId }: 
     SPATIAL_INDEX,
   );
 
-  const context = useTablePoints(spatial, rowCount, sessionId);
-  const tree = useSpatialTree(spatial, showBoxes && indexed, rowCount, sessionId);
+  const context = useTablePoints(spatial, rowCount, sessionId, onBackgroundFailure);
+  const tree = useSpatialTree(
+    spatial,
+    showBoxes && indexed,
+    rowCount,
+    sessionId,
+    onBackgroundFailure,
+  );
   const located = useMemo(() => locatedRows(result.rows), [result.rows]);
   const highlighted = useMemo(() => located.slice(0, MAX_HIGHLIGHTED), [located]);
 

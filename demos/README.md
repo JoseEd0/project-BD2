@@ -36,7 +36,7 @@ mano**, no límites oficiales.
 
 | Argumento | Para qué |
 |---|---|
-| `--data-dir` | dónde vive la base de datos (el mismo que usa el API) |
+| `--data-dir` | dónde vive la base de datos; si es el del API, el servidor tiene que estar detenido: un directorio lo abre un solo motor a la vez |
 | `--escala` | multiplica el número de filas; `3` da unas 90 000 |
 | `--seed` | semilla del generador; misma semilla, mismos datos |
 | `--reiniciar` | borra el directorio antes de cargar |

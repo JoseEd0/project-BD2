@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   ApiError,
@@ -66,6 +66,7 @@ export default function App() {
   const [pendingDrop, setPendingDrop] = useState<TableInfo | null>(null);
   const [confirmEmpty, setConfirmEmpty] = useState(false);
   const [inspected, setInspected] = useState<TableInfo | null>(null);
+  const inFlight = useRef(false);
 
   const { theme, toggleTheme } = useTheme();
   const sidebar = useSplitter(SIDEBAR.initial, SIDEBAR.min, SIDEBAR.max, "x");
@@ -130,25 +131,50 @@ export default function App() {
     [refreshTables],
   );
 
+  /** Las lecturas de fondo —la estructura, los puntos del mapa— van por la sesión: si se
+   * rinden esperando un bloqueo, la transacción abierta queda abortada y la insignia tiene
+   * que dejar de mostrarla. */
+  const noteBackgroundFailure = useCallback((error: unknown) => {
+    if (error instanceof ApiError && error.failure.in_transaction !== null) {
+      setInTransaction(error.failure.in_transaction);
+    }
+  }, []);
+
+  /** Una petición de la sesión cada vez. El botón se deshabilita, pero ⌘↵ o la vista previa
+   * llegan igual: una sentencia que espera un bloqueo se mandaría dos veces. Es una ref y
+   * no estado porque dos pulsaciones seguidas llegan antes de que React vuelva a pintar. */
+  const exclusively = useCallback(async (task: () => Promise<void>) => {
+    if (inFlight.current) {
+      return;
+    }
+    inFlight.current = true;
+    setRunning(true);
+    try {
+      await task();
+    } finally {
+      inFlight.current = false;
+      setRunning(false);
+    }
+  }, []);
+
   const execute = useCallback(
     async (script: string) => {
       if (script.trim().length === 0) {
         return;
       }
-      setRunning(true);
-      setFailure(null);
-      try {
-        await showResponse(await runQuery(script, sessionId));
-        setHistory((previous) =>
-          [script, ...previous.filter((item) => item !== script)].slice(0, HISTORY_LIMIT),
-        );
-      } catch (error) {
-        await showFailure(error);
-      } finally {
-        setRunning(false);
-      }
+      await exclusively(async () => {
+        setFailure(null);
+        try {
+          await showResponse(await runQuery(script, sessionId));
+          setHistory((previous) =>
+            [script, ...previous.filter((item) => item !== script)].slice(0, HISTORY_LIMIT),
+          );
+        } catch (error) {
+          await showFailure(error);
+        }
+      });
     },
-    [sessionId, showFailure, showResponse],
+    [exclusively, sessionId, showFailure, showResponse],
   );
 
   const preview = useCallback(
@@ -171,38 +197,42 @@ export default function App() {
 
   const emptyDatabase = useCallback(async () => {
     setConfirmEmpty(false);
-    setFailure(null);
-    try {
-      await showResponse(await dropAllTables(sessionId));
-    } catch (error) {
-      await showFailure(error);
-    }
-  }, [sessionId, showFailure, showResponse]);
+    await exclusively(async () => {
+      setFailure(null);
+      try {
+        await showResponse(await dropAllTables(sessionId));
+      } catch (error) {
+        await showFailure(error);
+      }
+    });
+  }, [exclusively, sessionId, showFailure, showResponse]);
 
   const upload = useCallback(
     async (values: UploadValues) => {
-      setUploading(true);
-      setFailure(null);
-      try {
-        if (values.mode === "fileOnly") {
-          const stored = await uploadFileOnly(values.file, values.name);
-          setSql(createFromFileSql(values.name, stored.path, stored.columns));
-          setView("consulta");
-          setResult(null);
+      await exclusively(async () => {
+        setUploading(true);
+        setFailure(null);
+        try {
+          if (values.mode === "fileOnly") {
+            const stored = await uploadFileOnly(values.file, values.name);
+            setSql(createFromFileSql(values.name, stored.path, stored.columns));
+            setView("consulta");
+            setResult(null);
+            setShowUpload(false);
+            return;
+          }
+          const response = await uploadCsv({ ...values, sessionId });
           setShowUpload(false);
-          return;
+          await showResponse(response);
+        } catch (error) {
+          setShowUpload(false);
+          await showFailure(error);
+        } finally {
+          setUploading(false);
         }
-        const response = await uploadCsv({ ...values, sessionId });
-        setShowUpload(false);
-        await showResponse(response);
-      } catch (error) {
-        setShowUpload(false);
-        await showFailure(error);
-      } finally {
-        setUploading(false);
-      }
+      });
     },
-    [sessionId, showFailure, showResponse],
+    [exclusively, sessionId, showFailure, showResponse],
   );
 
   const describe = useCallback((table: TableInfo) => {
@@ -295,6 +325,7 @@ export default function App() {
             <div className="workbench__output">
               <ResultsPanel
                 failure={failure}
+                onBackgroundFailure={noteBackgroundFailure}
                 result={result}
                 sessionId={sessionId}
                 tables={tables}
@@ -312,7 +343,7 @@ export default function App() {
 
       {showUpload && (
         <UploadDialog
-          busy={uploading}
+          busy={uploading || running}
           onClose={() => setShowUpload(false)}
           onSubmit={(values) => void upload(values)}
         />
@@ -321,6 +352,7 @@ export default function App() {
       {inspected !== null && (
         <StructureDialog
           onClose={() => setInspected(null)}
+          onFailure={noteBackgroundFailure}
           sessionId={sessionId}
           table={inspected}
         />

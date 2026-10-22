@@ -175,7 +175,7 @@ ORDER BY pedidos DESC;`,
       },
       {
         label: "ORDER BY",
-        description: "Ordenamiento externo por mezcla k-vías",
+        description: "Ordenar por una columna que no es la clave: ExternalSort, en memoria si cabe en el buffer",
         sql: `SELECT nombre, precio, stock
 FROM productos
 ORDER BY precio DESC

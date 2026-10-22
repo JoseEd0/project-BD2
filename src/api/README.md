@@ -7,7 +7,7 @@ lógica de base de datos**; si algo hay que decidir sobre datos, lo decide el mo
 
 ```bash
 .venv/bin/pip install -e .
-MINIGESTOR_DATA_DIR=./data .venv/bin/uvicorn api.main:app --reload --port 8000
+MINIGESTOR_DATA_DIR=./data .venv/bin/uvicorn --factory api.main:create_app --reload --port 8000
 ```
 
 Documentación interactiva generada por FastAPI en `http://localhost:8000/docs`.
@@ -21,6 +21,18 @@ Documentación interactiva generada por FastAPI en `http://localhost:8000/docs`.
 Están recogidas en [`.env.example`](../../.env.example), en la raíz del repositorio.
 
 Ninguna ruta ni puerto está escrito en el código.
+
+## Organización
+
+| Módulo | Qué hace |
+|---|---|
+| [`main.py`](main.py) | `create_app`: arma la aplicación; uvicorn la llama con `--factory` |
+| [`settings.py`](settings.py) | configuración leída de las variables de entorno |
+| [`service.py`](service.py) | estado compartido: motor, bloqueos y sesiones |
+| [`routes/`](routes/) | un router por dominio: tablas, consultas, subidas y sesiones |
+| [`responses.py`](responses.py) | del resultado del motor al JSON de la respuesta |
+| [`errors.py`](errors.py) | qué errores son del usuario (`400`) y cómo se cuentan |
+| [`schemas.py`](schemas.py) | forma de cada mensaje que entra y sale |
 
 ## Rutas
 

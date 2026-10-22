@@ -172,7 +172,7 @@ cp frontend/.env.example frontend/.env
 .venv/bin/python demos/poblar_ecommerce.py --data-dir ./data
 
 # 2. API, en http://localhost:8000 (documentación interactiva en /docs)
-MINIGESTOR_DATA_DIR=./data .venv/bin/uvicorn api.main:app --port 8000
+MINIGESTOR_DATA_DIR=./data .venv/bin/uvicorn --factory api.main:create_app --port 8000
 
 # 3. interfaz, en http://localhost:5173
 npm --prefix frontend run dev

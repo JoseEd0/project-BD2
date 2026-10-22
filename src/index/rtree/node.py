@@ -34,12 +34,9 @@ HEADER_SIZE = HEADER_FORMAT.size
 # Latitud, longitud y la dirección de la fila.
 LEAF_ENTRY_FORMAT = struct.Struct("<dd" + RECORD_ID_FIELDS)
 BRANCH_ENTRY_FORMAT = struct.Struct("<ddddi")
-NO_NODE = -1
 # Con menos de cuatro entradas no se puede dividir un nodo en dos grupos de al menos dos.
 MINIMUM_CAPACITY = 4
 MINIMUM_ENTRIES_PER_NODE = 2
-
-
 
 
 @unique

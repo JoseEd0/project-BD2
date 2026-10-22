@@ -174,22 +174,8 @@ class BPlusTree:
         levels: list[dict[str, Any]] = []
         frontier = [self._root]
         while frontier:
-            nodes = [self._load(page_id) for page_id in frontier]
-            levels.append(
-                {
-                    "kind": "hojas" if nodes[0].is_leaf else "internos",
-                    "node_count": len(nodes),
-                    "key_count": sum(len(node.keys) for node in nodes),
-                    "nodes": [
-                        {
-                            "keys": [str(key) for key in node.keys[:MAX_KEYS_SHOWN_PER_NODE]],
-                            "key_count": len(node.keys),
-                        }
-                        for node in nodes[:MAX_NODES_SHOWN_PER_LEVEL]
-                    ],
-                }
-            )
-            frontier = [] if nodes[0].is_leaf else [c for node in nodes for c in node.children]
+            level, frontier = self._describe_level(frontier)
+            levels.append(level)
         return {
             "kind": "bplustree",
             "height": self._height,
@@ -199,6 +185,29 @@ class BPlusTree:
             "internal_capacity": self._codec.internal_capacity,
             "levels": levels,
         }
+
+    def _describe_level(self, frontier: list[int]) -> tuple[dict[str, Any], list[int]]:
+        """Un nivel del árbol, leído nodo a nodo para no tener el nivel entero en memoria
+        —en un B+ agrupado, el de las hojas es la tabla—, y las páginas del nivel de abajo."""
+        shown: list[dict[str, Any]] = []
+        key_count = 0
+        children: list[int] = []
+        leaves = False
+        for position, page_id in enumerate(frontier):
+            node = self._load(page_id)
+            leaves = node.is_leaf
+            key_count += len(node.keys)
+            if position < MAX_NODES_SHOWN_PER_LEVEL:
+                keys = [_shown(key) for key in node.keys[:MAX_KEYS_SHOWN_PER_NODE]]
+                shown.append({"keys": keys, "key_count": len(node.keys)})
+            children.extend(node.children)
+        level = {
+            "kind": "hojas" if leaves else "internos",
+            "node_count": len(frontier),
+            "key_count": key_count,
+            "nodes": shown,
+        }
+        return level, children
 
     def flush(self) -> None:
         self._write_header()
@@ -443,3 +452,11 @@ class BPlusTree:
             self._entry_count,
             self._height,
         )
+
+
+def _shown(key: Key) -> str:
+    """La clave tal como se lee: de una compuesta, cada componente con su `str`, que en una
+    dirección es `(página:ranura)` y no la representación del objeto."""
+    if isinstance(key, tuple):
+        return "(" + ", ".join(str(part) for part in key) + ")"
+    return str(key)

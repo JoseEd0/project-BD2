@@ -34,6 +34,9 @@ HEADER_FIELDS = "IIHiQ"
 DIRECTORY_SUFFIX = ".dir"
 DIRECTORY_ENTRY = struct.Struct("<i")
 MAX_LOCAL_DEPTH = 32
+# El directorio nunca usa más bits que la profundidad local máxima: dos claves que solo
+# difieren por encima de ellos son, para el índice, el mismo hash.
+HASH_MASK = (1 << MAX_LOCAL_DEPTH) - 1
 INITIAL_GLOBAL_DEPTH = 1
 
 
@@ -225,14 +228,45 @@ class ExtendibleHashIndex:
         return removed
 
     def _compact_chain(self, bucket_id: int) -> None:
-        """Reescribe una cubeta con desbordamiento para devolver las páginas que el borrado
-        dejó vacías o a medio llenar."""
-        bucket = self._load(bucket_id)
-        if bucket.next_page == NO_PAGE:
-            return
-        entries = list(self._entries_of(bucket_id))
-        self._release_chain(bucket_id)
-        self._write_bucket(bucket_id, entries, bucket.flags)
+        """Aprieta la cadena tras un borrado: los huecos se llenan con entradas de la última
+        página, que se devuelve cuando queda vacía.
+
+        Así la cabeza de una cubeta con desbordamiento sigue llena —`insert` solo encadena
+        con la cabeza llena, y por eso una cadena guarda un solo hash— y un borrado escribe
+        unas pocas páginas en vez de reescribir la cadena entera.
+        """
+        chain = list(self._chain_pages(bucket_id))
+        changed: set[int] = set()
+        while len(chain) > 1:
+            tail_id, tail = chain[-1]
+            for page_id, page in chain[:-1]:
+                changed |= self._fill_from_tail(page_id, page, tail_id, tail)
+            if next(iter(tail.live_slots()), None) is not None:
+                break
+            chain.pop()
+            last_id, last = chain[-1]
+            last.next_page = NO_PAGE
+            changed.add(last_id)
+            changed.discard(tail_id)
+            self._release(tail_id)
+        for page_id, page in chain:
+            if page_id in changed:
+                self._store(page_id, page)
+
+    @staticmethod
+    def _fill_from_tail(
+        page_id: int, page: RecordPage, tail_id: int, tail: RecordPage
+    ) -> set[int]:
+        """Pasa entradas de la última página a los huecos de `page`; devuelve las páginas
+        que cambiaron."""
+        changed: set[int] = set()
+        for slot in list(tail.live_slots()):
+            if page_id == tail_id or page.first_free_slot() is None:
+                break
+            page.insert(tail.read(slot))
+            tail.free(slot)
+            changed = {page_id, tail_id}
+        return changed
 
     def _shrink(self, directory_index: int) -> None:
         """Funde la cubeta con su gemela mientras quepan holgadas, y reduce el directorio.
@@ -303,7 +337,10 @@ class ExtendibleHashIndex:
         el bit siguiente sí lo hará.
         """
         bucket_id = self._directory_entry(directory_index)
-        local_depth = self._load(bucket_id).flags
+        bucket = self._load(bucket_id)
+        if bucket.next_page != NO_PAGE and self._repeats_chained_hash(bucket_id, incoming):
+            return False
+        local_depth = bucket.flags
         high_bit = 1 << local_depth
         entries = list(self._entries_of(bucket_id))
         if len({self._hash_of(entry) for entry in [*entries, incoming]}) == 1:
@@ -318,6 +355,12 @@ class ExtendibleHashIndex:
         self._write_bucket(new_bucket_id, moving, local_depth + 1)
         self._repoint_directory(directory_index & (high_bit - 1), high_bit, new_bucket_id)
         return True
+
+    def _repeats_chained_hash(self, bucket_id: int, incoming: bytes) -> bool:
+        """Una cubeta solo encadena cuando todas sus entradas tienen el mismo hash, así que
+        basta compararlo con una para saber que partir no separaría la entrada nueva."""
+        stored = next(self._entries_of(bucket_id), None)
+        return stored is not None and self._hash_of(stored) == self._hash_of(incoming)
 
     def _repoint_directory(self, low_bits: int, high_bit: int, new_bucket_id: int) -> None:
         """Las entradas que ahora tienen el bit nuevo encendido pasan a la cubeta nueva."""
@@ -388,7 +431,7 @@ class ExtendibleHashIndex:
         return bool(self._hash_of(entry) & high_bit)
 
     def _hash_of(self, entry: bytes) -> int:
-        return stable_hash(entry[: self._key_codec.size])
+        return stable_hash(entry[: self._key_codec.size]) & HASH_MASK
 
     def _directory_index(self, key: Key) -> int:
         return stable_hash(self._key_codec.pack(key)) & (self.directory_size - 1)

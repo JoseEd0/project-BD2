@@ -291,14 +291,8 @@ class RTree:
         levels: list[dict[str, Any]] = []
         frontier = [self._root]
         while frontier:
-            nodes = [self._load(page_id) for page_id in frontier]
-            levels.append(_describe_level(nodes))
-            frontier = [
-                entry.child
-                for node in nodes
-                if isinstance(node, BranchNode)
-                for entry in node.entries
-            ]
+            level, frontier = self._describe_level(frontier)
+            levels.append(level)
         return {
             "kind": "rtree",
             "height": self._height,
@@ -310,6 +304,30 @@ class RTree:
             "minimum_fill": self._minimum_fill,
             "levels": levels,
         }
+
+    def _describe_level(self, frontier: list[int]) -> tuple[dict[str, Any], list[int]]:
+        """Un nivel del árbol, leído nodo a nodo para no tener el nivel entero en memoria,
+        y las páginas del nivel de abajo."""
+        shown: list[dict[str, Any]] = []
+        entry_count = 0
+        children: list[int] = []
+        leaves = False
+        for position, page_id in enumerate(frontier):
+            node = self._load(page_id)
+            leaves = isinstance(node, LeafNode)
+            entry_count += len(node.entries)
+            if position < MAX_NODES_SHOWN_PER_LEVEL:
+                bounds = list(_cover(node)) if node.entries else None
+                shown.append({"bounds": bounds, "entry_count": len(node.entries)})
+            if isinstance(node, BranchNode):
+                children.extend(entry.child for entry in node.entries)
+        level = {
+            "kind": "hojas" if leaves else "internos",
+            "node_count": len(frontier),
+            "entry_count": entry_count,
+            "nodes": shown,
+        }
+        return level, children
 
     def flush(self) -> None:
         self._write_header()
@@ -565,18 +583,3 @@ def _latitude_of(record: bytes) -> float:
 
 def _cover(node: Node) -> Rectangle:
     return Rectangle.enclosing(entry.bounds for entry in node.entries)
-
-
-def _describe_level(nodes: Sequence[Node]) -> dict[str, Any]:
-    return {
-        "kind": "hojas" if isinstance(nodes[0], LeafNode) else "internos",
-        "node_count": len(nodes),
-        "entry_count": sum(len(node.entries) for node in nodes),
-        "nodes": [
-            {
-                "bounds": list(_cover(node)) if node.entries else None,
-                "entry_count": len(node.entries),
-            }
-            for node in nodes[:MAX_NODES_SHOWN_PER_LEVEL]
-        ],
-    }

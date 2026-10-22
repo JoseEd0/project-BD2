@@ -75,6 +75,11 @@ directorio —comprueba si el reparto movería algo— y, si no, encadena una p�
 desbordamiento a la cubeta. Sin esa comprobación, insertar 300 filas con la misma clave
 duplicaría el directorio 300 veces.
 
+"El mismo hash" se mide en los 32 bits que el directorio puede llegar a usar
+(`MAX_LOCAL_DEPTH`): dos claves que solo difieren por encima de ellos son inseparables para
+el índice y se encadenan juntas. Una cubeta con cadena guarda un solo hash, así que la
+siguiente inserción de esa clave compara contra una entrada y no relee la cadena entera.
+
 ### Borrar: la división al revés
 
 Borrar libera la ranura y, si la cubeta quedó holgada, **deshace la división** que la creó:
@@ -99,8 +104,9 @@ El umbral del 50 % (`hash_merge_fill`) es deliberado: fundir en cuanto caben jus
 que la siguiente inserción volviera a partir la cubeta, y un índice que oscila entre partir
 y fundir escribe mucho para nada. Con la mitad de holgura, tras fundir queda sitio.
 
-Si la cubeta tenía páginas de desbordamiento y el borrado las dejó vacías o a medias, se
-reescribe la cadena y las páginas sobrantes se devuelven. Llenar el índice hasta que tenga
+Si la cubeta tenía páginas de desbordamiento, los huecos que deja el borrado se llenan con
+entradas de la última página, que se devuelve cuando queda vacía: la cabeza sigue llena y
+un borrado escribe unas pocas páginas, no la cadena entera. Llenar el índice hasta que tenga
 decenas de cubetas y borrarlo todo lo deja como recién creado: dos cubetas y un directorio
 de dos punteros (hay un test que lo comprueba validando la estructura por el camino).
 

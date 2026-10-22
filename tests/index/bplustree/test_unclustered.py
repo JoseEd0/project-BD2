@@ -115,3 +115,11 @@ def test_state_survives_reopening(config: EngineConfig, serializer: RecordSerial
         assert reopened.entry_count == 120
         for city in cities:
             assert sorted(reopened.search(city)) == sorted(expected[city])
+
+
+def test_the_structure_shows_addresses_as_page_and_slot(
+    index: UnclusteredBPlusIndex, serializer: RecordSerializer
+):
+    index.insert(row(serializer, 1, "lima"), RecordId(page_id=4, slot=24))
+    leaf = index.describe()["levels"][-1]["nodes"][0]
+    assert leaf["keys"] == ["(lima, (4:24))"]

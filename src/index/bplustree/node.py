@@ -45,7 +45,7 @@ class Node:
     """Contenido de un nodo ya deserializado.
 
     En un nodo interno se usan `keys` y `children`; en una hoja, `keys`, `values` y
-    `next_leaf`. El campo `next_leaf` también encadena las páginas libres del árbol.
+    `next_leaf`.
     """
 
     kind: NodeKind

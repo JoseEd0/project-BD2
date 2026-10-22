@@ -5,7 +5,7 @@ import pytest
 
 from config import EngineConfig
 from index.hash import ExtendibleHashIndex
-from index.hash.extendible_hash import HashFormatError, stable_hash
+from index.hash.extendible_hash import MAX_LOCAL_DEPTH, HashFormatError, stable_hash
 from index.keys import ScalarKeyCodec
 from storage.types import StorageError
 
@@ -13,6 +13,8 @@ HashValidator = Callable[[ExtendibleHashIndex, list[int]], None]
 
 VALUE_SIZE = 4
 SHUFFLE_SEED = 5
+# Dos enteros cuyos hashes coinciden en los 32 bits bajos y difieren en los altos.
+COLLIDING_KEYS = (2731, 107327)
 
 
 def payload(key: int) -> bytes:
@@ -108,6 +110,39 @@ def test_a_repeated_key_never_grows_the_directory(
     assert index.global_depth == 1
     assert index.describe()["bucket_count"] == 2
     assert len(index.search(key)) == index.bucket_capacity * 3
+
+
+def test_keys_whose_hashes_differ_only_above_the_directory_bits_are_chained(
+    index: ExtendibleHashIndex, key_codec: ScalarKeyCodec
+):
+    """El directorio no usa más de `MAX_LOCAL_DEPTH` bits del hash: dos claves que solo
+    difieren por encima son inseparables y se encadenan, sin duplicar el directorio."""
+    low_bits = (1 << MAX_LOCAL_DEPTH) - 1
+    first, second = COLLIDING_KEYS
+    assert stable_hash(key_codec.pack(first)) != stable_hash(key_codec.pack(second))
+    assert stable_hash(key_codec.pack(first)) & low_bits == (
+        stable_hash(key_codec.pack(second)) & low_bits
+    )
+    for value in range(index.bucket_capacity * 3):
+        index.insert(COLLIDING_KEYS[value % 2], payload(value))
+    assert index.global_depth == 1
+    assert len(index.search(first)) + len(index.search(second)) == index.bucket_capacity * 3
+
+
+def test_deleting_from_a_chain_keeps_its_head_full_and_frees_pages(
+    index: ExtendibleHashIndex, key_codec: ScalarKeyCodec
+):
+    """Tras cada borrado los huecos se llenan desde la última página: la cabeza sigue
+    llena, que es lo que permite encadenar solo claves con el mismo hash."""
+    key = key_whose_hash_has_low_bits_set(key_codec, 12)
+    copies = index.bucket_capacity * 3
+    for value in range(copies):
+        index.insert(key, payload(value))
+    for value in range(0, copies, 2):
+        assert index.delete_entry(key, payload(value))
+    buckets = [bucket for bucket in index.describe()["buckets"] if bucket["entries"]]
+    assert buckets[0]["overflow_pages"] == 1
+    assert sorted(index.search(key)) == sorted(payload(value) for value in range(1, copies, 2))
 
 
 def test_distinct_keys_that_share_a_bit_still_split(

@@ -19,6 +19,7 @@ from benchmarks.common import (
     benchmark_schema,
     build_rows,
     directory_size,
+    integer_of,
     pack_all,
     results_directory,
     sample_keys,
@@ -27,6 +28,7 @@ from benchmarks.common import (
 from config import EngineConfig
 from index.bplustree import ClusteredBPlusIndex, UnclusteredBPlusIndex
 from index.hash import ExtendibleHashIndex
+from index.hash.extendible_hash import DIRECTORY_SUFFIX
 from index.keys import ScalarKeyCodec
 from storage.heap import HeapFile
 from storage.record import RecordSerializer
@@ -86,7 +88,7 @@ def _measure_clustered(
             CLUSTERED,
             "construcción",
             size,
-            time_it(lambda: [index.insert(record) for record in records]),
+            time_it(lambda: _insert_records(index, records)),
         )
         report.add(
             CLUSTERED,
@@ -116,7 +118,9 @@ def _measure_clustered(
         churn = [
             (key, record)
             for key, record in zip(
-                [serializer.unpack_field(item, 0) for item in records], records, strict=True
+                [integer_of(serializer.unpack_field(item, 0)) for item in records],
+                records,
+                strict=True,
             )
             if key % MUTATION_FRACTION == 0
         ]
@@ -148,12 +152,7 @@ def _measure_unclustered(
             UNCLUSTERED,
             "construcción",
             size,
-            time_it(
-                lambda: [
-                    index.insert(record, address)
-                    for record, address in zip(records, addresses, strict=True)
-                ]
-            ),
+            time_it(lambda: _insert_addressed(index, records, addresses)),
         )
         report.add(
             UNCLUSTERED,
@@ -194,7 +193,7 @@ def _measure_unclustered(
         churn = [
             (record, address)
             for record, address in zip(records, addresses, strict=True)
-            if serializer.unpack_field(record, 0) % MUTATION_FRACTION == 0
+            if integer_of(serializer.unpack_field(record, 0)) % MUTATION_FRACTION == 0
         ]
         report.add(
             UNCLUSTERED,
@@ -222,14 +221,14 @@ def _measure_hash(
         HeapFile(heap_path, serializer.size, config) as heap,
     ):
         entries = [
-            (serializer.unpack_field(record, 0), address)
+            (integer_of(serializer.unpack_field(record, 0)), address)
             for record, address in zip(records, addresses, strict=True)
         ]
         report.add(
             HASH,
             "construcción",
             size,
-            time_it(lambda: [index.insert(key, address.pack()) for key, address in entries]),
+            time_it(lambda: _insert_keys(index, entries)),
         )
         report.add(
             HASH,
@@ -249,7 +248,7 @@ def _measure_hash(
             "espacio",
             size,
             0.0,
-            kib=round(directory_size([path, path.with_name(path.name + ".dir")]), 1),
+            kib=round(directory_size([path, path.with_name(path.name + DIRECTORY_SUFFIX)]), 1),
             profundidad_global=index.global_depth,
         )
         churn = [(key, address) for key, address in entries if key % MUTATION_FRACTION == 0]
@@ -260,6 +259,23 @@ def _measure_hash(
             time_it(lambda: _churn_hash(index, churn)),
             operaciones=len(churn) * 2,
         )
+
+
+def _insert_records(index: ClusteredBPlusIndex, records: list[bytes]) -> None:
+    for record in records:
+        index.insert(record)
+
+
+def _insert_addressed(
+    index: UnclusteredBPlusIndex, records: list[bytes], addresses: list[RecordId]
+) -> None:
+    for record, address in zip(records, addresses, strict=True):
+        index.insert(record, address)
+
+
+def _insert_keys(index: ExtendibleHashIndex, entries: list[tuple[int, RecordId]]) -> None:
+    for key, address in entries:
+        index.insert(key, address.pack())
 
 
 def _churn_clustered(index: ClusteredBPlusIndex, entries: list[tuple[int, bytes]]) -> None:

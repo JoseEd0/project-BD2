@@ -29,7 +29,7 @@ import csv
 import random
 import shutil
 import time
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
 from datetime import date, timedelta
 from pathlib import Path
@@ -254,7 +254,15 @@ class Generator:
         self.tiendas = max(1, int(BASE_TIENDAS * scale))
 
     def rows_of(self, table: str) -> Iterator[Sequence[object]]:
-        return getattr(self, f"_{table}")()
+        producers: dict[str, Callable[[], Iterator[Sequence[object]]]] = {
+            "categorias": self._categorias,
+            "clientes": self._clientes,
+            "productos": self._productos,
+            "pedidos": self._pedidos,
+            "detalle_pedidos": self._detalle_pedidos,
+            "tiendas": self._tiendas,
+        }
+        return producers[table]()
 
     def _categorias(self) -> Iterator[Sequence[object]]:
         yield from ((number, nombre) for number, nombre in enumerate(CATEGORIAS, start=1))

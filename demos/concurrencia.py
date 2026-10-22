@@ -25,6 +25,7 @@ from pathlib import Path
 
 from config import EngineConfig
 from query.engine import Engine
+from storage.types import Value
 from txn import DeadlockError, LockManager, Session, TransactionManager
 
 DEFAULT_THREADS = 4
@@ -45,7 +46,14 @@ def prepare(session: Session) -> None:
 
 
 def total_of(session: Session) -> int:
-    return int(session.execute("SELECT SUM(saldo) as total FROM cuentas").rows[0][0])
+    return balance_of(session.execute("SELECT SUM(saldo) as total FROM cuentas").rows[0][0])
+
+
+def balance_of(value: Value) -> int:
+    """Un saldo leído de la tabla, que siempre es un entero."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise TypeError(f"se esperaba un saldo entero y llegó {value!r}")
+    return value
 
 
 def scene_race_condition(engine: Engine, locks: LockManager, manager: TransactionManager,
@@ -56,13 +64,15 @@ def scene_race_condition(engine: Engine, locks: LockManager, manager: Transactio
     def worker() -> None:
         session = Session(engine, locks, manager)
         for _ in range(rounds):
-            current = session.execute("SELECT saldo FROM cuentas WHERE id = 1").rows[0][0]
+            current = balance_of(
+                session.execute("SELECT saldo FROM cuentas WHERE id = 1").rows[0][0]
+            )
             time.sleep(RACE_PAUSE_SECONDS)
-            session.execute(f"UPDATE cuentas SET saldo = {int(current) - 1} WHERE id = 1")
+            session.execute(f"UPDATE cuentas SET saldo = {current - 1} WHERE id = 1")
 
     run_threads(worker, threads)
     session = Session(engine, locks, manager)
-    final = session.execute("SELECT saldo FROM cuentas WHERE id = 1").rows[0][0]
+    final = balance_of(session.execute("SELECT saldo FROM cuentas WHERE id = 1").rows[0][0])
     expected = INITIAL_BALANCE - threads * rounds
     print(f"   esperado {expected}, obtenido {final} → "
           f"{'correcto' if final == expected else 'PERDIDAS por race condition'}")

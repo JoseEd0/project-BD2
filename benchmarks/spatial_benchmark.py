@@ -38,7 +38,14 @@ from itertools import islice
 from pathlib import Path
 from typing import Any
 
-from benchmarks.common import BYTES_PER_KIB, Report, directory_size, results_directory, time_it
+from benchmarks.common import (
+    BYTES_PER_KIB,
+    Report,
+    directory_size,
+    integer_of,
+    results_directory,
+    time_it,
+)
 from config import EngineConfig
 from index.rtree import RTree, SearchStats, SpatialIndex
 from query.engine import Engine
@@ -333,7 +340,7 @@ def _measure_queries(
         def run_all(query: Query = query, found: list[list[int]] = found) -> None:
             for center in workload.centers:
                 rows = engine.execute(query.engine_sql(center)).rows
-                found.append([int(row[0]) for row in rows])
+                found.append([integer_of(row[0]) for row in rows])
 
         elapsed = time_it(run_all)
         answers[query.operation] = found

@@ -14,11 +14,11 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
+from query.plan import MILLISECONDS_PER_SECOND
 from storage.record import RecordSerializer
 from storage.schema import Field, Schema
-from storage.types import FieldType
+from storage.types import FieldType, Value
 
-MILLISECONDS = 1000.0
 BYTES_PER_KIB = 1024.0
 NAME_LENGTH = 24
 CITY_LENGTH = 16
@@ -82,7 +82,7 @@ def time_it(action: Callable[[], Any]) -> float:
     """Milisegundos que tarda `action`."""
     started = time.perf_counter()
     action()
-    return (time.perf_counter() - started) * MILLISECONDS
+    return (time.perf_counter() - started) * MILLISECONDS_PER_SECOND
 
 
 def benchmark_schema() -> Schema:
@@ -116,6 +116,17 @@ def pack_all(serializer: RecordSerializer, rows: Sequence[tuple[Any, ...]]) -> l
 def directory_size(paths: Sequence[Path]) -> float:
     """Kibibytes ocupados por los archivos indicados."""
     return sum(path.stat().st_size for path in paths if path.exists()) / BYTES_PER_KIB
+
+
+def integer_of(value: Value) -> int:
+    """Un valor que el experimento sabe entero: el id de una fila del dataset sintético.
+
+    Raises:
+        TypeError: si no lo es, que sería un error del propio experimento.
+    """
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise TypeError(f"se esperaba un entero y llegó {value!r}")
+    return value
 
 
 def sample_keys(count: int, queries: int, seed: int) -> list[int]:

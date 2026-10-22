@@ -430,7 +430,8 @@ FIGURES: tuple[Figure, ...] = (
 
 
 def load(path: Path) -> dict[str, Any]:
-    return json.loads(path.read_text(encoding="utf-8"))
+    results: dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
+    return results
 
 
 def points_of(report: dict[str, Any], line: Line) -> list[tuple[int, float]]:

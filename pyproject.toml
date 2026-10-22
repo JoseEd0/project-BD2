@@ -36,6 +36,14 @@ select = ["E", "F", "W", "I", "N", "UP", "B", "A", "C4", "SIM", "RET", "PTH", "R
 [tool.mypy]
 python_version = "3.11"
 mypy_path = "src"
-files = ["src"]
+files = ["src", "benchmarks", "demos"]
 strict = true
 warn_unreachable = true
+
+# Las gráficas y la conexión a PostgreSQL son extras opcionales. Sus stubs usan sintaxis de
+# Python 3.12, que mypy no acepta con `python_version = "3.11"`: se tratan como `Any`.
+[[tool.mypy.overrides]]
+module = ["numpy", "numpy.*", "matplotlib", "matplotlib.*", "psycopg", "psycopg.*"]
+follow_imports = "skip"
+follow_imports_for_stubs = true
+ignore_missing_imports = true

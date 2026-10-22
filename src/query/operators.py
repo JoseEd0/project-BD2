@@ -38,7 +38,8 @@ from query.expressions import (
 )
 from query.functions import AggregateKind
 from query.plan import PlanNode
-from query.table import AddressedRecord, Table
+from query.row_store import AddressedRecord
+from query.table import Table
 from sql.nodes import ColumnRef, Expression, JoinKind, SortDirection
 from storage.record import Record, RecordSerializer
 from storage.schema import Field, Schema

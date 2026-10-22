@@ -13,8 +13,9 @@ from collections.abc import Iterator
 from index.rtree import SearchStats
 from query.operators import TableOperator
 from query.plan import PlanNode
+from query.row_store import AddressedRecord
 from query.spatial import DistanceTarget, PolygonSearch, RadiusSearch
-from query.table import AddressedRecord, Table
+from query.table import Table
 
 
 class SpatialScan(TableOperator):

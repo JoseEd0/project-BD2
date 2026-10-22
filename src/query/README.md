@@ -24,6 +24,12 @@ tiene. Es la **única** pieza que traduce los tipos de SQL a los del almacenamie
 Une la organización física con sus índices y mantiene la coherencia: si entra o sale una
 fila, todos sus índices se enteran en la misma operación.
 
+Las tres organizaciones se reducen a dos formas de localizar una fila
+([`row_store.py`](row_store.py)): el **heap file** por su dirección, que no cambia mientras
+la fila exista, y el **secuencial** y el **B+ agrupado** por su clave, porque mueven las
+filas al reorganizar o al dividir nodos. La tabla habla con las dos por la misma interfaz,
+`RowStore`, y no pregunta qué estructura hay debajo.
+
 | `CREATE TABLE` | Organización | Cómo se lee |
 |---|---|---|
 | `id INT PRIMARY KEY` | heap file + índice B+ sobre la clave | por índice o recorrido |

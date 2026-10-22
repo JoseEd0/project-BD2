@@ -11,6 +11,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Iterator
 from pathlib import Path
 from types import TracebackType
+from typing import Any
 
 from config import EngineConfig
 from storage.layout import FileHeader
@@ -144,6 +145,15 @@ class HeapFile:
             page = self._load(page_id)
             for slot in page.live_slots():
                 yield RecordId(page_id=page_id, slot=slot), page.read(slot)
+
+    def describe(self) -> dict[str, Any]:
+        """Forma física del archivo, para inspeccionarla."""
+        return {
+            "kind": "heap",
+            "pages": self.page_count,
+            "slots_per_page": self.slots_per_page,
+            "records": self.record_count,
+        }
 
     def flush(self) -> None:
         self._write_header()

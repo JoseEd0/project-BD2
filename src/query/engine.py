@@ -39,8 +39,9 @@ from query.loader import infer_schema, read_values
 from query.operators import UnsupportedQueryError
 from query.plan import PlanNode
 from query.planner import Planner
+from query.row_store import AddressedRecord
 from query.spatial import SpatialView, spatial_view
-from query.table import AddressedRecord, Table, discard_table_files, primary_key_index_name
+from query.table import Table, discard_table_files, primary_key_index_name
 from sql import parse_script
 from sql.nodes import (
     Assignment,

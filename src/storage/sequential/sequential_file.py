@@ -25,6 +25,7 @@ from bisect import bisect_left, bisect_right
 from collections.abc import Callable, Iterator
 from pathlib import Path
 from types import TracebackType
+from typing import Any
 
 from config import EngineConfig
 from storage.layout import FileHeader, chained_pages
@@ -200,6 +201,18 @@ class SequentialFile:
         rebuild_path.unlink(missing_ok=True)
         written_pages = self._write_rebuilt_file(rebuild_path, records_per_page)
         self._replace_files(rebuild_path, written_pages)
+
+    def describe(self) -> dict[str, Any]:
+        """Forma física del archivo, para inspeccionarla."""
+        return {
+            "kind": "sequential",
+            "main_pages": self.main_page_count,
+            "slots_per_page": self.slots_per_page,
+            "records": self.record_count,
+            "overflow_records": self.overflow_count,
+            "deleted_records": self.deleted_count,
+            "waste_ratio": self.waste_ratio,
+        }
 
     def flush(self) -> None:
         self._write_header()

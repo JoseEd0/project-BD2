@@ -18,6 +18,7 @@ from index.rtree import SearchStats, SpatialIndex
 from index.secondary import RangeIndex, SecondaryIndex
 from query.catalog import IndexDefinition, Organization, TableDefinition
 from query.index_methods import Capability, method_named
+from query.row_store import AddressedRecord, HeapStore, KeyedStore, RowStore
 from spatial.geometry import Point, Polygon
 from spatial.metrics import Metric
 from storage.heap import HeapFile
@@ -37,8 +38,6 @@ _STORAGE_SUFFIXES = {
     Organization.CLUSTERED_BTREE: CLUSTERED_SUFFIX,
 }
 PRIMARY_KEY_INDEX_PREFIX = "pk_"
-# Una fila tal como está guardada, con su dirección si la tabla es un heap file.
-AddressedRecord = tuple[RecordId | None, bytes]
 # Lo que había antes en el lugar de una fila que se inserta: nada, distinto de cualquier valor.
 _NO_ROW = object()
 
@@ -197,11 +196,7 @@ class Table:
     def addressed_scan(self) -> Iterator[AddressedRecord]:
         """Todas las filas guardadas, con su dirección en un heap file (`None` en las demás
         organizaciones, que localizan una fila por su clave)."""
-        if isinstance(self._storage, HeapFile):
-            yield from self._storage.scan()
-            return
-        for record in self._storage.scan():
-            yield None, record
+        return self._storage.scan()
 
     def addressed_by_primary_key(self, keys: Sequence[Key]) -> Iterator[AddressedRecord]:
         """Filas cuya clave primaria es una de `keys`, por el camino más corto que haya.
@@ -212,16 +207,10 @@ class Table:
         comprobar que la clave no se repite, y cargar N filas costaría O(N²).
         """
         wanted = list(dict.fromkeys(keys))
-        if isinstance(self._storage, HeapFile):
-            index = self._primary_key_index()
-            if index is None:
-                yield from self._filter_scan(wanted)
-            else:
-                yield from self.addressed_by_index(index.name, wanted)
-            return
-        for key in wanted:
-            for record in self._records_with_key(key):
-                yield None, record
+        index = self._primary_key_index()
+        if index is None:
+            return self._storage.with_keys(wanted)
+        return self.addressed_by_index(index.name, wanted)
 
     def addressed_by_primary_key_range(
         self, low: Key | None, high: Key | None
@@ -229,12 +218,9 @@ class Table:
         """Filas con la clave primaria en el rango, en orden. Solo si la organización ordena.
 
         Raises:
-            UnsupportedIndexError: si la tabla es un heap file, que no guarda orden.
+            UnorderedStoreError: si la tabla es un heap file, que no guarda orden.
         """
-        if isinstance(self._storage, HeapFile):
-            raise UnsupportedIndexError(f"'{self.name}' no guarda las filas en orden de clave")
-        for record in self._storage.range_search(low, high):
-            yield None, record
+        return self._storage.in_key_range(low, high)
 
     def addressed_by_index(
         self, index_name: str, values: Sequence[Key]
@@ -386,17 +372,11 @@ class Table:
         return len(victims)
 
     def _update_one(self, address: RecordId | None, old: bytes, new: bytes) -> None:
-        if isinstance(self._storage, HeapFile):
-            if address is None:
-                raise TableError("falta la dirección de la fila que se quiere actualizar")
-            for index in self._indexes.values():
-                index.delete(old, address)
-            self._storage.update(address, new)
-            for index in self._indexes.values():
-                index.insert(new, address)
-            return
-        self._storage.delete(self._primary_key_of(old))
-        self._storage.insert(new)
+        for index in self._indexes.values():
+            index.delete(old, _located(address))
+        self._storage.update(address, old, new)
+        for index in self._indexes.values():
+            index.insert(new, _located(address))
 
     def delete_first(self, target: Record) -> bool:
         """Borra una sola fila igual a `target`. Lo usa el deshacer de una inserción."""
@@ -420,9 +400,9 @@ class Table:
         Raises:
             UnsupportedIndexError: si la tabla no es un heap file.
         """
-        heap = self._require_heap()
+        self._require_addresses()
         index = self._open_index(definition)
-        index.build((record, address) for address, record in heap.scan())
+        index.build((record, _located(address)) for address, record in self._storage.scan())
         self._indexes[definition.name] = index
         return index
 
@@ -456,7 +436,7 @@ class Table:
             "table": self.name,
             "organization": self.organization.value,
             "rows": self.row_count,
-            "storage": self._describe_storage(),
+            "storage": self._storage.describe(),
             "indexes": [
                 {
                     "name": definition.name,
@@ -467,26 +447,6 @@ class Table:
                 for definition in self._definition.indexes
             ],
         }
-
-    def _describe_storage(self) -> dict[str, Any]:
-        if isinstance(self._storage, HeapFile):
-            return {
-                "kind": "heap",
-                "pages": self._storage.page_count,
-                "slots_per_page": self._storage.slots_per_page,
-                "records": self._storage.record_count,
-            }
-        if isinstance(self._storage, SequentialFile):
-            return {
-                "kind": "sequential",
-                "main_pages": self._storage.main_page_count,
-                "slots_per_page": self._storage.slots_per_page,
-                "records": self._storage.record_count,
-                "overflow_records": self._storage.overflow_count,
-                "deleted_records": self._storage.deleted_count,
-                "waste_ratio": self._storage.waste_ratio,
-            }
-        return self._storage.describe()
 
     def remove_files(self) -> None:
         """Cierra la tabla y borra del disco los archivos que creó."""
@@ -500,7 +460,7 @@ class Table:
     def _addressed_at(self, addresses: Iterable[RecordId]) -> Iterator[AddressedRecord]:
         """El salto al heap: la fila que vive en cada dirección que devolvió un índice."""
         wanted = list(addresses)
-        return zip(wanted, self._require_heap().read_many(wanted), strict=True)
+        return zip(wanted, self._storage.at(wanted), strict=True)
 
     def _with_null(self, column: str, expected: int) -> Iterator[AddressedRecord]:
         """Las `expected` filas cuyo valor en la columna es NULL, recorriendo la tabla.
@@ -557,31 +517,15 @@ class Table:
                 found.append((address, record, row))
         return found
 
-    def _records_with_key(self, key: Key) -> list[bytes]:
-        """Registros de un archivo secuencial o de un B+ agrupado con esa clave."""
-        if isinstance(self._storage, SequentialFile):
-            return self._storage.search(key)
-        found = self._require_clustered().search(key)
-        return [] if found is None else [found]
-
     def _store(self, record: bytes) -> None:
-        if not isinstance(self._storage, HeapFile):
-            self._storage.insert(record)
-            return
-        record_id = self._storage.insert(record)
+        address = self._storage.insert(record)
         for index in self._indexes.values():
-            index.insert(record, record_id)
+            index.insert(record, _located(address))
 
     def _delete_one(self, address: RecordId | None, record: bytes) -> None:
-        if isinstance(self._storage, HeapFile):
-            if address is None:
-                raise TableError("falta la dirección de la fila que se quiere borrar")
-            for index in self._indexes.values():
-                index.delete(record, address)
-            self._storage.delete(address)
-            return
-        key = self._primary_key_of(record)
-        self._storage.delete(key)
+        for index in self._indexes.values():
+            index.delete(record, _located(address))
+        self._storage.delete(address, record)
 
     def _primary_key_index(self) -> IndexDefinition | None:
         """Un índice de la clave que sepa buscar por igualdad, si lo hay."""
@@ -589,12 +533,6 @@ class Table:
             return None
         key = self._definition.primary_key
         return index_with_capability(self._definition, key, Capability.EQUALITY)
-
-    def _filter_scan(self, keys: Sequence[Key]) -> Iterator[AddressedRecord]:
-        position = self._primary_key_position()
-        for address, record in self.addressed_scan():
-            if self._serializer.unpack_field(record, position) in keys:
-                yield address, record
 
     def _reject_repeated_values(self, records: Sequence[bytes]) -> None:
         """Comprueba que unas filas nuevas no repiten la clave ni un valor `UNIQUE`."""
@@ -692,29 +630,26 @@ class Table:
             raise TableError(f"'{self.name}' no declara clave primaria")
         return self.schema.position_of(self._definition.primary_key)
 
-    def _require_clustered(self) -> ClusteredBPlusIndex:
-        if not isinstance(self._storage, ClusteredBPlusIndex):
-            raise UnsupportedIndexError(f"'{self.name}' no es un B+ agrupado")
-        return self._storage
-
-    def _require_heap(self) -> HeapFile:
-        if not isinstance(self._storage, HeapFile):
+    def _require_addresses(self) -> None:
+        if not self._storage.keeps_addresses:
             raise UnsupportedIndexError(
                 f"'{self.name}' no es un heap file: sus filas no tienen dirección estable"
             )
-        return self._storage
 
-    def _open_storage(self) -> HeapFile | SequentialFile | ClusteredBPlusIndex:
+    def _open_storage(self) -> RowStore:
         organization = self._definition.organization
         path = _storage_path(self._definition, self._directory)
-        if organization is Organization.HEAP:
-            return HeapFile(path, self._serializer.size, self._config)
         key_field = self._definition.primary_key
-        if key_field is None:
+        key_of = None if key_field is None else self._primary_key_of
+        if organization is Organization.HEAP:
+            return HeapStore(HeapFile(path, self._serializer.size, self._config), key_of)
+        if key_field is None or key_of is None:
             raise TableError(f"'{self.name}' necesita clave primaria para su organización")
         if organization is Organization.SEQUENTIAL:
-            return SequentialFile(path, self._serializer, key_field, self._config)
-        return ClusteredBPlusIndex(path, self._serializer, key_field, self._config)
+            sequential = SequentialFile(path, self._serializer, key_field, self._config)
+            return KeyedStore(sequential, key_of)
+        clustered = ClusteredBPlusIndex(path, self._serializer, key_field, self._config)
+        return KeyedStore(clustered, key_of)
 
     def _open_index(self, definition: IndexDefinition) -> SecondaryIndex:
         method = method_named(definition.method)
@@ -727,6 +662,14 @@ class Table:
 
     def _index_path(self, name: str) -> Path:
         return index_path(self._directory, self.name, name)
+
+
+def _located(address: RecordId | None) -> RecordId:
+    """La dirección de una fila que un índice secundario va a guardar o a quitar. Solo hay
+    índices secundarios sobre heap files, y en un heap toda fila tiene dirección."""
+    if address is None:
+        raise TableError("falta la dirección de una fila indexada")
+    return address
 
 
 def index_with_capability(

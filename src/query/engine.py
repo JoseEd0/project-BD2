@@ -32,6 +32,7 @@ from query.expressions import (
     RowLayout,
     UnknownColumnError,
 )
+from query.files import resolve_user_file
 from query.journal import DiscardingJournal, Journal
 from query.loader import infer_schema, read_values
 from query.operators import UnsupportedQueryError
@@ -305,7 +306,7 @@ class Engine:
     def _create_table_from_file(self, statement: CreateTableFromFileStatement) -> QueryResult:
         if statement.if_not_exists and self._catalog.has_table(statement.name):
             return QueryResult(message=f"la tabla '{statement.name}' ya existía")
-        path = Path(statement.path)
+        path = resolve_user_file(statement.path, self.config)
         schema = infer_schema(path, self.config)
         spec = statement.index
         if spec is not None and not schema.has_field(spec.columns[0]):

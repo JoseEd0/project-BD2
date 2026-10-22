@@ -81,11 +81,9 @@ export default function App() {
   }, [refreshTables]);
 
   useEffect(() => {
-    const release = () => {
-      void closeSession(sessionId);
-    };
-    window.addEventListener("beforeunload", release);
-    return () => window.removeEventListener("beforeunload", release);
+    const release = () => closeSession(sessionId);
+    window.addEventListener("pagehide", release);
+    return () => window.removeEventListener("pagehide", release);
   }, [sessionId]);
 
   const execute = useCallback(

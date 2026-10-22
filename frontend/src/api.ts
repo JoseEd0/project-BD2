@@ -111,6 +111,11 @@ export async function fetchTablePoints(table: string, column: string): Promise<T
   return response.json();
 }
 
-export async function closeSession(sessionId: string): Promise<void> {
-  await fetch(`${API_URL}/sessions/${sessionId}`, { method: "DELETE" });
+/**
+ * Cierra la sesión al abandonar la página. `sendBeacon` es la única petición que el
+ * navegador garantiza enviar mientras descarga la página; un `fetch` normal se cancela y la
+ * sesión se quedaría con sus bloqueos hasta expirar en el servidor.
+ */
+export function closeSession(sessionId: string): void {
+  navigator.sendBeacon(`${API_URL}/sessions/${encodeURIComponent(sessionId)}/close`);
 }

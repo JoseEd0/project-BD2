@@ -27,9 +27,13 @@ def describe_statement(statement: Statement) -> str:
 
 
 def as_response(
-    results: list[QueryResult], labels: list[str], in_transaction: bool
+    results: list[QueryResult], labels: list[str], in_transaction: bool, max_rows: int
 ) -> QueryResponse:
-    """Una respuesta para todo un script: las filas y el plan son los de la última consulta."""
+    """Una respuesta para todo un script: las filas y el plan son los de la última consulta.
+
+    Viajan como mucho `max_rows` filas; `total_rows` dice cuántas devolvió la consulta, para
+    que el cliente avise de que está viendo solo una parte.
+    """
     last_query = next((item for item in reversed(results) if item.plan is not None), None)
     outcomes = [
         StatementOutcome(
@@ -54,7 +58,8 @@ def as_response(
     return QueryResponse(
         statements=outcomes,
         columns=list(last_query.columns),
-        rows=[[_as_json(value) for value in row] for row in last_query.rows],
+        rows=[[_as_json(value) for value in row] for row in last_query.rows[:max_rows]],
+        total_rows=len(last_query.rows),
         plan=_as_plan(last_query.plan),
         message=last_query.message,
         affected_rows=last_query.affected_rows,

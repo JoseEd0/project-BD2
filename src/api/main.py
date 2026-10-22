@@ -12,19 +12,19 @@ Expone lo justo para que el frontend funcione:
 | `POST` | `/query` | panel de consultas: ejecuta SQL y devuelve filas, plan y figuras |
 | `POST` | `/files/upload` | guarda un CSV para cargarlo después con `FROM FILE` |
 | `POST` | `/tables/upload` | crea una tabla a partir de un CSV |
-| `DELETE` | `/sessions/{id}` | cierra una sesión y aborta lo que tuviera abierto |
+| `POST` | `/sessions/{id}/close` | cierra una sesión y aborta lo que tuviera abierto |
 
 Las sentencias sin `session_id` van en autocommit. Enviando un `session_id` estable, el
 cliente puede usar `BEGIN … COMMIT` a través de varias peticiones, que es lo que permite
 demostrar transacciones desde la interfaz.
 
-La aplicación se construye con `create_app`, que uvicorn llama con `--factory`: importar
-este módulo no abre ningún motor.
+`app_from_environment` es la fábrica que uvicorn llama con `--factory`; los tests usan
+`create_app` con su propia configuración. Importar este módulo no abre ningún motor.
 """
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -32,16 +32,29 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from api.routes import query, sessions, tables, uploads
 from api.service import Service
-from api.settings import build_config, cors_origins
+from api.settings import settings_from_environment
 from config import EngineConfig
 
 TITLE = "Minigestor de Base de Datos Multimodal"
 VERSION = "0.1.0"
 
 
-def create_app(config: EngineConfig | None = None) -> FastAPI:
-    """Construye la aplicación. Recibe la configuración para poder probarla aislada."""
-    service = Service(config or build_config())
+def app_from_environment() -> FastAPI:
+    """La aplicación configurada con las variables de entorno.
+
+    Raises:
+        SettingsError: si falta una variable obligatoria.
+    """
+    settings = settings_from_environment()
+    return create_app(settings.config, settings.cors_origins)
+
+
+def create_app(config: EngineConfig, cors_origins: Sequence[str] = ()) -> FastAPI:
+    """Construye la aplicación con una configuración explícita, para poder probarla aislada.
+
+    Sin `cors_origins` solo admite peticiones del mismo origen.
+    """
+    service = Service(config)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -51,7 +64,7 @@ def create_app(config: EngineConfig | None = None) -> FastAPI:
     app = FastAPI(title=TITLE, version=VERSION, lifespan=lifespan)
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=cors_origins(),
+        allow_origins=list(cors_origins),
         allow_methods=["*"],
         allow_headers=["*"],
     )

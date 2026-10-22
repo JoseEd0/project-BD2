@@ -26,6 +26,8 @@ DEFAULT_CSV_DELIMITER = ","
 DEFAULT_CSV_ENCODING = "utf-8"
 DEFAULT_MAX_UPLOAD_BYTES = 64 * 1024 * 1024
 DEFAULT_MAP_POINTS = 5000
+DEFAULT_MAX_RESULT_ROWS = 10_000
+DEFAULT_SESSION_IDLE_SECONDS = 15 * 60
 FALLBACK_DATA_DIRECTORY = "data"
 
 
@@ -57,7 +59,13 @@ class EngineConfig:
         csv_encoding: codificación de esos archivos.
         max_upload_bytes: tamaño máximo de un archivo subido por el API.
         map_points: puntos que el API entrega como máximo para dibujar una tabla en el mapa.
+        max_result_rows: filas que el API devuelve como máximo por consulta; el resto se
+            cuenta pero no viaja.
+        session_idle_seconds: inactividad tras la que el API cierra una sesión y aborta su
+            transacción, para que una pestaña cerrada no deje tablas bloqueadas.
         data_directory: raíz donde viven los archivos del gestor.
+        import_directories: directorios, además de `data_directory`, de los que
+            `CREATE TABLE ... FROM FILE` puede leer.
     """
 
     page_size: int = DEFAULT_PAGE_SIZE
@@ -77,4 +85,7 @@ class EngineConfig:
     csv_encoding: str = DEFAULT_CSV_ENCODING
     max_upload_bytes: int = DEFAULT_MAX_UPLOAD_BYTES
     map_points: int = DEFAULT_MAP_POINTS
+    max_result_rows: int = DEFAULT_MAX_RESULT_ROWS
+    session_idle_seconds: float = DEFAULT_SESSION_IDLE_SECONDS
     data_directory: Path = Path(FALLBACK_DATA_DIRECTORY)
+    import_directories: tuple[Path, ...] = ()

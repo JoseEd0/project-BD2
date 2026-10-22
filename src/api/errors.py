@@ -34,7 +34,17 @@ DOMAIN_ERRORS: tuple[type[Exception], ...] = (
 )
 
 
-def as_http_error(error: Exception, line: int | None, column: int | None) -> HTTPException:
+def as_http_error(
+    error: Exception,
+    in_transaction: bool | None = None,
+    line: int | None = None,
+    column: int | None = None,
+) -> HTTPException:
+    """Error del usuario como `400`.
+
+    `in_transaction` dice cómo quedó la sesión: un interbloqueo o una espera agotada abortan
+    la transacción, y el cliente tiene que enterarse para no seguir creyéndola abierta.
+    """
     return HTTPException(
         status_code=BAD_REQUEST,
         detail={
@@ -42,6 +52,7 @@ def as_http_error(error: Exception, line: int | None, column: int | None) -> HTT
             "kind": type(error).__name__,
             "line": line,
             "column": column,
+            "in_transaction": in_transaction,
         },
     )
 
@@ -49,5 +60,11 @@ def as_http_error(error: Exception, line: int | None, column: int | None) -> HTT
 def invalid_request(message: str) -> HTTPException:
     return HTTPException(
         status_code=BAD_REQUEST,
-        detail={"error": message, "kind": UPLOAD_ERROR_KIND, "line": None, "column": None},
+        detail={
+            "error": message,
+            "kind": UPLOAD_ERROR_KIND,
+            "line": None,
+            "column": None,
+            "in_transaction": None,
+        },
     )

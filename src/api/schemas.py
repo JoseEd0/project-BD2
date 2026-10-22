@@ -105,6 +105,9 @@ class QueryResponse(BaseModel):
     statements: list[StatementOutcome] = Field(default_factory=list)
     columns: list[str] = Field(default_factory=list)
     rows: list[list[Any]] = Field(default_factory=list)
+    total_rows: int = Field(
+        default=0, description="Filas del resultado; puede haber más que las que trae `rows`"
+    )
     plan: PlanInfo | None = None
     message: str = ""
     affected_rows: int = 0

@@ -9,6 +9,12 @@ from api.service import ServiceDependency
 router = APIRouter()
 
 
-@router.delete("/sessions/{identifier}")
+@router.post("/sessions/{identifier}/close")
 def close_session(identifier: str, service: ServiceDependency) -> dict[str, bool]:
+    """Cierra la sesión y aborta lo que tuviera abierto.
+
+    Es `POST` y no `DELETE` porque la llama `navigator.sendBeacon` al cerrar la pestaña: es
+    la única petición que el navegador garantiza enviar mientras descarga la página, y
+    solo sabe hacer `POST`.
+    """
     return {"closed": service.close_session(identifier)}

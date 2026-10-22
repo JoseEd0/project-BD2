@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import re
+import shutil
+import uuid
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, BinaryIO
 
 from fastapi import APIRouter, File, Form, UploadFile
 
@@ -17,7 +19,10 @@ from query.loader import LoaderError, read_header
 from sql.nodes import CreateTableFromFileStatement, IndexSpec, IndexType
 
 UPLOAD_DIRECTORY = "uploads"
-IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+CSV_SUFFIX = ".csv"
+PARTIAL_SUFFIX = ".partial"
+UPLOAD_CHUNK_BYTES = 1024 * 1024
+IDENTIFIER_PATTERN = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 # Método que se declara sobre la clave para obtener cada organización. En el heap la clave
 # es opcional: si se da, las filas siguen en el heap y la clave recibe un índice hash.
 ORGANIZATION_INDEX: dict[str, IndexType] = {
@@ -30,30 +35,38 @@ KEYLESS_ORGANIZATIONS = frozenset({Organization.HEAP.value})
 router = APIRouter()
 
 
+# Las dos rutas son `def` y no `async def`: FastAPI las corre en su pool de hilos. Copian
+# el archivo y crean la tabla, que puede esperar un bloqueo; dentro del event loop, esa
+# espera congelaría al servidor entero, incluido el COMMIT que liberaría el bloqueo.
+
+
 @router.post("/files/upload", response_model=FileUploadResponse)
-async def upload_file(
+def upload_file(
     service: ServiceDependency,
     file: Annotated[UploadFile, File(description="CSV con cabecera")],
     name: Annotated[str, Form()],
 ) -> FileUploadResponse:
-    """Solo guarda el archivo, sin crear tabla.
+    """Solo guarda el archivo, sin crear tabla; si ya había uno con ese nombre, lo reemplaza.
 
     Devuelve la ruta y las columnas para que la tabla se cree a mano con
     `CREATE TABLE ... FROM FILE`, eligiendo la organización en el propio SQL.
     """
-    if not IDENTIFIER_PATTERN.match(name):
-        raise invalid_request(f"'{name}' no es un nombre de archivo válido")
-    path = await _store_upload(service, file, name)
+    _require_identifier(name, "archivo")
+    path = _uploads_of(service) / f"{name}{CSV_SUFFIX}"
+    partial = path.with_name(path.name + PARTIAL_SUFFIX)
     try:
-        columns = read_header(path, service.config)
+        _copy_limited(file.file, partial, service.config.max_upload_bytes)
+        columns = read_header(partial, service.config)
+        partial.replace(path)
     except LoaderError as error:
-        path.unlink(missing_ok=True)
-        raise as_http_error(error, None, None) from error
+        raise as_http_error(error) from error
+    finally:
+        partial.unlink(missing_ok=True)
     return FileUploadResponse(path=_path_for_sql(path), columns=columns)
 
 
 @router.post("/tables/upload", response_model=QueryResponse)
-async def upload(
+def upload(
     service: ServiceDependency,
     file: Annotated[UploadFile, File(description="CSV con cabecera")],
     name: Annotated[str, Form()],
@@ -61,15 +74,30 @@ async def upload(
     key_column: Annotated[str | None, Form()] = None,
     session_id: Annotated[str | None, Form()] = None,
 ) -> QueryResponse:
-    """Crea una tabla a partir de un CSV subido, deduciendo el esquema del archivo."""
+    """Crea una tabla a partir de un CSV subido, deduciendo el esquema del archivo.
+
+    El CSV solo hace falta mientras se carga: va a un directorio propio de la petición y se
+    borra al terminar, haya salido bien o no.
+    """
     statement = _upload_statement(name, organization, key_column)
-    path = await _store_upload(service, file, name)
-    session = service.session(session_id)
+    workspace = _uploads_of(service) / uuid.uuid4().hex
+    workspace.mkdir()
     try:
-        result = session.run(_with_path(statement, path))
-    except DOMAIN_ERRORS as error:
-        raise as_http_error(error, None, None) from error
-    return as_response([result], ["CreateTableFromFile"], session.in_transaction)
+        path = workspace / f"{name}{CSV_SUFFIX}"
+        _copy_limited(file.file, path, service.config.max_upload_bytes)
+        with service.session(session_id) as session:
+            try:
+                result = session.run(_with_path(statement, path))
+            except DOMAIN_ERRORS as error:
+                raise as_http_error(error, session.in_transaction) from error
+            return as_response(
+                [result],
+                ["CreateTableFromFile"],
+                session.in_transaction,
+                service.config.max_result_rows,
+            )
+    finally:
+        shutil.rmtree(workspace, ignore_errors=True)
 
 
 def _upload_statement(
@@ -83,8 +111,7 @@ def _upload_statement(
     Raises:
         HTTPException: si el nombre, la columna o la organización no son válidos.
     """
-    if not IDENTIFIER_PATTERN.match(name):
-        raise invalid_request(f"'{name}' no es un nombre de tabla válido")
+    _require_identifier(name, "tabla")
     if organization not in ORGANIZATION_INDEX:
         raise invalid_request(f"organización desconocida: '{organization}'")
     key = (key_column or "").strip()
@@ -92,8 +119,7 @@ def _upload_statement(
         if organization in KEYLESS_ORGANIZATIONS:
             return CreateTableFromFileStatement(name=name, path="", index=None)
         raise invalid_request(f"la organización '{organization}' necesita una columna clave")
-    if not IDENTIFIER_PATTERN.match(key):
-        raise invalid_request(f"'{key}' no es un nombre de columna válido")
+    _require_identifier(key, "columna")
     spec = IndexSpec(method=ORGANIZATION_INDEX[organization], columns=(key,))
     return CreateTableFromFileStatement(name=name, path="", index=spec)
 
@@ -109,25 +135,41 @@ def _with_path(
     )
 
 
-async def _store_upload(service: Service, file: UploadFile, name: str) -> Path:
-    """Guarda el archivo subido junto a los datos, respetando el tamaño máximo.
+def _require_identifier(name: str, what: str) -> None:
+    """`fullmatch`, no `match` con `$`: el `$` de `re` acepta un salto de línea final, y
+    `"tabla\\n"` llegaría al disco como nombre de archivo."""
+    if not IDENTIFIER_PATTERN.fullmatch(name):
+        raise invalid_request(f"'{name}' no es un nombre de {what} válido")
 
-    Raises:
-        HTTPException: si el archivo está vacío o excede `max_upload_bytes`.
-    """
-    content = await file.read()
-    if len(content) == 0:
-        raise invalid_request("el archivo está vacío")
-    if len(content) > service.config.max_upload_bytes:
-        raise invalid_request(
-            f"el archivo ocupa {len(content)} bytes y el máximo es "
-            f"{service.config.max_upload_bytes}"
-        )
+
+def _uploads_of(service: Service) -> Path:
     directory = service.config.data_directory / UPLOAD_DIRECTORY
     directory.mkdir(parents=True, exist_ok=True)
-    path = directory / f"{name}.csv"
-    path.write_bytes(content)
-    return path
+    return directory
+
+
+def _copy_limited(source: BinaryIO, target: Path, limit: int) -> None:
+    """Copia el archivo subido por bloques, sin tenerlo entero en memoria.
+
+    Raises:
+        HTTPException: si está vacío o pasa de `limit` bytes; en ese caso no queda nada
+            escrito en `target`.
+    """
+    copied = 0
+    with target.open("wb") as output:
+        while chunk := source.read(UPLOAD_CHUNK_BYTES):
+            copied += len(chunk)
+            if copied > limit:
+                break
+            output.write(chunk)
+    if copied == 0 or copied > limit:
+        target.unlink(missing_ok=True)
+        message = (
+            "el archivo está vacío"
+            if copied == 0
+            else f"el archivo pasa de {limit} bytes, el máximo permitido"
+        )
+        raise invalid_request(message)
 
 
 def _path_for_sql(path: Path) -> str:

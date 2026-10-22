@@ -18,7 +18,9 @@ log de escritura anticipada.
 
 from __future__ import annotations
 
+from collections.abc import Callable, Iterable
 from types import TracebackType
+from typing import TypeVar
 
 from query.engine import Engine, QueryResult
 from query.table import Table
@@ -46,6 +48,7 @@ from txn.transaction import (
 )
 
 WRITE_STATEMENTS = (InsertStatement, UpdateStatement, DeleteStatement, DefinitionStatement)
+Read = TypeVar("Read")
 
 
 class SessionError(Exception):
@@ -104,6 +107,30 @@ class Session:
                 "abórtala antes; la transacción sigue abierta"
             )
         return self._run_in_transaction(statement)
+
+    def inspect(self, tables: Iterable[str], read: Callable[[], Read]) -> Read:
+        """Hace una lectura que no es SQL —la estructura física de una tabla, los puntos
+        que dibuja el mapa— con los mismos bloqueos compartidos que tomaría un SELECT.
+
+        Recorrer las páginas de una tabla mientras otra transacción las modifica daría
+        una estructura a medio cambiar; con el bloqueo, la lectura espera a que termine.
+        Dentro de una transacción los bloqueos se conservan hasta el final, como siempre.
+
+        Raises:
+            LockError: si el bloqueo no llega; una transacción abierta queda abortada.
+        """
+        autocommit = self._current is None
+        transaction = self._current or self._manager.begin()
+        try:
+            for resource in sorted({name.lower() for name in tables}):
+                self._locks.acquire(transaction.identifier, resource, LockMode.SHARED)
+            return read()
+        except LockError:
+            self._abort(transaction)
+            raise
+        finally:
+            if autocommit:
+                self._end(transaction, TransactionState.COMMITTED)
 
     def close(self) -> None:
         """Aborta lo que quede abierto y suelta los bloqueos."""

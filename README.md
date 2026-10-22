@@ -163,6 +163,9 @@ python3 -m venv .venv
 # interfaz
 npm --prefix frontend install
 cp frontend/.env.example frontend/.env
+
+# variables del API: directorio de datos, orígenes del frontend, de dónde se puede cargar
+cp .env.example .env
 ```
 
 ### 3.3 Poblar la base de datos y arrancar
@@ -172,7 +175,7 @@ cp frontend/.env.example frontend/.env
 .venv/bin/python demos/poblar_ecommerce.py --data-dir ./data
 
 # 2. API, en http://localhost:8000 (documentación interactiva en /docs)
-MINIGESTOR_DATA_DIR=./data .venv/bin/uvicorn --factory api.main:create_app --port 8000
+.venv/bin/uvicorn --factory api.main:app_from_environment --env-file .env --port 8000
 
 # 3. interfaz, en http://localhost:5173
 npm --prefix frontend run dev

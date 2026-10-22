@@ -1,9 +1,12 @@
+from dataclasses import replace
+
 import pytest
 
 from config import EngineConfig
 from query.catalog import CatalogError, UnknownTableError
 from query.engine import Engine, EngineError, QueryResult, TransactionStatementError
 from query.expressions import ExpressionError, UnknownColumnError
+from query.files import ForbiddenFileError
 from query.table import DuplicatePrimaryKeyError
 
 
@@ -342,3 +345,26 @@ def test_spilling_operators_leave_no_temporary_directories(engine: Engine, tmp_p
     engine.execute("SELECT b.id FROM b JOIN a ON b.a_id = a.id ORDER BY b.id")
     leftovers = [path.name for path in tmp_path.iterdir() if path.is_dir()]
     assert leftovers == []
+
+
+def test_a_table_cannot_be_loaded_from_outside_the_allowed_directories(
+    config: EngineConfig, tmp_path_factory: pytest.TempPathFactory
+):
+    outside = tmp_path_factory.mktemp("fuera") / "secreto.csv"
+    outside.write_text("usuario,clave\nadmin,hunter2\n")
+    with Engine(config) as engine:
+        with pytest.raises(ForbiddenFileError):
+            engine.execute(f"CREATE TABLE robo FROM FILE '{outside}'")
+        with pytest.raises(ForbiddenFileError):
+            engine.execute(f"CREATE TABLE robo FROM FILE '{config.data_directory}/../fuera0/x.csv'")
+        assert engine.table_names() == []
+
+
+def test_an_import_directory_allows_loading_from_it(
+    config: EngineConfig, tmp_path_factory: pytest.TempPathFactory
+):
+    samples = tmp_path_factory.mktemp("muestras")
+    (samples / "datos.csv").write_text("id,nombre\n1,ana\n")
+    with Engine(replace(config, import_directories=(samples,))) as engine:
+        engine.execute(f"CREATE TABLE datos FROM FILE '{samples / 'datos.csv'}'")
+        assert engine.execute("SELECT nombre FROM datos").rows == (("ana",),)

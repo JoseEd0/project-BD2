@@ -1,10 +1,16 @@
+import time
+from dataclasses import replace
+
 import pytest
 from fastapi.testclient import TestClient
 
 from api.main import create_app
+from api.service import Service
 from config import EngineConfig
+from query.engine import Engine
 
 SESSION = "demo"
+IMPATIENT_TIMEOUT = 0.1
 
 
 @pytest.fixture
@@ -92,12 +98,12 @@ def test_closing_a_session_rolls_back(client: TestClient):
     run(client, "INSERT INTO t VALUES (1, 10)")
     run(client, "BEGIN", SESSION)
     run(client, "UPDATE t SET v = 7 WHERE id = 1", SESSION)
-    assert client.delete(f"/sessions/{SESSION}").json() == {"closed": True}
+    assert client.post(f"/sessions/{SESSION}/close").json() == {"closed": True}
     assert run(client, "SELECT v FROM t")["rows"] == [[10]]
 
 
 def test_closing_an_unknown_session(client: TestClient):
-    assert client.delete("/sessions/fantasma").json() == {"closed": False}
+    assert client.post("/sessions/fantasma/close").json() == {"closed": False}
 
 
 def test_dates_travel_as_text(client: TestClient):
@@ -545,7 +551,7 @@ def test_an_upload_larger_than_the_limit_is_rejected(config: EngineConfig):
     with TestClient(create_app(small)) as limited:
         response = upload(limited)
         assert response.status_code == 400
-        assert "el máximo es" in response.json()["detail"]["error"]
+        assert "el máximo permitido" in response.json()["detail"]["error"]
         assert limited.get("/tables").json() == []
 
 
@@ -577,3 +583,123 @@ def test_emptying_the_database_waits_for_open_transactions(config: EngineConfig)
         assert run(busy, "SELECT * FROM t", session="dos")["rows"] == [[1]]
         assert busy.delete("/tables", params={"session_id": "dos"}).status_code == 200
         assert busy.get("/tables").json() == []
+
+
+def impatient_config(config: EngineConfig, **overrides: object) -> EngineConfig:
+    return replace(config, lock_timeout_seconds=IMPATIENT_TIMEOUT, **overrides)
+
+
+def test_begin_without_a_session_is_rejected_and_runs_nothing(client: TestClient):
+    run(client, "CREATE TABLE t (id INT PRIMARY KEY)")
+    response = client.post("/query", json={"sql": "BEGIN; INSERT INTO t VALUES (1);"})
+    assert response.status_code == 400
+    assert "session_id" in response.json()["detail"]["error"]
+    assert run(client, "SELECT * FROM t")["rows"] == []
+
+
+def test_requests_without_a_session_leave_no_transaction_behind(client: TestClient):
+    run(client, "CREATE TABLE t (id INT PRIMARY KEY)")
+    run(client, "INSERT INTO t VALUES (1)")
+    client.post("/query", json={"sql": "INSERT INTO t VALUES (1)"})
+    service = client.app.state.service
+    assert service.transactions.active_count == 0
+    assert service.locks.holders_of("t") == {}
+
+
+def test_an_aborted_transaction_is_reported_with_the_error(config: EngineConfig):
+    with TestClient(create_app(impatient_config(config))) as busy:
+        run(busy, "CREATE TABLE t (id INT PRIMARY KEY, v INT)")
+        run(busy, "INSERT INTO t VALUES (1, 1)")
+        run(busy, "BEGIN", session="uno")
+        run(busy, "UPDATE t SET v = 2", session="uno")
+        run(busy, "BEGIN", session="dos")
+        response = busy.post("/query", json={"sql": "UPDATE t SET v = 3", "session_id": "dos"})
+        assert response.status_code == 400
+        assert response.json()["detail"]["kind"] == "LockTimeoutError"
+        assert response.json()["detail"]["in_transaction"] is False
+
+
+def test_an_idle_session_expires_and_releases_its_locks(config: EngineConfig):
+    idle = impatient_config(config, session_idle_seconds=IMPATIENT_TIMEOUT)
+    with TestClient(create_app(idle)) as client:
+        run(client, "CREATE TABLE t (id INT PRIMARY KEY, v INT)")
+        run(client, "INSERT INTO t VALUES (1, 1)")
+        run(client, "BEGIN", session="olvidada")
+        run(client, "UPDATE t SET v = 99", session="olvidada")
+        time.sleep(IMPATIENT_TIMEOUT * 2)
+        run(client, "UPDATE t SET v = 2", session="otra")
+        assert run(client, "SELECT v FROM t")["rows"] == [[2]]
+        assert run(client, "SELECT v FROM t", session="olvidada")["in_transaction"] is False
+
+
+def test_closing_the_server_saves_committed_data_even_if_a_session_fails(
+    config: EngineConfig, monkeypatch: pytest.MonkeyPatch
+):
+    service = Service(config)
+    with service.session(None) as autocommit:
+        autocommit.execute("CREATE TABLE t (id INT PRIMARY KEY)")
+        autocommit.execute("INSERT INTO t VALUES (1), (2), (3)")
+    with service.session("rota") as broken:
+        broken.execute("BEGIN")
+
+        def fail() -> None:
+            raise RuntimeError("no se pudo deshacer")
+
+        monkeypatch.setattr(broken, "close", fail)
+    with pytest.raises(RuntimeError):
+        service.close()
+    with Engine(config) as reopened:
+        assert reopened.execute("SELECT COUNT(*) FROM t").rows == ((3,),)
+
+
+def test_a_name_with_a_trailing_newline_is_rejected(client: TestClient, config: EngineConfig):
+    response = post_csv(client, "/files/upload", "nombre\n", CSV_CONTENT.encode())
+    assert response.status_code == 400
+    assert uploads_of(config) == []
+
+
+def test_creating_a_table_from_an_upload_keeps_no_file(client: TestClient, config: EngineConfig):
+    assert upload(client).status_code == 200
+    assert upload(client).status_code == 400
+    assert uploads_of(config) == []
+
+
+def test_a_file_upload_replaces_the_previous_one(client: TestClient):
+    post_csv(client, "/files/upload", "datos", b"a,b\n1,2\n")
+    body = post_csv(client, "/files/upload", "datos", b"x,y,z\n1,2,3\n").json()
+    assert body["columns"] == ["x", "y", "z"]
+
+
+def test_a_table_cannot_be_loaded_from_outside_the_allowed_directories(
+    client: TestClient, tmp_path_factory: pytest.TempPathFactory
+):
+    outside = tmp_path_factory.mktemp("fuera") / "secreto.csv"
+    outside.write_text("usuario,clave\nadmin,hunter2\n")
+    response = client.post("/query", json={"sql": f"CREATE TABLE robo FROM FILE '{outside}'"})
+    assert response.status_code == 400
+    assert response.json()["detail"]["kind"] == "ForbiddenFileError"
+    assert client.get("/tables").json() == []
+
+
+def test_a_query_returns_at_most_the_configured_rows(config: EngineConfig):
+    with TestClient(create_app(replace(config, max_result_rows=3))) as client:
+        run(client, "CREATE TABLE t (id INT)")
+        run(client, "INSERT INTO t VALUES " + ", ".join(f"({i})" for i in range(10)))
+        body = run(client, "SELECT * FROM t")
+        assert len(body["rows"]) == 3
+        assert body["total_rows"] == 10
+
+
+def test_inspecting_a_table_waits_for_a_writing_transaction(config: EngineConfig):
+    with TestClient(create_app(impatient_config(config))) as client:
+        run(client, "CREATE TABLE t (id INT PRIMARY KEY, lugar POINT)")
+        run(client, "BEGIN", session="escribe")
+        run(client, "INSERT INTO t VALUES (1, POINT(-12.0, -77.0))", session="escribe")
+        for endpoint in ("/tables/t/structure", "/tables/t/points"):
+            response = client.get(endpoint)
+            assert response.status_code == 400
+            assert response.json()["detail"]["kind"] == "LockTimeoutError"
+            assert client.get(endpoint, params={"session_id": "escribe"}).status_code == 200
+        assert client.get("/tables").status_code == 200
+        run(client, "COMMIT", session="escribe")
+        assert client.get("/tables/t/points").json()["points"] == [[-12.0, -77.0]]

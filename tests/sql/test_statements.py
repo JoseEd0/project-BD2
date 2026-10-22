@@ -106,7 +106,7 @@ def test_limit_and_offset():
 
 
 def test_limit_requires_an_integer():
-    with pytest.raises(SqlSyntaxError, match="row count"):
+    with pytest.raises(SqlSyntaxError, match="número de filas"):
         parse("SELECT * FROM t LIMIT x")
 
 
@@ -121,7 +121,7 @@ def test_using_resolves_index_and_ranking_methods():
 
 
 def test_unknown_using_method_is_rejected():
-    with pytest.raises(SqlSyntaxError, match="unknown access method"):
+    with pytest.raises(SqlSyntaxError, match="método de acceso desconocido"):
         parse("SELECT * FROM t USING MAGIC")
 
 
@@ -136,7 +136,7 @@ def test_with_options_with_parentheses_and_negative_number():
 
 
 def test_duplicate_option_is_rejected():
-    with pytest.raises(SqlSyntaxError, match="duplicate option"):
+    with pytest.raises(SqlSyntaxError, match="opción repetida"):
         parse("SELECT * FROM t WITH (k = 1, k = 2)")
 
 
@@ -155,7 +155,7 @@ def test_insert_with_column_list_and_several_rows():
 
 
 def test_insert_arity_mismatch_is_rejected():
-    with pytest.raises(SqlSyntaxError, match="expected 2 values"):
+    with pytest.raises(SqlSyntaxError, match="se esperaban 2 valores"):
         parse("INSERT INTO t (a, b) VALUES (1)")
 
 
@@ -206,7 +206,7 @@ def test_table_level_primary_key():
 
 
 def test_table_level_primary_key_on_unknown_column_is_rejected():
-    with pytest.raises(SqlSyntaxError, match="unknown column"):
+    with pytest.raises(SqlSyntaxError, match="columna desconocida"):
         parse("CREATE TABLE t (id INT, PRIMARY KEY (missing))")
 
 
@@ -218,22 +218,22 @@ def test_spatial_and_vector_column_types():
 
 
 def test_vector_without_dimension_is_rejected():
-    with pytest.raises(SqlSyntaxError, match="requires a size"):
+    with pytest.raises(SqlSyntaxError, match="necesita un tamaño"):
         parse("CREATE TABLE t (features VECTOR)")
 
 
 def test_size_on_a_type_that_does_not_take_one_is_rejected():
-    with pytest.raises(SqlSyntaxError, match="does not take a size"):
+    with pytest.raises(SqlSyntaxError, match="no lleva tamaño"):
         parse("CREATE TABLE t (id INT(11))")
 
 
 def test_zero_size_is_rejected():
-    with pytest.raises(SqlSyntaxError, match="greater than zero"):
+    with pytest.raises(SqlSyntaxError, match="mayor que cero"):
         parse("CREATE TABLE t (name VARCHAR(0))")
 
 
 def test_unknown_column_type_is_rejected():
-    with pytest.raises(SqlSyntaxError, match="unknown column type"):
+    with pytest.raises(SqlSyntaxError, match="tipo de columna desconocido"):
         parse("CREATE TABLE t (id NUMERIC)")
 
 
@@ -269,7 +269,7 @@ def test_create_index_without_name():
 
 
 def test_unknown_index_method_is_rejected():
-    with pytest.raises(SqlSyntaxError, match="unknown index method"):
+    with pytest.raises(SqlSyntaxError, match="método de índice desconocido"):
         parse("CREATE INDEX ON t USING QUADTREE (a)")
 
 
@@ -302,7 +302,7 @@ def test_script_ignores_blank_statements_and_comments():
 
 
 def test_parse_rejects_more_than_one_statement():
-    with pytest.raises(SqlSyntaxError, match="single statement"):
+    with pytest.raises(SqlSyntaxError, match="una sola sentencia"):
         parse("SELECT * FROM a; SELECT * FROM b")
 
 
@@ -312,47 +312,47 @@ def test_missing_semicolon_between_statements_is_rejected():
 
 
 def test_empty_input_is_rejected_by_parse():
-    with pytest.raises(SqlSyntaxError, match="expected a statement"):
+    with pytest.raises(SqlSyntaxError, match="se esperaba una sentencia"):
         parse("   ")
 
 
 def test_unknown_statement_is_rejected():
-    with pytest.raises(SqlSyntaxError, match="expected a statement"):
+    with pytest.raises(SqlSyntaxError, match="se esperaba una sentencia"):
         parse("TRUNCATE t")
 
 
 def test_duplicate_column_in_create_table_is_rejected():
-    with pytest.raises(SqlSyntaxError, match="duplicate column 'id'"):
+    with pytest.raises(SqlSyntaxError, match="columna repetida 'id'"):
         parse("CREATE TABLE t (id INT, id TEXT)")
 
 
 def test_duplicate_column_is_detected_case_insensitively():
-    with pytest.raises(SqlSyntaxError, match="duplicate column"):
+    with pytest.raises(SqlSyntaxError, match="columna repetida"):
         parse("CREATE TABLE t (id INT, ID TEXT)")
 
 
 def test_two_table_level_primary_keys_are_rejected():
-    with pytest.raises(SqlSyntaxError, match="already declares a PRIMARY KEY"):
+    with pytest.raises(SqlSyntaxError, match="ya declara una PRIMARY KEY"):
         parse("CREATE TABLE t (a INT, b INT, PRIMARY KEY (a), PRIMARY KEY (b))")
 
 
 def test_duplicate_column_in_primary_key_is_rejected():
-    with pytest.raises(SqlSyntaxError, match="duplicate column"):
+    with pytest.raises(SqlSyntaxError, match="columna repetida"):
         parse("CREATE TABLE t (a INT, PRIMARY KEY (a, a))")
 
 
 def test_duplicate_column_in_insert_list_is_rejected():
-    with pytest.raises(SqlSyntaxError, match="duplicate column"):
+    with pytest.raises(SqlSyntaxError, match="columna repetida"):
         parse("INSERT INTO t (a, a) VALUES (1, 2)")
 
 
 def test_duplicate_column_in_index_is_rejected():
-    with pytest.raises(SqlSyntaxError, match="duplicate column"):
+    with pytest.raises(SqlSyntaxError, match="columna repetida"):
         parse("CREATE INDEX ON t USING BTREE (a, a)")
 
 
 def test_column_assigned_twice_in_update_is_rejected():
-    with pytest.raises(SqlSyntaxError, match="assigned twice"):
+    with pytest.raises(SqlSyntaxError, match="se asigna dos veces"):
         parse("UPDATE t SET a = 1, a = 2")
 
 
@@ -369,7 +369,7 @@ def test_parsed_options_are_immutable():
 
 
 def test_insert_rows_must_share_the_same_arity():
-    with pytest.raises(SqlSyntaxError, match="expected 2 values per row, got 1"):
+    with pytest.raises(SqlSyntaxError, match="se esperaban 2 valores por fila y hay 1"):
         parse("INSERT INTO t VALUES (1, 2), (3)")
 
 
@@ -393,12 +393,12 @@ def test_option_values_can_be_false_null_or_negative():
 @pytest.mark.parametrize(
     ("source", "message"),
     [
-        ("SELECT * FROM t WITH (k = -abc)", "expected a number after '-'"),
-        ("SELECT * FROM t WITH (k = )", "expected an option value"),
-        ("CREATE VIEW v", "expected TABLE or INDEX after CREATE"),
-        ("DROP VIEW v", "expected TABLE or INDEX after DROP"),
-        ("CREATE TABLE t FROM FILE datos", "expected a file path"),
-        ("", "expected a statement, found end of input"),
+        ("SELECT * FROM t WITH (k = -abc)", "se esperaba un número después de '-'"),
+        ("SELECT * FROM t WITH (k = )", "se esperaba un valor para la opción"),
+        ("CREATE VIEW v", "se esperaba TABLE o INDEX después de CREATE"),
+        ("DROP VIEW v", "se esperaba TABLE o INDEX después de DROP"),
+        ("CREATE TABLE t FROM FILE datos", "se esperaba una ruta de archivo"),
+        ("", "se esperaba una sentencia, se encontró fin de la entrada"),
     ],
 )
 def test_what_the_dialect_does_not_have_is_a_syntax_error(source: str, message: str):

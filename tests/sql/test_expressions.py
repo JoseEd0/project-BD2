@@ -183,12 +183,12 @@ def test_star_argument_in_aggregate():
 
 
 def test_positional_argument_after_keyword_is_rejected():
-    with pytest.raises(SqlSyntaxError, match="positional argument"):
+    with pytest.raises(SqlSyntaxError, match="argumento posicional"):
         parse("SELECT f(k = 1, 2) FROM t")
 
 
 def test_duplicate_keyword_argument_is_rejected():
-    with pytest.raises(SqlSyntaxError, match="duplicate argument"):
+    with pytest.raises(SqlSyntaxError, match="argumento repetido"):
         parse("SELECT f(k = 1, k = 2) FROM t")
 
 

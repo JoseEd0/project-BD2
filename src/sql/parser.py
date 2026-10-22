@@ -7,7 +7,7 @@ access structure and `WITH <options>` carries its tuning parameters.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from types import MappingProxyType
 
@@ -58,14 +58,15 @@ from .nodes import (
     UnaryOperation,
     UnaryOperator,
     UpdateStatement,
+    expression_depth,
 )
 from .tokens import Token, TokenType
 
 # Two caps keep a pathological query inside the interpreter stack, so it fails as a syntax
 # error instead of a RecursionError. Parentheses, NOT and unary minus recurse through the
-# whole descent of this parser, about a dozen frames per level. Every level of the
-# resulting tree, including each operator of a chain such as `a OR b OR c` (a left-deep
-# tree), costs a few frames in each recursive walk: validation, evaluation, rendering.
+# whole descent of this parser, about a dozen frames per level. Every level of the finished
+# tree, including each operator of a chain such as `a OR b OR c` (a left-deep tree), costs
+# a few frames in each recursive walk downstream: validation, evaluation, rendering.
 MAX_NESTING_DEPTH = 32
 MAX_EXPRESSION_DEPTH = 200
 
@@ -159,7 +160,6 @@ class Parser:
         self._source = source
         self._tokens = tokenize(source)
         self._index = 0
-        self._depth = 0
         self._nesting_depth = 0
 
     def parse_script(self) -> list[Statement]:
@@ -170,16 +170,16 @@ class Parser:
                 return statements
             statements.append(self._parse_statement())
             if not self._check(TokenType.EOF) and not self._check(TokenType.SEMICOLON):
-                raise self._error_here("expected ';' between statements")
+                raise self._error_here("se esperaba ';' entre sentencias")
 
     def parse_single(self) -> Statement:
         self._skip_separators()
         if self._check(TokenType.EOF):
-            raise self._error_here("expected a statement")
+            raise self._error_here("se esperaba una sentencia")
         statement = self._parse_statement()
         self._skip_separators()
         if not self._check(TokenType.EOF):
-            raise self._error_here("expected a single statement")
+            raise self._error_here("se esperaba una sola sentencia")
         return statement
 
     def _skip_separators(self) -> None:
@@ -206,7 +206,7 @@ class Parser:
             return self._parse_drop()
         if token.type in _TRANSACTION_STARTERS:
             return self._parse_transaction()
-        raise self._error_here("expected a statement")
+        raise self._error_here("se esperaba una sentencia")
 
     # --- SELECT -------------------------------------------------------------
 
@@ -273,13 +273,13 @@ class Parser:
 
     def _parse_optional_alias(self) -> str | None:
         if self._match(TokenType.AS):
-            return self._expect_name("an alias")
+            return self._expect_name("un alias")
         if self._check_any(NAME_TOKENS):
             return self._advance().text
         return None
 
     def _parse_table_ref(self) -> TableRef:
-        name = self._expect_name("a table name")
+        name = self._expect_name("un nombre de tabla")
         return TableRef(name=name, alias=self._parse_optional_alias())
 
     def _parse_joins(self) -> tuple[Join, ...]:
@@ -344,19 +344,19 @@ class Parser:
     def _parse_count(self, keyword: TokenType) -> int | None:
         if not self._match(keyword):
             return None
-        token = self._expect(TokenType.INTEGER, f"a row count after {keyword.value}")
+        token = self._expect(TokenType.INTEGER, f"un número de filas después de {keyword.value}")
         return int(token.text)
 
     def _parse_search_method(self) -> SearchMethod | None:
         if not self._match(TokenType.USING):
             return None
-        token = self._expect(TokenType.IDENTIFIER, "an access method after USING")
+        token = self._expect(TokenType.IDENTIFIER, "un método de acceso después de USING")
         name = token.text.upper()
         method: SearchMethod | None = INDEX_METHODS.get(name)
         if method is None:
             method = RANKING_METHODS.get(name)
         if method is None:
-            raise self._error_at(token, f"unknown access method '{token.text}'")
+            raise self._error_at(token, f"método de acceso desconocido '{token.text}'")
         return method
 
     def _parse_with_options(self) -> Mapping[str, OptionValue]:
@@ -372,10 +372,10 @@ class Parser:
         return MappingProxyType(options)
 
     def _parse_option_into(self, options: dict[str, OptionValue]) -> None:
-        token = self._expect_name_token("an option name")
+        token = self._expect_name_token("un nombre de opción")
         key = token.text.lower()
         if key in options:
-            raise self._error_at(token, f"duplicate option '{token.text}'")
+            raise self._error_at(token, f"opción repetida '{token.text}'")
         self._expect(TokenType.EQUAL)
         options[key] = self._parse_option_value()
 
@@ -386,7 +386,7 @@ class Parser:
         if not negative:
             return value
         if not isinstance(value, int | float) or isinstance(value, bool):
-            raise self._error_at(token, "expected a number after '-'")
+            raise self._error_at(token, "se esperaba un número después de '-'")
         return -value
 
     def _option_value_of(self, token: Token) -> OptionValue:
@@ -402,14 +402,14 @@ class Parser:
             return False
         if token.type is TokenType.NULL:
             return None
-        raise self._error_at(token, "expected an option value")
+        raise self._error_at(token, "se esperaba un valor para la opción")
 
     # --- INSERT / UPDATE / DELETE ------------------------------------------
 
     def _parse_insert(self) -> InsertStatement:
         self._expect(TokenType.INSERT)
         self._expect(TokenType.INTO)
-        table = self._expect_name("a table name")
+        table = self._expect_name("un nombre de tabla")
         columns = self._parse_optional_column_list()
         self._expect(TokenType.VALUES)
         first = self._parse_value_row(len(columns) if columns is not None else None)
@@ -421,7 +421,7 @@ class Parser:
     def _parse_optional_column_list(self) -> tuple[str, ...] | None:
         if not self._match(TokenType.LPAREN):
             return None
-        columns = self._parse_unique_name_tokens("a column name")
+        columns = self._parse_unique_name_tokens("un nombre de columna")
         self._expect(TokenType.RPAREN)
         return tuple(token.text for token in columns)
 
@@ -433,13 +433,13 @@ class Parser:
         self._expect(TokenType.RPAREN)
         if arity is not None and len(values) != arity:
             raise self._error_at(
-                open_paren, f"expected {arity} values per row, got {len(values)}"
+                open_paren, f"se esperaban {arity} valores por fila y hay {len(values)}"
             )
         return tuple(values)
 
     def _parse_update(self) -> UpdateStatement:
         self._expect(TokenType.UPDATE)
-        table = self._expect_name("a table name")
+        table = self._expect_name("un nombre de tabla")
         self._expect(TokenType.SET)
         assigned: set[str] = set()
         assignments = [self._parse_assignment(assigned)]
@@ -452,9 +452,9 @@ class Parser:
         )
 
     def _parse_assignment(self, assigned: set[str]) -> Assignment:
-        token = self._expect_name_token("a column name")
+        token = self._expect_name_token("un nombre de columna")
         if token.text.lower() in assigned:
-            raise self._error_at(token, f"column '{token.text}' is assigned twice")
+            raise self._error_at(token, f"la columna '{token.text}' se asigna dos veces")
         assigned.add(token.text.lower())
         self._expect(TokenType.EQUAL)
         return Assignment(column=token.text, value=self._parse_expression())
@@ -462,7 +462,7 @@ class Parser:
     def _parse_delete(self) -> DeleteStatement:
         self._expect(TokenType.DELETE)
         self._expect(TokenType.FROM)
-        table = self._expect_name("a table name")
+        table = self._expect_name("un nombre de tabla")
         return DeleteStatement(table=table, where=self._parse_optional_predicate(TokenType.WHERE))
 
     # --- CREATE / DROP ------------------------------------------------------
@@ -473,11 +473,11 @@ class Parser:
             return self._parse_create_table()
         if self._match(TokenType.INDEX):
             return self._parse_create_index()
-        raise self._error_here("expected TABLE or INDEX after CREATE")
+        raise self._error_here("se esperaba TABLE o INDEX después de CREATE")
 
     def _parse_create_table(self) -> Statement:
         if_not_exists = self._parse_if_not_exists()
-        name = self._expect_name("a table name")
+        name = self._expect_name("un nombre de tabla")
         if self._match(TokenType.FROM):
             return self._parse_create_table_from_file(name, if_not_exists)
         columns = self._parse_column_definitions()
@@ -485,7 +485,7 @@ class Parser:
 
     def _parse_create_table_from_file(self, name: str, if_not_exists: bool) -> Statement:
         self._expect(TokenType.FILE)
-        path = self._expect_string("a file path")
+        path = self._expect_string("una ruta de archivo")
         index = None
         if self._match(TokenType.USING):
             self._expect(TokenType.INDEX)
@@ -502,7 +502,7 @@ class Parser:
         while True:
             if self._check(TokenType.PRIMARY):
                 if primary_key_columns:
-                    raise self._error_here("table already declares a PRIMARY KEY")
+                    raise self._error_here("la tabla ya declara una PRIMARY KEY")
                 primary_key_columns = self._parse_table_primary_key()
             else:
                 columns.append(self._parse_unique_column_definition(seen))
@@ -516,7 +516,7 @@ class Parser:
         column = self._parse_column_definition()
         key = column.name.lower()
         if key in seen:
-            raise self._error_at(token, f"duplicate column '{column.name}'")
+            raise self._error_at(token, f"columna repetida '{column.name}'")
         seen.add(key)
         return column
 
@@ -524,7 +524,7 @@ class Parser:
         self._expect(TokenType.PRIMARY)
         self._expect(TokenType.KEY)
         self._expect(TokenType.LPAREN)
-        names = self._parse_unique_name_tokens("a column name")
+        names = self._parse_unique_name_tokens("un nombre de columna")
         self._expect(TokenType.RPAREN)
         return names
 
@@ -536,7 +536,7 @@ class Parser:
         known = {column.name.lower() for column in columns}
         for token in key_tokens:
             if token.text.lower() not in known:
-                raise self._error_at(token, f"unknown column '{token.text}' in PRIMARY KEY")
+                raise self._error_at(token, f"columna desconocida '{token.text}' en PRIMARY KEY")
         key_names = {token.text.lower() for token in key_tokens}
         return tuple(
             (
@@ -555,7 +555,7 @@ class Parser:
         )
 
     def _parse_column_definition(self) -> ColumnDefinition:
-        name = self._expect_name("a column name")
+        name = self._expect_name("un nombre de columna")
         data_type = self._parse_data_type()
         primary_key = False
         nullable = True
@@ -587,24 +587,24 @@ class Parser:
         )
 
     def _parse_data_type(self) -> DataType:
-        token = self._expect(TokenType.IDENTIFIER, "a column type")
+        token = self._expect(TokenType.IDENTIFIER, "un tipo de columna")
         kind = DATA_TYPES.get(token.text.upper())
         if kind is None:
-            raise self._error_at(token, f"unknown column type '{token.text}'")
+            raise self._error_at(token, f"tipo de columna desconocido '{token.text}'")
         size = self._parse_optional_size()
         if size is None and kind in TYPES_WITH_REQUIRED_SIZE:
-            raise self._error_at(token, f"type {kind.value} requires a size")
+            raise self._error_at(token, f"el tipo {kind.value} necesita un tamaño")
         if size is not None and kind not in TYPES_WITH_OPTIONAL_SIZE | TYPES_WITH_REQUIRED_SIZE:
-            raise self._error_at(token, f"type {kind.value} does not take a size")
+            raise self._error_at(token, f"el tipo {kind.value} no lleva tamaño")
         return DataType(kind=kind, size=size)
 
     def _parse_optional_size(self) -> int | None:
         if not self._match(TokenType.LPAREN):
             return None
-        token = self._expect(TokenType.INTEGER, "a positive size")
+        token = self._expect(TokenType.INTEGER, "un tamaño positivo")
         size = int(token.text)
         if size <= 0:
-            raise self._error_at(token, "size must be greater than zero")
+            raise self._error_at(token, "el tamaño debe ser mayor que cero")
         self._expect(TokenType.RPAREN)
         return size
 
@@ -612,7 +612,7 @@ class Parser:
         if_not_exists = self._parse_if_not_exists()
         name = self._advance().text if self._check_any(NAME_TOKENS) else None
         self._expect(TokenType.ON)
-        table = self._expect_name("a table name")
+        table = self._expect_name("un nombre de tabla")
         self._expect(TokenType.USING)
         return CreateIndexStatement(
             table=table, spec=self._parse_index_spec(), name=name, if_not_exists=if_not_exists
@@ -621,7 +621,7 @@ class Parser:
     def _parse_index_spec(self) -> IndexSpec:
         method = self._parse_index_method()
         self._expect(TokenType.LPAREN)
-        columns = self._parse_unique_name_tokens("a column name")
+        columns = self._parse_unique_name_tokens("un nombre de columna")
         self._expect(TokenType.RPAREN)
         return IndexSpec(
             method=method,
@@ -630,10 +630,10 @@ class Parser:
         )
 
     def _parse_index_method(self) -> IndexType:
-        token = self._expect(TokenType.IDENTIFIER, "an index method")
+        token = self._expect(TokenType.IDENTIFIER, "un método de índice")
         method = INDEX_METHODS.get(token.text.upper())
         if method is None:
-            raise self._error_at(token, f"unknown index method '{token.text}'")
+            raise self._error_at(token, f"método de índice desconocido '{token.text}'")
         return method
 
     def _parse_if_not_exists(self) -> bool:
@@ -653,13 +653,15 @@ class Parser:
         self._expect(TokenType.DROP)
         if self._match(TokenType.TABLE):
             if_exists = self._parse_if_exists()
-            return DropTableStatement(name=self._expect_name("a table name"), if_exists=if_exists)
+            return DropTableStatement(
+                name=self._expect_name("un nombre de tabla"), if_exists=if_exists
+            )
         if self._match(TokenType.INDEX):
             if_exists = self._parse_if_exists()
-            name = self._expect_name("an index name")
-            table = self._expect_name("a table name") if self._match(TokenType.ON) else None
+            name = self._expect_name("un nombre de índice")
+            table = self._expect_name("un nombre de tabla") if self._match(TokenType.ON) else None
             return DropIndexStatement(name=name, table=table, if_exists=if_exists)
-        raise self._error_here("expected TABLE or INDEX after DROP")
+        raise self._error_here("se esperaba TABLE o INDEX después de DROP")
 
     # --- transactions -------------------------------------------------------
 
@@ -677,50 +679,35 @@ class Parser:
     @contextmanager
     def _nesting(self) -> Iterator[None]:
         if self._nesting_depth >= MAX_NESTING_DEPTH:
-            raise self._error_here(f"expression nests deeper than {MAX_NESTING_DEPTH} levels")
-        self._descend()
+            raise self._error_here(f"la expresión anida más de {MAX_NESTING_DEPTH} niveles")
         self._nesting_depth += 1
         try:
             yield
         finally:
             self._nesting_depth -= 1
-            self._depth -= 1
-
-    @contextmanager
-    def _chain(self) -> Iterator[Callable[[], None]]:
-        """Yields a callback that adds one tree level per operator of a chain."""
-        start = self._depth
-        try:
-            yield self._descend
-        finally:
-            self._depth = start
-
-    def _descend(self) -> None:
-        if self._depth >= MAX_EXPRESSION_DEPTH:
-            raise self._error_here(
-                f"expression nests deeper than {MAX_EXPRESSION_DEPTH} levels; "
-                "a long list of alternatives is better written with IN (...)"
-            )
-        self._depth += 1
 
     def _parse_expression(self) -> Expression:
+        start = self._peek()
         with self._nesting():
-            return self._parse_disjunction()
+            expression = self._parse_disjunction()
+        if self._nesting_depth == 0 and expression_depth(expression) > MAX_EXPRESSION_DEPTH:
+            raise self._error_at(
+                start,
+                f"la expresión tiene más de {MAX_EXPRESSION_DEPTH} niveles; "
+                "una lista larga de alternativas se escribe mejor con IN (...)",
+            )
+        return expression
 
     def _parse_disjunction(self) -> Expression:
         left = self._parse_conjunction()
-        with self._chain() as link:
-            while self._match(TokenType.OR):
-                link()
-                left = BinaryOperation(BinaryOperator.OR, left, self._parse_conjunction())
+        while self._match(TokenType.OR):
+            left = BinaryOperation(BinaryOperator.OR, left, self._parse_conjunction())
         return left
 
     def _parse_conjunction(self) -> Expression:
         left = self._parse_negation()
-        with self._chain() as link:
-            while self._match(TokenType.AND):
-                link()
-                left = BinaryOperation(BinaryOperator.AND, left, self._parse_negation())
+        while self._match(TokenType.AND):
+            left = BinaryOperation(BinaryOperator.AND, left, self._parse_negation())
         return left
 
     def _parse_negation(self) -> Expression:
@@ -731,19 +718,16 @@ class Parser:
 
     def _parse_comparison(self) -> Expression:
         left = self._parse_additive()
-        with self._chain() as link:
-            while True:
-                operator = COMPARISON_OPERATORS.get(self._peek().type)
-                if operator is not None:
-                    self._advance()
-                    link()
-                    left = BinaryOperation(operator, left, self._parse_additive())
-                    continue
-                predicate = self._parse_optional_pattern_predicate(left)
-                if predicate is None:
-                    return left
-                link()
-                left = predicate
+        while True:
+            operator = COMPARISON_OPERATORS.get(self._peek().type)
+            if operator is not None:
+                self._advance()
+                left = BinaryOperation(operator, left, self._parse_additive())
+                continue
+            predicate = self._parse_optional_pattern_predicate(left)
+            if predicate is None:
+                return left
+            left = predicate
 
     def _parse_optional_pattern_predicate(self, operand: Expression) -> Expression | None:
         if self._check(TokenType.IS):
@@ -785,25 +769,21 @@ class Parser:
 
     def _parse_additive(self) -> Expression:
         left = self._parse_multiplicative()
-        with self._chain() as link:
-            while True:
-                operator = ADDITIVE_OPERATORS.get(self._peek().type)
-                if operator is None:
-                    return left
-                self._advance()
-                link()
-                left = BinaryOperation(operator, left, self._parse_multiplicative())
+        while True:
+            operator = ADDITIVE_OPERATORS.get(self._peek().type)
+            if operator is None:
+                return left
+            self._advance()
+            left = BinaryOperation(operator, left, self._parse_multiplicative())
 
     def _parse_multiplicative(self) -> Expression:
         left = self._parse_unary()
-        with self._chain() as link:
-            while True:
-                operator = MULTIPLICATIVE_OPERATORS.get(self._peek().type)
-                if operator is None:
-                    return left
-                self._advance()
-                link()
-                left = BinaryOperation(operator, left, self._parse_unary())
+        while True:
+            operator = MULTIPLICATIVE_OPERATORS.get(self._peek().type)
+            if operator is None:
+                return left
+            self._advance()
+            left = BinaryOperation(operator, left, self._parse_unary())
 
     def _parse_unary(self) -> Expression:
         if self._match(TokenType.MINUS):
@@ -825,7 +805,7 @@ class Parser:
             if self._check(TokenType.LPAREN):
                 return self._parse_function_call(token)
             return self._parse_reference(token)
-        raise self._error_at(token, "expected an expression")
+        raise self._error_at(token, "se esperaba una expresión")
 
     def _parse_group_or_tuple(self) -> Expression:
         first = self._parse_expression()
@@ -856,7 +836,7 @@ class Parser:
     def _parse_reference(self, token: Token) -> ColumnRef:
         if not self._match(TokenType.DOT):
             return ColumnRef(name=token.text)
-        return ColumnRef(name=self._expect_name("a column name"), qualifier=token.text)
+        return ColumnRef(name=self._expect_name("un nombre de columna"), qualifier=token.text)
 
     def _parse_function_call(self, name_token: Token) -> FunctionCall:
         self._expect(TokenType.LPAREN)
@@ -884,12 +864,12 @@ class Parser:
             self._advance()
             key = token.text.lower()
             if key in keyword_arguments:
-                raise self._error_at(token, f"duplicate argument '{token.text}'")
+                raise self._error_at(token, f"argumento repetido '{token.text}'")
             keyword_arguments[key] = self._parse_expression()
             return
         if keyword_arguments:
             raise self._error_here(
-                f"positional argument follows keyword argument in {name_token.text}()"
+                f"argumento posicional después de uno con nombre en {name_token.text}()"
             )
         if self._check(TokenType.STAR) and self._peek(1).type is TokenType.RPAREN:
             self._advance()
@@ -923,7 +903,7 @@ class Parser:
 
     def _expect(self, token_type: TokenType, description: str | None = None) -> Token:
         if not self._check(token_type):
-            raise self._error_here(f"expected {description or token_type.value}")
+            raise self._error_here(f"se esperaba {description or token_type.value}")
         return self._advance()
 
     def _parse_unique_name_tokens(self, description: str) -> tuple[Token, ...]:
@@ -932,7 +912,7 @@ class Parser:
         while True:
             token = self._expect_name_token(description)
             if token.text.lower() in seen:
-                raise self._error_at(token, f"duplicate column '{token.text}'")
+                raise self._error_at(token, f"columna repetida '{token.text}'")
             seen.add(token.text.lower())
             tokens.append(token)
             if not self._match(TokenType.COMMA):
@@ -940,7 +920,7 @@ class Parser:
 
     def _expect_name_token(self, description: str) -> Token:
         if not self._check_any(NAME_TOKENS):
-            raise self._error_here(f"expected {description}")
+            raise self._error_here(f"se esperaba {description}")
         return self._advance()
 
     def _expect_name(self, description: str) -> str:
@@ -948,16 +928,16 @@ class Parser:
 
     def _expect_string(self, description: str) -> str:
         if not self._check_any(STRING_TOKENS):
-            raise self._error_here(f"expected {description}")
+            raise self._error_here(f"se esperaba {description}")
         return self._advance().text
 
     def _error_here(self, message: str) -> SqlSyntaxError:
         return self._error_at(self._peek(), message)
 
     def _error_at(self, token: Token, message: str) -> SqlSyntaxError:
-        found = "end of input" if token.type is TokenType.EOF else f"'{token.text}'"
+        found = TokenType.EOF.value if token.type is TokenType.EOF else f"'{token.text}'"
         return SqlSyntaxError(
-            f"{message}, found {found}", token.line, token.column, self._line_text(token.line)
+            f"{message}, se encontró {found}", token.line, token.column, self._line_text(token.line)
         )
 
     def _line_text(self, line: int) -> str:

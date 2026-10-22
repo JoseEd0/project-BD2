@@ -8,11 +8,11 @@ from enum import Enum, unique
 
 @unique
 class TokenType(Enum):
-    IDENTIFIER = "identifier"
-    QUOTED_NAME = "double-quoted name"
-    STRING = "string literal"
-    INTEGER = "integer literal"
-    FLOAT = "float literal"
+    IDENTIFIER = "identificador"
+    QUOTED_NAME = "nombre entre comillas dobles"
+    STRING = "cadena"
+    INTEGER = "número entero"
+    FLOAT = "número decimal"
 
     COMMA = ","
     SEMICOLON = ";"
@@ -92,7 +92,7 @@ class TokenType(Enum):
     EXPLAIN = "EXPLAIN"
     ANALYZE = "ANALYZE"
 
-    EOF = "end of input"
+    EOF = "fin de la entrada"
 
 
 KEYWORDS: dict[str, TokenType] = {

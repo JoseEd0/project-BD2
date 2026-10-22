@@ -29,7 +29,7 @@ class SqlPositionError(SqlError):
         super().__init__(self._render())
 
     def _render(self) -> str:
-        header = f"{self.message} (line {self.line}, column {self.column})"
+        header = f"{self.message} (línea {self.line}, columna {self.column})"
         if not self.source_line:
             return header
         caret = " " * (self.column - 1) + CARET_MARKER

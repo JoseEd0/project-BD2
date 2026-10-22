@@ -168,6 +168,37 @@ class NullPredicate(Expression):
     negated: bool = False
 
 
+def operands(expression: Expression) -> tuple[Expression, ...]:
+    """Direct children of an expression node; empty for literals, columns and `*`."""
+    if isinstance(expression, FunctionCall):
+        return (*expression.arguments, *expression.keyword_arguments.values())
+    if isinstance(expression, TupleExpression):
+        return expression.elements
+    if isinstance(expression, UnaryOperation):
+        return (expression.operand,)
+    if isinstance(expression, BinaryOperation):
+        return (expression.left, expression.right)
+    if isinstance(expression, BetweenPredicate):
+        return (expression.operand, expression.lower, expression.upper)
+    if isinstance(expression, InPredicate):
+        return (expression.operand, *expression.values)
+    if isinstance(expression, LikePredicate):
+        return (expression.operand, expression.pattern)
+    if isinstance(expression, NullPredicate):
+        return (expression.operand,)
+    return ()
+
+
+def expression_depth(expression: Expression) -> int:
+    """Number of levels of the tree, counted without recursion so any tree can be measured."""
+    depth = 0
+    level: list[Expression] = [expression]
+    while level:
+        depth += 1
+        level = [child for node in level for child in operands(node)]
+    return depth
+
+
 @dataclass(frozen=True, slots=True)
 class DataType:
     kind: DataTypeKind

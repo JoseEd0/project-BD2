@@ -164,7 +164,7 @@ Los errores de SQL devuelven `400` con la posición cuando el parser la conoce, 
 que el editor del frontend necesita para señalar dónde está el problema:
 
 ```jsonc
-{ "detail": { "error": "expected a statement, found 'FROM'",
+{ "detail": { "error": "se esperaba una sentencia, se encontró 'FROM'",
               "kind": "SqlSyntaxError", "line": 1, "column": 8,
               "in_transaction": false } }
 ```

@@ -51,6 +51,7 @@ from sql.nodes import (
     TupleExpression,
     UnaryOperation,
     UnaryOperator,
+    operands,
 )
 from storage.record import Record
 from storage.schema import Field, Schema
@@ -231,7 +232,7 @@ class ExpressionEvaluator:
             return
         if isinstance(expression, Star):
             raise ExpressionError("'*' no es una expresión de valor")
-        for operand in _operands_of(expression):
+        for operand in operands(expression):
             self._validate_shape(operand)
         if _is_constant(expression):
             self.evaluate(expression, NO_ROW)
@@ -679,7 +680,7 @@ def subexpressions(expression: Expression) -> tuple[Expression, ...]:
             item for item in expression.keyword_arguments.values() if _symbol_of(item) is None
         ]
         return (*expression.arguments, *options)
-    return _operands_of(expression)
+    return operands(expression)
 
 
 def rewritten(
@@ -894,7 +895,7 @@ def _is_constant(expression: Expression) -> bool:
             item for item in expression.keyword_arguments.values() if _symbol_of(item) is None
         ]
         return all(_is_constant(item) for item in (*expression.arguments, *options))
-    return all(_is_constant(operand) for operand in _operands_of(expression))
+    return all(_is_constant(operand) for operand in operands(expression))
 
 
 def _column_constant_pairs(expression: Expression) -> list[tuple[ColumnRef, Any]]:
@@ -912,25 +913,6 @@ def _column_constant_pairs(expression: Expression) -> list[tuple[ColumnRef, Any]
         for column, other in candidates
         if isinstance(column, ColumnRef) and (value := constant_value(other)) is not NOT_CONSTANT
     ]
-
-
-def _operands_of(expression: Expression) -> tuple[Expression, ...]:
-    """Subexpresiones de un nodo compuesto, para recorrer el árbol sin evaluarlo."""
-    if isinstance(expression, UnaryOperation):
-        return (expression.operand,)
-    if isinstance(expression, BinaryOperation):
-        return (expression.left, expression.right)
-    if isinstance(expression, BetweenPredicate):
-        return (expression.operand, expression.lower, expression.upper)
-    if isinstance(expression, InPredicate):
-        return (expression.operand, *expression.values)
-    if isinstance(expression, LikePredicate):
-        return (expression.operand, expression.pattern)
-    if isinstance(expression, NullPredicate):
-        return (expression.operand,)
-    if isinstance(expression, TupleExpression):
-        return expression.elements
-    raise ExpressionError(f"expresión no soportada: {type(expression).__name__}")
 
 
 def _truth(value: Value) -> bool | None:

@@ -106,7 +106,7 @@ def test_unterminated_block_comment_is_rejected():
 def test_unknown_character_is_rejected():
     with pytest.raises(SqlLexicalError) as error:
         tokenize("SELECT #")
-    assert "unexpected character" in error.value.message
+    assert "carácter inesperado" in error.value.message
 
 
 def test_number_glued_to_letters_is_rejected():
@@ -115,7 +115,7 @@ def test_number_glued_to_letters_is_rejected():
 
 
 def test_empty_quoted_identifier_is_rejected():
-    with pytest.raises(SqlLexicalError, match="empty quoted identifier"):
+    with pytest.raises(SqlLexicalError, match="nombre entre comillas dobles vacío"):
         tokenize('SELECT "" FROM t')
 
 
@@ -134,8 +134,18 @@ def test_accented_letters_are_valid_identifiers():
 
 
 def test_integer_literal_beyond_the_conversion_limit_is_rejected():
-    with pytest.raises(SqlLexicalError, match="too large"):
+    with pytest.raises(SqlLexicalError, match="demasiado grande"):
         tokenize("SELECT " + "9" * 5000)
+
+
+@pytest.mark.parametrize("source", ["1e400", "1.5E+309"])
+def test_float_literal_that_overflows_to_infinity_is_rejected(source: str):
+    with pytest.raises(SqlLexicalError, match="literal decimal demasiado grande"):
+        tokenize(f"SELECT {source}")
+
+
+def test_float_literal_that_underflows_is_zero():
+    assert float(tokenize("SELECT 1e-400")[1].text) == 0.0
 
 
 def test_long_but_convertible_integer_is_accepted():

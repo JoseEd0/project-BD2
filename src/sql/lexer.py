@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 from .errors import SqlLexicalError
 from .tokens import KEYWORDS, Token, TokenType
 
@@ -98,7 +100,7 @@ class Lexer:
         self._advance_by(len(BLOCK_COMMENT_OPEN))
         while not self._starts_with(BLOCK_COMMENT_CLOSE):
             if self._at_end():
-                raise self._error("unterminated block comment", line, column)
+                raise self._error("comentario de bloque sin cerrar", line, column)
             self._advance()
         self._advance_by(len(BLOCK_COMMENT_CLOSE))
 
@@ -118,8 +120,9 @@ class Lexer:
             self._consume_digits()
         text = self._source[start : self._position]
         if self._peek().isalpha() or self._peek() in IDENTIFIER_EXTRA_CHARS:
-            raise self._error(f"invalid number literal '{text}{self._peek()}'", line, column)
+            raise self._error(f"literal numérico no válido '{text}{self._peek()}'", line, column)
         if is_float:
+            self._reject_infinite_float(text, line, column)
             return Token(TokenType.FLOAT, text, line, column)
         self._reject_unconvertible_integer(text, line, column)
         return Token(TokenType.INTEGER, text, line, column)
@@ -129,7 +132,12 @@ class Lexer:
         try:
             int(text)
         except ValueError as error:
-            raise self._error("integer literal is too large", line, column) from error
+            raise self._error("literal entero demasiado grande", line, column) from error
+
+    def _reject_infinite_float(self, text: str, line: int, column: int) -> None:
+        """`float('1e400')` is infinity, which no column stores and JSON cannot carry."""
+        if math.isinf(float(text)):
+            raise self._error("literal decimal demasiado grande", line, column)
 
     def _exponent_follows(self) -> bool:
         offset = 2 if self._peek(1) in SIGN_CHARS else 1
@@ -151,7 +159,7 @@ class Lexer:
         chunks: list[str] = []
         while True:
             if self._at_end():
-                raise self._error(f"unterminated {token_type.value}", line, column)
+                raise self._error(f"{token_type.value} sin cerrar", line, column)
             char = self._advance()
             if char != quote:
                 chunks.append(char)
@@ -162,7 +170,7 @@ class Lexer:
                 continue
             text = "".join(chunks)
             if not text and token_type is TokenType.QUOTED_NAME:
-                raise self._error("empty quoted identifier", line, column)
+                raise self._error("nombre entre comillas dobles vacío", line, column)
             return Token(token_type, text, line, column)
 
     def _read_operator(self, line: int, column: int) -> Token:
@@ -174,7 +182,7 @@ class Lexer:
         if char in _SINGLE_CHAR_TOKENS:
             self._advance()
             return Token(_SINGLE_CHAR_TOKENS[char], char, line, column)
-        raise self._error(f"unexpected character '{char}'", line, column)
+        raise self._error(f"carácter inesperado '{char}'", line, column)
 
     def _error(self, message: str, line: int, column: int) -> SqlLexicalError:
         return SqlLexicalError(message, line, column, self._line_text(line))

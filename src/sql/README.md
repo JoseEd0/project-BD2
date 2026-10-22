@@ -137,8 +137,10 @@ Dos límites hacen que una consulta patológica falle como error de sintaxis y n
 desbordamiento de pila. El anidamiento de paréntesis, `NOT` y `-` llega a
 `MAX_NESTING_DEPTH` (32) niveles, porque cada uno recorre el descenso entero del parser. La
 profundidad total del árbol llega a `MAX_EXPRESSION_DEPTH` (200), y ahí cuenta también cada
-operador de una cadena: `a OR b OR c` es un árbol de tres niveles. Una lista larga de
-alternativas se escribe con `IN (...)`.
+operador de una cadena: `a OR b OR c` es un árbol de tres niveles. Esa profundidad se mide
+sobre el árbol terminado (`expression_depth`, sin recursión), así que dos cadenas cortas
+encajadas, como `a * b * … + c + …`, suman sus niveles. Una lista larga de alternativas se
+escribe con `IN (...)`.
 
 ### Funciones espaciales
 
@@ -215,7 +217,8 @@ posición exacta del error:
   columnas cuando esta se declara;
 - tamaño de tipo obligatorio en `VECTOR`, prohibido donde no aplica y siempre mayor que cero;
 - opciones repetidas en `WITH` y argumentos nombrados repetidos en una llamada;
-- identificador citado vacío (`""`) y literal entero fuera del rango convertible.
+- identificador citado vacío (`""`), literal entero fuera del rango convertible y literal
+  decimal que desborda a infinito (`1e400`).
 
 La existencia de tablas y columnas, la compatibilidad de tipos y la aridad de las funciones
 corresponden al analizador semántico, que trabaja contra el catálogo.
@@ -226,7 +229,7 @@ corresponden al analizador semántico, que trabaja contra el catálogo.
 `line`, `column` y `source_line`. El mensaje formateado incluye la línea ofensora y un cursor:
 
 ```
-expected a row count after LIMIT, found 'x' (line 1, column 23)
+se esperaba un número de filas después de LIMIT, se encontró 'x' (línea 1, columna 23)
 SELECT * FROM t LIMIT x
                       ^
 ```

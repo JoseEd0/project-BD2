@@ -27,7 +27,7 @@ def test_error_message_renders_a_caret_under_the_token():
 
 
 def test_error_message_names_what_was_found():
-    with pytest.raises(SqlSyntaxError, match="found end of input"):
+    with pytest.raises(SqlSyntaxError, match="se encontró fin de la entrada"):
         parse("SELECT")
 
 
@@ -47,7 +47,7 @@ def test_lexical_error_is_raised_before_parsing():
     "(" * 500 + "1" + ")" * 500, "NOT " * 500 + "a", "- " * 500 + "1"],
 )
 def test_pathological_nesting_fails_as_a_syntax_error(condition: str):
-    with pytest.raises(SqlSyntaxError, match="nests deeper"):
+    with pytest.raises(SqlSyntaxError, match="anida más de"):
         parse(f"SELECT * FROM t WHERE {condition}")
 
 
@@ -55,4 +55,4 @@ def test_an_error_in_an_empty_text_has_no_line_to_show():
     with pytest.raises(SqlSyntaxError) as error:
         parse("")
     assert error.value.source_line == ""
-    assert str(error.value) == "expected a statement, found end of input (line 1, column 1)"
+    assert str(error.value) == "se esperaba una sentencia, se encontró fin de la entrada (línea 1, columna 1)"

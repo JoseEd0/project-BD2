@@ -149,7 +149,7 @@ def test_spatial_functions_answer_null_for_a_row_without_location(datos: Engine)
         ("distancia(p, POINT(-12.0, -77.0), metrica=5)", "la métrica se indica por su nombre"),
         ("distancia(p, POINT(-12.0, -77.0), metrica='manhattan')", "métrica desconocida"),
         ("distancia(p, POINT('a', -77.0))", "se esperaba un número y llegó 'a'"),
-        ("distancia(p, POINT(1e999, 0))", "fuera de"),
+        ("distancia(p, POINT(1e300, 0))", "fuera de"),
         (f"distancia(p, POINT(1{'0' * 400}, 0))", "no cabe"),
         ("distancia(p)", "necesita al menos 2 argumento"),
         ("distancia(p, p, p)", "admite como mucho 2 argumento"),

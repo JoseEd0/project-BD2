@@ -146,8 +146,17 @@ def test_a_long_chain_of_conditions_runs(pares: Engine):
 def test_a_pathological_chain_is_a_syntax_error_not_a_crash(pares: Engine, operator: str):
     chain = operator.join(f"v = {value}" if operator.strip() in ("OR", "AND") else "v"
                           for value in range(PATHOLOGICAL_CHAIN))
-    with pytest.raises(SqlSyntaxError, match="nests deeper"):
+    with pytest.raises(SqlSyntaxError, match="más de"):
         pares.execute(f"SELECT {chain} FROM a")
+
+
+def test_chains_nested_in_one_another_add_up_their_depth(pares: Engine):
+    """Cada cadena es corta, pero el operando izquierdo de una es la cadena anterior."""
+    products = " * ".join("v" for _ in range(LONG_CHAIN))
+    sums = " + ".join([products] + ["v"] * LONG_CHAIN)
+    condition = " AND ".join([f"{sums} > 0"] + ["id > 0"] * LONG_CHAIN)
+    with pytest.raises(SqlSyntaxError, match="más de"):
+        pares.execute(f"SELECT id FROM a WHERE {condition}")
 
 
 @pytest.mark.parametrize(

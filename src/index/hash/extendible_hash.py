@@ -215,7 +215,7 @@ class ExtendibleHashIndex:
         directory_index = self._directory_index(key)
         removed = 0
         for page_id, page in self._chain_pages(self._directory_entry(directory_index)):
-            slots = [slot for slot in page.live_slots() if page.read(slot).startswith(prefix)]
+            slots = [slot for slot, entry in page.live_records() if entry.startswith(prefix)]
             for slot in slots:
                 page.free(slot)
             if slots:
@@ -424,8 +424,7 @@ class ExtendibleHashIndex:
     def _entries_of(self, bucket_id: int) -> Iterator[bytes]:
         """Entradas completas (clave + valor) de la cubeta y su cadena."""
         for _, page in self._chain_pages(bucket_id):
-            for slot in page.live_slots():
-                yield page.read(slot)
+            yield from (entry for _, entry in page.live_records())
 
     def _bit_is_set(self, entry: bytes, high_bit: int) -> bool:
         return bool(self._hash_of(entry) & high_bit)

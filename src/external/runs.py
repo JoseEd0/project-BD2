@@ -78,8 +78,7 @@ class RunReader:
     def __iter__(self) -> Iterator[bytes]:
         for page_id in range(self._pager.page_count):
             page = RecordPage.from_bytes(self._pager.read(page_id), self._record_size)
-            for slot in page.live_slots():
-                yield page.read(slot)
+            yield from (record for _, record in page.live_records())
 
     def close(self) -> None:
         self._pager.close()

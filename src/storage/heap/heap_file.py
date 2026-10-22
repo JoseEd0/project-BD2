@@ -147,8 +147,8 @@ class HeapFile:
         """Recorre todos los registros vigentes en orden físico."""
         for page_id in range(HEADER_PAGE_ID + 1, self._pager.page_count):
             page = self._load(page_id)
-            for slot in page.live_slots():
-                yield RecordId(page_id=page_id, slot=slot), page.read(slot)
+            for slot, record in page.live_records():
+                yield RecordId(page_id=page_id, slot=slot), record
 
     def describe(self) -> dict[str, Any]:
         """Forma física del archivo, para inspeccionarla."""

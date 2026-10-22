@@ -118,7 +118,11 @@ dieciséis particiones abiertas reservaba dieciséis cachés.
 
 Un candado protege el pool, porque varias sesiones leen a la vez. El `fsync` de un `flush`
 va fuera de él, sobre una copia del descriptor: esperar al dispositivo no frena las lecturas
-de las demás sesiones.
+de las demás sesiones. Leer del disco una página que no está en el pool sí ocurre dentro del
+candado, y es un límite deliberado: un solo candado mantiene el LRU, el mapa de páginas y el
+desalojo coherentes sin más protocolo, y los archivos son locales, casi siempre ya en la
+caché del sistema operativo, así que la espera es corta. Un gestor con E/S paralela de verdad usaría un candado por página
+(*latch*) y lecturas sin el del pool.
 
 `read()` devuelve una **copia** de la página. Cuesta un `memcpy` por acceso y a cambio hace
 imposible corromper el buffer pool por descuido: quien quiera cambiar algo escribe de

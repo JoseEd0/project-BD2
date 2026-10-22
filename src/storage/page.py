@@ -122,6 +122,19 @@ class RecordPage:
             if self._raw[self._offset(slot)] == SlotState.USED:
                 yield slot
 
+    def live_records(self) -> Iterator[tuple[int, bytes]]:
+        """Ranuras vigentes con su registro, en orden de posición y de una pasada.
+
+        Los estados salen de una vez y cada registro se copia sin las comprobaciones de
+        `read`, que el propio recorrido ya garantiza: leer una cubeta hash de doscientas
+        entradas ranura por ranura costaba más que todo lo demás de la búsqueda.
+        """
+        first = HEADER_SIZE + STATE_SIZE
+        for slot, state in enumerate(self._states()):
+            if state == SlotState.USED:
+                start = first + slot * self._slot_size
+                yield slot, bytes(self._raw[start : start + self._record_size])
+
     def live_count(self) -> int:
         """Número de registros vigentes, contado sin leer ninguno."""
         return self._states().count(SlotState.USED)

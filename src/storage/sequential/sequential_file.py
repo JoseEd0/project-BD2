@@ -333,8 +333,7 @@ class SequentialFile:
 
     def _chain_matches(self, first_page_id: int, key: Key) -> Iterator[tuple[Key, bytes]]:
         for _, page in self._chain(first_page_id):
-            for slot in page.live_slots():
-                record = page.read(slot)
+            for _, record in page.live_records():
                 record_key = self._key_of(record)
                 if record_key == key:
                     yield record_key, record

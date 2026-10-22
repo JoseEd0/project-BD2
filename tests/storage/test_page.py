@@ -149,3 +149,13 @@ def test_live_count_ignores_freed_and_deleted_slots(page: RecordPage):
     page.tombstone(2)
     assert page.live_count() == 2
     assert page.used_slots == 4
+
+
+def test_live_records_match_reading_each_live_slot(page: RecordPage):
+    assert list(page.live_records()) == []
+    for marker in (1, 2, 3, 4):
+        page.insert(record(marker))
+    page.free(0)
+    page.tombstone(2)
+    expected = [(slot, page.read(slot)) for slot in page.live_slots()]
+    assert list(page.live_records()) == expected == [(1, record(2)), (3, record(4))]

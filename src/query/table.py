@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass
+from itertools import tee
 from math import ceil
 from pathlib import Path
 from typing import Any, Protocol
@@ -458,9 +459,13 @@ class Table:
             yield self._serializer.unpack(record)
 
     def _addressed_at(self, addresses: Iterable[RecordId]) -> Iterator[AddressedRecord]:
-        """El salto al heap: la fila que vive en cada dirección que devolvió un índice."""
-        wanted = list(addresses)
-        return zip(wanted, self._storage.at(wanted), strict=True)
+        """El salto al heap: la fila que vive en cada dirección que devolvió un índice.
+
+        Pide las direcciones de una en una: quien deja de pedir filas —un `LIMIT` sobre un
+        k-NN o sobre un rango— deja también de recorrer el índice.
+        """
+        requested, located = tee(addresses)
+        return zip(requested, self._storage.at(located), strict=True)
 
     def _with_null(self, column: str, expected: int) -> Iterator[AddressedRecord]:
         """Las `expected` filas cuyo valor en la columna es NULL, recorriendo la tabla.

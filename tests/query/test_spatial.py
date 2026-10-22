@@ -6,6 +6,7 @@ respuesta.
 """
 
 import random
+import re
 
 import pytest
 
@@ -357,6 +358,17 @@ def test_the_plan_reports_how_many_nodes_were_opened(indexed: Engine):
     description = indexed.describe_table("tiendas")
     spatial = next(index for index in description["indexes"] if index["method"] == "RTREE")
     assert f"de {spatial['structure']['nodes']} nodos" in plan_of(result)
+
+
+def test_nearest_with_a_limit_opens_only_part_of_the_tree(indexed: Engine):
+    """El k-NN es perezoso: tras la k-ésima fila nadie pide más y el resto no se abre."""
+    result = indexed.execute(
+        "SELECT id FROM tiendas ORDER BY distancia(ubicacion, POINT(-12.0464, -77.0428)) LIMIT 3"
+    )
+    visited = re.search(r"(\d+) de (\d+) nodos visitados", plan_of(result))
+    assert visited is not None
+    opened, total = map(int, visited.groups())
+    assert opened < total / 2
 
 
 def test_explain_shows_the_spatial_path_without_running_it(indexed: Engine):

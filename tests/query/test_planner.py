@@ -5,8 +5,12 @@ from dataclasses import replace
 import pytest
 
 from config import EngineConfig
+from index.bplustree import UnclusteredBPlusIndex
 from query.engine import Engine
 from sql.errors import SqlSyntaxError
+
+RANGE_ROWS = 200
+RANGE_LIMIT = 3
 
 
 def plan_of(engine: Engine, sql: str) -> str:
@@ -293,3 +297,23 @@ def test_grouping_and_joining_say_whether_they_needed_disk(config: EngineConfig)
         for query in queries.values():
             plan = tight.execute(f"EXPLAIN ANALYZE {query}").plan.render()
             assert "nivel(es) de particiones" in plan
+
+
+def test_a_limit_stops_reading_an_index_range(engine: Engine, monkeypatch: pytest.MonkeyPatch):
+    """El salto al heap pide las direcciones al índice de una en una: con un `LIMIT`, el
+    rango deja de leerse en cuanto hay filas suficientes."""
+    engine.execute("CREATE TABLE t (id INT PRIMARY KEY, v INT)")
+    engine.execute("INSERT INTO t VALUES " + ", ".join(f"({n}, {n})" for n in range(RANGE_ROWS)))
+    read: list[object] = []
+    range_search = UnclusteredBPlusIndex.range_search
+
+    def counted(index: UnclusteredBPlusIndex, low: object, high: object):
+        for entry in range_search(index, low, high):
+            read.append(entry)
+            yield entry
+
+    monkeypatch.setattr(UnclusteredBPlusIndex, "range_search", counted)
+    result = engine.execute(f"SELECT id FROM t WHERE id > 5 LIMIT {RANGE_LIMIT}")
+    assert "IndexRange" in result.plan.render()
+    assert [row[0] for row in result.rows] == [6, 7, 8]
+    assert len(read) <= RANGE_LIMIT + 1

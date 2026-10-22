@@ -314,7 +314,9 @@ dos miran la consulta con las mismas reglas.
 | `SpatialNearestScan` | `ORDER BY distancia(col, punto)` como única clave, ascendente | **todas** las filas, ya en orden de cercanía |
 
 `SpatialNearestScan` sustituye a la vez al recorrido y al ordenamiento: el plan no lleva
-`ExternalSort`, y un `LIMIT k` encima deja de pedirle filas tras la k-ésima. Un `WHERE` o un
+`ExternalSort`, y un `LIMIT k` encima deja de pedirle filas tras la k-ésima. El salto al
+heap pide las direcciones al índice de una en una, así que el resto del árbol no se llega a
+abrir; lo mismo vale para un rango por un B+ no agrupado. Un `WHERE` o un
 `DISTINCT` conservan su orden, así que «las 10 gasolineras más cercanas» es ese operador con
 un `Filter` encima. Con `JOIN` o `GROUP BY` no se aplica.
 

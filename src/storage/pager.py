@@ -10,6 +10,7 @@ metadata (cabeza de la lista de libres, raíz del árbol, profundidad global, �
 
 from __future__ import annotations
 
+import os
 import threading
 from collections import OrderedDict
 from pathlib import Path
@@ -101,12 +102,14 @@ class Pager:
             self._evict_if_needed()
 
     def flush(self) -> None:
-        """Vuelca a disco todas las páginas modificadas."""
+        """Vuelca a disco todas las páginas modificadas y espera a que el sistema operativo
+        las tenga en el dispositivo (`fsync`): un COMMIT se apoya en esto."""
         with self._guard:
             for page_id in sorted(self._dirty):
                 self._write_through(page_id, self._cache[page_id])
             self._dirty.clear()
             self._file.flush()
+            os.fsync(self._file.fileno())
 
     def close(self) -> None:
         with self._guard:

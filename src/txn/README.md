@@ -129,6 +129,19 @@ aleatorio, y un lock propio del motor serializa el DDL y la apertura de tablas.
 - **El registro de deshacer vive en memoria.** Sirve para lo que pide el enunciado
   —agrupar operaciones y poder abortarlas—, no para recuperarse de una caída del proceso:
   eso es otro mecanismo, un log de escritura anticipada en disco.
+- **COMMIT escribe en disco antes de soltar los bloqueos** (política *force*). Las páginas
+  que la transacción tocó, de la tabla y de sus índices, se vuelcan con `fsync`. Si el
+  volcado falla, la transacción se aborta. Lo confirmado sobrevive a que el proceso
+  termine sin cerrar el motor. Una caída *a mitad* de una transacción sí puede dejar
+  cambios a medias: arreglar eso es justo lo que haría el log de escritura anticipada.
+- **El DDL va fuera de las transacciones.** Dentro de `BEGIN`, un `CREATE` o un `DROP` da
+  `DefinitionInTransactionError` y la transacción sigue abierta, como en Oracle o MySQL.
+  El registro guarda filas, no archivos, así que un ROLLBACK no podría devolver una tabla
+  borrada.
+- **Terminar una transacción siempre suelta sus bloqueos**, aunque el deshacer falle; si
+  falla el deshacer de una sola sentencia, se aborta la transacción entera.
+- **La espera por un bloqueo tiene un plazo fijo** (`lock_timeout_seconds`), que no se
+  reinicia cuando otras transacciones sueltan bloqueos ajenos.
 
 ## Tests y demo
 

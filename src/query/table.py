@@ -117,6 +117,8 @@ class SecondaryIndex(Protocol):
 
     def describe(self) -> dict[str, Any]: ...
 
+    def flush(self) -> None: ...
+
     def close(self) -> None: ...
 
 
@@ -158,6 +160,9 @@ class HashSecondaryIndex:
 
     def describe(self) -> dict[str, Any]:
         return self._index.describe()
+
+    def flush(self) -> None:
+        self._index.flush()
 
     def close(self) -> None:
         self._index.close()
@@ -450,6 +455,12 @@ class Table:
         path = self._index_path(name)
         path.unlink(missing_ok=True)
         path.with_name(path.name + DIRECTORY_SUFFIX).unlink(missing_ok=True)
+
+    def flush(self) -> None:
+        """Escribe en disco las páginas modificadas de la tabla y de todos sus índices."""
+        self._storage.flush()
+        for index in self._indexes.values():
+            index.flush()
 
     def close(self) -> None:
         self._storage.close()

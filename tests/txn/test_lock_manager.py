@@ -132,3 +132,43 @@ def test_a_shared_wait_graph_without_a_cycle_is_not_a_deadlock(locks: LockManage
     locks.release_all(SECOND)
     writer.join()
     assert outcomes == {FIRST: "acquired", SECOND: "acquired", fourth: "acquired"}
+
+
+def test_the_timeout_is_a_deadline_that_unrelated_releases_do_not_extend(
+    quick_config: EngineConfig,
+):
+    """Cada liberación despierta a todos los que esperan. Si al despertar se volviera a
+    esperar el plazo entero, una transacción que nunca consigue su bloqueo esperaría para
+    siempre mientras otras sigan soltando los suyos."""
+    timeout = 0.3
+    impatient = LockManager(
+        EngineConfig(lock_timeout_seconds=timeout, data_directory=quick_config.data_directory)
+    )
+    impatient.acquire(FIRST, TABLE, LockMode.EXCLUSIVE)
+    stop = threading.Event()
+    outcome: list[type[Exception]] = []
+
+    def churn_another_resource() -> None:
+        while not stop.is_set():
+            impatient.acquire(THIRD, OTHER, LockMode.EXCLUSIVE)
+            impatient.release_all(THIRD)
+            stop.wait(timeout / 10)
+
+    def wait_for_the_table() -> None:
+        try:
+            impatient.acquire(SECOND, TABLE, LockMode.EXCLUSIVE)
+        except LockError as error:
+            outcome.append(type(error))
+
+    churner = threading.Thread(target=churn_another_resource)
+    waiter = threading.Thread(target=wait_for_the_table)
+    churner.start()
+    waiter.start()
+    waiter.join(timeout=timeout * 5)
+    stop.set()
+    churner.join()
+    still_waiting = waiter.is_alive()
+    impatient.release_all(FIRST)
+    waiter.join()
+    assert not still_waiting
+    assert outcome == [LockTimeoutError]

@@ -105,6 +105,9 @@ class SpatialIndex:
     def describe(self) -> dict[str, Any]:
         return self._tree.describe()
 
+    def flush(self) -> None:
+        self._tree.flush()
+
     def close(self) -> None:
         self._tree.close()
 

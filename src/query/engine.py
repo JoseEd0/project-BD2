@@ -329,6 +329,7 @@ class Engine:
             loaded = self._load_rows(self.table(definition.name), path, schema)
             if spec is not None and key_spec is None:
                 self._add_index(self.table(definition.name), spec.columns[0], spec.method, None)
+            self.table(definition.name).flush()
         except Exception:
             self._remove_table(definition.name)
             raise
@@ -414,12 +415,16 @@ class Engine:
 
         Si los archivos no se pueden crear —una fila que no cabe en una página, una clave
         demasiado larga para un nodo— la tabla no queda en el catálogo: registrada y sin
-        poder abrirse, no se podría consultar, volver a crear ni borrar.
+        poder abrirse, no se podría consultar, volver a crear ni borrar. Y se escriben en
+        disco antes de responder, porque el catálogo ya los da por existentes.
         """
         self._catalog.create_table(definition)
         try:
-            self._tables[definition.name.lower()] = Table(definition, self.config)
+            table = Table(definition, self.config)
+            self._tables[definition.name.lower()] = table
+            table.flush()
         except Exception:
+            self._tables.pop(definition.name.lower(), None)
             self._catalog.drop_table(definition.name)
             discard_table_files(self.config.data_directory, definition.name)
             raise

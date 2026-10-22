@@ -17,6 +17,7 @@ espera**. Si lo hay, esperar sería esperar para siempre, así que se aborta a q
 from __future__ import annotations
 
 import threading
+import time
 from enum import Enum, unique
 
 from config import EngineConfig
@@ -90,16 +91,25 @@ class LockManager:
     def _wait_until_free(
         self, transaction: TransactionId, resource: Resource, mode: LockMode
     ) -> None:
+        """Espera hasta que el bloqueo se pueda conceder, con un plazo fijo.
+
+        El plazo se calcula una sola vez: cada liberación, aunque sea de otro recurso,
+        despierta a todos los que esperan, y volver a esperar el tiempo completo tras cada
+        aviso dejaría esperando para siempre a quien nunca consigue su bloqueo.
+        """
+        deadline = time.monotonic() + self._timeout
         while self._conflicts(transaction, resource, mode):
             if self._closes_a_cycle(transaction):
                 self.deadlocks_detected += 1
                 raise DeadlockError(
                     f"la transacción {transaction} provocaría un interbloqueo en '{resource}'"
                 )
-            if not self._condition.wait(timeout=self._timeout):
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
                 raise LockTimeoutError(
                     f"la transacción {transaction} esperó demasiado por '{resource}'"
                 )
+            self._condition.wait(timeout=remaining)
 
     def _already_granted(
         self, transaction: TransactionId, resource: Resource, mode: LockMode

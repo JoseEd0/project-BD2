@@ -309,6 +309,10 @@ class RTree:
             "levels": levels,
         }
 
+    def flush(self) -> None:
+        self._write_header()
+        self._pager.flush()
+
     def close(self) -> None:
         self._write_header()
         self._pager.close()

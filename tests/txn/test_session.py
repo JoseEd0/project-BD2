@@ -2,10 +2,18 @@ import threading
 
 import pytest
 
+from config import EngineConfig
 from query.engine import Engine
 from query.expressions import ExpressionError
 from query.table import DuplicatePrimaryKeyError
-from txn import DeadlockError, LockManager, Session, SessionError, TransactionManager
+from txn import (
+    DeadlockError,
+    DefinitionInTransactionError,
+    LockManager,
+    Session,
+    SessionError,
+    TransactionManager,
+)
 from txn.transaction import TransactionState
 
 TRANSFER_ROUNDS = 40
@@ -354,3 +362,121 @@ def test_transaction_statements_take_no_table_lock(cuentas: Session, locks: Lock
     cuentas.execute("BEGIN")
     assert locks.holders_of("cuentas") == {}
     cuentas.execute("ROLLBACK")
+
+
+DEFINITION_STATEMENTS = [
+    "CREATE TABLE nueva (id INT)",
+    "CREATE TABLE IF NOT EXISTS cuentas (id INT)",
+    "CREATE INDEX idx_saldo ON cuentas USING HASH (saldo)",
+    "DROP TABLE cuentas",
+    "DROP INDEX pk_cuentas",
+]
+
+
+@pytest.mark.parametrize("statement", DEFINITION_STATEMENTS)
+def test_definition_statements_are_rejected_inside_a_transaction(
+    cuentas: Session, engine: Engine, statement: str
+):
+    """El registro de deshacer guarda filas, no archivos: un ROLLBACK no podría devolver
+    una tabla borrada. El DDL se rechaza y la transacción sigue como estaba."""
+    cuentas.execute("BEGIN")
+    cuentas.execute("UPDATE cuentas SET saldo = 0 WHERE id = 1")
+    with pytest.raises(DefinitionInTransactionError):
+        cuentas.execute(statement)
+    assert cuentas.in_transaction
+    cuentas.execute("ROLLBACK")
+    assert rows_of(cuentas, "SELECT saldo FROM cuentas WHERE id = 1") == ((100,),)
+    assert sorted(engine.table_names()) == ["cuentas"]
+    assert engine.table_of_index("pk_cuentas") == "cuentas"
+
+
+def test_definition_statements_still_run_in_autocommit(cuentas: Session, engine: Engine):
+    cuentas.execute("CREATE TABLE nueva (id INT)")
+    cuentas.execute("DROP TABLE nueva")
+    assert engine.table_names() == ["cuentas"]
+
+
+def test_a_rollback_that_fails_still_releases_the_locks(
+    cuentas: Session, locks: LockManager, monkeypatch: pytest.MonkeyPatch
+):
+    def broken_undo(*_: object) -> int:
+        raise RuntimeError("disco lleno")
+
+    cuentas.execute("BEGIN")
+    cuentas.execute("UPDATE cuentas SET saldo = 0 WHERE id = 1")
+    monkeypatch.setattr("txn.session.undo", broken_undo)
+    with pytest.raises(RuntimeError):
+        cuentas.execute("ROLLBACK")
+    assert not cuentas.in_transaction
+    assert locks.holders_of("cuentas") == {}
+
+
+def test_a_statement_whose_undo_fails_aborts_the_whole_transaction(
+    cuentas: Session, locks: LockManager, monkeypatch: pytest.MonkeyPatch
+):
+    def broken_undo(*_: object) -> int:
+        raise RuntimeError("disco lleno")
+
+    cuentas.execute("BEGIN")
+    monkeypatch.setattr("txn.session.undo_statement", broken_undo)
+    with pytest.raises(RuntimeError):
+        cuentas.execute("INSERT INTO cuentas VALUES (1, 0)")
+    assert not cuentas.in_transaction
+    assert locks.holders_of("cuentas") == {}
+
+
+def test_closing_a_session_whose_rollback_fails_releases_the_locks(
+    cuentas: Session, locks: LockManager, monkeypatch: pytest.MonkeyPatch
+):
+    def broken_undo(*_: object) -> int:
+        raise RuntimeError("disco lleno")
+
+    cuentas.execute("BEGIN")
+    cuentas.execute("UPDATE cuentas SET saldo = 0 WHERE id = 1")
+    monkeypatch.setattr("txn.session.undo", broken_undo)
+    with pytest.raises(RuntimeError):
+        cuentas.close()
+    assert locks.holders_of("cuentas") == {}
+
+
+DURABLE_TABLES = [
+    "id INT PRIMARY KEY, v INT, lugar POINT INDEX RTREE",
+    "id INT PRIMARY KEY INDEX HASH, v INT INDEX BTREE, lugar POINT",
+    "id INT PRIMARY KEY INDEX SEQ, v INT, lugar POINT",
+    "id INT PRIMARY KEY INDEX BTREE, v INT, lugar POINT",
+]
+
+
+@pytest.mark.parametrize("columns", DURABLE_TABLES)
+def test_a_commit_is_on_disk_before_the_engine_closes(
+    quick_config: EngineConfig, locks: LockManager, manager: TransactionManager, columns: str
+):
+    """Política *force*: quien abra los archivos después del COMMIT ve lo confirmado,
+    aunque el motor que lo escribió siga abierto con sus páginas en memoria."""
+    with Engine(quick_config) as engine, Session(engine, locks, manager) as writer:
+        writer.execute(f"CREATE TABLE t ({columns})")
+        writer.execute("BEGIN")
+        writer.execute("INSERT INTO t VALUES (1, 10, POINT(-12.0, -77.0)), (2, 20, NULL)")
+        writer.execute("UPDATE t SET v = 11 WHERE id = 1")
+        writer.execute("COMMIT")
+        writer.execute("INSERT INTO t VALUES (3, 30, NULL)")
+
+        with Engine(quick_config) as reader:
+            assert sorted(reader.execute("SELECT id, v FROM t").rows) == [
+                (1, 11),
+                (2, 20),
+                (3, 30),
+            ]
+            assert reader.execute("SELECT id FROM t WHERE v = 11").rows == ((1,),)
+            nearest = reader.execute(
+                "SELECT id FROM t WHERE lugar IS NOT NULL "
+                "ORDER BY distancia(lugar, POINT(-12.0, -77.0)) LIMIT 1"
+            )
+            assert nearest.rows == ((1,),)
+
+
+def test_a_new_table_is_on_disk_before_the_engine_closes(quick_config: EngineConfig):
+    with Engine(quick_config) as engine:
+        engine.execute("CREATE TABLE vacia (id INT PRIMARY KEY, v INT)")
+        with Engine(quick_config) as reader:
+            assert reader.execute("SELECT * FROM vacia").rows == ()

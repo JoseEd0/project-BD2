@@ -9,6 +9,11 @@ Fuera de una transacción explícita cada sentencia va en *autocommit*: se bloqu
 ejecuta y se suelta. Dentro de `BEGIN ... COMMIT`, los bloqueos se conservan hasta el final
 —**bloqueo en dos fases**—, que es lo que impide que otra transacción vea a medias lo que
 esta está cambiando.
+
+Al confirmar, las páginas que la transacción modificó se escriben en disco antes de soltar
+los bloqueos (política *force*): lo confirmado sobrevive a que el proceso termine sin
+cerrar el motor. No hay recuperación ante una caída a mitad de transacción; eso pediría un
+log de escritura anticipada.
 """
 
 from __future__ import annotations
@@ -21,12 +26,9 @@ from sql import parse_script
 from sql.nodes import (
     BeginTransactionStatement,
     CommitTransactionStatement,
-    CreateIndexStatement,
-    CreateTableFromFileStatement,
-    CreateTableStatement,
+    DefinitionStatement,
     DeleteStatement,
     DropIndexStatement,
-    DropTableStatement,
     ExplainStatement,
     InsertStatement,
     RollbackTransactionStatement,
@@ -43,20 +45,20 @@ from txn.transaction import (
     undo_statement,
 )
 
-WRITE_STATEMENTS = (
-    InsertStatement,
-    UpdateStatement,
-    DeleteStatement,
-    CreateTableStatement,
-    CreateTableFromFileStatement,
-    CreateIndexStatement,
-    DropTableStatement,
-    DropIndexStatement,
-)
+WRITE_STATEMENTS = (InsertStatement, UpdateStatement, DeleteStatement, DefinitionStatement)
 
 
 class SessionError(Exception):
     """La sentencia no encaja con el estado de la sesión."""
+
+
+class DefinitionInTransactionError(SessionError):
+    """Se pidió un CREATE o un DROP dentro de una transacción explícita.
+
+    El registro de deshacer guarda filas, no archivos: un ROLLBACK no podría devolver una
+    tabla borrada ni quitar un índice creado. Como en Oracle o MySQL, el DDL va fuera de
+    las transacciones; la transacción abierta sigue intacta.
+    """
 
 
 class Session:
@@ -81,6 +83,7 @@ class Session:
 
         Raises:
             SessionError: si la sentencia no encaja con el estado de la sesión.
+            DefinitionInTransactionError: si es DDL y hay una transacción abierta.
             DeadlockError: si esperar un bloqueo cerraría un ciclo; la transacción se aborta.
         """
         statements = parse_script(sql)
@@ -95,6 +98,11 @@ class Session:
             return self._commit()
         if isinstance(statement, RollbackTransactionStatement):
             return self._rollback()
+        if self._current is not None and isinstance(statement, DefinitionStatement):
+            raise DefinitionInTransactionError(
+                "CREATE y DROP no se admiten dentro de una transacción: confírmala o "
+                "abórtala antes; la transacción sigue abierta"
+            )
         return self._run_in_transaction(statement)
 
     def close(self) -> None:
@@ -121,9 +129,7 @@ class Session:
 
     def _commit(self) -> QueryResult:
         transaction = self._require_transaction()
-        self._manager.finish(transaction, TransactionState.COMMITTED)
-        self._locks.release_all(transaction.identifier)
-        self._current = None
+        self._confirm(transaction)
         return QueryResult(
             message=f"transacción {transaction.identifier} confirmada "
             f"({len(transaction.changes)} cambio(s))"
@@ -131,10 +137,10 @@ class Session:
 
     def _rollback(self) -> QueryResult:
         transaction = self._require_transaction()
-        undone = undo(transaction, self._tables_of(transaction))
-        self._manager.finish(transaction, TransactionState.ABORTED)
-        self._locks.release_all(transaction.identifier)
-        self._current = None
+        try:
+            undone = undo(transaction, self._tables_of(transaction))
+        finally:
+            self._end(transaction, TransactionState.ABORTED)
         return QueryResult(
             message=f"transacción {transaction.identifier} abortada ({undone} cambio(s) deshechos)"
         )
@@ -153,21 +159,52 @@ class Session:
             if autocommit:
                 self._abort(transaction)
             else:
-                undo_statement(transaction, self._tables_of(transaction), first_change)
+                self._undo_failed_statement(transaction, first_change)
             raise
         if autocommit:
-            self._manager.finish(transaction, TransactionState.COMMITTED)
-            self._locks.release_all(transaction.identifier)
+            self._confirm(transaction)
         else:
             self._current = transaction
         return result
 
+    def _undo_failed_statement(self, transaction: Transaction, first_change: int) -> None:
+        """Deshace solo la sentencia que falló; si ni eso se puede, aborta la transacción."""
+        try:
+            undo_statement(transaction, self._tables_of(transaction), first_change)
+        except Exception:
+            self._abort(transaction)
+            raise
+
+    def _confirm(self, transaction: Transaction) -> None:
+        """Escribe en disco lo que la transacción cambió y solo entonces la da por confirmada.
+
+        Si la escritura falla, la transacción se aborta: confirmarla prometería algo que el
+        disco no tiene.
+        """
+        try:
+            for table in self._tables_of(transaction).values():
+                table.flush()
+        except Exception:
+            self._abort(transaction)
+            raise
+        self._end(transaction, TransactionState.COMMITTED)
+
     def _abort(self, transaction: Transaction) -> None:
-        if transaction.is_active:
-            undo(transaction, self._tables_of(transaction))
-            self._manager.finish(transaction, TransactionState.ABORTED)
-        self._locks.release_all(transaction.identifier)
-        self._current = None
+        try:
+            if transaction.is_active:
+                undo(transaction, self._tables_of(transaction))
+        finally:
+            self._end(transaction, TransactionState.ABORTED)
+
+    def _end(self, transaction: Transaction, state: TransactionState) -> None:
+        """Cierra la transacción y suelta sus bloqueos pase lo que pase: un deshacer que
+        falla no puede dejar tablas bloqueadas para siempre."""
+        try:
+            if transaction.is_active:
+                self._manager.finish(transaction, state)
+        finally:
+            self._locks.release_all(transaction.identifier)
+            self._current = None
 
     def _lock_for(self, statement: Statement, transaction: Transaction) -> None:
         mode = LockMode.EXCLUSIVE if isinstance(statement, WRITE_STATEMENTS) else LockMode.SHARED

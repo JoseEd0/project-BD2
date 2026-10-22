@@ -28,15 +28,26 @@ class Family(Enum):
     BOOLEAN = "un booleano"
     DATE = "una fecha"
     BYTES = "bytes"
-    COORDINATES = "un punto"
+    POINT = "un punto"
+    VECTOR = "un vector"
     POLYGON = "un polígono"
 
 
 # Caracteres de un valor que se citan en un mensaje de error: un polígono o un entero de
 # cientos de cifras lo volverían ilegible.
 SHOWN_VALUE_LENGTH = 40
-# Un punto o un polígono se pueden comparar por igualdad, pero no tienen un orden.
-UNORDERED_FAMILIES = frozenset({Family.COORDINATES, Family.POLYGON})
+# Un punto, un vector o un polígono se pueden comparar por igualdad, pero no tienen orden.
+UNORDERED_FAMILIES = frozenset({Family.POINT, Family.VECTOR, Family.POLYGON})
+_FAMILY_OF_TYPE = {
+    FieldType.INT: Family.NUMBER,
+    FieldType.FLOAT: Family.NUMBER,
+    FieldType.BOOL: Family.BOOLEAN,
+    FieldType.STRING: Family.TEXT,
+    FieldType.DATE: Family.DATE,
+    FieldType.BYTES: Family.BYTES,
+    FieldType.POINT: Family.POINT,
+    FieldType.VECTOR: Family.VECTOR,
+}
 _NUMBER_TYPES = frozenset({int, float})
 _ORDERED_TYPES = frozenset({int, float, str, bool, date, bytes})
 
@@ -118,11 +129,37 @@ def family_of(value: object) -> Family:
         return Family.DATE
     if isinstance(value, bytes):
         return Family.BYTES
+    if isinstance(value, Point):
+        return Family.POINT
     if isinstance(value, tuple):
-        return Family.COORDINATES
+        return Family.VECTOR
     if isinstance(value, Polygon):
         return Family.POLYGON
     raise ComparisonError(f"no se puede comparar un valor de tipo {type(value).__name__}")
+
+
+def family_of_type(field_type: FieldType) -> Family:
+    """Familia de los valores que guarda una columna de ese tipo."""
+    return _FAMILY_OF_TYPE[field_type]
+
+
+def hash_comparable(left: FieldType, right: FieldType) -> bool:
+    """Si dos columnas se pueden igualar comparando sus valores tal cual, sin convertir.
+
+    Es lo que necesita un hash join: reparte por los bytes de cada valor, así que una fecha
+    y su texto ISO, que `comparable` sí iguala, caerían en particiones distintas.
+
+    Raises:
+        ComparisonError: si sus valores no se pueden comparar de ningún modo.
+    """
+    first, second = family_of_type(left), family_of_type(right)
+    if first is second:
+        return True
+    if {first, second} == {Family.DATE, Family.TEXT}:
+        return False
+    raise ComparisonError(
+        f"no se puede comparar una columna {left.value} con una {right.value}"
+    )
 
 
 def _with_dates_parsed(left: object, right: object) -> tuple[object, object]:
@@ -147,6 +184,8 @@ def describe_value(value: object) -> str:
         return f"'{value.isoformat()}'"
     if isinstance(value, Point):
         return f"POINT({value.lat!r}, {value.lon!r})"
+    if isinstance(value, str):
+        return "'" + value.replace("'", "''") + "'"
     return repr(value)
 
 

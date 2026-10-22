@@ -51,13 +51,22 @@ def test_text_that_is_not_a_date_cannot_be_compared_with_one():
         comparable(date(2024, 1, 5), "2024-13-40")
 
 
-def test_points_and_polygons_are_equal_or_not_but_have_no_order():
-    assert comparable(Point(1.0, 2.0), (1.0, 2.0)) == (Point(1.0, 2.0), (1.0, 2.0))
+def test_points_vectors_and_polygons_are_equal_or_not_but_have_no_order():
+    assert comparable(Point(1.0, 2.0), Point(1.0, 2.0)) == (Point(1.0, 2.0), Point(1.0, 2.0))
+    assert comparable((1.0, 2.0), (1.0, 2.0)) == ((1.0, 2.0), (1.0, 2.0))
     assert comparable(TRIANGLE, TRIANGLE) == (TRIANGLE, TRIANGLE)
+    with pytest.raises(ComparisonError, match="no tiene orden"):
+        orderable((1.0, 2.0), (3.0, 4.0))
     with pytest.raises(ComparisonError, match="no tiene orden"):
         orderable(Point(1.0, 2.0), Point(3.0, 4.0))
     with pytest.raises(ComparisonError, match="no tiene orden"):
         orderable(TRIANGLE, TRIANGLE)
+
+
+def test_a_point_is_not_a_vector():
+    """Un VECTOR(2) y un POINT guardan dos números, pero no son lo mismo."""
+    with pytest.raises(ComparisonError, match=r"un punto .* con un vector"):
+        comparable(Point(1.0, 2.0), (1.0, 2.0))
 
 
 def test_a_literal_takes_the_type_of_its_column():

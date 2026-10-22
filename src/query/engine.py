@@ -54,6 +54,7 @@ from sql.nodes import (
     DropTableStatement,
     ExplainStatement,
     Expression,
+    IndexSpec,
     IndexType,
     InsertStatement,
     RollbackTransactionStatement,
@@ -63,7 +64,7 @@ from sql.nodes import (
 )
 from storage.record import Record
 from storage.schema import Field, Schema
-from storage.types import ORDERED_FIELD_TYPES, FieldType, Value
+from storage.types import ORDERED_FIELD_TYPES, UNORDERED_FIELD_TYPES, FieldType, Value
 
 MILLISECONDS = 1000.0
 # Métodos que, declarados sobre una columna al cargar un archivo, la convierten en la clave
@@ -284,9 +285,7 @@ class Engine:
         if statement.if_not_exists and self._catalog.has_table(statement.name):
             return QueryResult(message=f"la tabla '{statement.name}' ya existía")
         fields = [field_from_column(column, self.config) for column in statement.columns]
-        primary_key = next(
-            (column.name for column in statement.columns if column.primary_key), None
-        )
+        primary_key = _primary_key_of(statement)
         if primary_key is not None:
             _require_orderable_key(Schema(fields).field_of(primary_key))
         key_method = _key_method_of(statement)
@@ -309,6 +308,8 @@ class Engine:
         path = resolve_user_file(statement.path, self.config)
         schema = infer_schema(path, self.config)
         spec = statement.index
+        if spec is not None:
+            _require_no_options(spec)
         if spec is not None and not schema.has_field(spec.columns[0]):
             raise CatalogError(f"la columna '{spec.columns[0]}' no está en '{path.name}'")
         key_spec = spec if spec is not None and spec.method in KEY_INDEX_METHODS else None
@@ -344,6 +345,7 @@ class Engine:
         column = statement.spec.columns[0]
         if len(statement.spec.columns) > 1:
             raise UnsupportedQueryError("todavía no hay índices sobre varias columnas")
+        _require_no_options(statement.spec)
         if not table.schema.has_field(column):
             raise CatalogError(f"la columna '{column}' no existe en '{table.name}'")
         if statement.if_not_exists and table.definition.index_on(column) is not None:
@@ -523,7 +525,7 @@ class Engine:
     @staticmethod
     def _predicate_of(table: Table, where: Expression | None) -> Callable[[Record], bool]:
         evaluator = ExpressionEvaluator(RowLayout.of_table(table.schema, table.name))
-        evaluator.validate(where)
+        evaluator.validate_condition(where)
 
         def matches(row: Record) -> bool:
             return evaluator.matches(where, row)
@@ -582,10 +584,11 @@ def _require_heap_for_secondary_index(organization: Organization, column: str) -
 
 
 def _require_method_for_column(field: Field, method: IndexType) -> None:
-    """Un R-Tree indexa puntos y solo puntos; un B+ o un hash, cualquier cosa menos puntos.
+    """Un R-Tree indexa puntos y solo puntos; un hash, cualquier cosa menos puntos; un B+,
+    solo lo que tiene orden.
 
-    Un punto no tiene un orden total que un B+ pueda aprovechar, y un hash solo serviría
-    para encontrar filas en unas coordenadas exactas.
+    Un punto o un vector no tienen un orden total que un B+ pueda aprovechar, y un hash
+    sobre puntos solo serviría para encontrar filas en unas coordenadas exactas.
 
     Raises:
         CatalogError: si el método no corresponde al tipo de la columna.
@@ -605,6 +608,40 @@ def _require_method_for_column(field: Field, method: IndexType) -> None:
             f"la columna '{field.name}' es POINT: solo admite un índice RTREE, "
             f"no {method.value}"
         )
+    if method is IndexType.BTREE and field.type in UNORDERED_FIELD_TYPES:
+        raise CatalogError(
+            f"la columna '{field.name}' es {field.type.value}, que no tiene orden: "
+            "no admite un índice BTREE"
+        )
+
+
+def _require_no_options(spec: IndexSpec) -> None:
+    """Ningún método de índice del motor tiene opciones: un `WITH` que se aceptara y no
+    se usara haría creer que el índice se construyó con ellas.
+
+    Raises:
+        CatalogError: si la especificación trae opciones.
+    """
+    if spec.options:
+        names = ", ".join(spec.options)
+        raise CatalogError(f"el índice {spec.method.value} no admite opciones: {names}")
+
+
+def _primary_key_of(statement: CreateTableStatement) -> str | None:
+    """Columna que la tabla declara como clave primaria.
+
+    Raises:
+        CatalogError: si la clave tiene varias columnas. Las organizaciones ordenadas y los
+            índices del motor son de una columna, y aceptar `PRIMARY KEY (a, b)` usando
+            solo `a` rechazaría filas que no repiten la clave.
+    """
+    keys = [column.name for column in statement.columns if column.primary_key]
+    if len(keys) > 1:
+        raise CatalogError(
+            f"la clave primaria ({', '.join(keys)}) tiene varias columnas, y el motor solo "
+            "admite claves de una"
+        )
+    return keys[0] if keys else None
 
 
 def _default_method_for(field: Field) -> IndexType:

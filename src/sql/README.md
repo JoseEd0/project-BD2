@@ -128,8 +128,12 @@ OR  <  AND  <  NOT  <  comparación  <  + -  <  * / %  <  - unario  <  primaria
   de un polígono), `*` como argumento de agregado
 - Llamadas con argumentos nombrados: `SIMILAR_TO('foto.jpg', k = 10)`; los posicionales van primero
 
-El anidamiento de paréntesis, `NOT` y `-` está limitado a `MAX_EXPRESSION_DEPTH` niveles para que
-una consulta patológica falle como error de sintaxis y no como desbordamiento de pila.
+Dos límites hacen que una consulta patológica falle como error de sintaxis y no como
+desbordamiento de pila. El anidamiento de paréntesis, `NOT` y `-` llega a
+`MAX_NESTING_DEPTH` (32) niveles, porque cada uno recorre el descenso entero del parser. La
+profundidad total del árbol llega a `MAX_EXPRESSION_DEPTH` (200), y ahí cuenta también cada
+operador de una cadena: `a OR b OR c` es un árbol de tres niveles. Una lista larga de
+alternativas se escribe con `IN (...)`.
 
 ### Funciones espaciales
 

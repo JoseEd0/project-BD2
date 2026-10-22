@@ -7,7 +7,7 @@ access structure and `WITH <options>` carries its tuning parameters.
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from types import MappingProxyType
 
@@ -61,9 +61,13 @@ from .nodes import (
 )
 from .tokens import Token, TokenType
 
-# Parenthesis, NOT and unary-minus nesting all recurse; the cap keeps a pathological
-# query inside the interpreter stack so it fails as a syntax error, not a crash.
-MAX_EXPRESSION_DEPTH = 32
+# Two caps keep a pathological query inside the interpreter stack, so it fails as a syntax
+# error instead of a RecursionError. Parentheses, NOT and unary minus recurse through the
+# whole descent of this parser, about a dozen frames per level. Every level of the
+# resulting tree, including each operator of a chain such as `a OR b OR c` (a left-deep
+# tree), costs a few frames in each recursive walk: validation, evaluation, rendering.
+MAX_NESTING_DEPTH = 32
+MAX_EXPRESSION_DEPTH = 200
 
 COMPARISON_OPERATORS: dict[TokenType, BinaryOperator] = {
     TokenType.EQUAL: BinaryOperator.EQUAL,
@@ -156,6 +160,7 @@ class Parser:
         self._tokens = tokenize(source)
         self._index = 0
         self._depth = 0
+        self._nesting_depth = 0
 
     def parse_script(self) -> list[Statement]:
         statements: list[Statement] = []
@@ -671,13 +676,32 @@ class Parser:
 
     @contextmanager
     def _nesting(self) -> Iterator[None]:
-        if self._depth >= MAX_EXPRESSION_DEPTH:
-            raise self._error_here(f"expression nests deeper than {MAX_EXPRESSION_DEPTH} levels")
-        self._depth += 1
+        if self._nesting_depth >= MAX_NESTING_DEPTH:
+            raise self._error_here(f"expression nests deeper than {MAX_NESTING_DEPTH} levels")
+        self._descend()
+        self._nesting_depth += 1
         try:
             yield
         finally:
+            self._nesting_depth -= 1
             self._depth -= 1
+
+    @contextmanager
+    def _chain(self) -> Iterator[Callable[[], None]]:
+        """Yields a callback that adds one tree level per operator of a chain."""
+        start = self._depth
+        try:
+            yield self._descend
+        finally:
+            self._depth = start
+
+    def _descend(self) -> None:
+        if self._depth >= MAX_EXPRESSION_DEPTH:
+            raise self._error_here(
+                f"expression nests deeper than {MAX_EXPRESSION_DEPTH} levels; "
+                "a long list of alternatives is better written with IN (...)"
+            )
+        self._depth += 1
 
     def _parse_expression(self) -> Expression:
         with self._nesting():
@@ -685,14 +709,18 @@ class Parser:
 
     def _parse_disjunction(self) -> Expression:
         left = self._parse_conjunction()
-        while self._match(TokenType.OR):
-            left = BinaryOperation(BinaryOperator.OR, left, self._parse_conjunction())
+        with self._chain() as link:
+            while self._match(TokenType.OR):
+                link()
+                left = BinaryOperation(BinaryOperator.OR, left, self._parse_conjunction())
         return left
 
     def _parse_conjunction(self) -> Expression:
         left = self._parse_negation()
-        while self._match(TokenType.AND):
-            left = BinaryOperation(BinaryOperator.AND, left, self._parse_negation())
+        with self._chain() as link:
+            while self._match(TokenType.AND):
+                link()
+                left = BinaryOperation(BinaryOperator.AND, left, self._parse_negation())
         return left
 
     def _parse_negation(self) -> Expression:
@@ -703,16 +731,19 @@ class Parser:
 
     def _parse_comparison(self) -> Expression:
         left = self._parse_additive()
-        while True:
-            operator = COMPARISON_OPERATORS.get(self._peek().type)
-            if operator is not None:
-                self._advance()
-                left = BinaryOperation(operator, left, self._parse_additive())
-                continue
-            predicate = self._parse_optional_pattern_predicate(left)
-            if predicate is None:
-                return left
-            left = predicate
+        with self._chain() as link:
+            while True:
+                operator = COMPARISON_OPERATORS.get(self._peek().type)
+                if operator is not None:
+                    self._advance()
+                    link()
+                    left = BinaryOperation(operator, left, self._parse_additive())
+                    continue
+                predicate = self._parse_optional_pattern_predicate(left)
+                if predicate is None:
+                    return left
+                link()
+                left = predicate
 
     def _parse_optional_pattern_predicate(self, operand: Expression) -> Expression | None:
         if self._check(TokenType.IS):
@@ -754,21 +785,25 @@ class Parser:
 
     def _parse_additive(self) -> Expression:
         left = self._parse_multiplicative()
-        while True:
-            operator = ADDITIVE_OPERATORS.get(self._peek().type)
-            if operator is None:
-                return left
-            self._advance()
-            left = BinaryOperation(operator, left, self._parse_multiplicative())
+        with self._chain() as link:
+            while True:
+                operator = ADDITIVE_OPERATORS.get(self._peek().type)
+                if operator is None:
+                    return left
+                self._advance()
+                link()
+                left = BinaryOperation(operator, left, self._parse_multiplicative())
 
     def _parse_multiplicative(self) -> Expression:
         left = self._parse_unary()
-        while True:
-            operator = MULTIPLICATIVE_OPERATORS.get(self._peek().type)
-            if operator is None:
-                return left
-            self._advance()
-            left = BinaryOperation(operator, left, self._parse_unary())
+        with self._chain() as link:
+            while True:
+                operator = MULTIPLICATIVE_OPERATORS.get(self._peek().type)
+                if operator is None:
+                    return left
+                self._advance()
+                link()
+                left = BinaryOperation(operator, left, self._parse_unary())
 
     def _parse_unary(self) -> Expression:
         if self._match(TokenType.MINUS):

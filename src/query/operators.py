@@ -31,6 +31,7 @@ from query.aggregation import Accumulator, Aggregate, accumulator_for, check_arg
 from query.comparison import describe_value
 from query.expressions import (
     ColumnSlot,
+    ExpressionError,
     ExpressionEvaluator,
     RowLayout,
     describe_expression,
@@ -42,9 +43,10 @@ from query.table import Table
 from sql.nodes import ColumnRef, Expression, JoinKind, SortDirection
 from storage.record import Record, RecordSerializer
 from storage.schema import Field, Schema
-from storage.types import FieldType, Value
+from storage.types import UNORDERED_FIELD_TYPES, FieldType, Value
 
 SORT_DIRECTORY = "sort"
+SORT_KEY_LABEL = "clave"
 GROUP_DIRECTORY = "group"
 JOIN_DIRECTORY = "join"
 DISTINCT_DIRECTORY = "distinct"
@@ -270,7 +272,7 @@ class Filter(Operator):
         self._child = child
         self._predicate = predicate
         self._evaluator = ExpressionEvaluator(child.layout)
-        self._evaluator.validate(predicate)
+        self._evaluator.validate_condition(predicate)
 
     @property
     def layout(self) -> RowLayout:
@@ -307,6 +309,7 @@ class Sort(Operator):
         self._evaluator = ExpressionEvaluator(child.layout)
         for expression, _ in self._keys:
             self._evaluator.validate(expression)
+            _require_orderable(expression, child)
         self._runs = 0
         self._passes = 0
 
@@ -429,17 +432,22 @@ class HashAggregate(Operator):
     def _build_layout(self) -> RowLayout:
         """Una columna por clave y otra por agregación.
 
-        Una clave que es una columna conserva su tabla, para que `SELECT a.ciudad`
-        resuelva; una que es una expresión se llama como se escribe (`grouping_label`).
+        Una clave que es una columna conserva la tabla de la que viene —aunque el GROUP BY
+        no la nombre—, para que `SELECT a.ciudad … GROUP BY ciudad` resuelva; una que es una
+        expresión se llama como se escribe (`grouping_label`).
         """
         slots = [
-            ColumnSlot(key.qualifier, key.name)
+            ColumnSlot(self._qualifier_of(key), key.name)
             if isinstance(key, ColumnRef)
             else ColumnSlot(None, grouping_label(key))
             for key in self._group_by
         ]
         slots.extend(ColumnSlot(None, aggregate.label) for aggregate in self._aggregates)
         return RowLayout(slots)
+
+    def _qualifier_of(self, key: ColumnRef) -> str | None:
+        layout = self._child.layout
+        return layout.slots[layout.position_of(key.name, key.qualifier)].qualifier
 
     def _build_schema(self) -> Schema:
         fields = [self._field_of(expression) for expression in self._group_by]
@@ -483,7 +491,7 @@ class JoinOperator(Operator):
         self._layout = left.layout.concat(right.layout)
         self._schema = internal_schema([*left.schema.fields, *right.schema.fields])
         self._evaluator = ExpressionEvaluator(self._layout)
-        self._evaluator.validate(condition)
+        self._evaluator.validate_condition(condition)
         self._no_left: Record = (None,) * len(left.schema)
         self._no_right: Record = (None,) * len(right.schema)
 
@@ -821,6 +829,24 @@ def _described_range(low: Key | None, high: Key | None) -> str:
     if low is None:
         return f"<= {describe_value(high)}"
     return f"entre {describe_value(low)} y {describe_value(high)}"
+
+
+def _require_orderable(expression: Expression, child: Operator) -> None:
+    """Un punto o un vector no tienen orden: `ORDER BY ubicacion` se rechaza igual que
+    `ubicacion < POINT(…)`, en vez de ordenar sus coordenadas como si fueran números.
+
+    Raises:
+        ExpressionError: si el valor de la clave no tiene orden.
+    """
+    shown = describe_expression(expression)
+    try:
+        kind = result_field(SORT_KEY_LABEL, expression, child.layout, child.schema).type
+    except ExpressionError:
+        raise ExpressionError(f"no se puede ordenar por '{shown}'") from None
+    if kind in UNORDERED_FIELD_TYPES:
+        raise ExpressionError(
+            f"'{shown}' es {kind.value}, que no tiene orden: no sirve en ORDER BY"
+        )
 
 
 def grouping_label(expression: Expression) -> str:

@@ -432,16 +432,17 @@ def test_ties_come_out_in_the_same_order_with_and_without_the_index(engine: Engi
 
 
 def test_an_alias_that_hides_a_column_orders_the_same_with_and_without_the_index(tiendas: Engine):
-    """`ORDER BY id` es la columna `id`, aunque el SELECT llame `id` a una distancia."""
+    """Como en SQL estándar, `ORDER BY id` es el alias del SELECT —una distancia—, aunque la
+    tabla tenga una columna `id`. Con el R-Tree, ese orden lo da el k-NN."""
     query = (
         "SELECT distancia(ubicacion, POINT(-12.0464, -77.0428)) AS id FROM tiendas ORDER BY id LIMIT 5"
     )
-    by_column = [HAVERSINE.distance(PLAZA, STORE_ROWS[number][3]) for number in range(5)]
-    assert [row[0] for row in tiendas.execute(query).rows] == pytest.approx(by_column)
+    nearest = sorted(HAVERSINE.distance(PLAZA, row[3]) for row in STORE_ROWS)[:5]
+    assert [row[0] for row in tiendas.execute(query).rows] == pytest.approx(nearest)
     tiendas.execute(CREATE_INDEX)
     indexed_result = tiendas.execute(query)
-    assert "SpatialNearestScan" not in plan_of(indexed_result)
-    assert [row[0] for row in indexed_result.rows] == pytest.approx(by_column)
+    assert "SpatialNearestScan" in plan_of(indexed_result)
+    assert [row[0] for row in indexed_result.rows] == pytest.approx(nearest)
 
 
 @pytest.mark.parametrize(

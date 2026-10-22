@@ -7,6 +7,7 @@ columna y con qué tabla está cualificada.
 
 from __future__ import annotations
 
+import math
 import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -236,11 +237,59 @@ class ExpressionEvaluator:
             return None
         return tuple(self._real(value) for value in values)
 
+    def validate_condition(self, expression: Expression | None) -> None:
+        """Como `validate`, y además comprueba que la expresión sea una condición.
+
+        `WHERE id` o `WHERE 0 AND x = 1` no significan nada en SQL: se rechazan antes de
+        leer filas, aunque la tabla esté vacía.
+
+        Raises:
+            ExpressionError: si no se puede resolver o no da verdadero, falso o NULL.
+        """
+        self.validate(expression)
+        if expression is not None:
+            self._require_condition(expression)
+
     def matches(self, expression: Expression | None, row: Record) -> bool:
-        """Evalúa un predicado tratando NULL como falso, igual que SQL."""
+        """Evalúa un predicado tratando NULL como falso, igual que SQL.
+
+        Raises:
+            ExpressionError: si la condición no da verdadero, falso o NULL.
+        """
         if expression is None:
             return True
-        return self.evaluate(expression, row) is True
+        return _truth(self.evaluate(expression, row)) is True
+
+    def _require_condition(self, expression: Expression) -> None:
+        if isinstance(expression, UnaryOperation) and expression.operator is UnaryOperator.NOT:
+            self._require_condition(expression.operand)
+            return
+        if isinstance(expression, BinaryOperation) and expression.operator in _CONNECTIVES:
+            self._require_condition(expression.left)
+            self._require_condition(expression.right)
+            return
+        if self._may_be_condition(expression):
+            return
+        raise ExpressionError(
+            f"'{describe_expression(expression)}' no es una condición: no da verdadero ni falso"
+        )
+
+    def _may_be_condition(self, expression: Expression) -> bool:
+        """Si la expresión puede dar un booleano. Lo que no se sabe antes de leer filas
+        —una columna calculada, una agregación— se comprueba fila a fila en `matches`."""
+        if isinstance(expression, BinaryOperation):
+            return expression.operator in _COMPARISONS
+        if isinstance(expression, BetweenPredicate | InPredicate | LikePredicate | NullPredicate):
+            return True
+        if isinstance(expression, Literal):
+            return expression.value is None or isinstance(expression.value, bool)
+        if isinstance(expression, ColumnRef):
+            field = self._layout.slots[self._position_of(expression)].field
+            return field is None or field.type is FieldType.BOOL
+        if isinstance(expression, FunctionCall):
+            function = scalar_function(expression.name)
+            return function is None or function.result in (None, FieldType.BOOL)
+        return False
 
     def _position_of(self, column: ColumnRef) -> int:
         position = self._positions.get(column)
@@ -333,7 +382,8 @@ class ExpressionEvaluator:
     def _unary(self, expression: UnaryOperation, row: Record) -> Value:
         value = self.evaluate(expression.operand, row)
         if expression.operator is UnaryOperator.NOT:
-            return None if value is None else not value
+            truth = _truth(value)
+            return None if truth is None else not truth
         if value is None:
             return None
         return -self._number(value)
@@ -355,36 +405,40 @@ class ExpressionEvaluator:
         return self._arithmetic(operator, left, right)
 
     def _and(self, expression: BinaryOperation, row: Record) -> Value:
-        left = self.evaluate(expression.left, row)
+        left = _truth(self.evaluate(expression.left, row))
         if left is False:
             return False
-        right = self.evaluate(expression.right, row)
+        right = _truth(self.evaluate(expression.right, row))
         if right is False:
             return False
         return None if left is None or right is None else True
 
     def _or(self, expression: BinaryOperation, row: Record) -> Value:
-        left = self.evaluate(expression.left, row)
+        left = _truth(self.evaluate(expression.left, row))
         if left is True:
             return True
-        right = self.evaluate(expression.right, row)
+        right = _truth(self.evaluate(expression.right, row))
         if right is True:
             return True
         return None if left is None or right is None else False
 
     def _arithmetic(self, operator: BinaryOperator, left: Value, right: Value) -> Value:
+        """Resultado de una operación entre dos números.
+
+        Un resultado real tiene que ser finito: `1e308 * 10` es un desbordamiento, no un
+        infinito que después ninguna columna admitiría.
+
+        Raises:
+            ExpressionError: si se divide por cero o el resultado no cabe en un real.
+        """
         first, second = self._number(left), self._number(right)
-        if operator is BinaryOperator.ADD:
-            return first + second
-        if operator is BinaryOperator.SUBTRACT:
-            return first - second
-        if operator is BinaryOperator.MULTIPLY:
-            return first * second
-        if second == 0:
-            raise ExpressionError("división por cero")
-        if operator is BinaryOperator.DIVIDE:
-            return first / second
-        return first % second
+        try:
+            result = _operate(operator, first, second)
+        except OverflowError:
+            raise ExpressionError("el resultado no cabe en un número real") from None
+        if isinstance(result, float) and not math.isfinite(result):
+            raise ExpressionError("el resultado no cabe en un número real")
+        return result
 
     def _between(self, expression: BetweenPredicate, row: Record) -> Value:
         value = self.evaluate(expression.operand, row)
@@ -398,15 +452,21 @@ class ExpressionEvaluator:
         return not inside if expression.negated else inside
 
     def _in(self, expression: InPredicate, row: Record) -> Value:
+        """`x IN (a, b, …)` es `x = a OR x = b OR …`, con su lógica de tres valores: si no
+        encuentra el valor pero alguna opción es NULL, el resultado es NULL, no falso. Por
+        eso `3 NOT IN (1, NULL)` no deja pasar ninguna fila."""
         value = self.evaluate(expression.operand, row)
         if value is None:
             return None
         options = [self.evaluate(item, row) for item in expression.values]
-        found = any(
+        if any(
             option is not None and _compare(BinaryOperator.EQUAL, value, option)
             for option in options
-        )
-        return not found if expression.negated else found
+        ):
+            return not expression.negated
+        if any(option is None for option in options):
+            return None
+        return expression.negated
 
     def _like(self, expression: LikePredicate, row: Record) -> Value:
         value = self.evaluate(expression.operand, row)
@@ -415,7 +475,7 @@ class ExpressionEvaluator:
             return None
         if not isinstance(value, str) or not isinstance(pattern, str):
             raise ExpressionError("LIKE solo se aplica a texto")
-        found = re.fullmatch(like_to_regex(pattern), value) is not None
+        found = re.fullmatch(like_to_regex(pattern), value, re.DOTALL) is not None
         return not found if expression.negated else found
 
     @staticmethod
@@ -468,8 +528,12 @@ def describe_expression(expression: Expression) -> str:
     if isinstance(expression, Star):
         return "*"
     if isinstance(expression, FunctionCall):
-        arguments = ", ".join(describe_expression(item) for item in expression.arguments)
-        return f"{expression.name}({arguments})"
+        arguments = [describe_expression(item) for item in expression.arguments]
+        arguments.extend(
+            f"{name}={_symbol_of(option) or describe_expression(option)}"
+            for name, option in expression.keyword_arguments.items()
+        )
+        return f"{expression.name}({', '.join(arguments)})"
     if isinstance(expression, UnaryOperation):
         separator = " " if expression.operator is UnaryOperator.NOT else ""
         return f"{expression.operator.value}{separator}{describe_expression(expression.operand)}"
@@ -628,25 +692,48 @@ def _function_result_type(call: FunctionCall) -> FieldType:
     return function.result
 
 
-def order_key(
-    expression: Expression, projections: Sequence[Projection], layout: RowLayout
-) -> Expression:
-    """Expresión a la que se refiere una clave del ORDER BY o del GROUP BY.
+def order_key(expression: Expression, projections: Sequence[Projection]) -> Expression:
+    """Expresión a la que se refiere una clave del ORDER BY.
 
-    La clave puede nombrar un alias del SELECT, que se sustituye por su expresión. Si
-    hay una columna real con ese nombre, gana la columna. Un alias de una agregación se
-    deja como está: la agrupación ya produjo una columna con ese nombre. Un entero es
-    la posición de una columna del SELECT: `ORDER BY 2` ordena por la segunda.
+    Como en SQL estándar, un nombre se busca primero entre las columnas del resultado: un
+    alias del SELECT gana a una columna de la tabla que se llame igual, y se sustituye por
+    su expresión. Un alias de una agregación se deja como está: la agrupación ya produjo
+    una columna con ese nombre. Un entero es la posición de una columna del SELECT:
+    `ORDER BY 2` ordena por la segunda.
 
     Raises:
         ExpressionError: si la posición no corresponde a ninguna columna del SELECT.
     """
     if isinstance(expression, Literal):
         return _projection_at(expression, projections)
+    aliased = _aliased(expression, projections)
+    return expression if aliased is None else aliased
+
+
+def group_key(
+    expression: Expression, projections: Sequence[Projection], layout: RowLayout
+) -> Expression:
+    """Expresión a la que se refiere una clave del GROUP BY.
+
+    Agrupar ocurre antes de calcular el SELECT, así que aquí gana la columna de la tabla:
+    un alias solo vale si ninguna columna se llama como él, igual que en PostgreSQL. Un
+    entero es una posición del SELECT, como en el ORDER BY.
+
+    Raises:
+        ExpressionError: si la posición no corresponde a ninguna columna del SELECT.
+    """
+    if isinstance(expression, Literal):
+        return _projection_at(expression, projections)
+    if isinstance(expression, ColumnRef) and layout.has(expression.name, expression.qualifier):
+        return expression
+    aliased = _aliased(expression, projections)
+    return expression if aliased is None else aliased
+
+
+def _aliased(expression: Expression, projections: Sequence[Projection]) -> Expression | None:
+    """La expresión del SELECT que lleva ese alias, o `None` si ninguna lo lleva."""
     if not isinstance(expression, ColumnRef) or expression.qualifier is not None:
-        return expression
-    if layout.has(expression.name):
-        return expression
+        return None
     for projection in projections:
         if projection.alias is None or projection.alias.lower() != expression.name.lower():
             continue
@@ -654,7 +741,7 @@ def order_key(
         if isinstance(aliased, FunctionCall) and aliased.name.upper() in AGGREGATE_NAMES:
             return expression
         return aliased
-    return expression
+    return None
 
 
 def _projection_at(position: Literal, projections: Sequence[Projection]) -> Expression:
@@ -754,6 +841,36 @@ def _operands_of(expression: Expression) -> tuple[Expression, ...]:
     raise ExpressionError(f"expresión no soportada: {type(expression).__name__}")
 
 
+def _truth(value: Value) -> bool | None:
+    """El valor como verdad de una condición.
+
+    Raises:
+        ExpressionError: si no es verdadero, falso ni NULL.
+    """
+    if value is None or isinstance(value, bool):
+        return value
+    raise ExpressionError(f"se esperaba una condición y llegó {describe_value(value)}")
+
+
+def _operate(operator: BinaryOperator, first: float, second: float) -> float:
+    """La operación aritmética. El resto tiene el signo del dividendo, como en SQL:
+    `-7 % 3` es `-1`; el `%` de Python daría `2`."""
+    if operator is BinaryOperator.ADD:
+        return first + second
+    if operator is BinaryOperator.SUBTRACT:
+        return first - second
+    if operator is BinaryOperator.MULTIPLY:
+        return first * second
+    if second == 0:
+        raise ExpressionError("división por cero")
+    if operator is BinaryOperator.DIVIDE:
+        return first / second
+    if isinstance(first, int) and isinstance(second, int):
+        remainder = abs(first) % abs(second)
+        return -remainder if first < 0 else remainder
+    return math.fmod(first, second)
+
+
 def like_to_regex(pattern: str) -> str:
     """Traduce un patrón LIKE a una expresión regular: `%` es cualquier cosa y `_` un carácter."""
     parts = []
@@ -782,6 +899,7 @@ def _compare(operator: BinaryOperator, left: Value, right: Value) -> bool:
 
 
 _EQUALITY_OPERATORS = frozenset({BinaryOperator.EQUAL, BinaryOperator.NOT_EQUAL})
+_CONNECTIVES = frozenset({BinaryOperator.AND, BinaryOperator.OR})
 _PRECEDENCE = {
     BinaryOperator.OR: 1,
     BinaryOperator.AND: 2,

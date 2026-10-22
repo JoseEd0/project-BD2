@@ -85,14 +85,35 @@ SELECT * FROM clientes WHERE id = 'abc'
 
 - Una **fecha** se escribe como texto ISO, en las condiciones y al insertar:
   `WHERE fecha >= '2025-01-01'`, `VALUES (…, '2026-03-15')`.
-- Un punto o un polígono se comparan con `=` y `<>`, pero no tienen orden.
+- Un punto, un vector o un polígono se comparan con `=` y `<>`, pero no tienen orden: no
+  sirven en `<`, en `ORDER BY` ni en un índice B+. Un punto y un `VECTOR(2)` guardan dos
+  números, pero son familias distintas y no se comparan entre sí.
 - Si la condición compara una columna con un literal, el choque se detecta **antes de leer
   ninguna fila**, así que también falla sobre una tabla vacía.
 
-La regla vive en un solo módulo y la aplican el evaluador y el planificador. Por eso una
-condición responde lo mismo —las mismas filas o el mismo error— recorra la tabla o use un
-índice; hay un test que cruza cada tipo de columna con cada tipo de literal y cada camino
-de acceso para comprobarlo.
+La regla vive en un solo módulo y la aplican el evaluador y el planificador, también a las
+claves de un hash join: `ON x.texto = y.id` se rechaza, y una fecha igualada a un texto
+ISO se comprueba sobre cada par en vez de repartirse por hash, que compara bytes. Por eso
+una condición responde **las mismas filas** recorra la tabla o use un índice, y un choque de
+tipos da el mismo error por los dos caminos; hay un test que cruza cada tipo de columna con
+cada tipo de literal y cada camino de acceso para comprobarlo.
+
+Lo que sí puede cambiar con el camino es un error que depende **de los datos de una fila**,
+como `WHERE v / 0 > 1 AND id = 99`: el índice de `id` descarta las filas sin leerlas y la
+división nunca se evalúa, mientras que el recorrido la evalúa sobre la primera fila. SQL
+no fija el orden en que se evalúan las condiciones, y PostgreSQL se comporta igual.
+
+### Lógica de tres valores y aritmética
+
+- Un `WHERE`, un `HAVING` y un `ON` tienen que ser **condiciones**: `WHERE id` o
+  `WHERE 0 AND x = 1` se rechazan antes de leer filas. `AND`, `OR` y `NOT` solo operan
+  sobre verdadero, falso y NULL.
+- `x IN (a, b)` es `x = a OR x = b`: con un NULL en la lista, un valor que no aparece da
+  NULL, así que `2 NOT IN (1, NULL)` no deja pasar la fila, igual que en PostgreSQL.
+- `%` da el resto con el signo del dividendo (`-7 % 3` es `-1`); `/` siempre da un real
+  (`7 / 2` es `3.5`), que es la única desviación deliberada respecto de PostgreSQL.
+- Un resultado real que no cabe en un doble —`1e308 * 10`— es un error, no un infinito.
+- `LIKE` reconoce `%` y `_` también a través de saltos de línea.
 
 Cuando el literal es del tipo correcto pero la columna no podría guardarlo —un texto más
 largo que el `VARCHAR`, un `5.5` frente a una columna entera—, ninguna fila puede
@@ -189,7 +210,9 @@ Limit
 Orden de aplicación: acceso → `JOIN` → `WHERE` → `GROUP BY`/`HAVING` → `ORDER BY` →
 `DISTINCT` → `SELECT` → `LIMIT`. El `ORDER BY` y el `DISTINCT` van **antes** de la
 proyección porque ahí las filas tienen tipos conocidos y se pueden volcar a disco; si el
-`ORDER BY` nombra un alias del `SELECT`, se sustituye por su expresión.
+`ORDER BY` nombra un alias del `SELECT`, se sustituye por su expresión. Como en SQL
+estándar, en el `ORDER BY` el alias gana a una columna de la tabla que se llame igual; en el
+`GROUP BY`, que ocurre antes de calcular el `SELECT`, gana la columna, como en PostgreSQL.
 
 ### Agrupación y agregaciones (`aggregation.py`)
 
@@ -200,7 +223,10 @@ proyección porque ahí las filas tienen tipos conocidos y se pueden volcar a di
 - Una agregación puede estar en el `SELECT`, en el `HAVING` o en el `ORDER BY`, sola o
   dentro de una expresión (`SUM(total) / COUNT(*)`, `HAVING MAX(n) - MIN(n) > 0`). Cada una
   se calcula una sola vez, y las expresiones se reescriben para leer la columna que produjo.
-- Una columna calculada sin alias se llama como está escrita: `x * 2`, `SUM(n * 2)`.
+- Una columna calculada sin alias se llama como está escrita: `x * 2`, `SUM(n * 2)`,
+  `SUM(a.v)`. Dos agregaciones son la misma solo si su llamada entera coincide, con la
+  tabla de cada columna y sus argumentos con nombre: `SUM(a.v)` y `SUM(b.v)` son dos.
+- `SELECT a.ciudad … GROUP BY ciudad` funciona: la clave conserva la tabla de la que viene.
 
 **De cada grupo se guarda un acumulador por función, no sus filas**: un contador, un total,
 el menor valor visto. Un grupo de un millón de filas ocupa lo mismo que uno de dos, y un

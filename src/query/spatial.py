@@ -24,7 +24,6 @@ from query.expressions import (
     NO_ROW,
     ExpressionError,
     ExpressionEvaluator,
-    RowLayout,
     conjuncts,
     constant_value,
     order_key,
@@ -148,19 +147,18 @@ def polygon_search(condition: Expression) -> PolygonSearch | None:
     return PolygonSearch(column, polygon)
 
 
-def nearest_search(statement: SelectStatement, layout: RowLayout) -> DistanceTarget | None:
+def nearest_search(statement: SelectStatement) -> DistanceTarget | None:
     """Reconoce un `ORDER BY distancia(columna, punto)` ascendente como única clave.
 
     La clave puede ser un alias del `SELECT`: `SELECT distancia(…) AS metros … ORDER BY
-    metros`. `layout` es el de las filas que se ordenan, y decide cuándo ese nombre es
-    en realidad una columna (ver `order_key`).
+    metros` (ver `order_key`).
     """
     if len(statement.order_by) != 1:
         return None
     item = statement.order_by[0]
     if item.direction is not SortDirection.ASCENDING:
         return None
-    return distance_target(order_key(item.expression, statement.projections, layout))
+    return distance_target(order_key(item.expression, statement.projections))
 
 
 def spatial_view(statement: SelectStatement, tables: Mapping[str, Table]) -> SpatialView | None:
@@ -168,7 +166,7 @@ def spatial_view(statement: SelectStatement, tables: Mapping[str, Table]) -> Spa
     conditions = conjuncts(statement.where)
     radii = tuple(found for found in map(radius_search, conditions) if found is not None)
     polygons = tuple(found for found in map(polygon_search, conditions) if found is not None)
-    nearest = nearest_search(statement, _layout_of(statement, tables))
+    nearest = nearest_search(statement)
     used = [search.target.column for search in radii]
     used.extend(search.column for search in polygons)
     if nearest is not None:
@@ -213,15 +211,6 @@ def _refers_to(reference: ColumnRef, source: TableRef) -> bool:
 
 def _is_point(table: Table, column: str) -> bool:
     return table.schema.has_field(column) and table.schema.field_of(column).type is FieldType.POINT
-
-
-def _layout_of(statement: SelectStatement, tables: Mapping[str, Table]) -> RowLayout:
-    """Columnas de las filas que la consulta ordena: las de todas sus tablas."""
-    layout = NO_COLUMNS
-    for source in (statement.source, *(join.table for join in statement.joins)):
-        table = tables[source.name.lower()]
-        layout = layout.concat(RowLayout.of_table(table.schema, source.alias or source.name))
-    return layout
 
 
 def _radius_of(limit: Expression) -> float | None:

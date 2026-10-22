@@ -18,8 +18,10 @@ from pathlib import Path
 from config import EngineConfig
 from query.aggregation import Aggregate
 from query.catalog import IndexDefinition, Organization
+from query.comparison import ComparisonError, hash_comparable
 from query.expressions import (
     NOT_CONSTANT,
+    ExpressionError,
     ExpressionEvaluator,
     RowLayout,
     UnknownColumnError,
@@ -27,6 +29,7 @@ from query.expressions import (
     conjuncts,
     constant_value,
     describe_expression,
+    group_key,
     order_key,
     rewritten,
     subexpressions,
@@ -72,6 +75,7 @@ from sql.nodes import (
     Star,
     TableRef,
 )
+from storage.schema import Field
 from storage.types import StorageError, Value, codec_for
 
 ORDERED_ORGANIZATIONS = frozenset({Organization.SEQUENTIAL, Organization.CLUSTERED_BTREE})
@@ -99,6 +103,7 @@ class Planner:
         Raises:
             UnsupportedQueryError: si la consulta usa algo que el ejecutor no implementa.
         """
+        _require_search(statement)
         self._single_source = not statement.joins
         aggregates, labels = self._aggregates_of(statement)
         grouped = bool(aggregates or statement.group_by)
@@ -112,7 +117,7 @@ class Planner:
         computed = _Computed({}, ())
         if grouped:
             keys = [
-                order_key(key, statement.projections, operator.layout) for key in statement.group_by
+                group_key(key, statement.projections, operator.layout) for key in statement.group_by
             ]
             computed = _Computed(labels, _grouped_expressions(keys))
             operator = HashAggregate(
@@ -180,7 +185,7 @@ class Planner:
         """
         if not isinstance(source, SequentialScan) or grouped or statement.joins:
             return None
-        target = nearest_search(statement, source.layout)
+        target = nearest_search(statement)
         if target is None:
             return None
         table = self._table(statement.source.name)
@@ -208,7 +213,7 @@ class Planner:
         if table.organization not in ORDERED_ORGANIZATIONS:
             return None
         column = self._column_named(
-            order_key(item.expression, statement.projections, source.layout), alias
+            order_key(item.expression, statement.projections), alias
         )
         if column is None or not self._is_primary_key(table, column):
             return None
@@ -349,7 +354,7 @@ class Planner:
         keys = [
             (
                 computed.reading(
-                    order_key(item.expression, statement.projections, operator.layout)
+                    order_key(item.expression, statement.projections)
                 ),
                 item.direction,
             )
@@ -492,13 +497,57 @@ def _split_join_condition(
 def _equated_columns(
     condition: Expression, left: RowLayout, right: RowLayout
 ) -> tuple[Expression, Expression] | None:
-    """Las dos columnas de `a.x = b.y`, la de la izquierda primero; `None` si no lo es."""
+    """Las dos columnas de `a.x = b.y`, la de la izquierda primero; `None` si no es una
+    igualdad que pueda repartir el hash join.
+
+    El hash compara los valores tal cual, así que las dos columnas tienen que ser de la
+    misma familia. Una fecha y un texto ISO se pueden igualar, pero solo convirtiendo:
+    esa igualdad se queda como condición que se comprueba sobre cada par.
+
+    Raises:
+        ExpressionError: si las dos columnas no se pueden comparar de ningún modo.
+    """
     if not isinstance(condition, BinaryOperation) or condition.operator is not BinaryOperator.EQUAL:
         return None
     for first, second in ((condition.left, condition.right), (condition.right, condition.left)):
         if _belongs_to(first, left) and _belongs_to(second, right):
-            return first, second
+            return (first, second) if _hashable_pair(first, left, second, right) else None
     return None
+
+
+def _hashable_pair(
+    first: Expression, left: RowLayout, second: Expression, right: RowLayout
+) -> bool:
+    first_field, second_field = _field_of(first, left), _field_of(second, right)
+    if first_field is None or second_field is None:
+        return False
+    try:
+        return hash_comparable(first_field.type, second_field.type)
+    except ComparisonError as error:
+        raise ExpressionError(str(error)) from error
+
+
+def _field_of(expression: Expression, layout: RowLayout) -> Field | None:
+    if not isinstance(expression, ColumnRef):
+        return None
+    return layout.slots[layout.position_of(expression.name, expression.qualifier)].field
+
+
+def _require_search(statement: SelectStatement) -> None:
+    """`USING` y `WITH` en un SELECT eligen el índice de una búsqueda `MATCH` o
+    `SIMILAR_TO`. Sin ninguna de las dos no tienen a qué aplicarse, y ignorarlos en
+    silencio haría creer que la consulta usó el método pedido.
+
+    Raises:
+        UnsupportedQueryError: si el SELECT trae `USING` o `WITH`.
+    """
+    if statement.search_method is None and not statement.options:
+        return
+    asked = "WITH" if statement.search_method is None else f"USING {statement.search_method.value}"
+    raise UnsupportedQueryError(
+        f"{asked} en un SELECT solo acompaña a una búsqueda MATCH o SIMILAR_TO, y este motor "
+        "todavía no las ejecuta"
+    )
 
 
 def _all_of(conditions: Sequence[Expression]) -> Expression | None:
@@ -556,12 +605,17 @@ def _grouped_expressions(keys: Sequence[Expression]) -> list[tuple[Expression, s
 
 
 def _signature(call: FunctionCall) -> str:
-    """Texto que identifica una agregación: dos llamadas iguales se calculan una sola vez."""
+    """Texto que identifica una agregación: dos llamadas iguales se calculan una sola vez.
+
+    Es la llamada entera, con la tabla de cada columna y sus argumentos con nombre:
+    `SUM(a.v)` y `SUM(b.v)` son dos agregaciones distintas, y también dos `SUM` de
+    distancias con métricas distintas.
+    """
     if not call.arguments or isinstance(call.arguments[0], Star):
         return f"{call.name.upper()}(*)"
-    argument = call.arguments[0]
-    shown = argument.name if isinstance(argument, ColumnRef) else describe_expression(argument)
-    return f"{call.name.upper()}({shown})"
+    return describe_expression(
+        FunctionCall(call.name.upper(), call.arguments, call.keyword_arguments)
+    )
 
 
 def _aggregate_calls(expression: Expression | None) -> list[FunctionCall]:

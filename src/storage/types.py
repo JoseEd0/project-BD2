@@ -58,6 +58,7 @@ SIZED_FIELD_TYPES = frozenset({FieldType.STRING, FieldType.VECTOR, FieldType.BYT
 ORDERED_FIELD_TYPES = frozenset(
     {FieldType.INT, FieldType.FLOAT, FieldType.BOOL, FieldType.STRING, FieldType.DATE}
 )
+UNORDERED_FIELD_TYPES = frozenset({FieldType.POINT, FieldType.VECTOR})
 
 
 class FieldCodec(ABC):

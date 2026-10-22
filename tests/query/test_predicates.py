@@ -65,9 +65,13 @@ def test_like_only_applies_to_text(datos: Engine):
 
 
 def test_in_with_a_null_never_says_not_in(datos: Engine):
-    """`n NOT IN (1, NULL)` es desconocido para la fila cuyo n es NULL, no verdadero."""
+    """`x IN (a, b)` es `x = a OR x = b`. Con un NULL en la lista, un valor que no aparece
+    da desconocido, no falso: `2 NOT IN (1, NULL)` no deja pasar la fila, igual que en
+    PostgreSQL. Solo una coincidencia da una respuesta segura."""
     assert ids(datos, "n IN (1, NULL)") == [1]
-    assert ids(datos, "n NOT IN (1, NULL)") == [2]
+    assert ids(datos, "n NOT IN (1, NULL)") == []
+    assert ids(datos, "n NOT IN (1, 7)") == [2]
+    assert ids(datos, "n NOT IN (2, NULL)") == []
     assert ids(datos, "x BETWEEN NULL AND 3") == []
     assert ids(datos, "NOT n = 1") == [2]
 

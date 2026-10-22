@@ -6,10 +6,12 @@ Ejecutar con (requiere `pip install -e .`):
 
 Muestra tres escenas:
 
-1. **Sin control**: varios hilos leen y escriben el mismo saldo sin transacción. El
-   resultado final es incorrecto porque las lecturas se pisan (*race condition*).
-2. **Con transacciones**: los mismos hilos, ahora dentro de `BEGIN … COMMIT`. Los bloqueos
-   serializan los accesos y el total se conserva.
+1. **Sin control**: varios hilos leen el mismo saldo, esperan un poco y escriben lo que
+   leyeron menos uno. Las lecturas se pisan y se pierden descuentos (*race condition*).
+2. **Con transacciones**: los mismos hilos y la misma carga, ahora dentro de
+   `BEGIN … COMMIT`. El bloqueo en dos fases impide que dos hilos escriban sobre una
+   lectura vieja: cuando dos leen a la vez y los dos quieren escribir, el gestor detecta el
+   interbloqueo y aborta a uno, que lo vuelve a intentar. El total se conserva.
 3. **Interbloqueo**: dos transacciones se piden mutuamente lo que la otra tiene. El gestor
    detecta el ciclo y aborta a una para que la otra pueda terminar.
 """
@@ -21,6 +23,7 @@ import tempfile
 import threading
 import time
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 
 from config import EngineConfig
@@ -33,6 +36,20 @@ DEFAULT_ROUNDS = 25
 INITIAL_BALANCE = 1000
 DEADLOCK_PAUSE_SECONDS = 0.2
 RACE_PAUSE_SECONDS = 0.001
+READ_BALANCE = "SELECT saldo FROM cuentas WHERE id = 1"
+
+
+@dataclass(frozen=True, slots=True)
+class Balance:
+    """Cómo terminó el saldo de una escena: lo esperado, lo obtenido y los reintentos."""
+
+    expected: int
+    obtained: int
+    retries: int = 0
+
+    @property
+    def correct(self) -> bool:
+        return self.obtained == self.expected
 
 
 def build_engine(directory: Path) -> tuple[Engine, LockManager, TransactionManager]:
@@ -45,10 +62,6 @@ def prepare(session: Session) -> None:
     session.execute(f"INSERT INTO cuentas VALUES (1, {INITIAL_BALANCE}), (2, 0)")
 
 
-def total_of(session: Session) -> int:
-    return balance_of(session.execute("SELECT SUM(saldo) as total FROM cuentas").rows[0][0])
-
-
 def balance_of(value: Value) -> int:
     """Un saldo leído de la tabla, que siempre es un entero."""
     if isinstance(value, bool) or not isinstance(value, int):
@@ -56,55 +69,93 @@ def balance_of(value: Value) -> int:
     return value
 
 
-def scene_race_condition(engine: Engine, locks: LockManager, manager: TransactionManager,
-                         threads: int, rounds: int) -> None:
+def read_balance(session: Session) -> int:
+    return balance_of(session.execute(READ_BALANCE).rows[0][0])
+
+
+def withdraw_one(session: Session) -> None:
+    """La carga de las dos primeras escenas: leer, pensar un instante y escribir."""
+    current = read_balance(session)
+    time.sleep(RACE_PAUSE_SECONDS)
+    session.execute(f"UPDATE cuentas SET saldo = {current - 1} WHERE id = 1")
+
+
+def reset_balance(session: Session) -> None:
+    session.execute(f"UPDATE cuentas SET saldo = {INITIAL_BALANCE} WHERE id = 1")
+
+
+def scene_race_condition(
+    engine: Engine, locks: LockManager, manager: TransactionManager, threads: int, rounds: int
+) -> Balance:
     """Cada hilo lee el saldo, espera un poco y escribe lo que había leído menos uno."""
     print("\n1) Sin transacción: lectura y escritura separadas")
+    reset_balance(Session(engine, locks, manager))
 
     def worker() -> None:
         session = Session(engine, locks, manager)
         for _ in range(rounds):
-            current = balance_of(
-                session.execute("SELECT saldo FROM cuentas WHERE id = 1").rows[0][0]
-            )
-            time.sleep(RACE_PAUSE_SECONDS)
-            session.execute(f"UPDATE cuentas SET saldo = {current - 1} WHERE id = 1")
+            withdraw_one(session)
 
     run_threads(worker, threads)
-    session = Session(engine, locks, manager)
-    final = balance_of(session.execute("SELECT saldo FROM cuentas WHERE id = 1").rows[0][0])
-    expected = INITIAL_BALANCE - threads * rounds
-    print(f"   esperado {expected}, obtenido {final} → "
-          f"{'correcto' if final == expected else 'PERDIDAS por race condition'}")
+    obtained = read_balance(Session(engine, locks, manager))
+    result = Balance(INITIAL_BALANCE - threads * rounds, obtained)
+    verdict = "correcto" if result.correct else "PERDIDAS por race condition"
+    print(f"   esperado {result.expected}, obtenido {result.obtained} → {verdict}")
+    return result
 
 
-def scene_transactions(engine: Engine, locks: LockManager, manager: TransactionManager,
-                       threads: int, rounds: int) -> None:
-    """Los mismos hilos, ahora con la lectura y la escritura dentro de una transacción."""
-    print("\n2) Con transacción: BEGIN … COMMIT")
-    session = Session(engine, locks, manager)
-    session.execute(f"UPDATE cuentas SET saldo = {INITIAL_BALANCE} WHERE id = 1")
-    session.execute("UPDATE cuentas SET saldo = 0 WHERE id = 2")
+def scene_transactions(
+    engine: Engine, locks: LockManager, manager: TransactionManager, threads: int, rounds: int
+) -> Balance:
+    """La misma carga, cada descuento dentro de una transacción que se reintenta si el gestor
+    la aborta por interbloqueo."""
+    print("\n2) Con transacción: la misma lectura y escritura dentro de BEGIN … COMMIT")
+    reset_balance(Session(engine, locks, manager))
+    retries: list[int] = []
 
     def worker() -> None:
-        worker_session = Session(engine, locks, manager)
+        session = Session(engine, locks, manager)
         for _ in range(rounds):
-            worker_session.execute("BEGIN TRANSACTION")
-            worker_session.execute("UPDATE cuentas SET saldo = saldo - 1 WHERE id = 1")
-            worker_session.execute("UPDATE cuentas SET saldo = saldo + 1 WHERE id = 2")
-            worker_session.execute("END TRANSACTION")
+            retries.append(withdraw_in_transaction(session))
 
     run_threads(worker, threads)
-    balances = session.execute("SELECT id, saldo FROM cuentas ORDER BY id").rows
-    print(f"   saldos {balances}, total {total_of(session)} "
-          f"(esperado {INITIAL_BALANCE})")
+    result = Balance(
+        INITIAL_BALANCE - threads * rounds,
+        read_balance(Session(engine, locks, manager)),
+        sum(retries),
+    )
+    verdict = "correcto" if result.correct else "PERDIDAS"
+    print(
+        f"   esperado {result.expected}, obtenido {result.obtained} → {verdict}; "
+        f"{result.retries} transacción(es) abortadas por interbloqueo y reintentadas"
+    )
+    return result
 
 
-def scene_deadlock(engine: Engine, locks: LockManager, manager: TransactionManager) -> None:
+def withdraw_in_transaction(session: Session) -> int:
+    """Un descuento como transacción. Devuelve cuántas veces hubo que reintentarlo.
+
+    Dos hilos que leyeron el saldo a la vez tienen los dos un bloqueo compartido, y los dos
+    quieren pasarlo a exclusivo para escribir: cada uno espera al otro. El gestor lo detecta
+    y aborta a uno —con lo que suelta su bloqueo—, y ese uno lo vuelve a intentar.
+    """
+    attempts = 0
+    while True:
+        try:
+            session.execute("BEGIN TRANSACTION")
+            withdraw_one(session)
+            session.execute("COMMIT")
+            return attempts
+        except DeadlockError:
+            attempts += 1
+
+
+def scene_deadlock(engine: Engine, locks: LockManager, manager: TransactionManager) -> list[str]:
     """Dos transacciones bloquean dos tablas en orden inverso."""
     print("\n3) Interbloqueo: dos transacciones en orden cruzado")
     session = Session(engine, locks, manager)
-    session.execute("CREATE TABLE otra (id INT PRIMARY KEY, saldo INT)")
+    session.execute("CREATE TABLE IF NOT EXISTS otra (id INT PRIMARY KEY, saldo INT)")
+    session.execute("DELETE FROM otra")
     session.execute("INSERT INTO otra VALUES (1, 0)")
     outcomes: list[str] = []
 
@@ -116,10 +167,10 @@ def scene_deadlock(engine: Engine, locks: LockManager, manager: TransactionManag
             time.sleep(DEADLOCK_PAUSE_SECONDS)
             worker_session.execute(f"UPDATE {second} SET saldo = saldo + 1 WHERE id = 1")
             worker_session.execute("COMMIT")
-            outcomes.append(f"   {name}: confirmada")
+            outcomes.append(f"{name}: confirmada")
         except DeadlockError as error:
             worker_session.close()
-            outcomes.append(f"   {name}: abortada por interbloqueo ({error})")
+            outcomes.append(f"{name}: abortada por interbloqueo ({error})")
 
     threads = [
         threading.Thread(target=worker, args=("A", "cuentas", "otra")),
@@ -130,8 +181,9 @@ def scene_deadlock(engine: Engine, locks: LockManager, manager: TransactionManag
     for thread in threads:
         thread.join()
     for line in sorted(outcomes):
-        print(line)
-    print(f"   interbloqueos detectados: {locks.deadlocks_detected}")
+        print(f"   {line}")
+    print(f"   interbloqueos detectados en total: {locks.deadlocks_detected}")
+    return sorted(outcomes)
 
 
 def run_threads(worker: Callable[[], None], count: int) -> None:

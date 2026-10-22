@@ -162,8 +162,10 @@ eso el CSV no está en el repositorio (`data/` se ignora): quien lo quiera, lo d
 .venv/bin/python demos/concurrencia.py
 ```
 
-Tres escenas: una **race condition** real (4 hilos restan 25 veces cada uno de un saldo
-de 1 000: debería quedar en 900 y sin control queda en 975), la misma carga hecha
-correcta dentro de transacciones, y un
-**interbloqueo** que el gestor detecta y resuelve abortando exactamente una de las dos
-transacciones. Ver [`src/txn/README.md`](../src/txn/README.md).
+Tres escenas: una **race condition** real (4 hilos leen el saldo, esperan y escriben lo
+leído menos uno, 25 veces cada uno, sobre un saldo de 1 000: debería quedar en 900 y sin
+control queda en 975); **la misma carga** dentro de transacciones, que queda en 900 y dice
+cuántas transacciones se abortaron por interbloqueo y se reintentaron; y un
+**interbloqueo** cruzado que el gestor detecta y resuelve abortando exactamente una de las
+dos transacciones. Ver [`src/txn/README.md`](../src/txn/README.md). Un test
+(`tests/demos/test_concurrencia.py`) corre las tres escenas en pequeño.

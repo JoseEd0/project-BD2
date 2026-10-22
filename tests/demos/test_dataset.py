@@ -4,8 +4,6 @@ Los atajos espaciales dan por hecho que cada tienda cae dentro del contorno de s
 y de ningún otro, y que los CSV versionados son los que produce el generador.
 """
 
-import importlib.util
-import sys
 from collections import Counter
 from pathlib import Path
 from types import ModuleType
@@ -17,19 +15,6 @@ from spatial.geometry import Point
 
 REPOSITORY = Path(__file__).resolve().parents[2]
 SAMPLES = REPOSITORY / "demos" / "samples"
-
-
-@pytest.fixture(scope="module")
-def dataset() -> ModuleType:
-    path = REPOSITORY / "demos" / "poblar_ecommerce.py"
-    spec = importlib.util.spec_from_file_location("poblar_ecommerce", path)
-    assert spec is not None
-    assert spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    # Las dataclasses buscan su módulo en `sys.modules` para resolver las anotaciones.
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module
 
 
 @pytest.fixture(scope="module")

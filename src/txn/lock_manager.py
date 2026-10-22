@@ -12,12 +12,20 @@ Reglas de compatibilidad:
 
 Cuando una transacción tendría que esperar, antes se busca un ciclo en el **grafo de
 espera**. Si lo hay, esperar sería esperar para siempre, así que se aborta a quien lo cerró.
+
+Un pedido compartido nuevo espera además detrás de los exclusivos que llegaron antes que él
+al mismo recurso. Sin esa regla, mientras quede algún lector, un escritor nunca entra: los
+lectores que llegan se suman a los que ya están, y el escritor espera hasta agotar su plazo
+(*inanición del escritor*). Pasar de compartido a exclusivo no hace cola: quien ya tiene el
+recurso no espera detrás de quien todavía no lo tiene.
 """
 
 from __future__ import annotations
 
+import itertools
 import threading
 import time
+from dataclasses import dataclass
 from enum import Enum, unique
 
 from config import EngineConfig
@@ -45,6 +53,15 @@ class LockMode(Enum):
     EXCLUSIVE = "X"
 
 
+@dataclass(frozen=True, slots=True)
+class _Request:
+    """Un pedido que espera: qué recurso, en qué modo y en qué turno llegó."""
+
+    resource: Resource
+    mode: LockMode
+    turn: int
+
+
 class LockManager:
     """Concede y libera bloqueos de tabla, abortando a quien provoque un interbloqueo."""
 
@@ -52,7 +69,8 @@ class LockManager:
         self._timeout = config.lock_timeout_seconds
         self._condition = threading.Condition()
         self._holders: dict[Resource, dict[TransactionId, LockMode]] = {}
-        self._waiting: dict[TransactionId, Resource] = {}
+        self._waiting: dict[TransactionId, _Request] = {}
+        self._turns = itertools.count()
         self.deadlocks_detected = 0
 
     def acquire(self, transaction: TransactionId, resource: Resource, mode: LockMode) -> None:
@@ -65,7 +83,7 @@ class LockManager:
         with self._condition:
             if self._already_granted(transaction, resource, mode):
                 return
-            self._waiting[transaction] = resource
+            self._waiting[transaction] = _Request(resource, mode, next(self._turns))
             try:
                 self._wait_until_free(transaction, resource, mode)
             finally:
@@ -99,7 +117,7 @@ class LockManager:
         aviso dejaría esperando para siempre a quien nunca consigue su bloqueo.
         """
         deadline = time.monotonic() + self._timeout
-        while self._conflicts(transaction, resource, mode):
+        while self._blockers_of(transaction):
             if self._closes_a_cycle(transaction):
                 self.deadlocks_detected += 1
                 raise DeadlockError(
@@ -127,18 +145,6 @@ class LockManager:
             return LockMode.EXCLUSIVE
         return LockMode.SHARED
 
-    def _conflicts(self, transaction: TransactionId, resource: Resource, mode: LockMode) -> bool:
-        others = {
-            holder: held
-            for holder, held in self._holders.get(resource, {}).items()
-            if holder != transaction
-        }
-        if not others:
-            return False
-        if mode is LockMode.EXCLUSIVE:
-            return True
-        return any(held is LockMode.EXCLUSIVE for held in others.values())
-
     def _closes_a_cycle(self, transaction: TransactionId) -> bool:
         """Recorre el grafo de espera desde `transaction` buscando volver a ella."""
         visited: set[TransactionId] = set()
@@ -154,7 +160,34 @@ class LockManager:
         return False
 
     def _blockers_of(self, transaction: TransactionId) -> list[TransactionId]:
-        resource = self._waiting.get(transaction)
-        if resource is None:
+        """Las transacciones por las que espera esta: las que tienen el recurso en un modo
+        incompatible y, si pide compartido sin tener nada, los exclusivos que llegaron antes.
+
+        Son las aristas del grafo de espera, así que tienen que ser exactas: una de más
+        abortaría a una transacción que no estaba en ningún ciclo.
+        """
+        request = self._waiting.get(transaction)
+        if request is None:
             return []
-        return [holder for holder in self._holders.get(resource, {}) if holder != transaction]
+        holders = self._holders.get(request.resource, {})
+        blockers = [
+            holder
+            for holder, held in holders.items()
+            if holder != transaction
+            and (request.mode is LockMode.EXCLUSIVE or held is LockMode.EXCLUSIVE)
+        ]
+        if request.mode is LockMode.SHARED and transaction not in holders:
+            blockers.extend(self._exclusive_queue_before(request, transaction))
+        return blockers
+
+    def _exclusive_queue_before(
+        self, request: _Request, transaction: TransactionId
+    ) -> list[TransactionId]:
+        return [
+            other
+            for other, waiting in self._waiting.items()
+            if other != transaction
+            and waiting.resource == request.resource
+            and waiting.mode is LockMode.EXCLUSIVE
+            and waiting.turn < request.turn
+        ]

@@ -12,7 +12,11 @@ Dos usuarios tocando la misma fila a la vez se pisan. El caso clásico:
 
 La demo [`demos/concurrencia.py`](../../demos/concurrencia.py) reproduce exactamente eso:
 con 4 hilos y 25 vueltas cada uno sobre un saldo de 1 000, el esperado es 900 y sin
-control sale 975: en cada vuelta se pierden tres de las cuatro restas.
+control sale 975: en cada vuelta se pierden tres de las cuatro restas. Con **la misma
+carga** dentro de `BEGIN … COMMIT` sale 900. Cuando dos hilos leen el saldo a la vez y los
+dos quieren escribir, cada uno espera al otro: el gestor detecta ese interbloqueo, aborta a
+uno y ese uno lo vuelve a intentar, que es lo que hace cualquier aplicación sobre un gestor
+con bloqueo en dos fases.
 
 ## Las tres piezas
 
@@ -48,6 +52,18 @@ esté usando.
 Los bloqueos se sueltan al confirmar o abortar, nunca antes: es **bloqueo en dos fases**
 (primero se adquiere todo, luego se suelta todo), que es lo que impide que otra transacción
 vea a medias lo que esta está cambiando.
+
+### Nadie se queda esperando para siempre
+
+Un pedido compartido nuevo **hace cola detrás de los exclusivos que llegaron antes** al
+mismo recurso, aunque sea compatible con los compartidos que ya están concedidos. Sin esa
+regla, mientras quede algún lector, un escritor no entra nunca: los lectores nuevos se
+suman a los que ya leen y el escritor espera hasta agotar su plazo. Es la *inanición del
+escritor*, y la demo la sacó a la luz: con cuatro hilos que leen y escriben el mismo saldo
+dentro de transacciones, tres morían por espera agotada y se perdían descuentos. Ascender
+de compartido a exclusivo no hace cola: quien ya tiene el recurso no espera detrás de
+quien todavía no lo tiene. Esas esperas nuevas también son aristas del grafo de espera,
+así que un ciclo que pase por ellas se detecta igual.
 
 ### Interbloqueos
 

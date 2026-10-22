@@ -1,4 +1,6 @@
 import threading
+import time
+from collections.abc import Callable
 
 import pytest
 
@@ -15,6 +17,8 @@ FIRST = 1
 SECOND = 2
 THIRD = 3
 TABLE = "cuentas"
+WAIT_SECONDS = 2.0
+POLL_SECONDS = 0.001
 OTHER = "otra"
 
 
@@ -172,3 +176,43 @@ def test_the_timeout_is_a_deadline_that_unrelated_releases_do_not_extend(
     waiter.join()
     assert not still_waiting
     assert outcome == [LockTimeoutError]
+
+
+def eventually(condition: Callable[[], bool]) -> bool:
+    """Si la condición se cumple antes de `WAIT_SECONDS`: una espera acotada, para que un
+    test de concurrencia falle en vez de colgarse."""
+    deadline = time.monotonic() + WAIT_SECONDS
+    while time.monotonic() < deadline:
+        if condition():
+            return True
+        threading.Event().wait(POLL_SECONDS)
+    return False
+
+
+def test_a_new_reader_waits_behind_a_writer_that_arrived_first(locks: LockManager):
+    """Sin esta regla, mientras quede algún lector el escritor no entra nunca."""
+    order: list[int] = []
+    locks.acquire(FIRST, TABLE, LockMode.SHARED)
+
+    def request(transaction: int, mode: LockMode) -> None:
+        locks.acquire(transaction, TABLE, mode)
+        order.append(transaction)
+        locks.release_all(transaction)
+
+    writer = threading.Thread(target=request, args=(SECOND, LockMode.EXCLUSIVE))
+    reader = threading.Thread(target=request, args=(THIRD, LockMode.SHARED))
+    writer.start()
+    writer_queued = eventually(lambda: SECOND in locks._waiting)
+    reader.start()
+    reader_queued = eventually(lambda: THIRD in locks._waiting)
+    locks.release_all(FIRST)
+    writer.join()
+    reader.join()
+    assert writer_queued and reader_queued
+    assert order == [SECOND, THIRD]
+
+
+def test_upgrading_a_shared_lock_does_not_queue_behind_new_readers(locks: LockManager):
+    locks.acquire(FIRST, TABLE, LockMode.SHARED)
+    locks.acquire(FIRST, TABLE, LockMode.EXCLUSIVE)
+    assert locks.holders_of(TABLE) == {FIRST: LockMode.EXCLUSIVE}

@@ -68,3 +68,11 @@ def test_a_chain_ends_at_no_page():
         return (page_id + 1 if page_id < 2 else NO_PAGE), f"p{page_id}"
 
     assert list(chained_pages(0, ending, 10, "t")) == [(0, "p0"), (1, "p1"), (2, "p2")]
+
+
+def test_a_header_that_does_not_fit_in_a_page_is_a_format_error(config: EngineConfig):
+    wide = FileHeader(b"TOYS", 1, "Q" * config.page_size, ToyFormatError, "un archivo de prueba")
+    with Pager(config.data_directory / "t", config) as pager:
+        pager.allocate()
+        with pytest.raises(ToyFormatError, match="mide"):
+            wide.write(pager)

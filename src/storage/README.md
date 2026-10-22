@@ -106,7 +106,8 @@ Ninguna estructura abre archivos por su cuenta. Todas piden páginas al `Pager`,
    `buffer_pool_pages` páginas (2 048 por omisión, 8 MiB) para **todos** los archivos de
    la configuración —tablas, índices y temporales de un ordenamiento—;
 2. marca como *sucias* las que se modifican y solo las escribe al expulsarlas, al hacer
-   `flush` (un COMMIT) o al cerrar;
+   `flush` (un COMMIT) o al cerrar. `discard()` cierra sin escribirlas, para un archivo
+   que se va a reemplazar o borrar;
 3. cuenta las lecturas y escrituras físicas (`reads`, `writes`): la diferencia entre
    páginas pedidas y páginas leídas de disco es lo que ahorra el buffer pool.
 
@@ -114,6 +115,10 @@ El pool es uno porque la memoria es una, como en cualquier gestor: un archivo mu
 consultado puede ocupar casi todo el presupuesto mientras otro sin uso no ocupa nada. Con
 una caché por archivo el gasto crecía con el número de archivos abiertos, y un `JOIN` con
 dieciséis particiones abiertas reservaba dieciséis cachés.
+
+Un candado protege el pool, porque varias sesiones leen a la vez. El `fsync` de un `flush`
+va fuera de él, sobre una copia del descriptor: esperar al dispositivo no frena las lecturas
+de las demás sesiones.
 
 `read()` devuelve una **copia** de la página. Cuesta un `memcpy` por acceso y a cambio hace
 imposible corromper el buffer pool por descuido: quien quiera cambiar algo escribe de

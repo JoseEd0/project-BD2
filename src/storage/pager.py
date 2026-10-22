@@ -96,22 +96,36 @@ class Pager:
 
     def flush(self) -> None:
         """Vuelca a disco todas las páginas modificadas y espera a que el sistema operativo
-        las tenga en el dispositivo (`fsync`): un COMMIT se apoya en esto."""
+        las tenga en el dispositivo (`fsync`): un COMMIT se apoya en esto.
+
+        El `fsync` espera al dispositivo y va fuera del candado del pool, sobre una copia
+        del descriptor: mientras tanto las demás sesiones siguen leyendo páginas.
+        """
         with self._pool.guard:
             dirty = self._pool.dirty_pages(self._owner)
             for page_id, page in dirty:
                 self.write_through(page_id, page)
             self._pool.mark_clean(self._owner, [page_id for page_id, _ in dirty])
             self._file.flush()
-            os.fsync(self._file.fileno())
+            descriptor = os.dup(self._file.fileno())
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
 
     def close(self) -> None:
         with self._pool.guard:
             if self._file.closed:
                 return
             self.flush()
-            self._pool.unregister(self._owner)
-            self._file.close()
+            self._forget()
+
+    def discard(self) -> None:
+        """Cierra el archivo sin escribir las páginas modificadas: para uno que se va a
+        reemplazar o borrar, donde volcarlas sería escribir para nada."""
+        with self._pool.guard:
+            if not self._file.closed:
+                self._forget()
 
     def write_through(self, page_id: int, page: bytearray) -> None:
         """Escribe la página en su sitio del archivo. La llama el pool al desalojarla."""
@@ -129,6 +143,10 @@ class Pager:
         traceback: TracebackType | None,
     ) -> None:
         self.close()
+
+    def _forget(self) -> None:
+        self._pool.unregister(self._owner)
+        self._file.close()
 
     def _load(self, page_id: int) -> bytearray:
         self._check_page(page_id)

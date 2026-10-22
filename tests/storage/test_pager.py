@@ -78,3 +78,11 @@ def test_only_cache_misses_count_as_reads(config: EngineConfig):
         pager.read(0)
         pager.read(0)
         assert pager.reads == 1
+
+
+def test_discard_forgets_modified_pages_without_writing_them(config: EngineConfig):
+    path = config.data_directory / "a.dat"
+    pager = Pager(path, config)
+    pager.write(pager.allocate(), b"\x07" * config.page_size)
+    pager.discard()
+    assert path.stat().st_size == 0

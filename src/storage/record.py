@@ -11,10 +11,10 @@ import struct
 from collections.abc import Sequence
 from typing import Any
 
+from .record_id import BITS_PER_BYTE
 from .schema import Schema
 from .types import FieldCodec, InvalidValueError, Value, codec_for
 
-BITS_PER_BYTE = 8
 BYTE_ORDER = "<"
 
 Record = tuple[Value, ...]

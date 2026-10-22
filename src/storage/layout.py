@@ -47,6 +47,13 @@ class FileHeader:
         self._kind = kind
 
     def write(self, pager: Pager, *values: Any) -> None:
+        """Raises:
+            StorageError: el `error` del tipo, si la cabecera no cabe en una página."""
+        if self._layout.size > pager.page_size:
+            raise self._error(
+                f"la cabecera de {self._kind} mide {self._layout.size} bytes y la página "
+                f"{pager.page_size}"
+            )
         raw = bytearray(pager.page_size)
         self._layout.pack_into(raw, 0, self._magic, self._version, *values)
         pager.write(HEADER_PAGE_ID, bytes(raw))

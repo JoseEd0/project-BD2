@@ -51,10 +51,14 @@ class HeapFile:
         self._record_size = record_size
         self._capacity = slot_capacity(config.page_size, record_size)
         self._pager = Pager(path, config)
-        if self._pager.page_count == 0:
-            self._create_header()
-        stored_size, free_head, count = HEAP_HEADER.read(self._pager)
-        self._validate(int(stored_size))
+        try:
+            if self._pager.page_count == 0:
+                self._create_header()
+            stored_size, free_head, count = HEAP_HEADER.read(self._pager)
+            self._validate(int(stored_size))
+        except BaseException:
+            self._pager.close()
+            raise
         self._free_head: int = int(free_head)
         self._count: int = int(count)
 

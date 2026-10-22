@@ -105,7 +105,11 @@ búsqueda lea más de 17 páginas.
 
 La reorganización escribe el archivo nuevo completo, **cabecera incluida**, lo baja a disco
 y solo entonces ocupa el lugar del viejo con un `rename`, que es atómico. Si el proceso
-muere a mitad, en disco queda el archivo viejo entero o el nuevo entero.
+muere a mitad, en disco queda el archivo viejo tal como lo dejó el último volcado o el
+nuevo entero; sin un registro de escritura anticipada, el motor no garantiza más que eso.
+Las páginas modificadas del archivo viejo no se escriben: el nuevo ya las contiene y el
+viejo se va a reemplazar. Un `t.seq.rebuild` que haya dejado una reorganización cortada se
+ignora al abrir y se pisa en la siguiente.
 
 ```
 antes:  60 registros, 8 lápidas, 15 en desbordamiento  → desperdicio 34 % ⇒ reorganiza

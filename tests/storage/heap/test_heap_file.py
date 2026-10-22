@@ -1,6 +1,7 @@
 import pytest
 
 from config import EngineConfig
+from storage.buffer_pool import BufferPool
 from storage.heap import HeapFile
 from storage.heap.heap_file import (
     HEAP_MAGIC,
@@ -110,6 +111,7 @@ def test_opening_with_another_record_size_is_rejected(config: EngineConfig):
         pass
     with pytest.raises(HeapFormatError):
         HeapFile(path, RECORD_SIZE + 1, config)
+    assert BufferPool.shared(config).resident_pages == 0, "el archivo rechazado quedó abierto"
 
 
 def test_serialized_rows_round_trip(config: EngineConfig, serializer: RecordSerializer):

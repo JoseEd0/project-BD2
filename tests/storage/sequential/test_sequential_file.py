@@ -7,7 +7,11 @@ from config import EngineConfig
 from storage.record import RecordSerializer
 from storage.schema import Field, Schema
 from storage.sequential import SequentialFile
-from storage.sequential.sequential_file import NullKeyError, SequentialFormatError
+from storage.sequential.sequential_file import (
+    REBUILD_SUFFIX,
+    NullKeyError,
+    SequentialFormatError,
+)
 from storage.types import FieldType
 
 SHUFFLE_SEED = 7
@@ -352,3 +356,23 @@ def test_one_page_never_carries_a_longer_chain_than_allowed(
         assert keys_of(file.scan(), serializer) == sorted(
             [*range(0, 400 * gap, gap), *range(1, 300)]
         )
+
+
+def test_a_leftover_rebuild_file_is_ignored_and_then_replaced(
+    config: EngineConfig, serializer: RecordSerializer
+):
+    """Una reorganización interrumpida deja `t.seq.rebuild` a medio escribir. Al reabrir se
+    ignora, la siguiente reorganización lo pisa y `files_of` lo incluye para que un DROP
+    no lo deje huérfano."""
+    path = config.data_directory / "t.seq"
+    leftover = path.with_name(path.name + REBUILD_SUFFIX)
+    with SequentialFile(path, serializer, "id", config) as file:
+        for key in range(20):
+            file.insert(row(serializer, key))
+    leftover.write_bytes(b"basura de una reorganizacion cortada")
+    with SequentialFile(path, serializer, "id", config) as file:
+        assert keys_of(file.scan(), serializer) == list(range(20))
+        file.reorganize()
+        assert keys_of(file.scan(), serializer) == list(range(20))
+    assert not leftover.exists()
+    assert leftover in SequentialFile.files_of(path)

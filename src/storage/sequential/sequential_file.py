@@ -29,7 +29,7 @@ from typing import Any
 
 from config import EngineConfig
 from storage.layout import FileHeader, chained_pages
-from storage.page import NO_PAGE, RecordPage, SlotState, slot_capacity
+from storage.page import RecordPage, SlotState, slot_capacity
 from storage.pager import HEADER_PAGE_ID, Pager
 from storage.record import RecordSerializer
 from storage.types import Key, StorageError
@@ -92,9 +92,14 @@ class SequentialFile:
         self._capacity = slot_capacity(config.page_size, self._record_size)
         self._main = Pager(path, config)
         self._overflow = Pager(self._overflow_path(path), config)
-        if self._main.page_count == 0:
-            self._create_header()
-        self._read_header()
+        try:
+            if self._main.page_count == 0:
+                self._create_header()
+            self._read_header()
+        except BaseException:
+            self._main.close()
+            self._overflow.close()
+            raise
 
     @property
     def record_count(self) -> int:
@@ -251,16 +256,13 @@ class SequentialFile:
 
     def _insert_into_overflow(self, page_id: int, page: RecordPage, record: bytes) -> int:
         chain_pages = 0
-        chain_page_id = page.next_page
-        while chain_page_id != NO_PAGE:
+        for chain_page_id, chain_page in self._chain(page.next_page):
             chain_pages += 1
-            chain_page = self._load_overflow(chain_page_id)
             if chain_page.first_free_slot() is not None:
                 chain_page.insert(record)
                 self._store_overflow(chain_page_id, chain_page)
                 self._overflow_count += 1
                 return chain_pages
-            chain_page_id = chain_page.next_page
         new_page_id = self._overflow.allocate()
         new_page = RecordPage.create(self._overflow.page_size, self._record_size)
         new_page.next_page = page.next_page
@@ -432,8 +434,8 @@ class SequentialFile:
     def _replace_files(self, rebuild_path: Path, written_pages: int) -> None:
         """El `rename` va antes de borrar el auxiliar: entre los dos pasos, el archivo
         principal nuevo no apunta a ninguna página del auxiliar viejo, que solo sobra."""
-        self._main.close()
-        self._overflow.close()
+        self._main.discard()
+        self._overflow.discard()
         rebuild_path.replace(self._path)
         self._overflow_path(self._path).unlink(missing_ok=True)
         self._main = Pager(self._path, self._config)

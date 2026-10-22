@@ -56,10 +56,6 @@ class BufferPool:
             return pool
 
     @property
-    def capacity(self) -> int:
-        return self._capacity
-
-    @property
     def resident_pages(self) -> int:
         return len(self._frames)
 
@@ -70,7 +66,8 @@ class BufferPool:
             return self._next_owner
 
     def unregister(self, owner: int) -> None:
-        """Olvida las páginas del archivo. Quien llama ya escribió las modificadas."""
+        """Olvida las páginas del archivo, también las modificadas: quien llama ya las
+        escribió o decidió que no hacen falta."""
         with self.guard:
             for frame in [frame for frame in self._frames if frame[0] == owner]:
                 del self._frames[frame]

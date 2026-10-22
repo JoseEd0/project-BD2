@@ -107,15 +107,17 @@ class ExternalHashGrouper:
     pasar: un contador, una suma, el primero que llegó. Una clave con un millón de filas
     ocupa lo mismo que una con dos.
 
-    Lo que sí tiene que caber en memoria son los estados de una partición. Si una trae más
-    grupos de los que caben en el buffer, se vuelve a repartir con otra función de hash,
-    las veces que haga falta: cada nivel divide sus grupos entre `P`. Una entrada que cabe
-    entera en el buffer no se reparte: se agrupa en memoria.
+    Es una agregación híbrida. Los primeros `B` grupos que aparecen se reducen en memoria
+    hasta el final de la entrada; solo las filas de los grupos que llegan cuando ya no hay
+    sitio se reparten en particiones, y cada partición se reduce después en memoria. Si una
+    trae más grupos de los que caben, se vuelve a repartir con otra función de hash, las
+    veces que haga falta: cada nivel divide sus grupos entre `P`.
 
-    Complejidad, con `N` registros, `G` grupos, `P` particiones y `B` grupos en el buffer:
+    Complejidad, con `N` registros, `G` grupos, `P` particiones, `B` grupos en el buffer y
+    `N'` registros de los grupos que no cupieron:
 
-    * E/S: `2N` si `G ≤ P · B`; en general `2N` por nivel, con `⌈log_P(G/B)⌉` niveles;
-    * memoria: como mucho `B` estados.
+    * E/S: nada si `G ≤ B`; `2N'` si `G ≤ B + P · B`; en general `2N'` por nivel;
+    * memoria: como mucho `2B` estados, los de memoria y los de la partición en curso.
 
     A diferencia de agrupar por ordenamiento externo, **no ordena**: los grupos salen en el
     orden en que aparecen dentro de cada partición. Quien necesite orden lo pide aparte.
@@ -146,16 +148,16 @@ class ExternalHashGrouper:
         """Pares `(clave, estado)`.
 
         El estado de un grupo es `step` aplicado a cada uno de sus registros, en el orden
-        en que llegaron, partiendo de `start()`. Si la entrada cabe en el buffer se agrupa
-        en memoria, sin escribir ninguna partición: `levels` queda en cero.
+        en que llegaron, partiendo de `start()`. Si todos los grupos caben en el buffer no
+        se escribe ninguna partición: `levels` queda en cero.
         """
-        stream = iter(records)
-        head = list(islice(stream, self._memory_groups + 1))
-        if len(head) <= self._memory_groups:
-            groups = self._groups_of(head, start, step)
-            if groups is not None:
-                return iter(groups)
-        return self._reduce_level(chain(head, stream), start, step, 0)
+        groups: dict[bytes, tuple[Key, State]] = {}
+        spilled = self._absorb(groups, records, start, step)
+        first = next(spilled, None)
+        if first is None:
+            return iter(groups.values())
+        partitioned = self._reduce_level(chain((first,), spilled), start, step, 0)
+        return chain(partitioned, groups.values())
 
     def close(self) -> None:
         while self._open:
@@ -188,6 +190,26 @@ class ExternalHashGrouper:
                 yield from groups
         self._open.remove(partitioner)
         partitioner.close()
+
+    def _absorb(
+        self,
+        groups: dict[bytes, tuple[Key, State]],
+        records: Iterable[bytes],
+        start: Callable[[], State],
+        step: Callable[[State, bytes], State],
+    ) -> Iterator[bytes]:
+        """Reduce en `groups` las filas de los grupos que caben y deja pasar las de los que
+        llegan cuando ya está lleno. Los grupos se distinguen como en `_groups_of`."""
+        for record in records:
+            key = self._key_of(record)
+            signature = canonical_key_bytes(key)
+            group = groups.get(signature)
+            if group is None:
+                if len(groups) == self._memory_groups:
+                    yield record
+                    continue
+                group = (key, start())
+            groups[signature] = (group[0], step(group[1], record))
 
     def _partition(self, records: Iterable[bytes], level: int) -> HashPartitioner:
         partitioner = HashPartitioner(
@@ -305,7 +327,11 @@ class ExternalHashJoin:
             if len(head) <= self._memory_records:
                 yield from self._join_in_memory(head, rights)
             else:
-                yield from self._join_level(chain(head, lefts), rights, 0)
+                # La muestra ya va dentro del flujo: soltarla para no tenerla en memoria
+                # junto a cada partición que se cargue.
+                stream = chain(head, lefts)
+                del head
+                yield from self._join_level(stream, rights, 0)
         with RunReader(left_path, self._left_record_size, self._config) as left_unmatched:
             yield from ((record, None) for record in left_unmatched)
         with RunReader(right_path, self._right_record_size, self._config) as right_unmatched:

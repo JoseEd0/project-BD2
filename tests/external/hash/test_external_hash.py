@@ -6,6 +6,7 @@ import pytest
 from config import EngineConfig
 from external.hash import ExternalHashGrouper, ExternalHashJoin
 from external.joining import Unmatched
+from external.runs import buffered_records
 from hashing import canonical_key_bytes
 from storage.record import RecordSerializer
 
@@ -95,9 +96,25 @@ def test_partitions_are_used(small_buffer: EngineConfig, serializer: RecordSeria
     with ExternalHashGrouper(
         small_buffer.data_directory / "g", serializer.size, id_of, small_buffer
     ) as grouper:
-        list(grouper.reduce(records, int, count))
-        assert sum(grouper.partition_sizes) == MANY_KEYS
+        groups = dict(grouper.reduce(records, int, count))
+        in_memory = buffered_records(small_buffer, serializer.size)
+        assert sum(grouper.partition_sizes) == MANY_KEYS - in_memory
         assert sum(1 for size in grouper.partition_sizes if size > 0) > 1
+    assert groups == dict.fromkeys(range(MANY_KEYS), 1)
+
+
+def test_groups_that_fit_stay_in_memory_whatever_the_number_of_rows(
+    small_buffer: EngineConfig, serializer: RecordSerializer, city_of
+):
+    """Agregación híbrida: con pocos grupos y muchas filas no se escribe nada a disco, por
+    muy grande que sea la entrada."""
+    records = [serializer.pack((index, CITIES[index % 2])) for index in range(MANY_KEYS)]
+    directory = small_buffer.data_directory / "g"
+    with ExternalHashGrouper(directory, serializer.size, city_of, small_buffer) as grouper:
+        groups = dict(grouper.reduce(records, int, count))
+        assert grouper.levels == 0
+        assert not directory.exists()
+    assert groups == {CITIES[0]: MANY_KEYS // 2, CITIES[1]: MANY_KEYS // 2}
 
 
 def test_a_group_is_reduced_in_arrival_order(
@@ -134,13 +151,13 @@ def test_more_groups_than_fit_in_memory_are_partitioned_again(
 def test_one_huge_group_needs_no_extra_passes(
     small_buffer: EngineConfig, serializer: RecordSerializer, city_of
 ):
-    """Un grupo ocupa un estado, tenga las filas que tenga."""
+    """Un grupo ocupa un estado, tenga las filas que tenga: se reduce en memoria."""
     records = [serializer.pack((index, "lima")) for index in range(MANY_KEYS * 3)]
     with ExternalHashGrouper(
         small_buffer.data_directory / "g", serializer.size, city_of, small_buffer
     ) as grouper:
         assert list(grouper.reduce(records, int, count)) == [("lima", MANY_KEYS * 3)]
-        assert grouper.levels == 1
+        assert grouper.levels == 0
 
 
 def test_abandoning_a_grouping_leaves_no_files_behind(

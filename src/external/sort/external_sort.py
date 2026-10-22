@@ -70,10 +70,12 @@ class ExternalSorter:
         if len(head) <= self._buffer_records:
             head.sort(key=self._key_of)
             return iter(head)
-        runs = self._write_runs(chain(head, stream))
+        # La muestra ya va dentro del flujo: soltarla para que no ocupe memoria mientras
+        # se escriben los runs.
+        records_left = chain(head, stream)
+        del head
+        runs = self._write_runs(records_left)
         self.run_count = len(runs)
-        if not runs:
-            return iter(())
         while len(runs) > self._fan_in:
             runs = self._merge_pass(runs)
             self.merge_passes += 1

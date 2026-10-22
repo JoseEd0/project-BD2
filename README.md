@@ -255,7 +255,7 @@ silencio en cualquier otra.
 ```bash
 .venv/bin/ruff check                          # estilo
 .venv/bin/mypy                                # tipos, en modo estricto
-.venv/bin/python -m pytest -q                 # 1566 tests
+.venv/bin/python -m pytest -q                 # 1626 tests
 npm --prefix frontend run build               # tipos y bundle de la interfaz
 ```
 

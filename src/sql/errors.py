@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from errors import DomainError
+
 CARET_MARKER = "^"
 
 
-class SqlError(Exception):
+class SqlError(DomainError):
     """Base class for every failure of the SQL front-end."""
 
 

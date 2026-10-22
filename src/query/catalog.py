@@ -16,6 +16,7 @@ from types import MappingProxyType
 from typing import Any
 
 from config import EngineConfig
+from errors import DomainError
 from sql.nodes import EMPTY_OPTIONS, ColumnDefinition, DataTypeKind, IndexType, OptionValue
 from storage.schema import Field, Schema
 from storage.types import FieldType
@@ -41,7 +42,7 @@ SQL_TO_STORAGE_TYPE: dict[DataTypeKind, FieldType] = {
 }
 
 
-class CatalogError(Exception):
+class CatalogError(DomainError):
     """Error de definición o de consulta del catálogo."""
 
 

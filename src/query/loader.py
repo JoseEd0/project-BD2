@@ -19,6 +19,7 @@ from math import isfinite
 from pathlib import Path
 
 from config import EngineConfig
+from errors import DomainError
 from spatial.geometry import GeometryError, Point, geographic_point
 from storage.schema import Field, Schema
 from storage.types import MAX_INT, MIN_INT, FieldType, Value
@@ -37,7 +38,7 @@ POINT_PATTERN = re.compile(
 )
 
 
-class LoaderError(Exception):
+class LoaderError(DomainError):
     """El archivo no se puede cargar como tabla."""
 
 

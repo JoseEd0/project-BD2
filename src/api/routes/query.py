@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from api.errors import DOMAIN_ERRORS, as_http_error, invalid_request
+from api.errors import as_http_error, invalid_request
 from api.responses import as_response, describe_statement
 from api.schemas import QueryRequest, QueryResponse
 from api.service import ServiceDependency
+from errors import DomainError
 from sql import parse_script
 from sql.errors import SqlPositionError
 from sql.nodes import BeginTransactionStatement
@@ -39,7 +40,7 @@ def query(request: QueryRequest, service: ServiceDependency) -> QueryResponse:
             raise as_http_error(
                 error, session.in_transaction, error.line, error.column
             ) from error
-        except DOMAIN_ERRORS as error:
+        except DomainError as error:
             raise as_http_error(error, session.in_transaction) from error
         labels = [describe_statement(statement) for statement in statements]
         return as_response(

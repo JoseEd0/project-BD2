@@ -10,10 +10,11 @@ from typing import Annotated, BinaryIO
 
 from fastapi import APIRouter, File, Form, UploadFile
 
-from api.errors import DOMAIN_ERRORS, as_http_error, invalid_request
+from api.errors import as_http_error, invalid_request
 from api.responses import as_response
 from api.schemas import FileUploadResponse, QueryResponse
 from api.service import Service, ServiceDependency
+from errors import DomainError
 from query.catalog import Organization
 from query.loader import LoaderError, read_header
 from sql.nodes import CreateTableFromFileStatement, IndexSpec, IndexType
@@ -88,7 +89,7 @@ def upload(
         with service.session(session_id) as session:
             try:
                 result = session.run(_with_path(statement, path))
-            except DOMAIN_ERRORS as error:
+            except DomainError as error:
                 raise as_http_error(error, session.in_transaction) from error
             return as_response(
                 [result],

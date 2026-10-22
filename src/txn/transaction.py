@@ -17,11 +17,12 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import Enum, unique
 
+from errors import DomainError
 from query.table import Table
 from storage.record import Record
 
 
-class TransactionError(Exception):
+class TransactionError(DomainError):
     """Operación inválida sobre una transacción."""
 
 

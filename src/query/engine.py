@@ -16,6 +16,7 @@ from types import TracebackType
 from typing import Any
 
 from config import EngineConfig
+from errors import DomainError
 from query.catalog import (
     Catalog,
     CatalogError,
@@ -76,7 +77,7 @@ DEFAULT_INDEX_PREFIX = "idx_"
 NO_JOURNAL: Journal = DiscardingJournal()
 
 
-class EngineError(Exception):
+class EngineError(DomainError):
     """La sentencia no se puede ejecutar."""
 
 

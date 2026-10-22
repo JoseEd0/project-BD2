@@ -14,6 +14,7 @@ from enum import Enum, unique
 from math import isfinite
 from typing import Any
 
+from errors import DomainError
 from spatial.geometry import GeometryError, Point, geographic_point
 
 EPOCH = date(1970, 1, 1)
@@ -33,7 +34,7 @@ Value = int | float | bool | str | bytes | date | tuple[float, ...] | None
 Key = Any
 
 
-class StorageError(Exception):
+class StorageError(DomainError):
     """Base de los errores de la capa de almacenamiento."""
 
 

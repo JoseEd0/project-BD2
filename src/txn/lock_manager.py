@@ -21,12 +21,13 @@ import time
 from enum import Enum, unique
 
 from config import EngineConfig
+from errors import DomainError
 
 Resource = str
 TransactionId = int
 
 
-class LockError(Exception):
+class LockError(DomainError):
     """Base de los errores de bloqueo."""
 
 

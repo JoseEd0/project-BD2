@@ -28,8 +28,10 @@ from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 
+from api.errors import validation_failed
 from api.routes import query, sessions, tables, uploads
 from api.service import Service
 from api.settings import settings_from_environment
@@ -69,6 +71,7 @@ def create_app(config: EngineConfig, cors_origins: Sequence[str] = ()) -> FastAP
         allow_headers=["*"],
     )
     app.state.service = service
+    app.add_exception_handler(RequestValidationError, validation_failed)
 
     @app.get("/health")
     def health() -> dict[str, str]:

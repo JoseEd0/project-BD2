@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from config import EngineConfig
+from errors import DomainError
 from external.hash import ExternalHashGrouper, ExternalHashJoin
 from external.joining import Pair, Unmatched, any_pair
 from external.loop import BlockNestedLoopJoin
@@ -63,7 +64,7 @@ MILLISECONDS = 1000.0
 COUNTED_ROW = True
 
 
-class UnsupportedQueryError(Exception):
+class UnsupportedQueryError(DomainError):
     """La consulta usa algo que el ejecutor todavía no implementa."""
 
 

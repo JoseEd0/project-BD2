@@ -12,6 +12,8 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from math import asin, atan2, cos, degrees, hypot, radians, sin, sqrt
 
+from errors import DomainError
+
 from .geometry import Point, Rectangle
 
 # Radio medio de la Tierra (IUGG). Es el que usa PostGIS al medir sobre la esfera, así que
@@ -28,7 +30,7 @@ FULL_TURN_DEGREES = 360.0
 HALF_TURN_DEGREES = 180.0
 
 
-class UnknownMetricError(Exception):
+class UnknownMetricError(DomainError):
     """El nombre no corresponde a ninguna métrica implementada."""
 
 

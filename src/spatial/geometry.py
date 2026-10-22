@@ -12,6 +12,8 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import NamedTuple
 
+from errors import DomainError
+
 MIN_LATITUDE = -90.0
 MAX_LATITUDE = 90.0
 MIN_LONGITUDE = -180.0
@@ -19,7 +21,7 @@ MAX_LONGITUDE = 180.0
 MINIMUM_POLYGON_VERTICES = 3
 
 
-class GeometryError(Exception):
+class GeometryError(DomainError):
     """Las coordenadas no describen una figura válida."""
 
 

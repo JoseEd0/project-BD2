@@ -12,12 +12,13 @@ from __future__ import annotations
 from datetime import date
 from enum import Enum, unique
 
+from errors import DomainError
 from spatial.geometry import Point, Polygon
 from storage.schema import Field
 from storage.types import FieldType, InvalidValueError, Value, codec_for, date_from
 
 
-class ComparisonError(Exception):
+class ComparisonError(DomainError):
     """Los dos valores no se pueden comparar."""
 
 

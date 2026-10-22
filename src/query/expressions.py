@@ -13,6 +13,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any
 
+from errors import DomainError
 from query.comparison import (
     ComparisonError,
     comparable,
@@ -59,7 +60,7 @@ NO_ROW: Record = ()
 NOT_CONSTANT = object()
 
 
-class ExpressionError(Exception):
+class ExpressionError(DomainError):
     """La expresión no se puede evaluar sobre esta fila."""
 
 

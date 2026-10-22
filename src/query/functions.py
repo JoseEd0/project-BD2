@@ -23,6 +23,7 @@ from dataclasses import dataclass
 from enum import Enum, unique
 from typing import Any
 
+from errors import DomainError
 from spatial.geometry import MINIMUM_POLYGON_VERTICES, Point, Polygon, geographic_point
 from spatial.metrics import HAVERSINE, Metric, metric_named
 from storage.types import FieldType, ValueTooLargeError, real_from
@@ -40,7 +41,7 @@ POINT_COLUMNS = frozenset({FieldType.POINT})
 NO_COLUMN: frozenset[FieldType] = frozenset()
 
 
-class FunctionError(Exception):
+class FunctionError(DomainError):
     """Los argumentos no son los que la función espera."""
 
 

@@ -1,37 +1,26 @@
-"""Traducción de los errores del motor a respuestas HTTP."""
+"""Traducción de los errores del motor a respuestas HTTP.
+
+Todas las respuestas de error tienen la misma forma, que es lo que el frontend lee:
+
+    {"detail": {"error": …, "kind": …, "line": …, "column": …, "in_transaction": …}}
+
+Un `DomainError` es culpa de lo que se pidió y vale un `400`; un cuerpo que no cumple el
+esquema de la ruta, un `422`. Cualquier otra excepción es un fallo del servidor y llega
+como `500`: convertirla en un `400` escondería el bug detrás de un «error del usuario».
+"""
 
 from __future__ import annotations
 
-from fastapi import HTTPException
+from typing import Any
 
-from query.catalog import CatalogError
-from query.engine import EngineError
-from query.expressions import ExpressionError
-from query.loader import LoaderError
-from query.operators import UnsupportedQueryError
-from sql.errors import SqlError
-from storage.types import StorageError
-from txn import SessionError
-from txn.lock_manager import LockError
-from txn.transaction import TransactionError
+from fastapi import HTTPException, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 
 BAD_REQUEST = 400
+UNPROCESSABLE = 422
 UPLOAD_ERROR_KIND = "UploadError"
-
-# Solo estos errores son culpa de lo que pidió el usuario y merecen un 400. Cualquier otra
-# excepción es un fallo del servidor y debe llegar como 500, no disfrazarse de error suyo.
-DOMAIN_ERRORS: tuple[type[Exception], ...] = (
-    SqlError,
-    StorageError,
-    CatalogError,
-    ExpressionError,
-    LoaderError,
-    EngineError,
-    UnsupportedQueryError,
-    LockError,
-    TransactionError,
-    SessionError,
-)
+VALIDATION_ERROR_KIND = "RequestValidationError"
 
 
 def as_http_error(
@@ -47,24 +36,39 @@ def as_http_error(
     """
     return HTTPException(
         status_code=BAD_REQUEST,
-        detail={
-            "error": str(error),
-            "kind": type(error).__name__,
-            "line": line,
-            "column": column,
-            "in_transaction": in_transaction,
-        },
+        detail=_detail(str(error), type(error).__name__, in_transaction, line, column),
     )
 
 
 def invalid_request(message: str) -> HTTPException:
-    return HTTPException(
-        status_code=BAD_REQUEST,
-        detail={
-            "error": message,
-            "kind": UPLOAD_ERROR_KIND,
-            "line": None,
-            "column": None,
-            "in_transaction": None,
-        },
+    return HTTPException(status_code=BAD_REQUEST, detail=_detail(message, UPLOAD_ERROR_KIND))
+
+
+async def validation_failed(_: Request, error: Exception) -> JSONResponse:
+    """Un cuerpo que no cumple el esquema, con la misma forma que cualquier otro error."""
+    problems = error.errors() if isinstance(error, RequestValidationError) else []
+    message = "; ".join(_described(problem) for problem in problems) or str(error)
+    return JSONResponse(
+        status_code=UNPROCESSABLE, content={"detail": _detail(message, VALIDATION_ERROR_KIND)}
     )
+
+
+def _described(problem: Any) -> str:
+    place = ".".join(str(part) for part in problem.get("loc", ()) if part != "body")
+    return f"{place}: {problem.get('msg', '')}" if place else str(problem.get("msg", ""))
+
+
+def _detail(
+    message: str,
+    kind: str,
+    in_transaction: bool | None = None,
+    line: int | None = None,
+    column: int | None = None,
+) -> dict[str, Any]:
+    return {
+        "error": message,
+        "kind": kind,
+        "line": line,
+        "column": column,
+        "in_transaction": in_transaction,
+    }

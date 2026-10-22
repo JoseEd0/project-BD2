@@ -33,7 +33,7 @@ Ninguna ruta ni puerto está escrito en el código.
 | [`service.py`](service.py) | estado compartido: motor, bloqueos y sesiones |
 | [`routes/`](routes/) | un router por dominio: tablas, consultas, subidas y sesiones |
 | [`responses.py`](responses.py) | del resultado del motor al JSON de la respuesta |
-| [`errors.py`](errors.py) | qué errores son del usuario (`400`) y cómo se cuentan |
+| [`errors.py`](errors.py) | la forma única de toda respuesta de error |
 | [`schemas.py`](schemas.py) | forma de cada mensaje que entra y sale |
 
 ## Rutas
@@ -175,6 +175,9 @@ abierta. Es `null` cuando el error no pasó por una sesión.
 
 Solo las excepciones **de dominio** —errores del SQL, del catálogo, del almacenamiento, de
 la carga de archivos o de bloqueos— se devuelven como `400`: son culpa de lo que se pidió.
+Todas derivan de una misma clase, `DomainError` ([`src/errors.py`](../errors.py)), así que
+un módulo nuevo no tiene que anotarse en ninguna lista para que sus errores lleguen bien.
+Un cuerpo que no cumple el esquema de la ruta es un `422`, con la misma forma de `detail`.
 Cualquier otra excepción es un fallo del servidor y llega como `500`; convertirla en un
 `400` escondería el bug detrás de un «error del usuario».
 

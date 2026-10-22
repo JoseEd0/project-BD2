@@ -6,10 +6,11 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Query
 
-from api.errors import DOMAIN_ERRORS, as_http_error
+from api.errors import as_http_error
 from api.responses import as_response
 from api.schemas import QueryResponse, TableInfo, TablePoints
 from api.service import ServiceDependency
+from errors import DomainError
 from sql.nodes import DropTableStatement
 
 router = APIRouter()
@@ -32,7 +33,7 @@ def table_structure(
     with service.session(session_id) as session:
         try:
             return session.inspect([name], lambda: service.engine.describe_table(name))
-        except DOMAIN_ERRORS as error:
+        except DomainError as error:
             raise as_http_error(error, session.in_transaction) from error
 
 
@@ -53,7 +54,7 @@ def table_points(
     with service.session(session_id) as session:
         try:
             return session.inspect([name], lambda: service.points(name, column, limit))
-        except DOMAIN_ERRORS as error:
+        except DomainError as error:
             raise as_http_error(error, session.in_transaction) from error
 
 
@@ -67,7 +68,7 @@ def drop_all_tables(service: ServiceDependency, session_id: SessionQuery = None)
         names = service.engine.table_names()
         try:
             results = [session.run(DropTableStatement(name=name)) for name in names]
-        except DOMAIN_ERRORS as error:
+        except DomainError as error:
             raise as_http_error(error, session.in_transaction) from error
         labels = ["DropTable"] * len(results)
         return as_response(

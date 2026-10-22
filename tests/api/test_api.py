@@ -703,3 +703,23 @@ def test_inspecting_a_table_waits_for_a_writing_transaction(config: EngineConfig
         assert client.get("/tables").status_code == 200
         run(client, "COMMIT", session="escribe")
         assert client.get("/tables/t/points").json()["points"] == [[-12.0, -77.0]]
+
+
+def test_a_request_that_does_not_fit_the_schema_has_the_usual_error_shape(client: TestClient):
+    response = client.post("/query", json={"sql": ""})
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert detail["kind"] == "RequestValidationError"
+    assert "sql" in detail["error"]
+    assert set(detail) == {"error", "kind", "line", "column", "in_transaction"}
+
+
+def test_a_bug_in_the_engine_is_a_server_error_not_the_users(
+    config: EngineConfig, monkeypatch: pytest.MonkeyPatch
+):
+    def broken(*_: object) -> None:
+        raise RuntimeError("fallo interno")
+
+    with TestClient(create_app(config), raise_server_exceptions=False) as client:
+        monkeypatch.setattr(client.app.state.service.engine, "run", broken)
+        assert client.post("/query", json={"sql": "SELECT 1 FROM t"}).status_code == 500

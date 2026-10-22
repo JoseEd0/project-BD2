@@ -22,6 +22,7 @@ from collections.abc import Callable, Iterable
 from types import TracebackType
 from typing import TypeVar
 
+from errors import DomainError
 from query.engine import Engine, QueryResult
 from query.table import Table
 from sql import parse_script
@@ -51,7 +52,7 @@ WRITE_STATEMENTS = (InsertStatement, UpdateStatement, DeleteStatement, Definitio
 Read = TypeVar("Read")
 
 
-class SessionError(Exception):
+class SessionError(DomainError):
     """La sentencia no encaja con el estado de la sesión."""
 
 

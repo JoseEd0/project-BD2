@@ -21,6 +21,14 @@ tamaño fijo y se **compara** como valor de Python.
 
 Una clave compuesta con componentes de más o de menos se rechaza con `KeyShapeError`.
 
+Cada códec se describe como un formato de `struct` y la conversión entre la clave y sus
+campos. Una clave compuesta es entonces un solo `struct` —los mismos bytes que sus
+componentes uno detrás de otro—, y un nodo del B+ lee o escribe todas sus claves de una
+pasada (`unpack_many`, con `iter_unpack`) en vez de una a una. Leer un nodo sigue costando
+lo que tiene, porque el árbol trabaja con nodos decodificados, pero ese costo bajó a la
+mitad: insertar 20 000 filas pasó de 8,2 s a 4,2 s en el B+ no agrupado y de 1,5 s a
+0,7 s en el agrupado.
+
 ## Índices secundarios (`secondary.py`)
 
 Los tres índices que el motor pone sobre una columna de un heap file —B+ no agrupado, hash

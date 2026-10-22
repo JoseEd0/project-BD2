@@ -2,7 +2,8 @@
 
 import pytest
 
-from index.keys import CompositeKeyCodec, KeyShapeError, ScalarKeyCodec
+from index.keys import CompositeKeyCodec, KeyShapeError, RecordIdKeyCodec, ScalarKeyCodec
+from storage.record_id import RecordId
 from storage.schema import Field
 from storage.types import FieldType, InvalidValueError
 
@@ -61,3 +62,30 @@ def test_a_composite_key_needs_every_component(composite: CompositeKeyCodec):
 def test_a_composite_codec_needs_at_least_one_component():
     with pytest.raises(KeyShapeError):
         CompositeKeyCodec([])
+
+
+def test_a_composite_key_takes_the_bytes_of_its_components_one_after_another():
+    """Es el formato en disco de las hojas del B+ no agrupado: no puede cambiar."""
+    value, address = ScalarKeyCodec(Field("id", FieldType.INT)), RecordIdKeyCodec()
+    composite = CompositeKeyCodec([value, address])
+    key = (42, RecordId(7, 3))
+    assert composite.pack(key) == value.pack(42) + address.pack(RecordId(7, 3))
+    assert composite.size == value.size + address.size
+    assert composite.unpack(composite.pack(key)) == key
+
+
+def test_many_keys_round_trip_in_one_pass(composite: CompositeKeyCodec):
+    keys = [("lima", 2), ("cusco", 9), ("piura", -4)]
+    packed = composite.pack_many(keys)
+    assert packed == b"".join(composite.pack(key) for key in keys)
+    assert composite.unpack_many(packed) == keys
+
+
+def test_no_keys_pack_to_nothing(composite: CompositeKeyCodec):
+    assert composite.pack_many([]) == b""
+    assert composite.unpack_many(b"") == []
+
+
+def test_a_batch_rejects_a_key_of_the_wrong_shape(composite: CompositeKeyCodec):
+    with pytest.raises(KeyShapeError):
+        composite.pack_many([("lima", 1), ("cusco",)])

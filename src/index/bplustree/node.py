@@ -34,8 +34,6 @@ NO_NODE = -1
 MINIMUM_CAPACITY = 3
 
 
-
-
 @unique
 class NodeKind(IntEnum):
     INTERNAL = 0
@@ -83,10 +81,8 @@ class NodeCodec:
     def pack(self, node: Node) -> bytes:
         raw = bytearray(self._page_size)
         HEADER_FORMAT.pack_into(raw, 0, int(node.kind), len(node.keys), node.next_leaf)
-        offset = HEADER_SIZE
-        for key in node.keys:
-            raw[offset : offset + self._key_codec.size] = self._key_codec.pack(key)
-            offset += self._key_codec.size
+        offset = HEADER_SIZE + self._key_codec.size * len(node.keys)
+        raw[HEADER_SIZE:offset] = self._key_codec.pack_many(node.keys)
         if node.is_leaf:
             self._pack_values(raw, offset, node)
         else:
@@ -99,39 +95,30 @@ class NodeCodec:
             kind = NodeKind(kind_value)
         except ValueError as error:
             raise CorruptNodeError(f"tipo de nodo desconocido: {kind_value}") from error
-        offset = HEADER_SIZE
-        keys: list[Key] = []
-        for _ in range(count):
-            keys.append(self._key_codec.unpack(raw[offset : offset + self._key_codec.size]))
-            offset += self._key_codec.size
+        offset = HEADER_SIZE + self._key_codec.size * count
+        keys = self._key_codec.unpack_many(raw[HEADER_SIZE:offset])
         if kind is NodeKind.LEAF:
-            return Node(kind=kind, keys=keys, values=self._unpack_values(raw, offset, count),
-                        next_leaf=next_leaf)
+            values = self._unpack_values(raw, offset, count)
+            return Node(kind=kind, keys=keys, values=values, next_leaf=next_leaf)
         return Node(kind=kind, keys=keys, children=self._unpack_children(raw, offset, count + 1))
 
     def _pack_values(self, raw: bytearray, offset: int, node: Node) -> None:
-        for value in node.values:
-            raw[offset : offset + self._value_size] = value
-            offset += self._value_size
+        raw[offset : offset + self._value_size * len(node.values)] = b"".join(node.values)
 
     def _pack_children(self, raw: bytearray, offset: int, node: Node) -> None:
-        for child in node.children:
-            CHILD_FORMAT.pack_into(raw, offset, child)
-            offset += CHILD_SIZE
+        packed = b"".join(CHILD_FORMAT.pack(child) for child in node.children)
+        raw[offset : offset + len(packed)] = packed
 
     def _unpack_values(self, raw: bytes, offset: int, count: int) -> list[bytes]:
-        values: list[bytes] = []
-        for _ in range(count):
-            values.append(bytes(raw[offset : offset + self._value_size]))
-            offset += self._value_size
-        return values
+        size = self._value_size
+        return [
+            bytes(raw[offset + size * index : offset + size * (index + 1)])
+            for index in range(count)
+        ]
 
     def _unpack_children(self, raw: bytes, offset: int, count: int) -> list[int]:
-        children: list[int] = []
-        for _ in range(count):
-            children.append(int(CHILD_FORMAT.unpack_from(raw, offset)[0]))
-            offset += CHILD_SIZE
-        return children
+        children = raw[offset : offset + CHILD_SIZE * count]
+        return [child for (child,) in CHILD_FORMAT.iter_unpack(children)]
 
     def _validate_capacity(self) -> None:
         if self.leaf_capacity < MINIMUM_CAPACITY:

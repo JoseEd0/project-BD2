@@ -6,9 +6,12 @@ sus resultados crudos en JSON y los imprime como tabla Markdown para pegarlos en
 
 from __future__ import annotations
 
+import argparse
 import json
+import os
 import random
 import time
+import tracemalloc
 from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -23,6 +26,10 @@ BYTES_PER_KIB = 1024.0
 NAME_LENGTH = 24
 CITY_LENGTH = 16
 RESULTS_DIRECTORY = "results"
+POSTGRES_DSN_VARIABLE = "BENCH_POSTGRES_DSN"
+ROWS_STREAM = "filas"
+QUERIES_STREAM = "consultas"
+DELETIONS_STREAM = "borrados"
 
 
 @dataclass
@@ -85,6 +92,46 @@ def time_it(action: Callable[[], Any]) -> float:
     return (time.perf_counter() - started) * MILLISECONDS_PER_SECOND
 
 
+def peak_memory_kib(action: Callable[[], Any]) -> float:
+    """Pico de memoria de Python, en KiB, mientras corre `action`.
+
+    Se mide aparte de los tiempos: `tracemalloc` frena la ejecución varias veces.
+    """
+    tracemalloc.start()
+    try:
+        action()
+        _, peak = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+    return round(peak / BYTES_PER_KIB, 1)
+
+
+def add_postgres_argument(parser: argparse.ArgumentParser) -> None:
+    """`--postgres-dsn`, que por omisión toma la variable `BENCH_POSTGRES_DSN`."""
+    parser.add_argument(
+        "--postgres-dsn",
+        default=os.environ.get(POSTGRES_DSN_VARIABLE),
+        help=f"conexión al PostgreSQL de referencia (por omisión, ${POSTGRES_DSN_VARIABLE})",
+    )
+
+
+def connect_postgres(dsn: str) -> Any:
+    """Conexión en modo autocommit al PostgreSQL de referencia.
+
+    `psycopg` es un extra opcional (`.[postgres]`): se importa solo si se mide contra él.
+    """
+    import psycopg
+
+    return psycopg.connect(dsn, autocommit=True)
+
+
+def relation_kib(cursor: Any, relation: str) -> float:
+    """KiB que ocupa en disco una tabla o un índice de PostgreSQL."""
+    cursor.execute("SELECT pg_relation_size(%s)", (relation,))
+    (size,) = cursor.fetchone()
+    return round(int(size) / BYTES_PER_KIB, 1)
+
+
 def benchmark_schema() -> Schema:
     """Esquema común: una clave entera, dos textos y un número."""
     return Schema(
@@ -97,9 +144,19 @@ def benchmark_schema() -> Schema:
     )
 
 
+def random_stream(seed: int, purpose: str) -> random.Random:
+    """Generador propio de un uso de la semilla: las filas, las consultas, los borrados.
+
+    Dos `Random(seed)` sacan los mismos números, y `shuffle` y `sample` los recorren al
+    revés: con un solo generador por semilla, las claves que se consultan o se borran
+    serían justo las últimas insertadas, que es un caso particular y no uno al azar.
+    """
+    return random.Random(f"{seed}:{purpose}")
+
+
 def build_rows(count: int, seed: int) -> list[tuple[int, str, str, float]]:
     """Filas con claves barajadas, para que ninguna estructura se beneficie del orden."""
-    generator = random.Random(seed)
+    generator = random_stream(seed, ROWS_STREAM)
     cities = ["lima", "cusco", "piura", "tacna", "trujillo"]
     keys = list(range(count))
     generator.shuffle(keys)
@@ -130,8 +187,14 @@ def integer_of(value: Value) -> int:
 
 
 def sample_keys(count: int, queries: int, seed: int) -> list[int]:
-    generator = random.Random(seed)
+    """Claves al azar para consultar, independientes del orden en que se insertaron."""
+    generator = random_stream(seed, QUERIES_STREAM)
     return [generator.randrange(count) for _ in range(queries)]
+
+
+def deletion_order(count: int, seed: int) -> list[int]:
+    """Todas las claves, en un orden al azar independiente del de inserción."""
+    return random_stream(seed, DELETIONS_STREAM).sample(range(count), count)
 
 
 def results_directory(root: Path) -> Path:

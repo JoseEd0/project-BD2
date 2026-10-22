@@ -9,22 +9,11 @@ from pathlib import Path
 
 import pytest
 from benchmarks.common import RESULTS_DIRECTORY
-from benchmarks.plot import (
-    BASELINE_CLEARANCE,
-    BLUE,
-    DISK_SPACE,
-    FIGURES,
-    NODES,
-    TOTAL_TIME,
-    Figure,
-    Line,
-    Style,
-    Technique,
+from benchmarks.plots import FIGURES
+from benchmarks.plots.drawing import (
     by_rows,
-    compare,
     compose,
     draw,
-    format_number,
     horizontal_limits,
     load,
     points_of,
@@ -32,6 +21,17 @@ from benchmarks.plot import (
     ticks_between,
     vertical_scale,
 )
+from benchmarks.plots.model import (
+    DISK_SPACE,
+    NODES,
+    TOTAL_TIME,
+    Figure,
+    Line,
+    Style,
+    Technique,
+    compare,
+)
+from benchmarks.plots.style import BASELINE_CLEARANCE, BLUE, format_number
 
 RESULTS = Path(__file__).parents[2] / "benchmarks" / RESULTS_DIRECTORY
 # Holgura, en píxeles, al comprobar que un texto cabe: lo que redondea el dibujo.

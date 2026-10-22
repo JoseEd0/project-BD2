@@ -15,14 +15,14 @@
       "technique": "heap file",
       "operation": "inserción",
       "dataset_size": 1000,
-      "milliseconds": 7.65641697216779,
+      "milliseconds": 3.8446670077973977,
       "extra": {}
     },
     {
       "technique": "heap file",
       "operation": "búsqueda por clave",
       "dataset_size": 1000,
-      "milliseconds": 1.0762499878183007,
+      "milliseconds": 49.47437500231899,
       "extra": {
         "consultas": 100
       }
@@ -38,6 +38,15 @@
     },
     {
       "technique": "heap file",
+      "operation": "borrado",
+      "dataset_size": 1000,
+      "milliseconds": 43.292333008139394,
+      "extra": {
+        "borrados": 100
+      }
+    },
+    {
+      "technique": "heap file",
       "operation": "reorganización",
       "dataset_size": 1000,
       "milliseconds": 0.0,
@@ -49,14 +58,14 @@
       "technique": "archivo secuencial",
       "operation": "inserción",
       "dataset_size": 1000,
-      "milliseconds": 25.252915918827057,
+      "milliseconds": 23.446624996722676,
       "extra": {}
     },
     {
       "technique": "archivo secuencial",
       "operation": "búsqueda por clave",
       "dataset_size": 1000,
-      "milliseconds": 4.6153750736266375,
+      "milliseconds": 4.702291000285186,
       "extra": {
         "consultas": 100
       }
@@ -67,30 +76,42 @@
       "dataset_size": 1000,
       "milliseconds": 0.0,
       "extra": {
-        "kib": 100.0
+        "kib": 104.0
+      }
+    },
+    {
+      "technique": "archivo secuencial",
+      "operation": "borrado",
+      "dataset_size": 1000,
+      "milliseconds": 4.527540993876755,
+      "extra": {
+        "borrados": 100,
+        "incluye_reorganizacion": false
       }
     },
     {
       "technique": "archivo secuencial",
       "operation": "reorganización",
       "dataset_size": 1000,
-      "milliseconds": 2.626249915920198,
+      "milliseconds": 2.1172499982640147,
       "extra": {
-        "desperdicio_previo": 0.121
+        "desperdicio_previo": 0.3,
+        "umbral": 0.3,
+        "registros": 798
       }
     },
     {
       "technique": "heap file",
       "operation": "inserción",
       "dataset_size": 10000,
-      "milliseconds": 71.84550003148615,
+      "milliseconds": 36.77554200112354,
       "extra": {}
     },
     {
       "technique": "heap file",
       "operation": "búsqueda por clave",
       "dataset_size": 10000,
-      "milliseconds": 10.639332933351398,
+      "milliseconds": 449.23808400926646,
       "extra": {
         "consultas": 100
       }
@@ -106,6 +127,15 @@
     },
     {
       "technique": "heap file",
+      "operation": "borrado",
+      "dataset_size": 10000,
+      "milliseconds": 409.8027500003809,
+      "extra": {
+        "borrados": 100
+      }
+    },
+    {
+      "technique": "heap file",
       "operation": "reorganización",
       "dataset_size": 10000,
       "milliseconds": 0.0,
@@ -117,14 +147,14 @@
       "technique": "archivo secuencial",
       "operation": "inserción",
       "dataset_size": 10000,
-      "milliseconds": 265.41783404536545,
+      "milliseconds": 268.10000000114087,
       "extra": {}
     },
     {
       "technique": "archivo secuencial",
       "operation": "búsqueda por clave",
       "dataset_size": 10000,
-      "milliseconds": 4.53541602473706,
+      "milliseconds": 5.151249992195517,
       "extra": {
         "consultas": 100
       }
@@ -135,30 +165,42 @@
       "dataset_size": 10000,
       "milliseconds": 0.0,
       "extra": {
-        "kib": 964.0
+        "kib": 960.0
+      }
+    },
+    {
+      "technique": "archivo secuencial",
+      "operation": "borrado",
+      "dataset_size": 10000,
+      "milliseconds": 5.21916599245742,
+      "extra": {
+        "borrados": 100,
+        "incluye_reorganizacion": false
       }
     },
     {
       "technique": "archivo secuencial",
       "operation": "reorganización",
       "dataset_size": 10000,
-      "milliseconds": 19.306457950733602,
+      "milliseconds": 16.51087499340065,
       "extra": {
-        "desperdicio_previo": 0.069
+        "desperdicio_previo": 0.3,
+        "umbral": 0.3,
+        "registros": 7631
       }
     },
     {
       "technique": "heap file",
       "operation": "inserción",
       "dataset_size": 100000,
-      "milliseconds": 743.6254170024768,
+      "milliseconds": 360.9136250015581,
       "extra": {}
     },
     {
       "technique": "heap file",
       "operation": "búsqueda por clave",
       "dataset_size": 100000,
-      "milliseconds": 97.24395908415318,
+      "milliseconds": 4779.3065840087365,
       "extra": {
         "consultas": 100
       }
@@ -174,6 +216,15 @@
     },
     {
       "technique": "heap file",
+      "operation": "borrado",
+      "dataset_size": 100000,
+      "milliseconds": 4490.120916991145,
+      "extra": {
+        "borrados": 100
+      }
+    },
+    {
+      "technique": "heap file",
       "operation": "reorganización",
       "dataset_size": 100000,
       "milliseconds": 0.0,
@@ -185,14 +236,14 @@
       "technique": "archivo secuencial",
       "operation": "inserción",
       "dataset_size": 100000,
-      "milliseconds": 3837.8220830345526,
+      "milliseconds": 3161.2614169862354,
       "extra": {}
     },
     {
       "technique": "archivo secuencial",
       "operation": "búsqueda por clave",
       "dataset_size": 100000,
-      "milliseconds": 5.736500024795532,
+      "milliseconds": 5.620250012725592,
       "extra": {
         "consultas": 100
       }
@@ -203,16 +254,28 @@
       "dataset_size": 100000,
       "milliseconds": 0.0,
       "extra": {
-        "kib": 9608.0
+        "kib": 9528.0
+      }
+    },
+    {
+      "technique": "archivo secuencial",
+      "operation": "borrado",
+      "dataset_size": 100000,
+      "milliseconds": 5.5114999995566905,
+      "extra": {
+        "borrados": 100,
+        "incluye_reorganizacion": false
       }
     },
     {
       "technique": "archivo secuencial",
       "operation": "reorganización",
       "dataset_size": 100000,
-      "milliseconds": 194.46762499865144,
+      "milliseconds": 164.32708299544174,
       "extra": {
-        "desperdicio_previo": 0.072
+        "desperdicio_previo": 0.3,
+        "umbral": 0.3,
+        "registros": 75055
       }
     }
   ]

@@ -30,7 +30,13 @@ def extra_of(report: Report, technique: str, operation: str) -> dict:
 
 def test_the_storage_experiment_measures_both_files(tmp_path: Path):
     report = storage_benchmark.run([SIZE], QUERIES, SEED, PAGE_SIZE, tmp_path)
-    operations = ("inserción", "búsqueda por clave", "espacio en disco", "reorganización")
+    operations = (
+        "inserción",
+        "búsqueda por clave",
+        "borrado",
+        "espacio en disco",
+        "reorganización",
+    )
     assert measured(report) == {
         (technique, operation)
         for technique in (storage_benchmark.HEAP, storage_benchmark.SEQUENTIAL)
@@ -41,6 +47,15 @@ def test_the_storage_experiment_measures_both_files(tmp_path: Path):
     sequential_space = extra_of(report, storage_benchmark.SEQUENTIAL, "espacio en disco")["kib"]
     assert 0 < heap_space < sequential_space
     assert "nota" in extra_of(report, storage_benchmark.HEAP, "reorganización")
+    for technique in (storage_benchmark.HEAP, storage_benchmark.SEQUENTIAL):
+        assert extra_of(report, technique, "borrado")["borrados"] == QUERIES
+
+
+def test_the_reorganization_is_the_one_the_threshold_triggers(tmp_path: Path):
+    report = storage_benchmark.run([SIZE], QUERIES, SEED, PAGE_SIZE, tmp_path)
+    reorganization = extra_of(report, storage_benchmark.SEQUENTIAL, "reorganización")
+    assert 0 < reorganization["desperdicio_previo"] <= reorganization["umbral"]
+    assert 0 < reorganization["registros"] < SIZE - QUERIES
 
 
 def test_the_index_experiment_measures_the_three_structures(tmp_path: Path):

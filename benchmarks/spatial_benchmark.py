@@ -26,11 +26,9 @@ motor. Requiere `pip install -e ".[postgres]"`.
 from __future__ import annotations
 
 import argparse
-import os
 import random
 import shutil
 import tempfile
-import tracemalloc
 from collections import deque
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
@@ -39,10 +37,14 @@ from pathlib import Path
 from typing import Any
 
 from benchmarks.common import (
-    BYTES_PER_KIB,
+    POSTGRES_DSN_VARIABLE,
     Report,
+    add_postgres_argument,
+    connect_postgres,
     directory_size,
     integer_of,
+    peak_memory_kib,
+    relation_kib,
     results_directory,
     time_it,
 )
@@ -61,7 +63,6 @@ DEFAULT_QUERIES = 100
 DEFAULT_SEED = 20261004
 DEFAULT_RADII_KM = (1.0, 5.0, 10.0)
 DEFAULT_NEIGHBOURS = (10, 50, 100)
-POSTGRES_DSN_VARIABLE = "BENCH_POSTGRES_DSN"
 
 SEQUENTIAL = "búsqueda secuencial"
 RTREE = "R-Tree"
@@ -358,17 +359,14 @@ def _measure_queries(
 def _measure_memory(
     report: Report, technique: str, engine: Engine, workload: Workload, asked: list[Query]
 ) -> None:
-    """Pico de memoria de Python al responder unas pocas consultas de cada tipo.
+    """Pico de memoria de Python al responder unas pocas consultas de cada tipo."""
 
-    Va aparte de los tiempos porque `tracemalloc` frena la ejecución varias veces.
-    """
-    tracemalloc.start()
-    for query in asked:
-        for center in workload.centers[:MEMORY_SAMPLE_QUERIES]:
-            engine.execute(query.engine_sql(center))
-    _, peak = tracemalloc.get_traced_memory()
-    tracemalloc.stop()
-    report.add(technique, PEAK_MEMORY, workload.size, 0.0, kib=round(peak / BYTES_PER_KIB, 1))
+    def answer_sample() -> None:
+        for query in asked:
+            for center in workload.centers[:MEMORY_SAMPLE_QUERIES]:
+                engine.execute(query.engine_sql(center))
+
+    report.add(technique, PEAK_MEMORY, workload.size, 0.0, kib=peak_memory_kib(answer_sample))
 
 
 def _require_same_answers(asked: list[Query], expected: Answers, found: Answers) -> None:
@@ -439,10 +437,8 @@ def _measure_insertion_build(report: Report, workload: Workload, config: EngineC
 def _measure_postgres(
     report: Report, workload: Workload, asked: list[Query], dsn: str, expected: Answers
 ) -> None:
-    import psycopg
-
     size = workload.size
-    with psycopg.connect(dsn, autocommit=True) as connection, connection.cursor() as cursor:
+    with connect_postgres(dsn) as connection, connection.cursor() as cursor:
         cursor.execute("CREATE EXTENSION IF NOT EXISTS postgis")
         cursor.execute(f"CREATE TEMP TABLE {TABLE} (id integer, ubicacion geography(Point, 4326))")
         with cursor.copy(f"COPY {TABLE} (id, ubicacion) FROM STDIN") as copy:
@@ -455,15 +451,13 @@ def _measure_postgres(
         cursor.execute("SET enable_seqscan = off")
         for query in asked:
             _measure_postgres_query(report, cursor, workload, query, expected[query.operation])
-        cursor.execute("SELECT pg_relation_size(%s), pg_relation_size(%s)", (INDEX, TABLE))
-        index_bytes, table_bytes = cursor.fetchone()
         report.add(
             GIST,
             INDEX_SPACE,
             size,
             0.0,
-            kib=round(index_bytes / BYTES_PER_KIB, 1),
-            tabla_kib=round(table_bytes / BYTES_PER_KIB, 1),
+            kib=relation_kib(cursor, INDEX),
+            tabla_kib=relation_kib(cursor, TABLE),
         )
 
 
@@ -509,11 +503,7 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
     parser.add_argument("--radii-km", type=float, nargs="+", default=list(DEFAULT_RADII_KM))
     parser.add_argument("--neighbours", type=int, nargs="+", default=list(DEFAULT_NEIGHBOURS))
-    parser.add_argument(
-        "--postgres-dsn",
-        default=os.environ.get(POSTGRES_DSN_VARIABLE),
-        help=f"conexión a PostgreSQL con PostGIS (por omisión, ${POSTGRES_DSN_VARIABLE})",
-    )
+    add_postgres_argument(parser)
     parser.add_argument(
         "--points-file",
         type=Path,

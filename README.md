@@ -219,6 +219,13 @@ puntos de interés del Perú, de OpenStreetMap— hay un guion que los descarga 
 que carga el gestor:
 
 ```bash
+.venv/bin/python demos/descargar_lugares.py --salida data/datasets/lugares_peru.csv
+```
+
+Es el archivo que usa el experimento espacial. Con `--recuadro` se queda solo con los que
+caen en un rectángulo; para Lima, unos 26 600:
+
+```bash
 .venv/bin/python demos/descargar_lugares.py --salida data/datasets/lugares_lima.csv \
     --recuadro -12.52 -77.20 -11.57 -76.62
 ```
@@ -248,7 +255,7 @@ silencio en cualquier otra.
 ```bash
 .venv/bin/ruff check                          # estilo
 .venv/bin/mypy                                # tipos, en modo estricto
-.venv/bin/python -m pytest -q                 # 1315 tests
+.venv/bin/python -m pytest -q                 # 1566 tests
 npm --prefix frontend run build               # tipos y bundle de la interfaz
 ```
 
@@ -279,7 +286,7 @@ BENCH_POSTGRES_DSN="dbname=minigestor_bench" .venv/bin/python -m benchmarks.spat
 Los resultados medidos y sus gráficas están versionados en
 [`benchmarks/results/`](benchmarks/results/) y [`benchmarks/figures/`](benchmarks/figures/).
 Una muestra, con 100 000 lugares reales de OpenStreetMap: encontrar los 10 más cercanos tarda
-**1 302 ms** recorriendo la tabla y **0.64 ms** con el R-Tree.
+**1 306 ms** recorriendo la tabla y **0.60 ms** con el R-Tree.
 
 ![Vecinos más cercanos: recorrido secuencial, R-Tree y GiST](benchmarks/figures/espacial-knn.png)
 
@@ -305,6 +312,17 @@ BEGIN TRANSACTION;  ...  END TRANSACTION;   -- o COMMIT / ROLLBACK
 Las fechas se escriben como texto ISO (`WHERE fecha >= '2025-01-01'`). Solo se comparan
 valores del mismo tipo: `WHERE id = 'abc'` se rechaza con un error que nombra la columna,
 en vez de devolver cero filas. Y una sentencia que falla a mitad no deja nada escrito.
+
+Una consulta devuelve las mismas filas con índice que sin él. Lo único que puede cambiar
+con el camino de acceso es un error que depende de los datos de una fila, como
+`WHERE v / 0 > 1 AND id = 99`: el índice descarta las filas antes de evaluar la división.
+SQL no fija el orden en que se evalúan las condiciones, y PostgreSQL hace lo mismo
+([`src/query/README.md`](src/query/README.md#tipos-en-las-condiciones-comparisonpy)).
+
+Dentro de una transacción solo van sentencias sobre filas: un `CREATE` o un `DROP` se
+rechaza y la transacción sigue abierta. `COMMIT` baja a disco lo que la transacción cambió
+antes de soltar sus bloqueos, pero no hay recuperación tras una caída: el registro de
+deshacer vive en memoria ([`src/txn/README.md`](src/txn/README.md#decisiones-de-alcance)).
 
 ### SQL espacial
 

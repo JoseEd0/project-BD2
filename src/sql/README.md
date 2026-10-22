@@ -22,6 +22,11 @@ El parser acepta el núcleo relacional de la Parte 1 y las extensiones espacial,
 multimedia de las Partes 2 a 4. **No valida nombres ni tipos contra el catálogo**: eso lo
 hace el motor al construir el plan, antes de leer ninguna fila.
 
+La sintaxis de texto y multimedia (`MATCH`, `SCORE()`, `SIMILAR_TO`, `SIMILARITY_SCORE()`,
+`USING TF_IDF | BM25 | HNSW | IVF`, los índices `INVERTED`, `IVF` y `HNSW`) hoy **solo se
+analiza**: el motor la rechaza con un error que lo dice, antes de leer ninguna fila, hasta
+que las Partes 3 y 4 traigan sus estructuras.
+
 ```bash
 .venv/bin/python -m pytest tests/sql -q
 ```

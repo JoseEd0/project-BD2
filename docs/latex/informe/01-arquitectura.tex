@@ -43,8 +43,9 @@ Hay cuatro decisiones de diseño que se aplican en todo el código:
 
 \begin{itemize}[nosep, leftmargin=*]
   \item \emph{Acceso por páginas.} Todas las estructuras leen y escriben páginas de
-        4\,096 bytes a través del mismo paginador, que tiene un buffer pool LRU de 128
-        páginas. Ningún archivo se carga completo en memoria.
+        4\,096 bytes a través del mismo paginador. Todos los archivos abiertos comparten un
+        solo buffer pool LRU de 2\,048 páginas (8~MiB). Ningún archivo se carga completo en
+        memoria.
   \item \emph{Registros de tamaño fijo.} Así la posición de un registro dentro de su página
         se calcula directamente, y la capacidad de cada nodo sale de dividir el tamaño de
         la página entre el de una entrada.

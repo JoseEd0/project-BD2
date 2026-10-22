@@ -13,11 +13,13 @@ Reglas de compatibilidad:
 Cuando una transacción tendría que esperar, antes se busca un ciclo en el **grafo de
 espera**. Si lo hay, esperar sería esperar para siempre, así que se aborta a quien lo cerró.
 
-Un pedido compartido nuevo espera además detrás de los exclusivos que llegaron antes que él
-al mismo recurso. Sin esa regla, mientras quede algún lector, un escritor nunca entra: los
-lectores que llegan se suman a los que ya están, y el escritor espera hasta agotar su plazo
-(*inanición del escritor*). Pasar de compartido a exclusivo no hace cola: quien ya tiene el
-recurso no espera detrás de quien todavía no lo tiene.
+Un pedido nuevo espera además detrás de los que llegaron antes que él al mismo recurso y no
+son compatibles con él: un compartido, detrás de los exclusivos; un exclusivo, detrás de
+todos. Sin esa cola, mientras quede algún lector un escritor nunca entra, porque los
+lectores que llegan se suman a los que ya están (*inanición del escritor*), y un lector o
+escritor que espera puede ver pasar por delante a los que llegan después. Pasar de
+compartido a exclusivo no hace cola: quien ya tiene el recurso no espera detrás de quien
+todavía no lo tiene.
 """
 
 from __future__ import annotations
@@ -86,8 +88,10 @@ class LockManager:
             self._waiting[transaction] = _Request(resource, mode, next(self._turns))
             try:
                 self._wait_until_free(transaction, resource, mode)
-            finally:
-                self._waiting.pop(transaction, None)
+            except LockError:
+                self._leave_queue(transaction)
+                raise
+            self._waiting.pop(transaction, None)
             self._holders.setdefault(resource, {})[transaction] = self._merged_mode(
                 transaction, resource, mode
             )
@@ -102,6 +106,12 @@ class LockManager:
             }
             self._waiting.pop(transaction, None)
             self._condition.notify_all()
+
+    def _leave_queue(self, transaction: TransactionId) -> None:
+        """Quien se rinde puede ser el turno por el que esperaban los que llegaron después;
+        si no se les avisa, siguen dormidos hasta agotar su propio plazo."""
+        self._waiting.pop(transaction, None)
+        self._condition.notify_all()
 
     def holders_of(self, resource: Resource) -> dict[TransactionId, LockMode]:
         with self._condition:
@@ -161,7 +171,7 @@ class LockManager:
 
     def _blockers_of(self, transaction: TransactionId) -> list[TransactionId]:
         """Las transacciones por las que espera esta: las que tienen el recurso en un modo
-        incompatible y, si pide compartido sin tener nada, los exclusivos que llegaron antes.
+        incompatible y, si no tiene nada de él, las incompatibles que llegaron antes.
 
         Son las aristas del grafo de espera, así que tienen que ser exactas: una de más
         abortaría a una transacción que no estaba en ningún ciclo.
@@ -173,21 +183,22 @@ class LockManager:
         blockers = [
             holder
             for holder, held in holders.items()
-            if holder != transaction
-            and (request.mode is LockMode.EXCLUSIVE or held is LockMode.EXCLUSIVE)
+            if holder != transaction and _conflict(request.mode, held)
         ]
-        if request.mode is LockMode.SHARED and transaction not in holders:
-            blockers.extend(self._exclusive_queue_before(request, transaction))
+        if transaction not in holders:
+            blockers.extend(self._queue_before(request, transaction))
         return blockers
 
-    def _exclusive_queue_before(
-        self, request: _Request, transaction: TransactionId
-    ) -> list[TransactionId]:
+    def _queue_before(self, request: _Request, transaction: TransactionId) -> list[TransactionId]:
         return [
             other
             for other, waiting in self._waiting.items()
             if other != transaction
             and waiting.resource == request.resource
-            and waiting.mode is LockMode.EXCLUSIVE
             and waiting.turn < request.turn
+            and _conflict(request.mode, waiting.mode)
         ]
+
+
+def _conflict(requested: LockMode, other: LockMode) -> bool:
+    return requested is LockMode.EXCLUSIVE or other is LockMode.EXCLUSIVE

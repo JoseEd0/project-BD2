@@ -216,3 +216,57 @@ def test_upgrading_a_shared_lock_does_not_queue_behind_new_readers(locks: LockMa
     locks.acquire(FIRST, TABLE, LockMode.SHARED)
     locks.acquire(FIRST, TABLE, LockMode.EXCLUSIVE)
     assert locks.holders_of(TABLE) == {FIRST: LockMode.EXCLUSIVE}
+
+
+def test_a_new_writer_waits_behind_a_reader_that_arrived_first(locks: LockManager):
+    """El escritor llega justo cuando el recurso se suelta, antes de que el lector que ya
+    esperaba alcance a despertar. Sin cola para los exclusivos se le adelantaría, y una
+    corriente de escritores dejaría al lector sin entrar nunca."""
+    order: list[int] = []
+    locks.acquire(FIRST, TABLE, LockMode.EXCLUSIVE)
+
+    def read() -> None:
+        locks.acquire(SECOND, TABLE, LockMode.SHARED)
+        order.append(SECOND)
+        locks.release_all(SECOND)
+
+    reader = threading.Thread(target=read)
+    reader.start()
+    reader_queued = eventually(lambda: SECOND in locks._waiting)
+    locks.release_all(FIRST)
+    locks.acquire(THIRD, TABLE, LockMode.EXCLUSIVE)
+    order.append(THIRD)
+    locks.release_all(THIRD)
+    reader.join()
+    assert reader_queued
+    assert order == [SECOND, THIRD]
+
+
+def test_a_waiter_that_gives_up_wakes_the_ones_queued_behind_it(quick_config: EngineConfig):
+    """El lector espera solo por el turno del escritor; cuando este se rinde, el lector
+    entra en ese momento y no al agotar su propio plazo."""
+    timeout = 0.6
+    impatient = LockManager(
+        EngineConfig(lock_timeout_seconds=timeout, data_directory=quick_config.data_directory)
+    )
+    impatient.acquire(FIRST, TABLE, LockMode.SHARED)
+    waited: list[float] = []
+
+    def give_up() -> None:
+        with pytest.raises(LockTimeoutError):
+            impatient.acquire(SECOND, TABLE, LockMode.EXCLUSIVE)
+
+    def read() -> None:
+        started = time.monotonic()
+        impatient.acquire(THIRD, TABLE, LockMode.SHARED)
+        waited.append(time.monotonic() - started)
+
+    writer = threading.Thread(target=give_up)
+    reader = threading.Thread(target=read)
+    writer.start()
+    assert eventually(lambda: SECOND in impatient._waiting)
+    threading.Event().wait(timeout / 2)
+    reader.start()
+    writer.join()
+    reader.join()
+    assert waited and waited[0] < timeout * 0.75

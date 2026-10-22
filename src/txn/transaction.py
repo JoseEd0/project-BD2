@@ -13,7 +13,6 @@ Confirmar es tirar esa lista; abortar es recorrerla al revés aplicando el cambi
 from __future__ import annotations
 
 import itertools
-from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import Enum, unique
 
@@ -85,12 +84,13 @@ class Transaction:
 
 
 def undo(transaction: Transaction, tables: dict[str, Table]) -> int:
-    """Aplica los cambios inversos en orden inverso. Devuelve cuántos deshizo.
+    """Aplica los cambios inversos en orden inverso y vacía el registro. Devuelve cuántos
+    deshizo.
 
     Raises:
         TransactionError: si falta alguna de las tablas afectadas.
     """
-    return _revert_all(transaction.changes, tables)
+    return _revert_down_to(transaction, tables, first_change=0)
 
 
 def undo_statement(transaction: Transaction, tables: dict[str, Table], first_change: int) -> int:
@@ -103,18 +103,20 @@ def undo_statement(transaction: Transaction, tables: dict[str, Table], first_cha
     Raises:
         TransactionError: si falta alguna de las tablas afectadas.
     """
-    undone = _revert_all(transaction.changes[first_change:], tables)
-    del transaction.changes[first_change:]
-    return undone
+    return _revert_down_to(transaction, tables, first_change)
 
 
-def _revert_all(changes: Sequence[Change], tables: dict[str, Table]) -> int:
+def _revert_down_to(transaction: Transaction, tables: dict[str, Table], first_change: int) -> int:
+    """Cada cambio sale del registro en cuanto se revierte: si un deshacer falla a mitad,
+    el que venga después no vuelve a revertir lo que ya se revirtió."""
     undone = 0
-    for change in reversed(changes):
+    while len(transaction.changes) > first_change:
+        change = transaction.changes[-1]
         table = tables.get(change.table.lower())
         if table is None:
             raise TransactionError(f"no se puede deshacer: falta la tabla '{change.table}'")
         undone += int(_revert(change, table))
+        transaction.changes.pop()
     return undone
 
 

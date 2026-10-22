@@ -3,6 +3,7 @@
 import pytest
 
 from query.engine import Engine
+from query.table import Table
 from txn.transaction import (
     Transaction,
     TransactionError,
@@ -71,6 +72,33 @@ def test_only_the_changes_of_one_statement_can_be_undone(cuentas: Engine):
     assert undo_statement(transaction, {"cuentas": cuentas.table("cuentas")}, kept) == 1
     assert len(transaction.changes) == kept
     assert rows(cuentas) == ((1, 0), (2, 50))
+
+
+def test_an_undo_that_fails_halfway_keeps_only_what_it_did_not_revert(
+    cuentas: Engine, monkeypatch: pytest.MonkeyPatch
+):
+    """El aborto que sigue a un deshacer roto no puede volver a insertar lo ya restaurado."""
+    transaction = Transaction(identifier=1)
+    cuentas.execute("DELETE FROM cuentas", journal=transaction)
+    table = cuentas.table("cuentas")
+    original_insert = Table.insert
+    calls = 0
+
+    def insert_failing_the_second_time(self: Table, values: tuple) -> object:
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise OSError("fallo de escritura al deshacer")
+        return original_insert(self, values)
+
+    monkeypatch.setattr(Table, "insert", insert_failing_the_second_time)
+    with pytest.raises(OSError):
+        undo_statement(transaction, {"cuentas": table}, first_change=0)
+    assert len(transaction.changes) == 1
+    monkeypatch.setattr(Table, "insert", original_insert)
+    assert undo(transaction, {"cuentas": table}) == 1
+    assert rows(cuentas) == ((1, 100), (2, 50))
+    assert transaction.changes == []
 
 
 def test_undoing_needs_every_table_it_touched(cuentas: Engine):

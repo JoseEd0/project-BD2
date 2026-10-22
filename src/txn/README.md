@@ -55,15 +55,22 @@ vea a medias lo que esta está cambiando.
 
 ### Nadie se queda esperando para siempre
 
-Un pedido compartido nuevo **hace cola detrás de los exclusivos que llegaron antes** al
-mismo recurso, aunque sea compatible con los compartidos que ya están concedidos. Sin esa
-regla, mientras quede algún lector, un escritor no entra nunca: los lectores nuevos se
-suman a los que ya leen y el escritor espera hasta agotar su plazo. Es la *inanición del
-escritor*, y la demo la sacó a la luz: con cuatro hilos que leen y escriben el mismo saldo
-dentro de transacciones, tres morían por espera agotada y se perdían descuentos. Ascender
-de compartido a exclusivo no hace cola: quien ya tiene el recurso no espera detrás de
-quien todavía no lo tiene. Esas esperas nuevas también son aristas del grafo de espera,
-así que un ciclo que pase por ellas se detecta igual.
+Todo pedido nuevo **hace cola detrás de los incompatibles que llegaron antes** al mismo
+recurso: un compartido, detrás de los exclusivos que esperan, aunque sea compatible con
+los compartidos ya concedidos; un exclusivo, detrás de todos los que esperan. Sin la
+primera regla, mientras quede algún lector un escritor no entra nunca: los lectores nuevos
+se suman a los que ya leen y el escritor espera hasta agotar su plazo. Es la *inanición
+del escritor*, y la demo la sacó a la luz: con cuatro hilos que leen y escriben el mismo
+saldo dentro de transacciones, tres morían por espera agotada y se perdían descuentos. Sin
+la segunda, una corriente de sentencias en autocommit que escriben se adelanta una y otra
+vez a quien ya esperaba, sea lector o escritor. Ascender de compartido a exclusivo no hace
+cola: quien ya tiene el recurso no espera detrás de quien todavía no lo tiene. Esas
+esperas también son aristas del grafo de espera, así que un ciclo que pase por ellas se
+detecta igual.
+
+Quien deja de esperar por plazo agotado o por interbloqueo avisa a los demás al salir de
+la cola: los que esperaban detrás de su turno pueden entrar en ese momento, sin consumir
+su propio plazo.
 
 ### Interbloqueos
 
@@ -156,7 +163,9 @@ mismo plazo de espera que los bloqueos de tabla.
   El registro guarda filas, no archivos, así que un ROLLBACK no podría devolver una tabla
   borrada.
 - **Terminar una transacción siempre suelta sus bloqueos**, aunque el deshacer falle; si
-  falla el deshacer de una sola sentencia, se aborta la transacción entera.
+  falla el deshacer de una sola sentencia, se aborta la transacción entera. Cada cambio
+  sale del registro en cuanto se revierte, así que ese aborto no vuelve a revertir lo que
+  la sentencia ya había deshecho.
 - **Deshacer busca cada fila por su clave primaria**, que es una búsqueda por índice: un
   ROLLBACK de `m` cambios cuesta `m` búsquedas y no `m` recorridos. Solo una tabla sin
   clave primaria recorre el heap para encontrar la fila.
@@ -171,8 +180,9 @@ mismo plazo de espera que los bloqueos de tabla.
 ```
 
 Los tests cubren: compatibilidad de modos, ascenso de S a X, espera real entre hilos,
-tiempo de espera agotado, **detección de ciclo**, autocommit, deshacer de `INSERT`,
+tiempo de espera agotado, cola de llegada para lectores y escritores, aviso de quien se
+rinde, **detección de ciclo**, autocommit, deshacer de `INSERT`,
 `DELETE`, `UPDATE` y de varios cambios en orden inverso, deshacer de una sentencia que
-falla a mitad, de un cambio de clave primaria y de filas con fechas y puntos, liberación
+falla a mitad, un deshacer que se rompe a mitad sin revertir dos veces, de un cambio de clave primaria y de filas con fechas y puntos, liberación
 de bloqueos al confirmar, y dos escenarios con hilos: transferencias concurrentes que conservan el total y
 un interbloqueo del que exactamente una de las dos transacciones sale abortada.

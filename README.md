@@ -232,10 +232,16 @@ están en [`.env.example`](.env.example); las de la interfaz, en
 | Variable | Para qué | Por defecto |
 |---|---|---|
 | `MINIGESTOR_DATA_DIR` | dónde viven los archivos del gestor | `data` |
-| `MINIGESTOR_CORS_ORIGINS` | orígenes a los que el API permite llamar | `http://localhost:5173` |
+| `MINIGESTOR_IMPORT_DIRS` | otros directorios de los que `FROM FILE` puede leer | ninguno |
+| `MINIGESTOR_CORS_ORIGINS` | orígenes desde los que llama la interfaz | **obligatoria** |
 | `MINIGESTOR_LOCK_TIMEOUT` | segundos que una transacción espera un bloqueo | `5` |
-| `VITE_API_URL` | dirección del API que usa la interfaz | `http://localhost:8000` |
+| `VITE_API_URL` | dirección del API que usa la interfaz | **obligatoria** |
 | `BENCH_POSTGRES_DSN` | conexión al PostgreSQL contra el que se mide GiST | — |
+
+Las dos obligatorias no tienen un valor por omisión a propósito: sin `MINIGESTOR_CORS_ORIGINS`
+el API no arranca y dice por qué; sin `VITE_API_URL` la interfaz lo avisa en el panel de
+resultados. Un `localhost` escrito en el código funcionaría en una máquina y fallaría en
+silencio en cualquier otra.
 
 ### 3.6 Comprobar la instalación
 

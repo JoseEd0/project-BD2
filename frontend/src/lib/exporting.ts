@@ -1,5 +1,5 @@
 import type { CellValue } from "../types";
-import { cellText } from "./points";
+import { cellText } from "./cells";
 
 const SEPARATOR = ",";
 const NEWLINE = "\n";

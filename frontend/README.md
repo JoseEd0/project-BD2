@@ -120,13 +120,27 @@ imponga. Al pie se listan todas.
 ```bash
 cd frontend
 npm install
-cp .env.example .env      # ajusta VITE_API_URL si el API no está en el puerto 8000;
+cp .env.example .env      # VITE_API_URL es obligatoria: la dirección del API;
                           # las teselas del mapa también se configuran ahí
 npm run dev               # http://localhost:5173
 ```
 
 El API tiene que estar en marcha (ver [`src/api/README.md`](../src/api/README.md)). La URL
-**no está incrustada en el código**: sale de `VITE_API_URL`.
+**no está incrustada en el código**: sale de `VITE_API_URL`, y si falta la interfaz lo dice en
+el panel de resultados en vez de llamar a un `localhost` que quizás no existe.
+
+Lo que la interfaz cuida además:
+
+- **Sesión**: cada pestaña tiene un identificador aleatorio (`crypto.randomUUID`) y la cierra
+  con `sendBeacon` al irse, que es la única petición que el navegador garantiza enviar
+  mientras descarga la página.
+- **Transacciones**: si un error del motor aborta la transacción —un interbloqueo, una espera
+  agotada—, el indicador «Transacción abierta» se apaga, porque el error lo dice.
+- **Resultados grandes**: el API envía como mucho 10 000 filas; la tabla avisa «Mostrando N
+  de M filas» cuando hay más.
+- **Accesibilidad**: los diálogos son modales de verdad (`aria-modal`, se cierran con Escape
+  y devuelven el foco), los botones ✕ tienen nombre y los divisores entre paneles se mueven
+  también con las flechas del teclado.
 
 ```bash
 npm run build     # comprobación de tipos + bundle de producción en dist/

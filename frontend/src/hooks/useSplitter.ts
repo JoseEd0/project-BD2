@@ -2,13 +2,26 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 type Axis = "x" | "y";
 
+/** Píxeles que mueve el divisor cada pulsación de una flecha del teclado. */
+const KEYBOARD_STEP = 24;
+const GROW_KEYS: Record<Axis, string> = { x: "ArrowRight", y: "ArrowDown" };
+const SHRINK_KEYS: Record<Axis, string> = { x: "ArrowLeft", y: "ArrowUp" };
+
+/** Cuánto crece el panel con esa tecla: hacia la derecha o abajo, crece; al revés, encoge. */
+function keyboardStep(key: string, axis: Axis): number {
+  if (key === GROW_KEYS[axis]) return KEYBOARD_STEP;
+  if (key === SHRINK_KEYS[axis]) return -KEYBOARD_STEP;
+  return 0;
+}
+
 interface Splitter {
   size: number;
   dragging: boolean;
-  onPointerDown: (event: React.PointerEvent) => void;
+  /** Lo que lleva el elemento divisor: se arrastra con el ratón o se mueve con las flechas. */
+  separator: React.HTMLAttributes<HTMLDivElement>;
 }
 
-/** Divisor arrastrable entre dos paneles, con el tamaño acotado por `min` y `max`. */
+/** Divisor entre dos paneles, con el tamaño acotado por `min` y `max`. */
 export function useSplitter(initial: number, min: number, max: number, axis: Axis): Splitter {
   const [size, setSize] = useState(initial);
   const [dragging, setDragging] = useState(false);
@@ -24,6 +37,18 @@ export function useSplitter(initial: number, min: number, max: number, axis: Axi
       setDragging(true);
     },
     [axis, size],
+  );
+
+  const onKeyDown = useCallback(
+    (event: React.KeyboardEvent) => {
+      const step = keyboardStep(event.key, axis);
+      if (step === 0) {
+        return;
+      }
+      event.preventDefault();
+      setSize((current) => Math.min(max, Math.max(min, current + step)));
+    },
+    [axis, max, min],
   );
 
   useEffect(() => {
@@ -48,5 +73,18 @@ export function useSplitter(initial: number, min: number, max: number, axis: Axi
     };
   }, [axis, dragging, max, min]);
 
-  return { size, dragging, onPointerDown };
+  return {
+    size,
+    dragging,
+    separator: {
+      role: "separator",
+      tabIndex: 0,
+      "aria-orientation": axis === "x" ? "vertical" : "horizontal",
+      "aria-valuemin": min,
+      "aria-valuemax": max,
+      "aria-valuenow": size,
+      onPointerDown,
+      onKeyDown,
+    },
+  };
 }

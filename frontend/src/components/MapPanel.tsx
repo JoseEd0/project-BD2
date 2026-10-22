@@ -6,7 +6,8 @@ import { fetchStructure, fetchTablePoints } from "../api";
 import { useLeafletMap } from "../hooks/useLeafletMap";
 import type { Theme } from "../hooks/useTheme";
 import { isIndexedWith } from "../lib/columns";
-import { formatPoint, isGeoPoint } from "../lib/points";
+import { displayCell } from "../lib/cells";
+import { formatPoint } from "../lib/points";
 import { euclideanRing, locatedRows, overlayLabel } from "../lib/spatial";
 import type { LocatedRow } from "../lib/spatial";
 import type {
@@ -25,6 +26,7 @@ interface MapPanelProps {
   spatial: SpatialInfo;
   tables: TableInfo[];
   theme: Theme;
+  sessionId: string;
 }
 
 /** Puntos del resultado que se resaltan como mucho; más allá el mapa deja de ser legible. */
@@ -41,6 +43,14 @@ const PIN_SHAPE = '<span class="map-pin__shape"></span>';
 const CONTEXT_RADIUS = 2.5;
 const RESULT_RADIUS = 5.5;
 const SPATIAL_INDEX = "RTREE";
+/** Trazo de cada capa: las figuras de la consulta apenas tiñen el fondo, los puntos de la
+ * tabla quedan tenues y los del resultado, casi opacos para que destaquen. */
+const FIGURE_WEIGHT = 2;
+const FIGURE_FILL_OPACITY = 0.07;
+const BOX_WEIGHT = 1;
+const CONTEXT_FILL_OPACITY = 0.55;
+const RESULT_EDGE_WEIGHT = 1.5;
+const RESULT_FILL_OPACITY = 0.95;
 
 /** Qué se encuadró por última vez y en qué mapa, para no reencuadrar al cambiar de tema. */
 interface Framing {
@@ -72,11 +82,6 @@ function latLng(point: GeoPoint): L.LatLngTuple {
   return [point.lat, point.lon];
 }
 
-function cellLabel(value: CellValue): string {
-  if (value === null) return "NULL";
-  return isGeoPoint(value) ? formatPoint(value) : String(value);
-}
-
 /** Ficha de una fila. Se arma con nodos, no con HTML: los valores vienen de los datos. */
 function popupFor(columns: string[], row: CellValue[]): HTMLElement {
   const list = document.createElement("dl");
@@ -85,7 +90,7 @@ function popupFor(columns: string[], row: CellValue[]): HTMLElement {
     const term = document.createElement("dt");
     term.textContent = column;
     const detail = document.createElement("dd");
-    detail.textContent = cellLabel(row[index]);
+    detail.textContent = displayCell(row[index]);
     list.append(term, detail);
   });
   return list;
@@ -94,8 +99,8 @@ function popupFor(columns: string[], row: CellValue[]): HTMLElement {
 function figureLayers(overlay: Overlay, palette: Palette): L.Layer[] {
   const outline: L.PathOptions = {
     color: palette.figure,
-    weight: 2,
-    fillOpacity: 0.07,
+    weight: FIGURE_WEIGHT,
+    fillOpacity: FIGURE_FILL_OPACITY,
     interactive: false,
   };
   if (overlay.kind === "polygon") {
@@ -129,7 +134,7 @@ function boxLayers(tree: RTreeStructure, palette: Palette): L.Layer[] {
               [node.bounds[0], node.bounds[1]],
               [node.bounds[2], node.bounds[3]],
             ],
-            { color: palette.boxes, weight: 1, fill: false, interactive: false },
+            { color: palette.boxes, weight: BOX_WEIGHT, fill: false, interactive: false },
           ),
         ],
   );
@@ -141,7 +146,7 @@ function contextLayers(context: TablePoints, palette: Palette): L.Layer[] {
       radius: CONTEXT_RADIUS,
       stroke: false,
       fillColor: palette.context,
-      fillOpacity: 0.55,
+      fillOpacity: CONTEXT_FILL_OPACITY,
       interactive: false,
     }),
   );
@@ -152,14 +157,13 @@ function resultLayers(located: LocatedRow[], columns: string[], palette: Palette
     L.circleMarker(latLng(point), {
       radius: RESULT_RADIUS,
       color: palette.resultEdge,
-      weight: 1.5,
+      weight: RESULT_EDGE_WEIGHT,
       fillColor: palette.result,
-      fillOpacity: 0.95,
+      fillOpacity: RESULT_FILL_OPACITY,
     }).bindPopup(() => popupFor(columns, row)),
   );
 }
 
-/** Puntos de la tabla consultada, para que el resultado se vea sobre el total. */
 /** Alto que la leyenda tapa desde el borde inferior del mapa: el encuadre lo deja libre. */
 function legendClearance(legend: HTMLElement | null): number {
   const frame = legend?.offsetParent;
@@ -169,22 +173,32 @@ function legendClearance(legend: HTMLElement | null): number {
   return Math.min(frame.clientHeight - legend.offsetTop, frame.clientHeight * MAX_LEGEND_SHARE);
 }
 
-function useTablePoints(spatial: SpatialInfo, rowCount: number): TablePoints | null {
+/** Puntos de la tabla consultada, para que el resultado se vea sobre el total. */
+function useTablePoints(
+  spatial: SpatialInfo,
+  rowCount: number,
+  sessionId: string,
+): TablePoints | null {
   const [points, setPoints] = useState<TablePoints | null>(null);
   useEffect(() => {
     let current = true;
-    fetchTablePoints(spatial.table, spatial.column)
+    fetchTablePoints(spatial.table, spatial.column, sessionId)
       .then((loaded) => current && setPoints(loaded))
       .catch(() => current && setPoints(null));
     return () => {
       current = false;
     };
-  }, [spatial.table, spatial.column, rowCount]);
+  }, [spatial.table, spatial.column, rowCount, sessionId]);
   return points;
 }
 
 /** Estructura del R-Tree de la columna, solo mientras se pide ver sus MBR. */
-function useSpatialTree(spatial: SpatialInfo, wanted: boolean, rowCount: number): RTreeStructure | null {
+function useSpatialTree(
+  spatial: SpatialInfo,
+  wanted: boolean,
+  rowCount: number,
+  sessionId: string,
+): RTreeStructure | null {
   const [tree, setTree] = useState<RTreeStructure | null>(null);
   useEffect(() => {
     if (!wanted) {
@@ -192,7 +206,7 @@ function useSpatialTree(spatial: SpatialInfo, wanted: boolean, rowCount: number)
       return;
     }
     let current = true;
-    fetchStructure(spatial.table)
+    fetchStructure(spatial.table, sessionId)
       .then((structure) => {
         const index = structure.indexes.find((item) => item.column === spatial.column);
         if (current && index?.structure.kind === "rtree") {
@@ -203,11 +217,11 @@ function useSpatialTree(spatial: SpatialInfo, wanted: boolean, rowCount: number)
     return () => {
       current = false;
     };
-  }, [spatial.table, spatial.column, wanted, rowCount]);
+  }, [spatial.table, spatial.column, wanted, rowCount, sessionId]);
   return tree;
 }
 
-export default function MapPanel({ result, spatial, tables, theme }: MapPanelProps) {
+export default function MapPanel({ result, spatial, tables, theme, sessionId }: MapPanelProps) {
   const container = useRef<HTMLDivElement>(null);
   const legend = useRef<HTMLDivElement>(null);
   const map = useLeafletMap(container);
@@ -221,8 +235,8 @@ export default function MapPanel({ result, spatial, tables, theme }: MapPanelPro
     SPATIAL_INDEX,
   );
 
-  const context = useTablePoints(spatial, rowCount);
-  const tree = useSpatialTree(spatial, showBoxes && indexed, rowCount);
+  const context = useTablePoints(spatial, rowCount, sessionId);
+  const tree = useSpatialTree(spatial, showBoxes && indexed, rowCount, sessionId);
   const located = useMemo(() => locatedRows(result.rows), [result.rows]);
   const highlighted = useMemo(() => located.slice(0, MAX_HIGHLIGHTED), [located]);
 

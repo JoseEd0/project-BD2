@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import { ApiError, fetchStructure } from "../api";
 import { averageFill } from "../lib/spatial";
+import Modal from "./Modal";
 import type {
   Bounds,
   HashStructure,
@@ -16,6 +17,7 @@ import type {
 
 interface StructureDialogProps {
   table: TableInfo;
+  sessionId: string;
   onClose: () => void;
 }
 
@@ -239,31 +241,20 @@ function FileView({ storage }: { storage: HeapStorage | SequentialStorage }) {
   );
 }
 
-export default function StructureDialog({ table, onClose }: StructureDialogProps) {
+export default function StructureDialog({ table, sessionId, onClose }: StructureDialogProps) {
   const [structure, setStructure] = useState<TableStructure | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchStructure(table.name)
+    fetchStructure(table.name, sessionId)
       .then(setStructure)
       .catch((reason: unknown) =>
         setError(reason instanceof ApiError ? reason.failure.error : "No se pudo leer la estructura"),
       );
-  }, [table.name]);
+  }, [table.name, sessionId]);
 
   return (
-    <div className="modal" onClick={onClose} role="presentation">
-      <div
-        className="modal__panel modal__panel--wide"
-        onClick={(event) => event.stopPropagation()}
-        role="dialog"
-      >
-        <header className="modal__header">
-          <h2>Estructura física de «{table.name}»</h2>
-          <button className="icon-button" onClick={onClose} type="button">
-            ✕
-          </button>
-        </header>
+    <Modal onClose={onClose} title={`Estructura física de «${table.name}»`} width="wide">
         <div className="modal__body">
           {error !== null && <div className="notice notice--error">{error}</div>}
           {structure === null && error === null && <p className="modal__note">Leyendo páginas…</p>}
@@ -290,7 +281,6 @@ export default function StructureDialog({ table, onClose }: StructureDialogProps
             </>
           )}
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

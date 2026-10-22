@@ -195,8 +195,10 @@ code {
 }
 
 .splitter:hover,
+.splitter:focus-visible,
 .splitter.is-dragging {
   background: var(--accent);
+  outline: none;
 }
 
 /* ---------- cabecera ---------- */
@@ -363,6 +365,15 @@ code {
   text-align: center;
   color: var(--text-faint);
   font-size: 14px;
+}
+
+.panel__note {
+  margin: 0;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-size: 13px;
 }
 
 /* ---------- botones ---------- */

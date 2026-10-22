@@ -70,6 +70,8 @@ export interface QueryResponse {
   statements: StatementOutcome[];
   columns: string[];
   rows: CellValue[][];
+  /** Filas que devolvió la consulta; `rows` trae como mucho las que el API deja viajar. */
+  total_rows: number;
   plan: PlanInfo | null;
   message: string;
   affected_rows: number;
@@ -83,6 +85,8 @@ export interface QueryFailure {
   kind: string;
   line: number | null;
   column: number | null;
+  /** Cómo quedó la sesión tras el error; `null` si el error no pasó por una sesión. */
+  in_transaction: boolean | null;
 }
 
 export interface FileUpload {

@@ -1,4 +1,4 @@
-import { API_URL } from "./config";
+import { API_URL, MISSING_API_URL } from "./config";
 import type {
   FileUpload,
   QueryFailure,
@@ -18,35 +18,64 @@ export class ApiError extends Error {
   }
 }
 
-async function parseFailure(response: Response): Promise<never> {
+/** Cualquier error que el API no devolvió: el servidor está caído o no se configuró. */
+export class ConnectionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ConnectionError";
+  }
+}
+
+const CONNECTION_FAILED = "No se pudo contactar con el motor. ¿Está el API en marcha?";
+
+function apiUrl(path: string): string {
+  if (API_URL === undefined || API_URL.length === 0) {
+    throw new ConnectionError(MISSING_API_URL);
+  }
+  return `${API_URL}${path}`;
+}
+
+/** Una petición al API: su cuerpo JSON, o el error que el API explicó. */
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  let response: Response;
+  try {
+    response = await fetch(apiUrl(path), init);
+  } catch (error) {
+    throw error instanceof ConnectionError ? error : new ConnectionError(CONNECTION_FAILED);
+  }
+  if (!response.ok) {
+    throw new ApiError(await failureOf(response));
+  }
+  return (await response.json()) as T;
+}
+
+async function failureOf(response: Response): Promise<QueryFailure> {
   const body = await response.json().catch(() => null);
   const detail = body?.detail;
-  throw new ApiError({
+  return {
     error: detail?.error ?? `El servidor respondió ${response.status}`,
     kind: detail?.kind ?? "HttpError",
     line: detail?.line ?? null,
     column: detail?.column ?? null,
-  });
+    in_transaction: detail?.in_transaction ?? null,
+  };
 }
 
-export async function fetchTables(): Promise<TableInfo[]> {
-  const response = await fetch(`${API_URL}/tables`);
-  if (!response.ok) {
-    return parseFailure(response);
-  }
-  return response.json();
+function withSession(path: string, sessionId: string, extra: Record<string, string> = {}): string {
+  const query = new URLSearchParams({ ...extra, session_id: sessionId });
+  return `${path}?${query}`;
 }
 
-export async function runQuery(sql: string, sessionId: string): Promise<QueryResponse> {
-  const response = await fetch(`${API_URL}/query`, {
+export function fetchTables(): Promise<TableInfo[]> {
+  return request("/tables");
+}
+
+export function runQuery(sql: string, sessionId: string): Promise<QueryResponse> {
+  return request("/query", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ sql, session_id: sessionId }),
   });
-  if (!response.ok) {
-    return parseFailure(response);
-  }
-  return response.json();
 }
 
 export interface UploadRequest {
@@ -57,58 +86,41 @@ export interface UploadRequest {
   sessionId: string;
 }
 
-export async function uploadCsv(request: UploadRequest): Promise<QueryResponse> {
+export function uploadCsv(upload: UploadRequest): Promise<QueryResponse> {
   const form = new FormData();
-  form.append("file", request.file);
-  form.append("name", request.name);
-  form.append("organization", request.organization);
-  form.append("session_id", request.sessionId);
-  if (request.keyColumn !== null) {
-    form.append("key_column", request.keyColumn);
+  form.append("file", upload.file);
+  form.append("name", upload.name);
+  form.append("organization", upload.organization);
+  form.append("session_id", upload.sessionId);
+  if (upload.keyColumn !== null) {
+    form.append("key_column", upload.keyColumn);
   }
-  const response = await fetch(`${API_URL}/tables/upload`, { method: "POST", body: form });
-  if (!response.ok) {
-    return parseFailure(response);
-  }
-  return response.json();
+  return request("/tables/upload", { method: "POST", body: form });
 }
 
-export async function dropAllTables(sessionId: string): Promise<QueryResponse> {
-  const response = await fetch(`${API_URL}/tables?session_id=${encodeURIComponent(sessionId)}`, {
-    method: "DELETE",
-  });
-  if (!response.ok) {
-    return parseFailure(response);
-  }
-  return response.json();
+export function dropAllTables(sessionId: string): Promise<QueryResponse> {
+  return request(withSession("/tables", sessionId), { method: "DELETE" });
 }
 
-export async function uploadFileOnly(file: File, name: string): Promise<FileUpload> {
+export function uploadFileOnly(file: File, name: string): Promise<FileUpload> {
   const form = new FormData();
   form.append("file", file);
   form.append("name", name);
-  const response = await fetch(`${API_URL}/files/upload`, { method: "POST", body: form });
-  if (!response.ok) {
-    return parseFailure(response);
-  }
-  return response.json();
+  return request("/files/upload", { method: "POST", body: form });
 }
 
-export async function fetchStructure(table: string): Promise<TableStructure> {
-  const response = await fetch(`${API_URL}/tables/${encodeURIComponent(table)}/structure`);
-  if (!response.ok) {
-    return parseFailure(response);
-  }
-  return response.json();
+/** Estructura física de la tabla, leída dentro de la sesión: si tiene una transacción que
+ * escribe en esa tabla, ve sus cambios en vez de esperar a que termine. */
+export function fetchStructure(table: string, sessionId: string): Promise<TableStructure> {
+  return request(withSession(`/tables/${encodeURIComponent(table)}/structure`, sessionId));
 }
 
-export async function fetchTablePoints(table: string, column: string): Promise<TablePoints> {
-  const query = new URLSearchParams({ column });
-  const response = await fetch(`${API_URL}/tables/${encodeURIComponent(table)}/points?${query}`);
-  if (!response.ok) {
-    return parseFailure(response);
-  }
-  return response.json();
+export function fetchTablePoints(
+  table: string,
+  column: string,
+  sessionId: string,
+): Promise<TablePoints> {
+  return request(withSession(`/tables/${encodeURIComponent(table)}/points`, sessionId, { column }));
 }
 
 /**
@@ -117,5 +129,7 @@ export async function fetchTablePoints(table: string, column: string): Promise<T
  * sesión se quedaría con sus bloqueos hasta expirar en el servidor.
  */
 export function closeSession(sessionId: string): void {
-  navigator.sendBeacon(`${API_URL}/sessions/${encodeURIComponent(sessionId)}/close`);
+  if (API_URL !== undefined && API_URL.length > 0) {
+    navigator.sendBeacon(apiUrl(`/sessions/${encodeURIComponent(sessionId)}/close`));
+  }
 }

@@ -2,6 +2,13 @@
 
 const HEADER_SAMPLE_BYTES = 64 * 1024;
 const QUOTE = '"';
+const PREFERRED_KEY = "id";
+export const NO_KEY = "";
+
+/** La columna que se propone como clave: `id` si la hay, si no la primera. */
+export function defaultKey(columns: string[]): string {
+  return columns.includes(PREFERRED_KEY) ? PREFERRED_KEY : (columns[0] ?? NO_KEY);
+}
 
 /** Nombres de la cabecera, leyendo solo el principio del archivo. */
 export async function readCsvHeader(file: File): Promise<string[]> {
@@ -41,11 +48,12 @@ export function tableNameFrom(file: File): string {
 }
 
 /**
- * Plantilla de `CREATE TABLE ... FROM FILE` para un archivo ya subido. Deja escrita la
- * opción más habitual y, en comentarios, cómo cambiarla por cada organización.
+ * Plantilla de `CREATE TABLE ... FROM FILE` para un archivo ya subido. Deja escrita la misma
+ * organización que propone el diálogo de carga —heap file con índice hash sobre la clave— y,
+ * en comentarios, cómo cambiarla por cada una de las otras.
  */
 export function createFromFileSql(name: string, path: string, columns: string[]): string {
-  const key = columns.includes("id") ? "id" : (columns[0] ?? "id");
+  const key = defaultKey(columns) || PREFERRED_KEY;
   return `-- Archivo subido: ${path}
 -- Columnas: ${columns.join(", ")}
 --
@@ -56,5 +64,5 @@ export function createFromFileSql(name: string, path: string, columns: string[])
 --   USING INDEX RTREE("columna") heap file sin clave + R-Tree sobre una columna POINT
 --   (sin USING INDEX)            heap file sin clave
 CREATE TABLE ${name} FROM FILE '${path}'
-  USING INDEX BTREE("${key}");`;
+  USING INDEX HASH("${key}");`;
 }

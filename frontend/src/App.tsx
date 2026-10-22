@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
   ApiError,
+  ConnectionError,
   closeSession,
   dropAllTables,
   fetchTables,
@@ -29,15 +30,23 @@ type View = "consulta" | "esquema";
 
 const PREVIEW_LIMIT = 100;
 const HISTORY_LIMIT = 25;
-const SESSION_ID_RADIX = 36;
-const SESSION_ID_LENGTH = 6;
-const SESSION_ID_OFFSET = 2;
 const SIDEBAR = { initial: 300, min: 220, max: 520 };
 const EDITOR = { initial: 240, min: 120, max: 620 };
 
+/** Identificador de la sesión de esta pestaña. Es aleatorio de verdad: quien adivinara el de
+ * otra pestaña podría confirmar o abortar su transacción. */
 function newSessionId(): string {
-  const random = Math.random().toString(SESSION_ID_RADIX);
-  return `ui-${random.slice(SESSION_ID_OFFSET, SESSION_ID_OFFSET + SESSION_ID_LENGTH)}`;
+  return `ui-${crypto.randomUUID()}`;
+}
+
+function connectionFailure(error: ConnectionError): QueryFailure {
+  return {
+    error: error.message,
+    kind: "ConnectionError",
+    line: null,
+    column: null,
+    in_transaction: null,
+  };
 }
 
 export default function App() {
@@ -86,6 +95,41 @@ export default function App() {
     return () => window.removeEventListener("pagehide", release);
   }, [sessionId]);
 
+  /** Lo que sigue a una respuesta del API: el estado de la transacción viene de ella. */
+  const showResponse = useCallback(
+    async (response: QueryResponse) => {
+      setResult(response);
+      setInTransaction(response.in_transaction);
+      setConnected(true);
+      await refreshTables();
+    },
+    [refreshTables],
+  );
+
+  /** Un error, del motor o de la conexión. Uno del motor dice cómo quedó la transacción:
+   * un interbloqueo o una espera agotada la abortan, y la interfaz no puede seguir
+   * mostrándola abierta. */
+  const showFailure = useCallback(
+    async (error: unknown) => {
+      setResult(null);
+      if (error instanceof ApiError) {
+        setFailure(error.failure);
+        if (error.failure.in_transaction !== null) {
+          setInTransaction(error.failure.in_transaction);
+        }
+        await refreshTables();
+        return;
+      }
+      if (error instanceof ConnectionError) {
+        setConnected(false);
+        setFailure(connectionFailure(error));
+        return;
+      }
+      throw error;
+    },
+    [refreshTables],
+  );
+
   const execute = useCallback(
     async (script: string) => {
       if (script.trim().length === 0) {
@@ -94,33 +138,17 @@ export default function App() {
       setRunning(true);
       setFailure(null);
       try {
-        const response = await runQuery(script, sessionId);
-        setResult(response);
-        setInTransaction(response.in_transaction);
-        setConnected(true);
+        await showResponse(await runQuery(script, sessionId));
         setHistory((previous) =>
           [script, ...previous.filter((item) => item !== script)].slice(0, HISTORY_LIMIT),
         );
-        await refreshTables();
       } catch (error) {
-        setResult(null);
-        if (error instanceof ApiError) {
-          setFailure(error.failure);
-          await refreshTables();
-        } else {
-          setConnected(false);
-          setFailure({
-            error: "No se pudo contactar con el motor. ¿Está el API en marcha?",
-            kind: "ConnectionError",
-            line: null,
-            column: null,
-          });
-        }
+        await showFailure(error);
       } finally {
         setRunning(false);
       }
     },
-    [refreshTables, sessionId],
+    [sessionId, showFailure, showResponse],
   );
 
   const preview = useCallback(
@@ -145,15 +173,11 @@ export default function App() {
     setConfirmEmpty(false);
     setFailure(null);
     try {
-      setResult(await dropAllTables(sessionId));
-      await refreshTables();
+      await showResponse(await dropAllTables(sessionId));
     } catch (error) {
-      if (error instanceof ApiError) {
-        setFailure(error.failure);
-        setResult(null);
-      }
+      await showFailure(error);
     }
-  }, [refreshTables, sessionId]);
+  }, [sessionId, showFailure, showResponse]);
 
   const upload = useCallback(
     async (values: UploadValues) => {
@@ -169,20 +193,16 @@ export default function App() {
           return;
         }
         const response = await uploadCsv({ ...values, sessionId });
-        setResult(response);
         setShowUpload(false);
-        await refreshTables();
+        await showResponse(response);
       } catch (error) {
-        if (error instanceof ApiError) {
-          setFailure(error.failure);
-          setResult(null);
-          setShowUpload(false);
-        }
+        setShowUpload(false);
+        await showFailure(error);
       } finally {
         setUploading(false);
       }
     },
-    [refreshTables, sessionId],
+    [sessionId, showFailure, showResponse],
   );
 
   const describe = useCallback((table: TableInfo) => {
@@ -251,9 +271,9 @@ export default function App() {
           tables={tables}
         />
         <div
+          aria-label="Ancho del panel de archivos"
           className={sidebar.dragging ? "splitter splitter--x is-dragging" : "splitter splitter--x"}
-          onPointerDown={sidebar.onPointerDown}
-          role="separator"
+          {...sidebar.separator}
         />
         {view === "consulta" ? (
           <div className="workbench__main">
@@ -266,14 +286,20 @@ export default function App() {
               sql={sql}
             />
             <div
+              aria-label="Alto del editor"
               className={
                 editor.dragging ? "splitter splitter--y is-dragging" : "splitter splitter--y"
               }
-              onPointerDown={editor.onPointerDown}
-              role="separator"
+              {...editor.separator}
             />
             <div className="workbench__output">
-              <ResultsPanel failure={failure} result={result} tables={tables} theme={theme} />
+              <ResultsPanel
+                failure={failure}
+                result={result}
+                sessionId={sessionId}
+                tables={tables}
+                theme={theme}
+              />
               <PlanPanel plan={result?.plan ?? null} />
             </div>
           </div>
@@ -293,7 +319,11 @@ export default function App() {
       )}
 
       {inspected !== null && (
-        <StructureDialog onClose={() => setInspected(null)} table={inspected} />
+        <StructureDialog
+          onClose={() => setInspected(null)}
+          sessionId={sessionId}
+          table={inspected}
+        />
       )}
 
       {confirmEmpty && (
@@ -321,7 +351,7 @@ export default function App() {
       <StatusBar
         connected={connected}
         elapsedMs={result?.elapsed_ms ?? null}
-        rowCount={result ? result.rows.length : null}
+        rowCount={result ? result.total_rows : null}
         tableCount={tables.length}
         totalRows={totalRows}
       />

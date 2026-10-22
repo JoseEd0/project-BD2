@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 
 import type { Theme } from "../hooks/useTheme";
+import { displayCell } from "../lib/cells";
+import { isGeoPoint } from "../lib/points";
 import { downloadCsv, toClipboardTable, toCsv } from "../lib/exporting";
-import { formatPoint, isGeoPoint } from "../lib/points";
 import type { CellValue, QueryFailure, QueryResponse, TableInfo } from "../types";
 import MapPanel from "./MapPanel";
 
@@ -11,30 +12,13 @@ interface ResultsPanelProps {
   failure: QueryFailure | null;
   tables: TableInfo[];
   theme: Theme;
+  sessionId: string;
 }
 
 type Tab = "filas" | "mensajes" | "mapa";
 
 /** Milisegundos que el botón muestra «Copiado» antes de volver a su texto. */
 const COPIED_FEEDBACK_MS = 1500;
-
-/** Dígitos significativos que bastan para quitar el ruido binario de un doble. */
-const SIGNIFICANT_DIGITS = 12;
-
-function formatNumber(value: number): string {
-  if (Number.isInteger(value)) {
-    return value.toString();
-  }
-  return Number(value.toPrecision(SIGNIFICANT_DIGITS)).toString();
-}
-
-function renderCell(value: CellValue) {
-  if (value === null) return "NULL";
-  if (typeof value === "boolean") return value ? "true" : "false";
-  if (typeof value === "number") return formatNumber(value);
-  if (isGeoPoint(value)) return formatPoint(value);
-  return String(value);
-}
 
 function cellClass(value: CellValue): string {
   if (value === null) return "is-null";
@@ -87,7 +71,7 @@ function Messages({ result }: { result: QueryResponse }) {
   );
 }
 
-export default function ResultsPanel({ result, failure, tables, theme }: ResultsPanelProps) {
+export default function ResultsPanel({ result, failure, tables, theme, sessionId }: ResultsPanelProps) {
   const [tab, setTab] = useState<Tab>("filas");
   const [copied, setCopied] = useState(false);
   const hasRows = result !== null && result.columns.length > 0;
@@ -168,7 +152,13 @@ export default function ResultsPanel({ result, failure, tables, theme }: Results
       <div className={tab === "mapa" && spatial !== null ? "panel__body panel__body--map" : "panel__body"}>
         {failure !== null && <Failure failure={failure} />}
         {result !== null && spatial !== null && tab === "mapa" && (
-          <MapPanel result={result} spatial={spatial} tables={tables} theme={theme} />
+          <MapPanel
+            result={result}
+            sessionId={sessionId}
+            spatial={spatial}
+            tables={tables}
+            theme={theme}
+          />
         )}
         {failure === null && result === null && (
           <p className="panel__empty">Ejecuta una consulta para ver aquí sus filas.</p>
@@ -181,6 +171,14 @@ export default function ResultsPanel({ result, failure, tables, theme }: Results
           </div>
         )}
         {failure === null && result !== null && tab === "filas" && hasRows && (
+          <>
+          {result.total_rows > result.rows.length && (
+            <p className="panel__note">
+              Mostrando {result.rows.length.toLocaleString("es")} de{" "}
+              {result.total_rows.toLocaleString("es")} filas: el servidor envía como mucho esa
+              cantidad. Usa LIMIT o un WHERE para ver otras.
+            </p>
+          )}
           <table className="grid">
             <thead>
               <tr>
@@ -195,14 +193,15 @@ export default function ResultsPanel({ result, failure, tables, theme }: Results
                 <tr key={rowIndex}>
                   <td className="grid__index">{rowIndex + 1}</td>
                   {row.map((value, columnIndex) => (
-                    <td className={cellClass(value)} key={columnIndex} title={renderCell(value)}>
-                      {renderCell(value)}
+                    <td className={cellClass(value)} key={columnIndex} title={displayCell(value)}>
+                      {displayCell(value)}
                     </td>
                   ))}
                 </tr>
               ))}
             </tbody>
           </table>
+          </>
         )}
       </div>
     </section>

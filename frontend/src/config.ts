@@ -1,11 +1,16 @@
 /**
  * Direcciones externas que usa la interfaz. Vienen de las variables de entorno de Vite
- * (ver `.env.example`); los valores por omisión son los del desarrollo local.
+ * (ver `frontend/.env.example`).
  */
 
-export const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+/** URL del API del motor. Sin ella no hay a quién preguntar: ver `apiUrl` en `api.ts`. */
+export const API_URL: string | undefined = import.meta.env.VITE_API_URL;
 
-/** Plantilla de teselas del mapa, en el formato `{z}/{x}/{y}` de Leaflet. */
+export const MISSING_API_URL =
+  "Falta VITE_API_URL: copia frontend/.env.example a frontend/.env y vuelve a arrancar la interfaz";
+
+/** Plantilla de teselas del mapa, en el formato `{z}/{x}/{y}` de Leaflet. Opcional: por
+ * omisión, las de OpenStreetMap, que son públicas y no dependen de este proyecto. */
 export const MAP_TILES_URL =
   import.meta.env.VITE_MAP_TILES_URL ?? "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
 

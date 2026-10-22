@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import type { DragEvent } from "react";
 
-import { readCsvHeader, tableNameFrom } from "../lib/csvFiles";
+import { defaultKey, NO_KEY, readCsvHeader, tableNameFrom } from "../lib/csvFiles";
+import Modal from "./Modal";
 
 export type UploadValues =
   | { mode: "create"; file: File; name: string; organization: string; keyColumn: string | null }
@@ -54,12 +55,6 @@ const DEFAULT_STRUCTURE = "heap";
 
 const CSV_EXTENSION = ".csv";
 const BYTES_PER_KIB = 1024;
-const PREFERRED_KEY = "id";
-const NO_KEY = "";
-
-function defaultKey(columns: string[]): string {
-  return columns.includes(PREFERRED_KEY) ? PREFERRED_KEY : (columns[0] ?? NO_KEY);
-}
 
 export default function UploadDialog({ busy, onSubmit, onClose }: UploadDialogProps) {
   const [mode, setMode] = useState<Mode>("create");
@@ -109,15 +104,19 @@ export default function UploadDialog({ busy, onSubmit, onClose }: UploadDialogPr
   }
 
   return (
-    <div className="modal" onClick={onClose} role="presentation">
-      <div className="modal__panel" onClick={(event) => event.stopPropagation()} role="dialog">
-        <header className="modal__header">
-          <h2>Cargar CSV</h2>
-          <button className="icon-button" onClick={onClose} type="button">
-            ✕
+    <Modal footer={<>
+          <button className="action" onClick={onClose} type="button">
+            Cancelar
           </button>
-        </header>
-
+          <button
+            className="action action--primary"
+            disabled={!ready || busy}
+            onClick={submit}
+            type="button"
+          >
+            {busy ? "Subiendo…" : mode === "create" ? "Crear tabla" : "Subir archivo"}
+          </button>
+</>} onClose={onClose} title="Cargar CSV">
         <div className="modal__body">
           <label
             className={dragging ? "dropzone dropzone--active" : "dropzone"}
@@ -249,20 +248,6 @@ export default function UploadDialog({ busy, onSubmit, onClose }: UploadDialogPr
           )}
         </div>
 
-        <footer className="modal__footer">
-          <button className="action" onClick={onClose} type="button">
-            Cancelar
-          </button>
-          <button
-            className="action action--primary"
-            disabled={!ready || busy}
-            onClick={submit}
-            type="button"
-          >
-            {busy ? "Subiendo…" : mode === "create" ? "Crear tabla" : "Subir archivo"}
-          </button>
-        </footer>
-      </div>
-    </div>
+    </Modal>
   );
 }

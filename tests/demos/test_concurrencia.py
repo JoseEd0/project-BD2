@@ -35,3 +35,12 @@ def test_transactions_keep_every_withdrawal_that_the_race_loses(demo: ModuleType
     verdicts = sorted(line.split(":")[1].split()[0] for line in outcomes)
     assert verdicts == ["abortada", "confirmada"]
     assert locks.deadlocks_detected >= 1
+
+
+def test_the_demo_can_run_again_on_the_same_directory(demo: ModuleType, tmp_path: Path):
+    for _ in range(2):
+        engine, locks, manager = demo.build_engine(tmp_path)
+        with engine:
+            demo.prepare(demo.Session(engine, locks, manager))
+            balance = demo.read_balance(demo.Session(engine, locks, manager))
+        assert balance == demo.INITIAL_BALANCE

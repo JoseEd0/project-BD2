@@ -58,7 +58,10 @@ def build_engine(directory: Path) -> tuple[Engine, LockManager, TransactionManag
 
 
 def prepare(session: Session) -> None:
-    session.execute("CREATE TABLE cuentas (id INT PRIMARY KEY, saldo INT)")
+    """Deja las cuentas en su estado inicial, aunque `--data-dir` sea de una ejecución
+    anterior."""
+    session.execute("CREATE TABLE IF NOT EXISTS cuentas (id INT PRIMARY KEY, saldo INT)")
+    session.execute("DELETE FROM cuentas")
     session.execute(f"INSERT INTO cuentas VALUES (1, {INITIAL_BALANCE}), (2, 0)")
 
 

@@ -56,3 +56,20 @@ def test_a_timeout_that_is_not_a_number_is_reported(monkeypatch: pytest.MonkeyPa
     monkeypatch.setenv(LOCK_TIMEOUT_VARIABLE, "cinco")
     with pytest.raises(SettingsError, match=LOCK_TIMEOUT_VARIABLE):
         settings_from_environment()
+
+
+@pytest.mark.parametrize("raw", ["nan", "inf", "-inf"])
+def test_a_timeout_that_is_not_finite_is_reported(monkeypatch: pytest.MonkeyPatch, raw: str):
+    """Un plazo infinito dejaría a una transacción esperando un bloqueo para siempre."""
+    monkeypatch.setenv(CORS_ORIGINS_VARIABLE, ORIGINS)
+    monkeypatch.setenv(LOCK_TIMEOUT_VARIABLE, raw)
+    with pytest.raises(SettingsError, match="finito"):
+        settings_from_environment()
+
+
+def test_an_empty_data_directory_is_reported(monkeypatch: pytest.MonkeyPatch):
+    """`Path("")` es el directorio actual: la base acabaría mezclada con el código."""
+    monkeypatch.setenv(CORS_ORIGINS_VARIABLE, ORIGINS)
+    monkeypatch.setenv(DATA_DIRECTORY_VARIABLE, "  ")
+    with pytest.raises(SettingsError, match=DATA_DIRECTORY_VARIABLE):
+        settings_from_environment()

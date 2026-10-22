@@ -7,6 +7,7 @@ constantes de comportamiento en el cuerpo de una función.
 from __future__ import annotations
 
 import codecs
+import math
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -152,7 +153,9 @@ class EngineConfig:
 
 
 def _require_between(name: str, value: int, low: int, high: int | None) -> None:
-    if value < low or (high is not None and value > high):
+    """Escrito en positivo porque un NaN no es menor ni mayor que nada: con `value < low`
+    pasaría todas las cotas."""
+    if not (value >= low and (high is None or value <= high)):
         bounds = f"al menos {low}" if high is None else f"entre {low} y {high}"
         raise ConfigurationError(f"{name} tiene que ser {bounds}, no {value}")
 
@@ -163,5 +166,6 @@ def _require_fraction(name: str, value: float, high: float) -> None:
 
 
 def _require_positive(name: str, value: float) -> None:
-    if value <= 0:
-        raise ConfigurationError(f"{name} tiene que ser positivo, no {value}")
+    """Un plazo infinito o NaN haría que una espera no terminara nunca."""
+    if not 0 < value < math.inf:
+        raise ConfigurationError(f"{name} tiene que ser positivo y finito, no {value}")

@@ -24,14 +24,14 @@ demostrar transacciones desde la interfaz.
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.errors import validation_failed
+from api.errors import error_response, server_failure, upload_too_large, validation_failed
 from api.routes import query, sessions, tables, uploads
 from api.service import Service
 from api.settings import settings_from_environment
@@ -64,6 +64,27 @@ def create_app(config: EngineConfig, cors_origins: Sequence[str] = ()) -> FastAP
         service.close()
 
     app = FastAPI(title=TITLE, version=VERSION, lifespan=lifespan)
+
+    # Starlette envuelve con el último middleware que se añade, y el de CORS tiene que ser
+    # ese: una respuesta sin sus cabeceras, aunque sea un 500, el navegador la descarta y
+    # el frontend solo ve un fallo de red.
+    @app.middleware("http")
+    async def answer_unexpected_failures(
+        request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
+        try:
+            return await call_next(request)
+        except Exception as error:
+            return server_failure(error)
+
+    @app.middleware("http")
+    async def refuse_oversized_uploads(
+        request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
+        if uploads.declares_oversized_upload(request, config.max_upload_bytes):
+            return error_response(upload_too_large(config.max_upload_bytes))
+        return await call_next(request)
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=list(cors_origins),

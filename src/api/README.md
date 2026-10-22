@@ -15,10 +15,10 @@ Documentación interactiva generada por FastAPI en `http://localhost:8000/docs`.
 
 | Variable de entorno | Para qué | Por defecto |
 |---|---|---|
-| `MINIGESTOR_DATA_DIR` | dónde viven los archivos del gestor | `data` |
+| `MINIGESTOR_DATA_DIR` | dónde viven los archivos del gestor; vacía es un error, no el directorio actual | `data` |
 | `MINIGESTOR_IMPORT_DIRS` | otros directorios de los que `FROM FILE` puede leer, separados por comas | ninguno |
 | `MINIGESTOR_CORS_ORIGINS` | orígenes desde los que llama el frontend, separados por comas | **obligatoria** |
-| `MINIGESTOR_LOCK_TIMEOUT` | segundos que una transacción espera un bloqueo | `5` |
+| `MINIGESTOR_LOCK_TIMEOUT` | segundos que una transacción espera un bloqueo; un número finito | `5` |
 
 Están recogidas en [`.env.example`](../../.env.example), en la raíz del repositorio.
 
@@ -62,7 +62,11 @@ Ninguna ruta ni puerto está escrito en el código.
 
 Dos peticiones con el mismo `session_id` se atienden una tras otra. Una sesión que pasa
 `EngineConfig.session_idle_seconds` (15 minutos) sin usarse se cierra y aborta su
-transacción: una pestaña cerrada no deja tablas bloqueadas. `/tables/{name}/structure` y
+transacción: una pestaña cerrada no deja tablas bloqueadas. Si cerrar una de ellas falla,
+las demás se cierran igual. `POST /sessions/{id}/close` responde enseguida aunque la sesión
+tenga una petición en curso: el cierre lo hace la última que termine, para que ninguna
+abra una transacción en una sesión que el servidor ya olvidó. Una tabla que otro cliente
+borra mientras `/tables` las lista simplemente no aparece. `/tables/{name}/structure` y
 `/tables/{name}/points` aceptan el mismo `session_id` y leen con bloqueo compartido, así que
 esperan a que termine una transacción que esté escribiendo en la tabla. `/tables` no
 bloquea: su número de filas es un contador y puede incluir cambios aún no confirmados.
@@ -147,8 +151,11 @@ La sentencia se construye como objeto, **no concatenando texto SQL**: un nombre 
 malicioso no puede inyectar nada. La carga es atómica: si una fila falla —una clave
 repetida, una columna clave que no está en la cabecera— la tabla no queda creada.
 
-El archivo se copia por bloques, sin tenerlo entero en memoria, y se corta en cuanto pasa
-de `max_upload_bytes`. En `/tables/upload` el CSV vive en un directorio propio de la
+Una subida que anuncia en `Content-Length` más de `max_upload_bytes` (con un margen para
+el envoltorio *multipart*) se rechaza con `413` antes de recibir el cuerpo. Si no lo
+anuncia, el archivo se copia por bloques, sin tenerlo entero en memoria, y se corta con el
+mismo `413` en cuanto pasa del límite; cada subida escribe en su propio temporal, así que
+dos con el mismo nombre a la vez no se mezclan. En `/tables/upload` el CSV vive en un directorio propio de la
 petición y se borra al terminar, salga bien o no: los datos ya están en la tabla. En
 `/files/upload` se guarda en `uploads/` y reemplaza al anterior del mismo nombre. Las dos
 rutas son síncronas a propósito: crear la tabla puede esperar un bloqueo, y esa espera
@@ -165,7 +172,7 @@ que el editor del frontend necesita para señalar dónde está el problema:
 
 ```jsonc
 { "detail": { "error": "se esperaba una sentencia, se encontró 'FROM'",
-              "kind": "SqlSyntaxError", "line": 1, "column": 8,
+              "kind": "SqlSyntaxError", "line": 1, "column": 1,
               "in_transaction": false } }
 ```
 
@@ -178,8 +185,12 @@ la carga de archivos o de bloqueos— se devuelven como `400`: son culpa de lo q
 Todas derivan de una misma clase, `DomainError` ([`src/errors.py`](../errors.py)), así que
 un módulo nuevo no tiene que anotarse en ninguna lista para que sus errores lleguen bien.
 Un cuerpo que no cumple el esquema de la ruta es un `422`, con la misma forma de `detail`.
-Cualquier otra excepción es un fallo del servidor y llega como `500`; convertirla en un
-`400` escondería el bug detrás de un «error del usuario».
+Un archivo más grande que el límite es un `413`. Cualquier otra excepción es un fallo del
+servidor y llega como `500`, con la misma forma, la clase de la excepción en `kind` y la
+traza en el log; convertirla en un `400` escondería el bug detrás de un «error del
+usuario». El middleware de CORS envuelve a todos los demás, así que también los `413` y
+`500` llevan sus cabeceras: sin ellas el navegador descartaría la respuesta y el frontend
+solo vería un fallo de red.
 
 ## Tests
 

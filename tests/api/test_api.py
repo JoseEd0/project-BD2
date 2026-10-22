@@ -1,9 +1,14 @@
+import threading
 import time
+from collections.abc import Callable
 from dataclasses import replace
+from pathlib import Path
+from typing import BinaryIO
 
 import pytest
 from fastapi.testclient import TestClient
 
+import api.routes.uploads as uploads_route
 from api.main import create_app
 from api.service import Service
 from config import EngineConfig
@@ -550,7 +555,7 @@ def test_an_upload_larger_than_the_limit_is_rejected(config: EngineConfig):
     )
     with TestClient(create_app(small)) as limited:
         response = upload(limited)
-        assert response.status_code == 400
+        assert response.status_code == 413
         assert "el máximo permitido" in response.json()["detail"]["error"]
         assert limited.get("/tables").json() == []
 
@@ -594,6 +599,7 @@ def test_begin_without_a_session_is_rejected_and_runs_nothing(client: TestClient
     response = client.post("/query", json={"sql": "BEGIN; INSERT INTO t VALUES (1);"})
     assert response.status_code == 400
     assert "session_id" in response.json()["detail"]["error"]
+    assert response.json()["detail"]["kind"] == "SessionError"
     assert run(client, "SELECT * FROM t")["rows"] == []
 
 
@@ -723,3 +729,141 @@ def test_a_bug_in_the_engine_is_a_server_error_not_the_users(
     with TestClient(create_app(config), raise_server_exceptions=False) as client:
         monkeypatch.setattr(client.app.state.service.engine, "run", broken)
         assert client.post("/query", json={"sql": "SELECT 1 FROM t"}).status_code == 500
+
+
+def test_an_upload_that_announces_too_many_bytes_is_refused_before_reading_it(
+    config: EngineConfig, monkeypatch: pytest.MonkeyPatch
+):
+    def never_copied(*_: object) -> None:
+        raise AssertionError("la ruta no debía recibir el archivo")
+
+    monkeypatch.setattr(uploads_route, "_copy_limited", never_copied)
+    small = replace(config, max_upload_bytes=1024)
+    oversized = b"id\n" + b"1\n" * uploads_route.MULTIPART_ALLOWANCE_BYTES
+    with TestClient(create_app(small)) as limited:
+        response = post_csv(limited, "/tables/upload", "grande", oversized)
+        assert response.status_code == 413
+        assert response.json()["detail"]["kind"] == "UploadError"
+    assert uploads_of(config) == []
+
+
+def test_each_upload_writes_to_its_own_temporary_file(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+):
+    """Dos subidas con el mismo nombre a la vez no pueden escribir en el mismo temporal."""
+    targets: list[Path] = []
+    original = uploads_route._copy_limited
+
+    def recording(source: BinaryIO, target: Path, limit: int) -> None:
+        targets.append(target)
+        original(source, target, limit)
+
+    monkeypatch.setattr(uploads_route, "_copy_limited", recording)
+    for _ in range(2):
+        assert post_csv(client, "/files/upload", "datos", CSV_CONTENT.encode()).status_code == 200
+    assert len(set(targets)) == 2
+
+
+def test_a_server_error_keeps_the_error_shape_and_the_cors_headers(
+    config: EngineConfig, monkeypatch: pytest.MonkeyPatch
+):
+    """Sin las cabeceras CORS el navegador descarta la respuesta y el frontend solo ve un
+    fallo de red, sin el mensaje."""
+    origin = "http://localhost:5173"
+
+    def broken(*_: object, **__: object) -> None:
+        raise RuntimeError("fallo interno")
+
+    with TestClient(create_app(config, (origin,)), raise_server_exceptions=False) as client:
+        monkeypatch.setattr(client.app.state.service.engine, "run", broken)
+        response = client.post(
+            "/query", json={"sql": "SELECT 1 FROM t"}, headers={"Origin": origin}
+        )
+    assert response.status_code == 500
+    assert response.headers["access-control-allow-origin"] == origin
+    assert response.json()["detail"]["kind"] == "RuntimeError"
+    assert "fallo interno" in response.json()["detail"]["error"]
+
+
+def test_a_table_dropped_while_listing_is_left_out(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+):
+    run(client, "CREATE TABLE t (id INT PRIMARY KEY)")
+    engine = client.app.state.service.engine
+    monkeypatch.setattr(engine, "table_names", lambda: ["borrada", "t"])
+    assert [table["name"] for table in client.get("/tables").json()] == ["t"]
+
+
+THREAD_JOIN_SECONDS = 5.0
+
+
+def _eventually(condition: Callable[[], bool]) -> bool:
+    """Una espera acotada, para que un test de hilos falle en vez de colgarse."""
+    deadline = time.monotonic() + THREAD_JOIN_SECONDS
+    while not condition():
+        if time.monotonic() > deadline:
+            return False
+        threading.Event().wait(0.001)
+    return True
+
+
+def test_closing_a_session_with_a_request_in_flight_waits_for_it(config: EngineConfig):
+    """La pestaña se cierra mientras una petición suya espera turno. El cierre no espera a
+    esa petición: queda pendiente y lo hace ella al terminar. Si la sesión se cerrara
+    antes, la petición abriría una transacción que nadie podría cerrar, con sus bloqueos."""
+    service = Service(config)
+    with service.session(None) as autocommit:
+        autocommit.execute("CREATE TABLE t (id INT PRIMARY KEY, v INT)")
+        autocommit.execute("INSERT INTO t VALUES (1, 1)")
+    with service.session(SESSION):
+        pass
+    slot = service._sessions[SESSION]
+    slot.guard.acquire()
+
+    def late_request() -> None:
+        with service.session(SESSION) as session:
+            session.execute("BEGIN")
+            session.execute("UPDATE t SET v = 2 WHERE id = 1")
+
+    worker = threading.Thread(target=late_request)
+    closer = threading.Thread(target=service.close_session, args=(SESSION,))
+    worker.start()
+    queued = _eventually(lambda: slot.requests == 1)
+    closer.start()
+    closer.join(THREAD_JOIN_SECONDS)
+    closed_without_waiting = not closer.is_alive()
+    slot.guard.release()
+    worker.join(THREAD_JOIN_SECONDS)
+    closer.join(THREAD_JOIN_SECONDS)
+    assert queued and closed_without_waiting
+    assert not worker.is_alive()
+    assert not slot.session.in_transaction
+    assert service.locks.holders_of("t") == {}
+    with service.session(None) as autocommit:
+        assert autocommit.execute("SELECT v FROM t").rows == ((1,),)
+    service.close()
+
+
+def test_one_expired_session_that_fails_to_close_does_not_keep_the_others_open(
+    config: EngineConfig, monkeypatch: pytest.MonkeyPatch
+):
+    service = Service(impatient_config(config, session_idle_seconds=IMPATIENT_TIMEOUT))
+    with service.session(None) as autocommit:
+        autocommit.execute("CREATE TABLE a (id INT PRIMARY KEY)")
+        autocommit.execute("CREATE TABLE b (id INT PRIMARY KEY)")
+    for identifier, table in (("rota", "a"), ("sana", "b")):
+        with service.session(identifier) as session:
+            session.execute("BEGIN")
+            session.execute(f"INSERT INTO {table} VALUES (1)")
+
+    def fail() -> None:
+        raise RuntimeError("no se pudo deshacer")
+
+    monkeypatch.setattr(service._sessions["rota"].session, "close", fail)
+    time.sleep(IMPATIENT_TIMEOUT * 2)
+    with pytest.raises(RuntimeError), service.session("nueva"):
+        pass
+    assert service.locks.holders_of("b") == {}
+    assert service._sessions["nueva"].requests == 0
+    monkeypatch.undo()
+    service.close()

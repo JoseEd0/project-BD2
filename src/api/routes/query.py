@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from api.errors import as_http_error, invalid_request
+from api.errors import as_http_error
 from api.responses import as_response, describe_statement
 from api.schemas import QueryRequest, QueryResponse
 from api.service import ServiceDependency
@@ -12,6 +12,7 @@ from errors import DomainError
 from sql import parse_script
 from sql.errors import SqlPositionError
 from sql.nodes import BeginTransactionStatement
+from txn import SessionError
 
 router = APIRouter()
 
@@ -32,7 +33,7 @@ def query(request: QueryRequest, service: ServiceDependency) -> QueryResponse:
     if request.session_id is None and any(
         isinstance(statement, BeginTransactionStatement) for statement in statements
     ):
-        raise invalid_request("BEGIN necesita un session_id para seguir la transacción")
+        raise as_http_error(SessionError("BEGIN necesita un session_id para seguir la transacción"))
     with service.session(request.session_id) as session:
         try:
             results = [session.run(statement) for statement in statements]

@@ -13,7 +13,7 @@ from fastapi import Depends, Request
 
 from api.schemas import ColumnInfo, TableInfo, TablePoints
 from config import EngineConfig
-from query.catalog import CatalogError, TableDefinition
+from query.catalog import CatalogError, TableDefinition, UnknownTableError
 from query.engine import Engine
 from storage.schema import Field
 from storage.types import FieldType
@@ -25,13 +25,16 @@ class _SessionSlot:
     """Una sesión con nombre que el servidor recuerda entre peticiones.
 
     `guard` hace que dos peticiones con el mismo `session_id` se atiendan una tras otra: una
-    sesión lleva una sola transacción y no admite dos sentencias a la vez.
+    sesión lleva una sola transacción y no admite dos sentencias a la vez. `closing` marca
+    una sesión que se pidió cerrar mientras aún tenía peticiones en curso: la cierra la
+    última en terminar.
     """
 
     session: Session
     guard: threading.Lock = field(default_factory=threading.Lock)
     last_used: float = field(default_factory=time.monotonic)
     requests: int = 0
+    closing: bool = False
 
 
 class Service:
@@ -61,19 +64,29 @@ class Service:
             with Session(self.engine, self.locks, self.transactions) as ephemeral:
                 yield ephemeral
             return
-        slot = self._claim(identifier)
+        slot, expired = self._claim(identifier)
         try:
+            _close_all(expired)
             with slot.guard:
                 yield slot.session
         finally:
             self._release(slot)
 
     def close_session(self, identifier: str) -> bool:
+        """Cierra la sesión y aborta lo que tuviera abierto.
+
+        Si alguna petición de la sesión sigue en curso o esperando su turno, el cierre
+        queda para cuando termine la última: cerrarla antes dejaría que esa petición
+        abriera una transacción en una sesión que ya nadie recuerda, con sus bloqueos
+        retenidos para siempre.
+        """
         with self._sessions_guard:
             slot = self._sessions.pop(identifier, None)
-        if slot is None:
-            return False
-        with slot.guard:
+            if slot is None:
+                return False
+            slot.closing = True
+            idle = slot.requests == 0
+        if idle:
             slot.session.close()
         return True
 
@@ -82,10 +95,15 @@ class Service:
 
         No toma bloqueos: el catálogo tiene su propio lock y el número de filas es un
         contador que se lee de una vez. Por eso puede contar filas que otra transacción
-        aún no confirmó, igual que una estadística de `pg_class` en PostgreSQL.
+        aún no confirmó, igual que una estadística de `pg_class` en PostgreSQL. Una tabla
+        que otro cliente borra mientras tanto simplemente no aparece.
         """
         for name in self.engine.table_names():
-            yield self._describe(name)
+            try:
+                described = self._describe(name)
+            except UnknownTableError:
+                continue
+            yield described
 
     def points(self, name: str, column: str | None, limit: int | None) -> TablePoints:
         """Puntos de la tabla, como mucho `map_points` de la configuración.
@@ -117,10 +135,10 @@ class Service:
             self._sessions.clear()
         with ExitStack() as closing:
             closing.callback(self.engine.close)
-            for slot in slots:
-                closing.callback(slot.session.close)
+            closing.callback(_close_all, slots)
 
-    def _claim(self, identifier: str) -> _SessionSlot:
+    def _claim(self, identifier: str) -> tuple[_SessionSlot, list[_SessionSlot]]:
+        """La sesión pedida, ya contada como en uso, y las caducadas que hay que cerrar."""
         with self._sessions_guard:
             expired = self._take_expired(identifier)
             slot = self._sessions.get(identifier)
@@ -128,14 +146,15 @@ class Service:
                 slot = _SessionSlot(Session(self.engine, self.locks, self.transactions))
                 self._sessions[identifier] = slot
             slot.requests += 1
-        for stale in expired:
-            stale.session.close()
-        return slot
+        return slot, expired
 
     def _release(self, slot: _SessionSlot) -> None:
         with self._sessions_guard:
             slot.requests -= 1
             slot.last_used = time.monotonic()
+            pending_close = slot.closing and slot.requests == 0
+        if pending_close:
+            slot.session.close()
 
     def _take_expired(self, keep: str) -> list[_SessionSlot]:
         """Quita del registro las sesiones inactivas para cerrarlas fuera del lock."""
@@ -169,6 +188,14 @@ class Service:
             ],
             indexes=[index.name for index in definition.indexes],
         )
+
+
+def _close_all(slots: Iterable[_SessionSlot]) -> None:
+    """Cierra todas aunque falle alguna: una sesión que no se cierra no puede dejar a las
+    demás con sus bloqueos tomados. Si alguna falló, el error se propaga al final."""
+    with ExitStack() as closing:
+        for slot in slots:
+            closing.callback(slot.session.close)
 
 
 def service_of(request: Request) -> Service:

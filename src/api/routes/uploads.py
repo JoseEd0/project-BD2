@@ -8,9 +8,9 @@ import uuid
 from pathlib import Path
 from typing import Annotated, BinaryIO
 
-from fastapi import APIRouter, File, Form, UploadFile
+from fastapi import APIRouter, File, Form, Request, UploadFile
 
-from api.errors import as_http_error, invalid_request
+from api.errors import as_http_error, invalid_request, upload_too_large
 from api.responses import as_response
 from api.schemas import FileUploadResponse, QueryResponse
 from api.service import Service, ServiceDependency
@@ -19,6 +19,13 @@ from query.catalog import Organization
 from query.loader import LoaderError, read_header
 from sql.nodes import CreateTableFromFileStatement, IndexSpec, IndexType
 
+FILE_UPLOAD_PATH = "/files/upload"
+TABLE_UPLOAD_PATH = "/tables/upload"
+UPLOAD_PATHS = frozenset({FILE_UPLOAD_PATH, TABLE_UPLOAD_PATH})
+CONTENT_LENGTH_HEADER = "content-length"
+# El límite es del archivo, pero Content-Length mide el cuerpo multipart entero: los
+# separadores, las cabeceras de cada parte y los campos de texto del formulario.
+MULTIPART_ALLOWANCE_BYTES = 64 * 1024
 UPLOAD_DIRECTORY = "uploads"
 CSV_SUFFIX = ".csv"
 PARTIAL_SUFFIX = ".partial"
@@ -41,7 +48,23 @@ router = APIRouter()
 # espera congelaría al servidor entero, incluido el COMMIT que liberaría el bloqueo.
 
 
-@router.post("/files/upload", response_model=FileUploadResponse)
+def declares_oversized_upload(request: Request, limit: int) -> bool:
+    """Si la petición anuncia un archivo mayor que `limit` antes de enviarlo.
+
+    Sirve para rechazarla sin recibir el cuerpo: el servidor lo leería entero a un temporal
+    antes de entrar en la ruta. Sin Content-Length válido no se decide aquí; el límite se
+    vuelve a comprobar al copiar el archivo.
+    """
+    if request.url.path not in UPLOAD_PATHS:
+        return False
+    try:
+        declared = int(request.headers.get(CONTENT_LENGTH_HEADER, ""))
+    except ValueError:
+        return False
+    return declared > limit + MULTIPART_ALLOWANCE_BYTES
+
+
+@router.post(FILE_UPLOAD_PATH, response_model=FileUploadResponse)
 def upload_file(
     service: ServiceDependency,
     file: Annotated[UploadFile, File(description="CSV con cabecera")],
@@ -54,7 +77,7 @@ def upload_file(
     """
     _require_identifier(name, "archivo")
     path = _uploads_of(service) / f"{name}{CSV_SUFFIX}"
-    partial = path.with_name(path.name + PARTIAL_SUFFIX)
+    partial = path.with_name(f"{path.name}.{uuid.uuid4().hex}{PARTIAL_SUFFIX}")
     try:
         _copy_limited(file.file, partial, service.config.max_upload_bytes)
         columns = read_header(partial, service.config)
@@ -66,7 +89,7 @@ def upload_file(
     return FileUploadResponse(path=_path_for_sql(path), columns=columns)
 
 
-@router.post("/tables/upload", response_model=QueryResponse)
+@router.post(TABLE_UPLOAD_PATH, response_model=QueryResponse)
 def upload(
     service: ServiceDependency,
     file: Annotated[UploadFile, File(description="CSV con cabecera")],
@@ -153,8 +176,8 @@ def _copy_limited(source: BinaryIO, target: Path, limit: int) -> None:
     """Copia el archivo subido por bloques, sin tenerlo entero en memoria.
 
     Raises:
-        HTTPException: si está vacío o pasa de `limit` bytes; en ese caso no queda nada
-            escrito en `target`.
+        HTTPException: si está vacío (`400`) o pasa de `limit` bytes (`413`); en ese caso
+            no queda nada escrito en `target`.
     """
     copied = 0
     with target.open("wb") as output:
@@ -165,12 +188,7 @@ def _copy_limited(source: BinaryIO, target: Path, limit: int) -> None:
             output.write(chunk)
     if copied == 0 or copied > limit:
         target.unlink(missing_ok=True)
-        message = (
-            "el archivo está vacío"
-            if copied == 0
-            else f"el archivo pasa de {limit} bytes, el máximo permitido"
-        )
-        raise invalid_request(message)
+        raise invalid_request("el archivo está vacío") if copied == 0 else upload_too_large(limit)
 
 
 def _path_for_sql(path: Path) -> str:

@@ -24,6 +24,11 @@ INVALID = [
     {"max_result_rows": 0},
     {"csv_delimiter": ";;"},
     {"csv_encoding": "no-existe"},
+    {"page_size": float("nan")},
+    {"buffer_pool_pages": float("nan")},
+    {"lock_timeout_seconds": float("nan")},
+    {"lock_timeout_seconds": float("inf")},
+    {"session_idle_seconds": float("inf")},
 ]
 
 

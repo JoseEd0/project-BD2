@@ -31,8 +31,9 @@ además un ordenamiento externo.
 La agregación es **híbrida**: los primeros grupos que caben en el buffer se reducen en
 memoria hasta el final, y solo se reparten las filas de los grupos que llegan cuando ya no
 hay sitio. Con pocos grupos no se escribe ninguna partición, tenga la entrada las filas que
-tenga. En el `JOIN`, si el lado izquierdo cabe en el buffer se carga y se recorre el derecho
-una sola vez. `EXPLAIN ANALYZE` dice en cada caso si hizo falta disco: «en memoria» o «2
+tenga. En el `JOIN`, si uno de los dos lados cabe en el buffer —el izquierdo o, si no, el
+derecho— se carga y el otro se recorre una sola vez: juntar una tabla grande con una
+pequeña no toca el disco, se escriban en el orden que se escriban. `EXPLAIN ANALYZE` dice en cada caso si hizo falta disco: «en memoria» o «2
 nivel(es) de particiones».
 
 ### De cada grupo se guarda un estado, no sus filas
@@ -90,17 +91,20 @@ conserva, salen al final sin pareja. Dos parámetros completan la reunión:
 - `accepts`, una condición adicional sobre cada par de claves iguales: el resto del `ON`
   (`… AND a.precio < b.tope`). Un par que no la cumple cuenta como no emparejado.
 - `unmatched`, qué filas sin pareja se entregan de todos modos, con `None` en el otro lado:
-  es lo que distingue un `LEFT`, un `RIGHT` o un `FULL JOIN` de uno interno. Las derechas
-  se saben al sondear; las izquierdas, al terminar su partición.
+  es lo que distingue un `LEFT`, un `RIGHT` o un `FULL JOIN` de uno interno. Las del lado
+  que se recorre se saben al sondear; las del lado cargado, al terminar su partición.
 
-### Cuando la partición izquierda no cabe
+### Cuando una partición no cabe
 
-La partición izquierda es la que se carga en memoria. Si tiene más filas que el buffer:
+Se carga en memoria la partición izquierda si cabe y, si no, la derecha; los pares salen
+igual, con la fila izquierda primero. Solo si no cabe ninguna de las dos:
 
 ```
-  ¿cabe Li?  ── sí ──►  diccionario en memoria                       (el caso normal)
+  ¿cabe Li?  ── sí ──►  diccionario sobre Li, se recorre Ri          (el caso normal)
       │
-      no ──►  repartir Li y Ri con otra función de hash y repetir
+      no ──►  ¿cabe Ri?  ── sí ──►  diccionario sobre Ri, se recorre Li
+                  │
+                  no ──►  repartir Li y Ri con otra función de hash y repetir
                   │
                   └─ ¿la nueva función tampoco separó nada?
                          todas las filas comparten clave: ningún hash las reparte
@@ -108,7 +112,8 @@ La partición izquierda es la que se carga en memoria. Si tiene más filas que e
 ```
 
 Una clave muy repetida es el punto débil clásico del hash join: sus filas tienen el mismo
-hash con cualquier función. En vez de cargarla entera se reúne por
+hash con cualquier función. Si al otro lado tiene pocas filas, se carga ese lado. Si es
+muy repetida en los dos, en vez de cargarla entera se reúne por
 [bucles anidados en bloques](../loop/README.md), que solo necesita un bloque en memoria, y
 las demás claves siguen su camino normal.
 
@@ -127,7 +132,7 @@ Con `N` y `M` registros, `G` grupos, `P` particiones y un buffer de `B` registro
 |---|---|
 | E/S del GROUP BY | `2N` si `G ≤ P · B`; en general `2N` por nivel, `⌈log_P(G/B)⌉` niveles |
 | E/S del JOIN | `2(N + M)` si las particiones caben; otro tanto por cada nivel extra |
-| Memoria | como mucho `B` estados (GROUP BY) o `B` filas de la izquierda (JOIN) |
+| Memoria | como mucho `B` estados (GROUP BY) o `B` filas del lado cargado (JOIN); al decidir cuál, una muestra de hasta `B` de cada lado |
 | Comparaciones del JOIN | `O(N + M)`, salvo entre las filas de una clave muy repetida |
 | Resultado ordenado | no |
 
@@ -161,7 +166,9 @@ que no necesita pasadas extra.
 
 De la reunión: con coincidencias, sin ninguna, claves repetidas (3 × 4 = 12 pares), un lado
 vacío, las cuatro reuniones externas, claves NULL, condición adicional, **lado izquierdo
-mayor que la memoria** y **clave con más filas que la memoria** (por bloques), estas dos
-comparadas con el cálculo de todos contra todos en las cuatro reuniones.
+mayor que la memoria**, **izquierda grande con derecha pequeña** (se carga la derecha, sin
+particiones), **partición cuya derecha cabe** y **clave con más filas que la memoria en los
+dos lados** (por bloques), comparadas con el cálculo de todos contra todos en las cuatro
+reuniones.
 
 En los dos casos, que abandonar el recorrido a medias no deja archivos temporales.

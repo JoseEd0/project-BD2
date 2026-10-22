@@ -379,11 +379,13 @@ def test_a_build_side_larger_than_memory_is_partitioned_again(
 def test_a_key_with_more_rows_than_memory_is_joined_by_blocks(
     small_buffer: EngineConfig, serializer: RecordSerializer, city_of, unmatched
 ):
-    """Ningún hash separa filas con la misma clave. Esa partición se reúne por bloques, y
-    las demás claves —y las filas con clave NULL— siguen su camino normal."""
+    """Ningún hash separa filas con la misma clave. Si la clave sobra de memoria en los dos
+    lados, esa partición se reúne por bloques, y las demás claves —y las filas con clave
+    NULL— siguen su camino normal."""
     left = [(index, "lima") for index in range(HEAVY_KEY_ROWS)]
     left += [(500, "cusco"), (501, None), (502, "piura")]
-    right = [(1000, "lima"), (1001, "lima"), (1002, "cusco"), (1003, None), (1004, "tacna")]
+    right = [(1000 + index, "lima") for index in range(HEAVY_KEY_ROWS)]
+    right += [(2000, "cusco"), (2001, None), (2002, "tacna")]
     directory = small_buffer.data_directory / "j"
     with ExternalHashJoin(
         directory, serializer.size, serializer.size, city_of, city_of, small_buffer, unmatched=unmatched
@@ -400,7 +402,7 @@ def test_the_extra_condition_also_applies_when_joining_by_blocks(
     small_buffer: EngineConfig, serializer: RecordSerializer, city_of
 ):
     left = [serializer.pack((index, "lima")) for index in range(HEAVY_KEY_ROWS)]
-    right = [serializer.pack((index, "lima")) for index in (10, 20)]
+    right = [serializer.pack((index, "lima")) for index in (*range(HEAVY_KEY_ROWS), 999)]
 
     def same_id(first_row: bytes, second_row: bytes) -> bool:
         return bool(serializer.unpack(first_row)[0] == serializer.unpack(second_row)[0])
@@ -417,7 +419,7 @@ def test_the_extra_condition_also_applies_when_joining_by_blocks(
     ) as joiner:
         found = joined_ids(serializer, joiner.join(left, right))
         assert joiner.block_joins == 1
-    assert found == Counter({(10, 10): 1, (20, 20): 1})
+    assert found == Counter({(index, index): 1 for index in range(HEAVY_KEY_ROWS)} | {(None, 999): 1})
 
 
 def test_abandoning_a_join_leaves_no_files_behind(
@@ -510,3 +512,50 @@ def test_a_join_whose_left_side_fits_partitions_nothing(
         )
         assert joiner.levels == 0
     assert found == brute_force_pairs(left, right, Unmatched.NONE)
+
+
+@pytest.mark.parametrize(
+    "unmatched", [Unmatched.NONE, Unmatched.LEFT, Unmatched.RIGHT, Unmatched.BOTH]
+)
+def test_a_large_left_with_a_small_right_builds_on_the_right_without_partitioning(
+    small_buffer: EngineConfig, serializer: RecordSerializer, city_of, unmatched
+):
+    """El orden de las tablas en el FROM no debería decidir si la reunión toca el disco."""
+    left = [(index, f"k{index % 7}") for index in range(MANY_KEYS)] + [(MANY_KEYS, None)]
+    right = [(1000, "k1"), (1001, "k3"), (1002, "otra"), (1003, None)]
+    directory = small_buffer.data_directory / "j"
+    with ExternalHashJoin(
+        directory, serializer.size, serializer.size, city_of, city_of, small_buffer, unmatched=unmatched
+    ) as joiner:
+        found = joined_ids(
+            serializer, joiner.join(map(serializer.pack, left), map(serializer.pack, right))
+        )
+        assert joiner.levels == 0
+        assert joiner.block_joins == 0
+    assert found == brute_force_pairs(left, right, unmatched)
+    assert not directory.exists()
+
+
+def test_a_partition_whose_right_side_fits_is_built_on_the_right(
+    small_buffer: EngineConfig, serializer: RecordSerializer, city_of
+):
+    """Una clave muy repetida a la izquierda, con pocas filas a la derecha, no necesita
+    bucles anidados en bloques: su partición derecha sí cabe."""
+    left = [(index, "lima") for index in range(HEAVY_KEY_ROWS)]
+    left += [(500 + index, f"k{index}") for index in range(MANY_KEYS)]
+    right = [(1000 + index, f"k{index}") for index in range(MANY_KEYS)] + [(5000, "lima")]
+    with ExternalHashJoin(
+        small_buffer.data_directory / "j",
+        serializer.size,
+        serializer.size,
+        city_of,
+        city_of,
+        small_buffer,
+        unmatched=Unmatched.BOTH,
+    ) as joiner:
+        found = joined_ids(
+            serializer, joiner.join(map(serializer.pack, left), map(serializer.pack, right))
+        )
+        assert joiner.levels >= 1
+        assert joiner.block_joins == 0
+    assert found == brute_force_pairs(left, right, Unmatched.BOTH)

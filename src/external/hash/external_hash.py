@@ -15,6 +15,7 @@ separa las claves que con la primera coincidían. Ver `README.md` para el análi
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Iterator
+from dataclasses import dataclass
 from itertools import chain, islice
 from pathlib import Path
 from types import TracebackType
@@ -253,12 +254,14 @@ class ExternalHashJoin:
     """Junta dos entradas por igualdad de clave (*grace hash join*).
 
     Se particionan **las dos** entradas con el mismo hash. Como las claves iguales caen en
-    la misma partición, basta con cargar en memoria la partición izquierda y recorrer la
-    derecha comparando. Si la izquierda entera cabe en el buffer, no se particiona nada: se
-    carga y se recorre la derecha una sola vez.
+    la misma partición, basta con cargar en memoria uno de los dos lados de cada partición
+    y recorrer el otro comparando. Se carga la izquierda si cabe en el buffer y, si no, la
+    derecha. Si una entrada entera cabe, no se particiona nada: se carga y la otra se
+    recorre una sola vez, así que juntar una tabla grande con una pequeña no toca el disco
+    sea cual sea el orden en que se escribieron.
 
-    Una partición izquierda que no cabe en el buffer se vuelve a repartir, junto con su
-    pareja derecha, con otra función de hash. Si la nueva función tampoco separa nada es
+    Una partición en la que no cabe ninguno de los dos lados se vuelve a repartir, junto
+    con su pareja, con otra función de hash. Si la nueva función tampoco separa nada es
     que sus filas comparten clave, y no hay hash que las reparta: esa partición se resuelve
     por bucles anidados en bloques, que no necesita tenerla entera en memoria.
 
@@ -275,7 +278,8 @@ class ExternalHashJoin:
     Complejidad, con `N` y `M` registros y `B` registros en el buffer:
 
     * E/S: `2(N + M)` si las particiones caben, y otro tanto por cada nivel extra;
-    * memoria: como mucho `B` registros de la izquierda;
+    * memoria: como mucho `B` registros del lado que se carga; mientras se decide cuál, una
+      muestra de hasta `B` de cada lado;
     * comparaciones: `O(N + M)` en vez de las `O(N · M)` del bucle anidado, salvo entre
       las filas de una misma clave muy repetida.
     """
@@ -300,6 +304,7 @@ class ExternalHashJoin:
         self._accepts = accepts
         self._unmatched = unmatched
         self._memory_records = buffered_records(config, left_record_size)
+        self._right_memory_records = buffered_records(config, right_record_size)
         self._open: list[HashPartitioner] = []
         self._set_aside = [
             directory / f"{LEFT_PREFIX}{NULL_KEYS_SUFFIX}",
@@ -327,11 +332,16 @@ class ExternalHashJoin:
             if len(head) <= self._memory_records:
                 yield from self._join_in_memory(head, rights)
             else:
-                # La muestra ya va dentro del flujo: soltarla para no tenerla en memoria
-                # junto a cada partición que se cargue.
-                stream = chain(head, lefts)
-                del head
-                yield from self._join_level(stream, rights, 0)
+                right_head = list(islice(rights, self._right_memory_records + 1))
+                # Las muestras ya van dentro de los flujos: soltarlas para no tenerlas en
+                # memoria junto a cada partición que se cargue.
+                stream, right_stream = chain(head, lefts), chain(right_head, rights)
+                right_fits = len(right_head) <= self._right_memory_records
+                del head, right_head
+                if right_fits:
+                    yield from self._join_with_right_in_memory(stream, right_stream)
+                else:
+                    yield from self._join_level(stream, right_stream, 0)
         with RunReader(left_path, self._left_record_size, self._config) as left_unmatched:
             yield from ((record, None) for record in left_unmatched)
         with RunReader(right_path, self._right_record_size, self._config) as right_unmatched:
@@ -370,10 +380,14 @@ class ExternalHashJoin:
             right_records, RIGHT_PREFIX, self._right_record_size, self._right_key_of, level
         )
         self.levels = max(self.levels, level + 1)
-        for index, size in enumerate(left.partition_sizes):
+        for index, (size, right_size) in enumerate(
+            zip(left.partition_sizes, right.partition_sizes, strict=True)
+        ):
             lefts, rights = left.read(index), right.read(index)
             if size <= self._memory_records:
                 yield from self._join_in_memory(lefts, rights)
+            elif right_size <= self._right_memory_records:
+                yield from self._join_with_right_in_memory(lefts, rights)
             elif level > 0 and size == left.record_count:
                 yield from self._join_by_blocks(lefts, rights, level)
             else:
@@ -400,26 +414,23 @@ class ExternalHashJoin:
     def _join_in_memory(
         self, left_records: Iterable[bytes], right_records: Iterable[bytes]
     ) -> Iterator[Pair]:
-        lefts = list(left_records)
-        if not lefts and Unmatched.RIGHT not in self._unmatched:
-            return
-        table: dict[Key, list[int]] = {}
-        for position, record in enumerate(lefts):
-            table.setdefault(self._left_key_of(record), []).append(position)
-        paired = bytearray(len(lefts))
-        for probe in right_records:
-            found = False
-            for position in table.get(self._right_key_of(probe), ()):
-                if self._accepts(lefts[position], probe):
-                    found = True
-                    paired[position] = True
-                    yield lefts[position], probe
-            if not found and Unmatched.RIGHT in self._unmatched:
-                yield None, probe
-        if Unmatched.LEFT in self._unmatched:
-            for position, record in enumerate(lefts):
-                if not paired[position]:
-                    yield record, None
+        """Carga la izquierda y recorre la derecha."""
+        yield from _build_and_probe(
+            _Side(list(left_records), self._left_key_of, Unmatched.LEFT in self._unmatched),
+            _Side(right_records, self._right_key_of, Unmatched.RIGHT in self._unmatched),
+            self._accepts,
+        )
+
+    def _join_with_right_in_memory(
+        self, left_records: Iterable[bytes], right_records: Iterable[bytes]
+    ) -> Iterator[Pair]:
+        """Carga la derecha y recorre la izquierda; los pares salen igual, izquierda primero."""
+        swapped = _build_and_probe(
+            _Side(list(right_records), self._right_key_of, Unmatched.RIGHT in self._unmatched),
+            _Side(left_records, self._left_key_of, Unmatched.LEFT in self._unmatched),
+            lambda right, left: self._accepts(left, right),
+        )
+        yield from ((left, right) for right, left in swapped)
 
     def _join_by_blocks(
         self, left_records: Iterable[bytes], right_records: Iterable[bytes], level: int
@@ -444,6 +455,41 @@ class ExternalHashJoin:
         if self._left_key_of(left) != self._right_key_of(right):
             return False
         return self._accepts(left, right)
+
+
+@dataclass(frozen=True, slots=True)
+class _Side:
+    """Un lado de la reunión en memoria: sus filas, cómo sacar su clave y si sus filas sin
+    pareja se conservan."""
+
+    records: Iterable[bytes]
+    key_of: Callable[[bytes], Key]
+    keeps_unmatched: bool
+
+
+def _build_and_probe(build: _Side, probe: _Side, accepts: PairTest) -> Iterator[Pair]:
+    """Tabla hash sobre `build` (una lista) y una pasada por `probe`. Los pares salen
+    `(fila de build, fila de probe)`; `accepts` los recibe en ese mismo orden."""
+    built = list(build.records)
+    if not built and not probe.keeps_unmatched:
+        return
+    table: dict[Key, list[int]] = {}
+    for position, record in enumerate(built):
+        table.setdefault(build.key_of(record), []).append(position)
+    paired = bytearray(len(built))
+    for record in probe.records:
+        found = False
+        for position in table.get(probe.key_of(record), ()):
+            if accepts(built[position], record):
+                found = True
+                paired[position] = True
+                yield built[position], record
+        if not found and probe.keeps_unmatched:
+            yield None, record
+    if build.keeps_unmatched:
+        for position, record in enumerate(built):
+            if not paired[position]:
+                yield record, None
 
 
 def _keyed_only(

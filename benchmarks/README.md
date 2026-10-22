@@ -57,28 +57,28 @@ al tamaño— y la del secuencial es casi plana.
 
 | Operación | Técnica | 1 000 | 10 000 | 100 000 |
 |---|---|---:|---:|---:|
-| Inserción (ms) | heap | **3.84** | **36.8** | **361** |
-|  | secuencial | 23.4 | 268 | 3 161 |
-| Búsqueda por clave (ms) | heap | 49.5 | 449 | 4 779 |
-|  | secuencial | **4.70** | **5.15** | **5.62** |
-| Borrado por clave (ms) | heap | 43.3 | 410 | 4 490 |
-|  | secuencial | **4.53** | **5.22** | **5.51** |
+| Inserción (ms) | heap | **3.59** | **37.5** | **373** |
+|  | secuencial | 23.9 | 273 | 3 182 |
+| Búsqueda por clave (ms) | heap | 27.6 | 262 | 2 724 |
+|  | secuencial | **4.32** | **4.73** | **5.63** |
+| Borrado por clave (ms) | heap | 26.2 | 243 | 2 561 |
+|  | secuencial | **4.79** | **5.02** | **5.48** |
 | Espacio (KiB) | heap | **64.0** | **576** | **5 720** |
 |  | secuencial | 104 | 960 | 9 528 |
-| Reorganización (ms) | secuencial | 2.12 | 16.5 | 164 |
+| Reorganización (ms) | secuencial | 2.08 | 16.9 | 164 |
 
 ### Conclusiones
 
 **Por clave, el secuencial gana en todos los tamaños.** El heap recorre de media la mitad
-del archivo por cada clave, así que su tiempo crece lineal (49.5 → 449 → 4 779 ms
+del archivo por cada clave, así que su tiempo crece lineal (27.6 → 262 → 2 724 ms
 para 100 búsquedas), mientras que el secuencial hace una búsqueda binaria sobre sus páginas
-y casi no se mueve (4.70 → 5.15 → 5.62 ms). Ya con 1 000 filas es
-11 veces más rápido, y con 100 000 **busca 850 veces más
+y casi no se mueve (4.32 → 4.73 → 5.63 ms). Ya con 1 000 filas es
+6.4 veces más rápido, y con 100 000 **busca 484 veces más
 rápido**. Borrar cuesta casi lo mismo que buscar en las dos estructuras, porque es
-encontrar la fila y marcarla: con 100 000 filas el secuencial borra 815 veces más
+encontrar la fila y marcarla: con 100 000 filas el secuencial borra 468 veces más
 rápido.
 
-El precio del orden se paga al escribir: insertar cuesta **8.8 veces más** en el
+El precio del orden se paga al escribir: insertar cuesta **8.5 veces más** en el
 secuencial, porque cada inserción localiza la página y desplaza bytes dentro de ella, y cada
 tanto se dispara una reorganización. También ocupa **1.7 veces más espacio**, y eso es
 deliberado: el factor de llenado del 80 % deja hueco para que las inserciones futuras quepan
@@ -96,15 +96,19 @@ secuencial si se consulta por clave o por rango y las escrituras son la minoría
 
 | | Heap file | Archivo secuencial |
 |---|---|---|
-| **Ventajas** | Inserción `O(1)`: va directo a la cabeza de la lista de libres · el menor espacio en disco · reutiliza los huecos de los borrados sin ningún trabajo diferido · sin coste oculto | Búsqueda y borrado por clave `O(log P)`: 850× más rápido con 100 000 filas · rangos y recorrido ordenado gratis, sin ordenar nada · el orden se mantiene siempre disponible |
-| **Desventajas** | Búsqueda y borrado por valor `O(P)`: hay que recorrer el archivo · un rango o un `ORDER BY` obligan a ordenar aparte · inútil sin un índice encima | Inserción 8.8× más lenta: localiza la página y desplaza bytes · 1.7× más espacio por el factor de llenado del 80 % · reorganizaciones que congelan el archivo cuando el desperdicio pasa del 30 % · el desbordamiento degrada la búsqueda hasta que se reorganiza |
+| **Ventajas** | Inserción `O(1)`: va directo a la cabeza de la lista de libres · el menor espacio en disco · reutiliza los huecos de los borrados sin ningún trabajo diferido · sin coste oculto | Búsqueda y borrado por clave `O(log P)`: 484× más rápido con 100 000 filas · rangos y recorrido ordenado gratis, sin ordenar nada · el orden se mantiene siempre disponible |
+| **Desventajas** | Búsqueda y borrado por valor `O(P)`: hay que recorrer el archivo · un rango o un `ORDER BY` obligan a ordenar aparte · inútil sin un índice encima | Inserción 8.5× más lenta: localiza la página y desplaza bytes · 1.7× más espacio por el factor de llenado del 80 % · reorganizaciones que congelan el archivo cuando el desperdicio pasa del 30 % · el desbordamiento degrada la búsqueda hasta que se reorganiza |
 | **Se elige cuando** | Carga masiva, tablas que siempre se consultan por índice, orden de lectura irrelevante | Consultas por rango o por clave frecuentes, escrituras minoritarias, necesidad de recorrer en orden |
 
 ## 2. Indexación — B+ agrupado vs B+ no agrupado vs hash extendible
 
 `index_benchmark.py` mide construcción, igualdad, rango, recorrido ordenado, espacio
-adicional y un ciclo de borrados e inserciones sobre el 10 % de las filas. Las búsquedas de
-los índices no agrupados **incluyen el salto al heap**, que es el coste real de usarlos.
+adicional y un ciclo de borrados e inserciones sobre el 10 % de las filas. Las tres
+técnicas hacen el mismo trabajo: guardar las filas y encontrarlas. El B+ agrupado las
+guarda en sus hojas; el no agrupado y el hash guardan direcciones y tienen **su propio
+heap**, así que su construcción y su ciclo de borrados e inserciones incluyen escribir y
+borrar las filas en él. Sus búsquedas **incluyen el salto al heap**, y el JSON guarda
+además la misma búsqueda sin él (`solo_indice_ms`) para separar los dos costes.
 
 ### Resultados medidos
 
@@ -117,24 +121,24 @@ ninguna de las dos cosas.
 
 | Operación | Técnica | 1 000 | 10 000 | 100 000 |
 |---|---|---:|---:|---:|
-| Construcción (ms) | B+ agrupado | 19.8 | 298 | 4 446 |
-|  | B+ no agrupado | 173 | 2 056 | 25 587 |
-|  | hash extendible | **7.45** | **98.4** | **933** |
-| Igualdad (ms) | B+ agrupado | **1.20** | **2.99** | **3.95** |
-|  | B+ no agrupado | 12.5 | 13.0 | 17.1 |
-|  | hash extendible | 12.5 | 9.17 | 12.2 |
-| Rango (ms) | B+ agrupado | **2.48** | **4.43** | **5.49** |
-|  | B+ no agrupado | 20.3 | 21.3 | 35.1 |
+| Construcción (ms) | B+ agrupado | 20.4 | 302 | 4 428 |
+|  | B+ no agrupado | 179 | 2 094 | 25 920 |
+|  | hash extendible | **11.1** | **135** | **1 317** |
+| Igualdad (ms) | B+ agrupado | **1.20** | **3.04** | **4.06** |
+|  | B+ no agrupado | 12.3 | 12.3 | 16.1 |
+|  | hash extendible | 4.58 | 3.48 | 4.29 |
+| Rango (ms) | B+ agrupado | **2.49** | **4.48** | **5.47** |
+|  | B+ no agrupado | 20.9 | 21.7 | 27.0 |
 | | hash extendible | — | — | **no soportado** |
-| Recorrido ordenado (ms) | B+ agrupado | **0.23** | **2.46** | **31.2** |
-|  | B+ no agrupado | 1.79 | 18.0 | 199 |
+| Recorrido ordenado (ms) | B+ agrupado | **0.25** | **2.50** | **31.8** |
+|  | B+ no agrupado | 1.79 | 18.9 | 199 |
 | | hash extendible | — | — | **no soportado** |
 | Espacio (KiB) | B+ agrupado | 108 | 956 | 9 356 |
 |  | B+ no agrupado | **24.0** | **220** | **2 040** |
 |  | hash extendible | 28.0 | 264 | 2 056 |
-| Inserción/borrado (ms) | B+ agrupado | **4.79** | **86.0** | **1 124** |
-|  | B+ no agrupado | 43.2 | 457 | 5 018 |
-|  | hash extendible | 11.9 | 92.8 | 1 159 |
+| Inserción/borrado (ms) | B+ agrupado | **4.75** | 87.2 | 1 129 |
+|  | B+ no agrupado | 44.4 | 478 | 5 047 |
+|  | hash extendible | 5.32 | **45.0** | **531** |
 
 Las celdas «no soportado» **no son un cero de rendimiento, son una limitación de la
 técnica**: el hash destruye el orden, así que no hay forma de resolver un rango ni un
@@ -142,24 +146,30 @@ técnica**: el hash destruye el orden, así que no hay forma de resolver un rang
 
 ### Conclusiones
 
-**El B+ agrupado gana en consultas y el hash en escritura.** El agrupado responde 100
-igualdades en 3.95 ms con 100 000 filas porque la fila ya está en la hoja: no hay salto.
-El hash tarda 12.2 ms pese a ser `O(1)`, y toda la diferencia es ese salto al heap. El B+
-no agrupado (17.1 ms) suma lo peor de ambos para esta carga: `O(log N)` **más** el salto.
+**En una búsqueda por igualdad cuesta el índice, no el salto al heap.** El agrupado
+responde 100 igualdades en 4.06 ms con 100 000 filas y el hash en 4.29 ms; sin ir al heap, el hash
+tarda 4.00 ms, lo mismo que el agrupado. El salto a la fila es como mucho un 7 % del tiempo en
+los dos índices secundarios: una lectura de una página que casi siempre está en el buffer
+pool. Lo que pesa es leer la cubeta o el nodo y decodificar sus entradas en Python. Por eso
+el B+ no agrupado es el más lento (16.1 ms, 16.0 sin el heap): sus claves compuestas
+`(valor, dirección)` llenan nodos de unas 300 entradas, y cada nodo que lee se decodifica
+entero.
 
-**El salto al heap domina cuando hay muchos resultados.** En el recorrido ordenado de
-100 000 filas el agrupado tarda 31.2 ms y el no agrupado 199 ms: 6.4 veces más, y
-la estructura es la misma. La diferencia son 100 000 accesos sueltos al heap.
+**El salto al heap sí pesa cuando hay muchos resultados.** En el recorrido ordenado de
+100 000 filas el agrupado tarda 31.8 ms y el no agrupado 199 ms, 6.3 veces más. De esos,
+79.0 ms son recorrer sus propias hojas y 120 ms, 100 000 lecturas sueltas del heap en el
+orden de la clave y no en el físico.
 
 **El espacio va al revés.** El agrupado ocupa 9 356 KiB porque guarda las filas; los otros
 dos rondan 2 040 KiB porque solo guardan direcciones. Por eso solo puede haber un índice
 agrupado por tabla y tantos secundarios como haga falta.
 
-**El hash es el más rápido de construir.** Construye en 0.9 s, 27 veces menos que el B+
-no agrupado, porque insertar es calcular la cubeta y escribir en ella. En el ciclo de
-borrados e inserciones, en cambio, el agrupado es algo más rápido en los tres tamaños
-(1.1 s contra 1.2 s con 100 000 filas): el hash paga al borrar lo que cuesta mantenerse
-compacto, porque funde cada cubeta holgada con su gemela y reduce el directorio.
+**El hash es el más rápido para escribir.** Construye en 1.3 s contando su heap, 20 veces menos
+que el B+ no agrupado, porque insertar es calcular la cubeta y escribir en ella. En el ciclo
+de borrados e inserciones también gana con 10 000 y 100 000 filas (0.5 s contra 1.1 s del
+agrupado con 100 000). Con 1 000 filas el agrupado es algo más rápido (4.75 contra
+5.32 ms): el hash paga al borrar lo que cuesta mantenerse compacto, porque funde cada
+cubeta holgada con su gemela y reduce el directorio, y con pocas filas eso es casi todo.
 
 **Cuándo usar cada uno:** agrupado para la clave primaria de la tabla; hash para columnas
 que solo se consultan por igualdad; B+ no agrupado cuando además hacen falta rangos sobre
@@ -169,15 +179,16 @@ una columna que no es la de agrupamiento.
 
 | | B+ agrupado | B+ no agrupado | Hash extendible |
 |---|---|---|---|
-| **Ventajas** | La fila está en la hoja: **sin salto al heap** · el mejor en igualdad (3.95 ms) y en rango (5.49 ms) · recorrido ordenado 6.4× más rápido que el no agrupado · un solo archivo que es índice y datos a la vez | Ocupa 4.6× menos que el agrupado porque solo guarda direcciones · **varios por tabla**, uno por columna que interese · admite rangos y orden · admite valores repetidos con clave compuesta `(valor, dirección)` | Igualdad en `O(1)`: dos accesos, uno al directorio y uno a la cubeta, sea cual sea el tamaño · **construcción 27× más rápida** que el B+ no agrupado (0.9 s vs 25.6 s) · crecer solo duplica el directorio, sin tocar las cubetas · al borrar funde cubetas y encoge el directorio |
-| **Desventajas** | Ocupa 9 356 KiB porque guarda las filas · **solo puede haber uno por tabla**: los datos solo pueden estar ordenados de una forma · las hojas son grandes, así que caben menos entradas por página y el árbol crece en altura | Paga un **salto al heap por cada resultado**: con 100 000 filas el recorrido ordenado tarda 199 ms frente a 31.2 ms del agrupado · el más lento en construirse por el coste de decodificar claves compuestas | **No admite rangos ni `ORDER BY`**: el hash destruye el orden · claves muy repetidas no se pueden repartir y degeneran en cadenas de desbordamiento |
+| **Ventajas** | La fila está en la hoja: **sin salto al heap** · el mejor en igualdad (4.06 ms) y en rango (5.47 ms) · recorrido ordenado 6.3× más rápido que el no agrupado · un solo archivo que es índice y datos a la vez | Ocupa 4.6× menos que el agrupado porque solo guarda direcciones · **varios por tabla**, uno por columna que interese · admite rangos y orden · admite valores repetidos con clave compuesta `(valor, dirección)` | Igualdad en `O(1)`: dos accesos, uno al directorio y uno a la cubeta, sea cual sea el tamaño · **construcción 20× más rápida** que el B+ no agrupado (1.3 s vs 25.9 s) · crecer solo duplica el directorio, sin tocar las cubetas · al borrar funde cubetas y encoge el directorio |
+| **Desventajas** | Ocupa 9 356 KiB porque guarda las filas · **solo puede haber uno por tabla**: los datos solo pueden estar ordenados de una forma · las hojas son grandes, así que caben menos entradas por página y el árbol crece en altura | Paga un **salto al heap por cada resultado**, que pesa cuando son muchos: con 100 000 filas el recorrido ordenado tarda 199 ms frente a 31.8 ms del agrupado · el más lento en construirse por el coste de decodificar claves compuestas | **No admite rangos ni `ORDER BY`**: el hash destruye el orden · con pocas filas, borrar es más caro que en el B+ porque funde cubetas y encoge el directorio · claves muy repetidas no se pueden repartir y degeneran en cadenas de desbordamiento |
 | **Se elige cuando** | Es la clave primaria de la tabla y las consultas por ella dominan | Hace falta un índice secundario y las consultas incluyen rangos u orden | La columna solo se consulta por igualdad y se carga mucho de una vez |
 
 ## Cómo leer los tiempos de construcción
 
-El B+ no agrupado tarda 25.6 s en construirse con 100 000 filas: 5.8 veces más que el
-agrupado y 27 veces más que el hash. El motivo está en la implementación, no en la
-estructura. Su clave es compuesta `(valor, dirección)`, ocupa 14 bytes en vez de 8, y por
+El B+ no agrupado tarda 25.9 s en construirse con 100 000 filas: 5.9 veces más que el
+agrupado y 20 veces más que el hash, y los tres cuentan ya el escribir las filas: el
+agrupado en sus hojas, los otros dos en su heap. El motivo está en la implementación, no en
+la estructura. Su clave es compuesta `(valor, dirección)`, ocupa 14 bytes en vez de 8, y por
 eso en cada nodo caben casi 300 entradas en vez de 59. Cada vez que se lee un nodo,
 **deserializar decodifica esas 300 claves compuestas en Python**, aunque la búsqueda binaria
 solo vaya a mirar ocho.
@@ -232,15 +243,15 @@ Tiempo medio por consulta, en milisegundos:
 
 | Radio | Técnica | 1 000 | 10 000 | 100 000 | Filas devueltas (100 000) |
 |---|---|---:|---:|---:|---:|
-| 1 km | búsqueda secuencial | 3.52 | 34.6 | 347 | 64.1 |
+| 1 km | búsqueda secuencial | 3.52 | 33.8 | 338 | 64.1 |
 |  | R-Tree | 0.27 | 0.42 | 0.96 | |
-|  | GiST | **0.041** | **0.041** | **0.25** | |
-| 5 km | búsqueda secuencial | 3.53 | 34.4 | 347 | 544 |
-|  | R-Tree | 0.32 | 0.78 | 4.19 | |
-|  | GiST | **0.039** | **0.059** | **0.43** | |
-| 10 km | búsqueda secuencial | 3.58 | 34.8 | 349 | 1 577 |
-|  | R-Tree | 0.41 | 1.29 | 10.9 | |
-|  | GiST | **0.044** | **0.098** | **1.02** | |
+|  | GiST | **0.043** | **0.048** | **0.24** | |
+| 5 km | búsqueda secuencial | 3.51 | 33.9 | 339 | 544 |
+|  | R-Tree | 0.33 | 0.82 | 4.39 | |
+|  | GiST | **0.042** | **0.063** | **0.48** | |
+| 10 km | búsqueda secuencial | 3.55 | 34.3 | 339 | 1 577 |
+|  | R-Tree | 0.42 | 1.40 | 11.1 | |
+|  | GiST | **0.050** | **0.099** | **1.00** | |
 
 ### Vecinos más cercanos
 
@@ -250,15 +261,15 @@ Tiempo medio por consulta, en milisegundos:
 
 | k | Técnica | 1 000 | 10 000 | 100 000 |
 |---|---|---:|---:|---:|
-| 10 | búsqueda secuencial | 6.25 | 75.1 | 1 306 |
-|  | R-Tree | 0.34 | 0.44 | 0.60 |
-|  | GiST | **0.055** | **0.056** | **0.12** |
-| 50 | búsqueda secuencial | 6.23 | 75.8 | 1 320 |
-|  | R-Tree | 0.55 | 0.69 | 0.88 |
-|  | GiST | **0.088** | **0.094** | **0.18** |
-| 100 | búsqueda secuencial | 6.38 | 76.4 | 1 296 |
-|  | R-Tree | 0.80 | 1.00 | 1.21 |
-|  | GiST | **0.12** | **0.13** | **0.24** |
+| 10 | búsqueda secuencial | 5.82 | 70.2 | 1 171 |
+|  | R-Tree | 0.33 | 0.44 | 0.57 |
+|  | GiST | **0.059** | **0.058** | **0.12** |
+| 50 | búsqueda secuencial | 5.85 | 71.1 | 1 173 |
+|  | R-Tree | 0.54 | 0.70 | 0.86 |
+|  | GiST | **0.095** | **0.097** | **0.19** |
+| 100 | búsqueda secuencial | 5.94 | 73.7 | 1 170 |
+|  | R-Tree | 0.79 | 1.14 | 1.31 |
+|  | GiST | **0.12** | **0.14** | **0.26** |
 
 ### Por qué: los nodos que abre cada consulta
 
@@ -285,13 +296,13 @@ Esta es la gráfica que explica las dos anteriores. El árbol se multiplica por 
 
 | Medida | Técnica | 1 000 | 10 000 | 100 000 |
 |---|---|---:|---:|---:|
-| Construcción (ms) | R-Tree, carga masiva (STR) | 4.17 | 47.8 | 712 |
-|  | R-Tree, inserción uno a uno | 142 | 1 885 | 22 706 |
-|  | GiST | **1.79** | **18.4** | **188** |
+| Construcción (ms) | R-Tree, carga masiva (STR) | 3.46 | 40.6 | 544 |
+|  | R-Tree, inserción uno a uno | 145 | 1 854 | 22 549 |
+|  | GiST | **1.47** | **18.8** | **188** |
 | Espacio del índice (KiB) | R-Tree, carga masiva | **32.0** | **248** | **2 428** |
 |  | R-Tree, inserción uno a uno | 40.0 | 324 | 3 260 |
-|  | GiST | 88.0 | 800 | 7 792 |
-| Memoria pico al consultar (KiB) | búsqueda secuencial | 200 | 772 | 1 624 |
+|  | GiST | 88.0 | 808 | 7 760 |
+| Memoria pico al consultar (KiB) | búsqueda secuencial | 200 | 772 | 1 468 |
 |  | R-Tree | **98.2** | **167** | **1 365** |
 
 `CREATE INDEX … USING RTREE` usa la carga masiva; la inserción uno a uno es lo que cuesta
@@ -302,35 +313,35 @@ PostgreSQL no es comparable desde fuera y no se reporta.
 ### Conclusiones
 
 **El recorrido secuencial crece con la tabla; el índice, con la respuesta.** La búsqueda
-secuencial tarda lo mismo pida un radio de 1 km o de 10 (347 y 349 ms con 100 000 puntos),
-porque siempre mide la distancia a todos. El R-Tree tarda 0.96 ms para 1 km y 10.9 ms para
+secuencial tarda lo mismo pida un radio de 1 km o de 10 (338 y 339 ms con 100 000 puntos),
+porque siempre mide la distancia a todos. El R-Tree tarda 0.96 ms para 1 km y 11.1 ms para
 10 km: lo que le cuesta son las 64.1 o las 1 577 filas que tiene que devolver.
 
 **Cuanto más selectiva la consulta, más gana el índice.** Con 100 000 puntos, el R-Tree es
-364 veces más rápido que el recorrido para 1 km, 83 veces para 5 km y 32 para 10 km,
+351 veces más rápido que el recorrido para 1 km, 77 veces para 5 km y 31 para 10 km,
 donde cada consulta devuelve ya el 1.6 % de la tabla.
 
 **En el k-NN la diferencia es de tres órdenes de magnitud.** Sin índice no hay forma de
-saber cuáles son los 10 más cercanos sin medir los 100 000 y ordenarlos: 1 306 ms. El
-R-Tree abre los nodos del más cercano al más lejano y se detiene al tener diez: 0.60 ms,
-**2 192 veces menos**. Y casi no depende del tamaño: de 1 000 a 100 000 puntos el recorrido
-se multiplica por 209 y el R-Tree por 1.8.
+saber cuáles son los 10 más cercanos sin medir los 100 000 y ordenarlos: 1 171 ms. El
+R-Tree abre los nodos del más cercano al más lejano y se detiene al tener diez: 0.57 ms,
+**2 042 veces menos**. Y casi no depende del tamaño: de 1 000 a 100 000 puntos el recorrido
+se multiplica por 201 y el R-Tree por 1.7.
 
-**GiST es entre 3.9 y 13 veces más rápido que el R-Tree, y escala igual.** La distancia entre
+**GiST es entre 4.0 y 14 veces más rápido que el R-Tree, y escala igual.** La distancia entre
 las dos líneas es constante en las gráficas: la misma pendiente, desplazada. GiST está
 escrito en C y lleva décadas de optimización; este R-Tree es Python y deserializa cada nodo
 que abre. Lo que el experimento compara es **el algoritmo**, y ahí las dos estructuras se
 comportan igual y el recorrido no.
 
-**La carga masiva es 32 veces más rápida que insertar y deja un árbol mejor.** 0.7 s
-frente a 22.7 s con 100 000 puntos, 606 nodos en vez de 814 y un 26 % menos de espacio.
+**La carga masiva es 41 veces más rápida que insertar y deja un árbol mejor.** 0.5 s
+frente a 22.5 s con 100 000 puntos, 606 nodos en vez de 814 y un 26 % menos de espacio.
 GiST construye en 0.2 s.
 
-**El índice propio ocupa 3.2 veces menos que el de PostGIS:** 2 428 KiB frente a 7 792. Las
+**El índice propio ocupa 3.2 veces menos que el de PostGIS:** 2 428 KiB frente a 7 760. Las
 hojas de este R-Tree guardan el punto en 22 bytes; `geography` indexa cajas en tres
 dimensiones.
 
-**La memoria al consultar es parecida en las dos técnicas del motor** (1 624 KiB el recorrido y
+**La memoria al consultar es parecida en las dos técnicas del motor** (1 468 KiB el recorrido y
 1 365 KiB el R-Tree con 100 000 puntos). El R-Tree necesita tener a la vez las direcciones
 que devuelve el índice, porque las ordena por página antes de ir al heap para leer cada
 página una sola vez.
@@ -339,9 +350,9 @@ página una sola vez.
 
 | | Búsqueda secuencial | R-Tree (propio) | GiST (PostgreSQL) |
 |---|---|---|---|
-| **Ventajas** | Sin índice que construir, almacenar ni mantener · coste predecible: siempre el mismo · suficiente en tablas pequeñas: 3.52 ms por radio con 1 000 puntos | k-NN en `O(log N + k)`: 0.60 ms con 100 000 puntos · por radio, hasta 364× más rápido que recorrer · el índice más compacto de los tres · una sola estructura para las dos métricas | El más rápido en todo, entre 3.9 y 13 veces · construye 100 000 puntos en 0.2 s · maduro, concurrente y con recuperación ante fallos |
-| **Desventajas** | Crece en proporción a la tabla · el k-NN obliga a medir y ordenar todo: 1.3 s con 100 000 puntos · no aprovecha que la consulta sea selectiva | Hay que mantenerlo: insertar uno a uno cuesta 0.23 ms por punto · gana menos cuanto mayor es la parte de la tabla que devuelve la consulta | Es un sistema entero, no una estructura: hay que instalarlo, cargarlo y consultarlo por red · su índice ocupa 3.2× más |
-| **Se elige cuando** | La tabla es pequeña (con 1 000 puntos responde en 3.52 a 6.38 ms) o la consulta devuelve una parte grande de las filas | Consultas selectivas —un barrio, los `k` más cercanos— sobre muchos puntos | Hay un PostgreSQL disponible y el rendimiento manda |
+| **Ventajas** | Sin índice que construir, almacenar ni mantener · coste predecible: siempre el mismo · suficiente en tablas pequeñas: 3.51 ms por radio con 1 000 puntos | k-NN en `O(log N + k)`: 0.57 ms con 100 000 puntos · por radio, hasta 351× más rápido que recorrer · el índice más compacto de los tres · una sola estructura para las dos métricas | El más rápido en todo, entre 4.0 y 14 veces · construye 100 000 puntos en 0.2 s · maduro, concurrente y con recuperación ante fallos |
+| **Desventajas** | Crece en proporción a la tabla · el k-NN obliga a medir y ordenar todo: 1.2 s con 100 000 puntos · no aprovecha que la consulta sea selectiva | Hay que mantenerlo: insertar uno a uno cuesta 0.23 ms por punto · gana menos cuanto mayor es la parte de la tabla que devuelve la consulta | Es un sistema entero, no una estructura: hay que instalarlo, cargarlo y consultarlo por red · su índice ocupa 3.2× más |
+| **Se elige cuando** | La tabla es pequeña (con 1 000 puntos responde en 3.51 a 5.94 ms) o la consulta devuelve una parte grande de las filas | Consultas selectivas —un barrio, los `k` más cercanos— sobre muchos puntos | Hay un PostgreSQL disponible y el rendimiento manda |
 
 ### Reproducirlo
 

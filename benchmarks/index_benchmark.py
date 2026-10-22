@@ -3,6 +3,11 @@
 Mide lo que pide el enunciado: tiempo de construcción, búsqueda por igualdad, búsqueda por
 rango, recorrido ordenado, espacio adicional y coste de inserciones y borrados.
 
+Las tres técnicas hacen el mismo trabajo: guardar las filas y poder encontrarlas. En el B+
+agrupado las filas viven en las hojas; los otros dos guardan direcciones, así que cada uno
+tiene su propio heap, y llenarlo o cambiarlo cuenta en su construcción y en sus borrados e
+inserciones.
+
     .venv/bin/python -m benchmarks.index_benchmark --sizes 1000 10000 --queries 100
 """
 
@@ -11,7 +16,7 @@ from __future__ import annotations
 import argparse
 import shutil
 import tempfile
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from pathlib import Path
 
 from benchmarks.common import (
@@ -44,6 +49,8 @@ MUTATION_LABEL = "inserciones/eliminaciones"
 CLUSTERED = "B+ agrupado"
 UNCLUSTERED = "B+ no agrupado"
 HASH = "hash extendible"
+WITH_HEAP_NOTE = "incluye el heap"
+INDEX_ONLY_DIGITS = 2
 
 
 def run(sizes: list[int], queries: int, seed: int, page_size: int, workspace: Path) -> Report:
@@ -60,18 +67,9 @@ def run(sizes: list[int], queries: int, seed: int, page_size: int, workspace: Pa
         directory.mkdir(parents=True, exist_ok=True)
         config = EngineConfig(page_size=page_size, data_directory=directory)
         _measure_clustered(report, config, serializer, records, keys, size)
-        addresses = _fill_heap(config, serializer, records)
-        _measure_unclustered(report, config, serializer, records, addresses, keys, size)
-        _measure_hash(report, config, serializer, records, addresses, keys, size)
+        _measure_unclustered(report, config, serializer, records, keys, size)
+        _measure_hash(report, config, serializer, records, keys, size)
     return report
-
-
-def _fill_heap(
-    config: EngineConfig, serializer: RecordSerializer, records: list[bytes]
-) -> list[RecordId]:
-    path = config.data_directory / "datos.heap"
-    with HeapFile(path, serializer.size, config) as heap:
-        return [heap.insert(record) for record in records]
 
 
 def _measure_clustered(
@@ -138,21 +136,22 @@ def _measure_unclustered(
     config: EngineConfig,
     serializer: RecordSerializer,
     records: list[bytes],
-    addresses: list[RecordId],
     keys: list[int],
     size: int,
 ) -> None:
     path = config.data_directory / "unclustered.bpt"
-    heap_path = config.data_directory / "datos.heap"
+    heap_path = config.data_directory / "unclustered.heap"
     with (
         UnclusteredBPlusIndex(path, serializer, "id", config) as index,
         HeapFile(heap_path, serializer.size, config) as heap,
     ):
+        addresses: list[RecordId] = []
         report.add(
             UNCLUSTERED,
             "construcción",
             size,
-            time_it(lambda: _insert_addressed(index, records, addresses)),
+            time_it(lambda: addresses.extend(_load_addressed(heap, index, records))),
+            nota=WITH_HEAP_NOTE,
         )
         report.add(
             UNCLUSTERED,
@@ -161,6 +160,7 @@ def _measure_unclustered(
             time_it(lambda: [_resolve(heap, index.search(key)) for key in keys]),
             consultas=len(keys),
             nota="incluye el salto al heap",
+            solo_indice_ms=_index_only(lambda: [index.search(key) for key in keys]),
         )
         report.add(
             UNCLUSTERED,
@@ -179,6 +179,7 @@ def _measure_unclustered(
             "recorrido ordenado",
             size,
             time_it(lambda: [heap.read(address) for _, address in index.scan()]),
+            solo_indice_ms=_index_only(lambda: list(index.scan())),
         )
         index.flush()
         report.add(
@@ -199,8 +200,9 @@ def _measure_unclustered(
             UNCLUSTERED,
             MUTATION_LABEL,
             size,
-            time_it(lambda: _churn_unclustered(index, churn)),
+            time_it(lambda: _churn_unclustered(heap, index, churn)),
             operaciones=len(churn) * 2,
+            nota=WITH_HEAP_NOTE,
         )
 
 
@@ -209,26 +211,24 @@ def _measure_hash(
     config: EngineConfig,
     serializer: RecordSerializer,
     records: list[bytes],
-    addresses: list[RecordId],
     keys: list[int],
     size: int,
 ) -> None:
     path = config.data_directory / "hash.idx"
-    heap_path = config.data_directory / "datos.heap"
+    heap_path = config.data_directory / "hash.heap"
     codec = ScalarKeyCodec(serializer.schema.fields[0])
     with (
         ExtendibleHashIndex(path, codec, RECORD_ID_SIZE, config) as index,
         HeapFile(heap_path, serializer.size, config) as heap,
     ):
-        entries = [
-            (integer_of(serializer.unpack_field(record, 0)), address)
-            for record, address in zip(records, addresses, strict=True)
-        ]
+        keyed = [(integer_of(serializer.unpack_field(record, 0)), record) for record in records]
+        entries: list[tuple[int, RecordId]] = []
         report.add(
             HASH,
             "construcción",
             size,
-            time_it(lambda: _insert_keys(index, entries)),
+            time_it(lambda: entries.extend(_load_keyed(heap, index, keyed))),
+            nota=WITH_HEAP_NOTE,
         )
         report.add(
             HASH,
@@ -237,6 +237,7 @@ def _measure_hash(
             time_it(lambda: [_resolve_raw(heap, index.search(key)) for key in keys]),
             consultas=len(keys),
             nota="incluye el salto al heap",
+            solo_indice_ms=_index_only(lambda: [index.search(key) for key in keys]),
         )
         report.add(HASH, "rango", size, 0.0, nota="no soportado: el hash no guarda orden")
         report.add(
@@ -251,13 +252,18 @@ def _measure_hash(
             kib=round(directory_size([path, path.with_name(path.name + DIRECTORY_SUFFIX)]), 1),
             profundidad_global=index.global_depth,
         )
-        churn = [(key, address) for key, address in entries if key % MUTATION_FRACTION == 0]
+        churn = [
+            (key, record, address)
+            for (key, record), (_, address) in zip(keyed, entries, strict=True)
+            if key % MUTATION_FRACTION == 0
+        ]
         report.add(
             HASH,
             MUTATION_LABEL,
             size,
-            time_it(lambda: _churn_hash(index, churn)),
+            time_it(lambda: _churn_hash(heap, index, churn)),
             operaciones=len(churn) * 2,
+            nota=WITH_HEAP_NOTE,
         )
 
 
@@ -266,16 +272,34 @@ def _insert_records(index: ClusteredBPlusIndex, records: list[bytes]) -> None:
         index.insert(record)
 
 
-def _insert_addressed(
-    index: UnclusteredBPlusIndex, records: list[bytes], addresses: list[RecordId]
-) -> None:
-    for record, address in zip(records, addresses, strict=True):
+def _index_only(lookup: Callable[[], object]) -> float:
+    """La misma lectura sin ir al heap: separa lo que cuesta el índice de lo que cuesta el
+    salto a la fila."""
+    return round(time_it(lookup), INDEX_ONLY_DIGITS)
+
+
+def _load_addressed(
+    heap: HeapFile, index: UnclusteredBPlusIndex, records: list[bytes]
+) -> list[RecordId]:
+    """Como carga el motor una tabla con índice secundario: cada fila al heap y su
+    dirección al índice."""
+    addresses = []
+    for record in records:
+        address = heap.insert(record)
         index.insert(record, address)
+        addresses.append(address)
+    return addresses
 
 
-def _insert_keys(index: ExtendibleHashIndex, entries: list[tuple[int, RecordId]]) -> None:
-    for key, address in entries:
+def _load_keyed(
+    heap: HeapFile, index: ExtendibleHashIndex, keyed: list[tuple[int, bytes]]
+) -> list[tuple[int, RecordId]]:
+    entries = []
+    for key, record in keyed:
+        address = heap.insert(record)
         index.insert(key, address.pack())
+        entries.append((key, address))
+    return entries
 
 
 def _churn_clustered(index: ClusteredBPlusIndex, entries: list[tuple[int, bytes]]) -> None:
@@ -287,19 +311,23 @@ def _churn_clustered(index: ClusteredBPlusIndex, entries: list[tuple[int, bytes]
 
 
 def _churn_unclustered(
-    index: UnclusteredBPlusIndex, entries: list[tuple[bytes, RecordId]]
+    heap: HeapFile, index: UnclusteredBPlusIndex, entries: list[tuple[bytes, RecordId]]
 ) -> None:
     for record, address in entries:
         index.delete(record, address)
-    for record, address in entries:
-        index.insert(record, address)
+        heap.delete(address)
+    for record, _ in entries:
+        index.insert(record, heap.insert(record))
 
 
-def _churn_hash(index: ExtendibleHashIndex, entries: list[tuple[int, RecordId]]) -> None:
-    for key, _ in entries:
+def _churn_hash(
+    heap: HeapFile, index: ExtendibleHashIndex, entries: list[tuple[int, bytes, RecordId]]
+) -> None:
+    for key, _, address in entries:
         index.delete(key)
-    for key, address in entries:
-        index.insert(key, address.pack())
+        heap.delete(address)
+    for key, record, _ in entries:
+        index.insert(key, heap.insert(record).pack())
 
 
 def _resolve_range(heap: HeapFile, found: Iterable[tuple[object, RecordId]]) -> list[bytes]:

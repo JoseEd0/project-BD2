@@ -15,14 +15,14 @@
       "technique": "heap file",
       "operation": "inserción",
       "dataset_size": 1000,
-      "milliseconds": 3.8446670077973977,
+      "milliseconds": 3.5948750155512244,
       "extra": {}
     },
     {
       "technique": "heap file",
       "operation": "búsqueda por clave",
       "dataset_size": 1000,
-      "milliseconds": 49.47437500231899,
+      "milliseconds": 27.613458019914106,
       "extra": {
         "consultas": 100
       }
@@ -40,7 +40,7 @@
       "technique": "heap file",
       "operation": "borrado",
       "dataset_size": 1000,
-      "milliseconds": 43.292333008139394,
+      "milliseconds": 26.190207980107516,
       "extra": {
         "borrados": 100
       }
@@ -58,14 +58,14 @@
       "technique": "archivo secuencial",
       "operation": "inserción",
       "dataset_size": 1000,
-      "milliseconds": 23.446624996722676,
+      "milliseconds": 23.893792007584125,
       "extra": {}
     },
     {
       "technique": "archivo secuencial",
       "operation": "búsqueda por clave",
       "dataset_size": 1000,
-      "milliseconds": 4.702291000285186,
+      "milliseconds": 4.319041996495798,
       "extra": {
         "consultas": 100
       }
@@ -83,7 +83,7 @@
       "technique": "archivo secuencial",
       "operation": "borrado",
       "dataset_size": 1000,
-      "milliseconds": 4.527540993876755,
+      "milliseconds": 4.785500001162291,
       "extra": {
         "borrados": 100,
         "incluye_reorganizacion": false
@@ -93,7 +93,7 @@
       "technique": "archivo secuencial",
       "operation": "reorganización",
       "dataset_size": 1000,
-      "milliseconds": 2.1172499982640147,
+      "milliseconds": 2.0780830236617476,
       "extra": {
         "desperdicio_previo": 0.3,
         "umbral": 0.3,
@@ -104,14 +104,14 @@
       "technique": "heap file",
       "operation": "inserción",
       "dataset_size": 10000,
-      "milliseconds": 36.77554200112354,
+      "milliseconds": 37.49108299962245,
       "extra": {}
     },
     {
       "technique": "heap file",
       "operation": "búsqueda por clave",
       "dataset_size": 10000,
-      "milliseconds": 449.23808400926646,
+      "milliseconds": 262.35416598501615,
       "extra": {
         "consultas": 100
       }
@@ -129,7 +129,7 @@
       "technique": "heap file",
       "operation": "borrado",
       "dataset_size": 10000,
-      "milliseconds": 409.8027500003809,
+      "milliseconds": 242.67695800517686,
       "extra": {
         "borrados": 100
       }
@@ -147,14 +147,14 @@
       "technique": "archivo secuencial",
       "operation": "inserción",
       "dataset_size": 10000,
-      "milliseconds": 268.10000000114087,
+      "milliseconds": 272.6956669939682,
       "extra": {}
     },
     {
       "technique": "archivo secuencial",
       "operation": "búsqueda por clave",
       "dataset_size": 10000,
-      "milliseconds": 5.151249992195517,
+      "milliseconds": 4.732208006316796,
       "extra": {
         "consultas": 100
       }
@@ -172,7 +172,7 @@
       "technique": "archivo secuencial",
       "operation": "borrado",
       "dataset_size": 10000,
-      "milliseconds": 5.21916599245742,
+      "milliseconds": 5.021207995014265,
       "extra": {
         "borrados": 100,
         "incluye_reorganizacion": false
@@ -182,7 +182,7 @@
       "technique": "archivo secuencial",
       "operation": "reorganización",
       "dataset_size": 10000,
-      "milliseconds": 16.51087499340065,
+      "milliseconds": 16.88675000332296,
       "extra": {
         "desperdicio_previo": 0.3,
         "umbral": 0.3,
@@ -193,14 +193,14 @@
       "technique": "heap file",
       "operation": "inserción",
       "dataset_size": 100000,
-      "milliseconds": 360.9136250015581,
+      "milliseconds": 373.222624999471,
       "extra": {}
     },
     {
       "technique": "heap file",
       "operation": "búsqueda por clave",
       "dataset_size": 100000,
-      "milliseconds": 4779.3065840087365,
+      "milliseconds": 2723.747500014724,
       "extra": {
         "consultas": 100
       }
@@ -218,7 +218,7 @@
       "technique": "heap file",
       "operation": "borrado",
       "dataset_size": 100000,
-      "milliseconds": 4490.120916991145,
+      "milliseconds": 2560.532667004736,
       "extra": {
         "borrados": 100
       }
@@ -236,14 +236,14 @@
       "technique": "archivo secuencial",
       "operation": "inserción",
       "dataset_size": 100000,
-      "milliseconds": 3161.2614169862354,
+      "milliseconds": 3182.2441249969415,
       "extra": {}
     },
     {
       "technique": "archivo secuencial",
       "operation": "búsqueda por clave",
       "dataset_size": 100000,
-      "milliseconds": 5.620250012725592,
+      "milliseconds": 5.627625010674819,
       "extra": {
         "consultas": 100
       }
@@ -261,7 +261,7 @@
       "technique": "archivo secuencial",
       "operation": "borrado",
       "dataset_size": 100000,
-      "milliseconds": 5.5114999995566905,
+      "milliseconds": 5.475791986100376,
       "extra": {
         "borrados": 100,
         "incluye_reorganizacion": false
@@ -271,7 +271,7 @@
       "technique": "archivo secuencial",
       "operation": "reorganización",
       "dataset_size": 100000,
-      "milliseconds": 164.32708299544174,
+      "milliseconds": 163.7040839996189,
       "extra": {
         "desperdicio_previo": 0.3,
         "umbral": 0.3,

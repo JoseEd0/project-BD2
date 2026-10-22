@@ -79,6 +79,18 @@ def test_the_index_experiment_measures_the_three_structures(tmp_path: Path):
         assert "nota" not in extra_of(report, index_benchmark.CLUSTERED, operation)
 
 
+def test_secondary_indexes_pay_for_their_heap_and_report_the_index_alone(tmp_path: Path):
+    """Sin el heap, la construcción del hash y del no agrupado no sería comparable con la
+    del agrupado, que sí guarda las filas."""
+    report = index_benchmark.run([SIZE], QUERIES, SEED, PAGE_SIZE, tmp_path)
+    for technique in (index_benchmark.UNCLUSTERED, index_benchmark.HASH):
+        for operation in ("construcción", index_benchmark.MUTATION_LABEL):
+            assert extra_of(report, technique, operation)["nota"] == index_benchmark.WITH_HEAP_NOTE
+        assert extra_of(report, technique, "igualdad")["solo_indice_ms"] >= 0
+    ordered = extra_of(report, index_benchmark.UNCLUSTERED, "recorrido ordenado")
+    assert ordered["solo_indice_ms"] >= 0
+
+
 def test_a_report_is_saved_and_rendered(tmp_path: Path):
     report = storage_benchmark.run([SIZE], QUERIES, SEED, PAGE_SIZE, tmp_path / "trabajo")
     path = report.save(tmp_path / "resultados")

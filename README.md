@@ -286,7 +286,7 @@ BENCH_POSTGRES_DSN="dbname=minigestor_bench" .venv/bin/python -m benchmarks.spat
 Los resultados medidos y sus gráficas están versionados en
 [`benchmarks/results/`](benchmarks/results/) y [`benchmarks/figures/`](benchmarks/figures/).
 Una muestra, con 100 000 lugares reales de OpenStreetMap: encontrar los 10 más cercanos tarda
-**1 306 ms** recorriendo la tabla y **0.60 ms** con el R-Tree.
+**1 171 ms** recorriendo la tabla y **0.57 ms** con el R-Tree.
 
 ![Vecinos más cercanos: recorrido secuencial, R-Tree y GiST](benchmarks/figures/espacial-knn.png)
 

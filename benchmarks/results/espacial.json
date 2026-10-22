@@ -27,7 +27,7 @@
       "technique": "búsqueda secuencial",
       "operation": "radio 1 km",
       "dataset_size": 1000,
-      "milliseconds": 3.5241691599367186,
+      "milliseconds": 3.5164816697943024,
       "extra": {
         "consultas": 100,
         "filas_promedio": 2.3
@@ -37,7 +37,7 @@
       "technique": "búsqueda secuencial",
       "operation": "radio 5 km",
       "dataset_size": 1000,
-      "milliseconds": 3.5309658298501745,
+      "milliseconds": 3.508945420035161,
       "extra": {
         "consultas": 100,
         "filas_promedio": 10.1
@@ -47,7 +47,7 @@
       "technique": "búsqueda secuencial",
       "operation": "radio 10 km",
       "dataset_size": 1000,
-      "milliseconds": 3.5764520900556818,
+      "milliseconds": 3.5472166701219976,
       "extra": {
         "consultas": 100,
         "filas_promedio": 25.6
@@ -57,7 +57,7 @@
       "technique": "búsqueda secuencial",
       "operation": "k-NN k=10",
       "dataset_size": 1000,
-      "milliseconds": 6.246251249976922,
+      "milliseconds": 5.818337910168339,
       "extra": {
         "consultas": 100,
         "filas_promedio": 10.0
@@ -67,7 +67,7 @@
       "technique": "búsqueda secuencial",
       "operation": "k-NN k=50",
       "dataset_size": 1000,
-      "milliseconds": 6.227012499875855,
+      "milliseconds": 5.852015840064269,
       "extra": {
         "consultas": 100,
         "filas_promedio": 50.0
@@ -77,7 +77,7 @@
       "technique": "búsqueda secuencial",
       "operation": "k-NN k=100",
       "dataset_size": 1000,
-      "milliseconds": 6.380348750099074,
+      "milliseconds": 5.939270420058165,
       "extra": {
         "consultas": 100,
         "filas_promedio": 100.0
@@ -106,7 +106,7 @@
       "technique": "R-Tree",
       "operation": "construcción",
       "dataset_size": 1000,
-      "milliseconds": 4.168042010860518,
+      "milliseconds": 3.4625840198714286,
       "extra": {
         "metodo": "carga masiva STR"
       }
@@ -115,7 +115,7 @@
       "technique": "R-Tree",
       "operation": "radio 1 km",
       "dataset_size": 1000,
-      "milliseconds": 0.27157791977515444,
+      "milliseconds": 0.2738662497722544,
       "extra": {
         "consultas": 100,
         "filas_promedio": 2.3,
@@ -127,7 +127,7 @@
       "technique": "R-Tree",
       "operation": "radio 5 km",
       "dataset_size": 1000,
-      "milliseconds": 0.32204458984779194,
+      "milliseconds": 0.32766290998551995,
       "extra": {
         "consultas": 100,
         "filas_promedio": 10.1,
@@ -139,7 +139,7 @@
       "technique": "R-Tree",
       "operation": "radio 10 km",
       "dataset_size": 1000,
-      "milliseconds": 0.40640874998643994,
+      "milliseconds": 0.42462457990041,
       "extra": {
         "consultas": 100,
         "filas_promedio": 25.6,
@@ -151,7 +151,7 @@
       "technique": "R-Tree",
       "operation": "k-NN k=10",
       "dataset_size": 1000,
-      "milliseconds": 0.3351404200657271,
+      "milliseconds": 0.3312491698306985,
       "extra": {
         "consultas": 100,
         "filas_promedio": 10.0,
@@ -163,7 +163,7 @@
       "technique": "R-Tree",
       "operation": "k-NN k=50",
       "dataset_size": 1000,
-      "milliseconds": 0.5495470800087787,
+      "milliseconds": 0.5444941599853337,
       "extra": {
         "consultas": 100,
         "filas_promedio": 50.0,
@@ -175,7 +175,7 @@
       "technique": "R-Tree",
       "operation": "k-NN k=100",
       "dataset_size": 1000,
-      "milliseconds": 0.8001720899483189,
+      "milliseconds": 0.7949058301164769,
       "extra": {
         "consultas": 100,
         "filas_promedio": 100.0,
@@ -206,7 +206,7 @@
       "technique": "R-Tree (inserción)",
       "operation": "construcción",
       "dataset_size": 1000,
-      "milliseconds": 142.40508401417173,
+      "milliseconds": 145.05516600911506,
       "extra": {
         "metodo": "inserción uno a uno",
         "nodos": 9
@@ -225,14 +225,14 @@
       "technique": "GiST (PostgreSQL)",
       "operation": "construcción",
       "dataset_size": 1000,
-      "milliseconds": 1.7945420113392174,
+      "milliseconds": 1.4673749974463135,
       "extra": {}
     },
     {
       "technique": "GiST (PostgreSQL)",
       "operation": "radio 1 km",
       "dataset_size": 1000,
-      "milliseconds": 0.041191669879481196,
+      "milliseconds": 0.04293750011129305,
       "extra": {
         "consultas": 100,
         "filas_promedio": 2.3,
@@ -244,7 +244,7 @@
       "technique": "GiST (PostgreSQL)",
       "operation": "radio 5 km",
       "dataset_size": 1000,
-      "milliseconds": 0.039232920098584145,
+      "milliseconds": 0.041958749934565276,
       "extra": {
         "consultas": 100,
         "filas_promedio": 10.1,
@@ -256,7 +256,7 @@
       "technique": "GiST (PostgreSQL)",
       "operation": "radio 10 km",
       "dataset_size": 1000,
-      "milliseconds": 0.04392625007312745,
+      "milliseconds": 0.04952874995069578,
       "extra": {
         "consultas": 100,
         "filas_promedio": 25.6,
@@ -268,7 +268,7 @@
       "technique": "GiST (PostgreSQL)",
       "operation": "k-NN k=10",
       "dataset_size": 1000,
-      "milliseconds": 0.05453082994790748,
+      "milliseconds": 0.058597910101525486,
       "extra": {
         "consultas": 100,
         "filas_promedio": 10.0,
@@ -280,7 +280,7 @@
       "technique": "GiST (PostgreSQL)",
       "operation": "k-NN k=50",
       "dataset_size": 1000,
-      "milliseconds": 0.08845542004564777,
+      "milliseconds": 0.09493290999671444,
       "extra": {
         "consultas": 100,
         "filas_promedio": 50.0,
@@ -292,7 +292,7 @@
       "technique": "GiST (PostgreSQL)",
       "operation": "k-NN k=100",
       "dataset_size": 1000,
-      "milliseconds": 0.11798666993854567,
+      "milliseconds": 0.11588834022404626,
       "extra": {
         "consultas": 100,
         "filas_promedio": 100.0,
@@ -314,7 +314,7 @@
       "technique": "búsqueda secuencial",
       "operation": "radio 1 km",
       "dataset_size": 10000,
-      "milliseconds": 34.55112499999814,
+      "milliseconds": 33.843131250177976,
       "extra": {
         "consultas": 100,
         "filas_promedio": 10.2
@@ -324,7 +324,7 @@
       "technique": "búsqueda secuencial",
       "operation": "radio 5 km",
       "dataset_size": 10000,
-      "milliseconds": 34.3954500000109,
+      "milliseconds": 33.93958749977173,
       "extra": {
         "consultas": 100,
         "filas_promedio": 67.0
@@ -334,7 +334,7 @@
       "technique": "búsqueda secuencial",
       "operation": "radio 10 km",
       "dataset_size": 10000,
-      "milliseconds": 34.80983416986419,
+      "milliseconds": 34.298236669856124,
       "extra": {
         "consultas": 100,
         "filas_promedio": 152.5
@@ -344,7 +344,7 @@
       "technique": "búsqueda secuencial",
       "operation": "k-NN k=10",
       "dataset_size": 10000,
-      "milliseconds": 75.07087292004144,
+      "milliseconds": 70.17851874988992,
       "extra": {
         "consultas": 100,
         "filas_promedio": 10.0
@@ -354,7 +354,7 @@
       "technique": "búsqueda secuencial",
       "operation": "k-NN k=50",
       "dataset_size": 10000,
-      "milliseconds": 75.75608458981151,
+      "milliseconds": 71.08434624999063,
       "extra": {
         "consultas": 100,
         "filas_promedio": 50.0
@@ -364,7 +364,7 @@
       "technique": "búsqueda secuencial",
       "operation": "k-NN k=100",
       "dataset_size": 10000,
-      "milliseconds": 76.37941041000886,
+      "milliseconds": 73.68366332986625,
       "extra": {
         "consultas": 100,
         "filas_promedio": 100.0
@@ -376,7 +376,7 @@
       "dataset_size": 10000,
       "milliseconds": 0.0,
       "extra": {
-        "kib": 772.0
+        "kib": 772.4
       }
     },
     {
@@ -393,7 +393,7 @@
       "technique": "R-Tree",
       "operation": "construcción",
       "dataset_size": 10000,
-      "milliseconds": 47.8279160161037,
+      "milliseconds": 40.616042009787634,
       "extra": {
         "metodo": "carga masiva STR"
       }
@@ -402,7 +402,7 @@
       "technique": "R-Tree",
       "operation": "radio 1 km",
       "dataset_size": 10000,
-      "milliseconds": 0.4185558299650438,
+      "milliseconds": 0.4234162502689287,
       "extra": {
         "consultas": 100,
         "filas_promedio": 10.2,
@@ -414,7 +414,7 @@
       "technique": "R-Tree",
       "operation": "radio 5 km",
       "dataset_size": 10000,
-      "milliseconds": 0.7769220802583732,
+      "milliseconds": 0.8212458298658021,
       "extra": {
         "consultas": 100,
         "filas_promedio": 67.0,
@@ -426,7 +426,7 @@
       "technique": "R-Tree",
       "operation": "radio 10 km",
       "dataset_size": 10000,
-      "milliseconds": 1.2916979199508205,
+      "milliseconds": 1.4016670800629072,
       "extra": {
         "consultas": 100,
         "filas_promedio": 152.5,
@@ -438,7 +438,7 @@
       "technique": "R-Tree",
       "operation": "k-NN k=10",
       "dataset_size": 10000,
-      "milliseconds": 0.43733500002417713,
+      "milliseconds": 0.44489625026471913,
       "extra": {
         "consultas": 100,
         "filas_promedio": 10.0,
@@ -450,7 +450,7 @@
       "technique": "R-Tree",
       "operation": "k-NN k=50",
       "dataset_size": 10000,
-      "milliseconds": 0.6851795801776461,
+      "milliseconds": 0.6959154200740159,
       "extra": {
         "consultas": 100,
         "filas_promedio": 50.0,
@@ -462,7 +462,7 @@
       "technique": "R-Tree",
       "operation": "k-NN k=100",
       "dataset_size": 10000,
-      "milliseconds": 1.0028862502076663,
+      "milliseconds": 1.1412612500134856,
       "extra": {
         "consultas": 100,
         "filas_promedio": 100.0,
@@ -493,7 +493,7 @@
       "technique": "R-Tree (inserción)",
       "operation": "construcción",
       "dataset_size": 10000,
-      "milliseconds": 1884.7242910123896,
+      "milliseconds": 1853.5260829958133,
       "extra": {
         "metodo": "inserción uno a uno",
         "nodos": 80
@@ -512,14 +512,14 @@
       "technique": "GiST (PostgreSQL)",
       "operation": "construcción",
       "dataset_size": 10000,
-      "milliseconds": 18.36987500428222,
+      "milliseconds": 18.80837499629706,
       "extra": {}
     },
     {
       "technique": "GiST (PostgreSQL)",
       "operation": "radio 1 km",
       "dataset_size": 10000,
-      "milliseconds": 0.04125916981138289,
+      "milliseconds": 0.047846660017967224,
       "extra": {
         "consultas": 100,
         "filas_promedio": 10.2,
@@ -531,7 +531,7 @@
       "technique": "GiST (PostgreSQL)",
       "operation": "radio 5 km",
       "dataset_size": 10000,
-      "milliseconds": 0.05869000015081838,
+      "milliseconds": 0.06280959001742303,
       "extra": {
         "consultas": 100,
         "filas_promedio": 67.0,
@@ -543,7 +543,7 @@
       "technique": "GiST (PostgreSQL)",
       "operation": "radio 10 km",
       "dataset_size": 10000,
-      "milliseconds": 0.09763332986040041,
+      "milliseconds": 0.09882708021905273,
       "extra": {
         "consultas": 100,
         "filas_promedio": 152.5,
@@ -555,7 +555,7 @@
       "technique": "GiST (PostgreSQL)",
       "operation": "k-NN k=10",
       "dataset_size": 10000,
-      "milliseconds": 0.0560645799851045,
+      "milliseconds": 0.05812832998344675,
       "extra": {
         "consultas": 100,
         "filas_promedio": 10.0,
@@ -567,7 +567,7 @@
       "technique": "GiST (PostgreSQL)",
       "operation": "k-NN k=50",
       "dataset_size": 10000,
-      "milliseconds": 0.09370708023197949,
+      "milliseconds": 0.09705624979687855,
       "extra": {
         "consultas": 100,
         "filas_promedio": 50.0,
@@ -579,7 +579,7 @@
       "technique": "GiST (PostgreSQL)",
       "operation": "k-NN k=100",
       "dataset_size": 10000,
-      "milliseconds": 0.13138917012838647,
+      "milliseconds": 0.13541749998694286,
       "extra": {
         "consultas": 100,
         "filas_promedio": 100.0,
@@ -593,7 +593,7 @@
       "dataset_size": 10000,
       "milliseconds": 0.0,
       "extra": {
-        "kib": 800.0,
+        "kib": 808.0,
         "tabla_kib": 1088.0
       }
     },
@@ -601,7 +601,7 @@
       "technique": "búsqueda secuencial",
       "operation": "radio 1 km",
       "dataset_size": 100000,
-      "milliseconds": 347.2772904098383,
+      "milliseconds": 338.3587079201243,
       "extra": {
         "consultas": 100,
         "filas_promedio": 64.1
@@ -611,7 +611,7 @@
       "technique": "búsqueda secuencial",
       "operation": "radio 5 km",
       "dataset_size": 100000,
-      "milliseconds": 346.9113891699817,
+      "milliseconds": 338.5747045799508,
       "extra": {
         "consultas": 100,
         "filas_promedio": 544.3
@@ -621,7 +621,7 @@
       "technique": "búsqueda secuencial",
       "operation": "radio 10 km",
       "dataset_size": 100000,
-      "milliseconds": 348.9305675000651,
+      "milliseconds": 338.56197749992134,
       "extra": {
         "consultas": 100,
         "filas_promedio": 1577.1
@@ -631,7 +631,7 @@
       "technique": "búsqueda secuencial",
       "operation": "k-NN k=10",
       "dataset_size": 100000,
-      "milliseconds": 1306.3799779198598,
+      "milliseconds": 1170.8431783301057,
       "extra": {
         "consultas": 100,
         "filas_promedio": 10.0
@@ -641,7 +641,7 @@
       "technique": "búsqueda secuencial",
       "operation": "k-NN k=50",
       "dataset_size": 100000,
-      "milliseconds": 1320.1967874998809,
+      "milliseconds": 1172.861748750147,
       "extra": {
         "consultas": 100,
         "filas_promedio": 50.0
@@ -651,7 +651,7 @@
       "technique": "búsqueda secuencial",
       "operation": "k-NN k=100",
       "dataset_size": 100000,
-      "milliseconds": 1295.6972479101387,
+      "milliseconds": 1170.3698904201156,
       "extra": {
         "consultas": 100,
         "filas_promedio": 100.0
@@ -663,7 +663,7 @@
       "dataset_size": 100000,
       "milliseconds": 0.0,
       "extra": {
-        "kib": 1624.3
+        "kib": 1467.9
       }
     },
     {
@@ -680,7 +680,7 @@
       "technique": "R-Tree",
       "operation": "construcción",
       "dataset_size": 100000,
-      "milliseconds": 711.6151249792892,
+      "milliseconds": 544.3231249810196,
       "extra": {
         "metodo": "carga masiva STR"
       }
@@ -689,7 +689,7 @@
       "technique": "R-Tree",
       "operation": "radio 1 km",
       "dataset_size": 100000,
-      "milliseconds": 0.955364579858724,
+      "milliseconds": 0.9635112498654053,
       "extra": {
         "consultas": 100,
         "filas_promedio": 64.1,
@@ -701,7 +701,7 @@
       "technique": "R-Tree",
       "operation": "radio 5 km",
       "dataset_size": 100000,
-      "milliseconds": 4.190563329902943,
+      "milliseconds": 4.38901541987434,
       "extra": {
         "consultas": 100,
         "filas_promedio": 544.3,
@@ -713,7 +713,7 @@
       "technique": "R-Tree",
       "operation": "radio 10 km",
       "dataset_size": 100000,
-      "milliseconds": 10.944366250187159,
+      "milliseconds": 11.067672089848202,
       "extra": {
         "consultas": 100,
         "filas_promedio": 1577.1,
@@ -725,7 +725,7 @@
       "technique": "R-Tree",
       "operation": "k-NN k=10",
       "dataset_size": 100000,
-      "milliseconds": 0.5958875000942498,
+      "milliseconds": 0.5734791600843892,
       "extra": {
         "consultas": 100,
         "filas_promedio": 10.0,
@@ -737,7 +737,7 @@
       "technique": "R-Tree",
       "operation": "k-NN k=50",
       "dataset_size": 100000,
-      "milliseconds": 0.8809483298682608,
+      "milliseconds": 0.8553820801898837,
       "extra": {
         "consultas": 100,
         "filas_promedio": 50.0,
@@ -749,7 +749,7 @@
       "technique": "R-Tree",
       "operation": "k-NN k=100",
       "dataset_size": 100000,
-      "milliseconds": 1.211275000241585,
+      "milliseconds": 1.3064245900022797,
       "extra": {
         "consultas": 100,
         "filas_promedio": 100.0,
@@ -780,7 +780,7 @@
       "technique": "R-Tree (inserción)",
       "operation": "construcción",
       "dataset_size": 100000,
-      "milliseconds": 22705.594250001013,
+      "milliseconds": 22549.409625004046,
       "extra": {
         "metodo": "inserción uno a uno",
         "nodos": 814
@@ -799,14 +799,14 @@
       "technique": "GiST (PostgreSQL)",
       "operation": "construcción",
       "dataset_size": 100000,
-      "milliseconds": 188.43512499006465,
+      "milliseconds": 187.85966699942946,
       "extra": {}
     },
     {
       "technique": "GiST (PostgreSQL)",
       "operation": "radio 1 km",
       "dataset_size": 100000,
-      "milliseconds": 0.2454295800998807,
+      "milliseconds": 0.24138249980751425,
       "extra": {
         "consultas": 100,
         "filas_promedio": 64.1,
@@ -818,7 +818,7 @@
       "technique": "GiST (PostgreSQL)",
       "operation": "radio 5 km",
       "dataset_size": 100000,
-      "milliseconds": 0.4332966700894758,
+      "milliseconds": 0.47916167008224875,
       "extra": {
         "consultas": 100,
         "filas_promedio": 544.3,
@@ -830,7 +830,7 @@
       "technique": "GiST (PostgreSQL)",
       "operation": "radio 10 km",
       "dataset_size": 100000,
-      "milliseconds": 1.022542910068296,
+      "milliseconds": 0.9969604201614857,
       "extra": {
         "consultas": 100,
         "filas_promedio": 1577.1,
@@ -842,7 +842,7 @@
       "technique": "GiST (PostgreSQL)",
       "operation": "k-NN k=10",
       "dataset_size": 100000,
-      "milliseconds": 0.12335542007349432,
+      "milliseconds": 0.12284500000532717,
       "extra": {
         "consultas": 100,
         "filas_promedio": 10.0,
@@ -854,7 +854,7 @@
       "technique": "GiST (PostgreSQL)",
       "operation": "k-NN k=50",
       "dataset_size": 100000,
-      "milliseconds": 0.1848041600896977,
+      "milliseconds": 0.19081667007412761,
       "extra": {
         "consultas": 100,
         "filas_promedio": 50.0,
@@ -866,7 +866,7 @@
       "technique": "GiST (PostgreSQL)",
       "operation": "k-NN k=100",
       "dataset_size": 100000,
-      "milliseconds": 0.24376125016715378,
+      "milliseconds": 0.255292080109939,
       "extra": {
         "consultas": 100,
         "filas_promedio": 100.0,
@@ -880,7 +880,7 @@
       "dataset_size": 100000,
       "milliseconds": 0.0,
       "extra": {
-        "kib": 7792.0,
+        "kib": 7760.0,
         "tabla_kib": 6720.0
       }
     }

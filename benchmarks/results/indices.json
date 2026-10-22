@@ -15,14 +15,14 @@
       "technique": "B+ agrupado",
       "operation": "construcción",
       "dataset_size": 1000,
-      "milliseconds": 19.845625007292256,
+      "milliseconds": 20.358166977530345,
       "extra": {}
     },
     {
       "technique": "B+ agrupado",
       "operation": "igualdad",
       "dataset_size": 1000,
-      "milliseconds": 1.1965839948970824,
+      "milliseconds": 1.1965000012423843,
       "extra": {
         "consultas": 100
       }
@@ -31,7 +31,7 @@
       "technique": "B+ agrupado",
       "operation": "rango",
       "dataset_size": 1000,
-      "milliseconds": 2.4754590122029185,
+      "milliseconds": 2.493459003744647,
       "extra": {
         "ancho": 50
       }
@@ -40,7 +40,7 @@
       "technique": "B+ agrupado",
       "operation": "recorrido ordenado",
       "dataset_size": 1000,
-      "milliseconds": 0.23095798678696156,
+      "milliseconds": 0.25450001703575253,
       "extra": {}
     },
     {
@@ -58,7 +58,7 @@
       "technique": "B+ agrupado",
       "operation": "inserciones/eliminaciones",
       "dataset_size": 1000,
-      "milliseconds": 4.79450001148507,
+      "milliseconds": 4.74570898222737,
       "extra": {
         "operaciones": 200
       }
@@ -67,24 +67,27 @@
       "technique": "B+ no agrupado",
       "operation": "construcción",
       "dataset_size": 1000,
-      "milliseconds": 173.45695800031535,
-      "extra": {}
+      "milliseconds": 178.8747500104364,
+      "extra": {
+        "nota": "incluye el heap"
+      }
     },
     {
       "technique": "B+ no agrupado",
       "operation": "igualdad",
       "dataset_size": 1000,
-      "milliseconds": 12.469499983126298,
+      "milliseconds": 12.327417003689334,
       "extra": {
         "consultas": 100,
-        "nota": "incluye el salto al heap"
+        "nota": "incluye el salto al heap",
+        "solo_indice_ms": 12.19
       }
     },
     {
       "technique": "B+ no agrupado",
       "operation": "rango",
       "dataset_size": 1000,
-      "milliseconds": 20.305082987761125,
+      "milliseconds": 20.885625010123476,
       "extra": {
         "ancho": 50
       }
@@ -93,8 +96,10 @@
       "technique": "B+ no agrupado",
       "operation": "recorrido ordenado",
       "dataset_size": 1000,
-      "milliseconds": 1.7942079866770655,
-      "extra": {}
+      "milliseconds": 1.788791996659711,
+      "extra": {
+        "solo_indice_ms": 0.83
+      }
     },
     {
       "technique": "B+ no agrupado",
@@ -111,26 +116,30 @@
       "technique": "B+ no agrupado",
       "operation": "inserciones/eliminaciones",
       "dataset_size": 1000,
-      "milliseconds": 43.2088749948889,
+      "milliseconds": 44.374416989739984,
       "extra": {
-        "operaciones": 200
+        "operaciones": 200,
+        "nota": "incluye el heap"
       }
     },
     {
       "technique": "hash extendible",
       "operation": "construcción",
       "dataset_size": 1000,
-      "milliseconds": 7.450832985341549,
-      "extra": {}
+      "milliseconds": 11.0581660119351,
+      "extra": {
+        "nota": "incluye el heap"
+      }
     },
     {
       "technique": "hash extendible",
       "operation": "igualdad",
       "dataset_size": 1000,
-      "milliseconds": 12.471208989154547,
+      "milliseconds": 4.577083018375561,
       "extra": {
         "consultas": 100,
-        "nota": "incluye el salto al heap"
+        "nota": "incluye el salto al heap",
+        "solo_indice_ms": 4.4
       }
     },
     {
@@ -165,23 +174,24 @@
       "technique": "hash extendible",
       "operation": "inserciones/eliminaciones",
       "dataset_size": 1000,
-      "milliseconds": 11.934042006032541,
+      "milliseconds": 5.321749980794266,
       "extra": {
-        "operaciones": 200
+        "operaciones": 200,
+        "nota": "incluye el heap"
       }
     },
     {
       "technique": "B+ agrupado",
       "operation": "construcción",
       "dataset_size": 10000,
-      "milliseconds": 297.9162499832455,
+      "milliseconds": 301.9567499868572,
       "extra": {}
     },
     {
       "technique": "B+ agrupado",
       "operation": "igualdad",
       "dataset_size": 10000,
-      "milliseconds": 2.994915994349867,
+      "milliseconds": 3.0355839990079403,
       "extra": {
         "consultas": 100
       }
@@ -190,7 +200,7 @@
       "technique": "B+ agrupado",
       "operation": "rango",
       "dataset_size": 10000,
-      "milliseconds": 4.431250010384247,
+      "milliseconds": 4.4788329978473485,
       "extra": {
         "ancho": 50
       }
@@ -199,7 +209,7 @@
       "technique": "B+ agrupado",
       "operation": "recorrido ordenado",
       "dataset_size": 10000,
-      "milliseconds": 2.461666997987777,
+      "milliseconds": 2.502542018191889,
       "extra": {}
     },
     {
@@ -217,7 +227,7 @@
       "technique": "B+ agrupado",
       "operation": "inserciones/eliminaciones",
       "dataset_size": 10000,
-      "milliseconds": 85.97387501504272,
+      "milliseconds": 87.23033301066607,
       "extra": {
         "operaciones": 2000
       }
@@ -226,24 +236,27 @@
       "technique": "B+ no agrupado",
       "operation": "construcción",
       "dataset_size": 10000,
-      "milliseconds": 2055.5630000017118,
-      "extra": {}
+      "milliseconds": 2093.668040994089,
+      "extra": {
+        "nota": "incluye el heap"
+      }
     },
     {
       "technique": "B+ no agrupado",
       "operation": "igualdad",
       "dataset_size": 10000,
-      "milliseconds": 12.975874997209758,
+      "milliseconds": 12.341082998318598,
       "extra": {
         "consultas": 100,
-        "nota": "incluye el salto al heap"
+        "nota": "incluye el salto al heap",
+        "solo_indice_ms": 12.16
       }
     },
     {
       "technique": "B+ no agrupado",
       "operation": "rango",
       "dataset_size": 10000,
-      "milliseconds": 21.34162501897663,
+      "milliseconds": 21.744791010860354,
       "extra": {
         "ancho": 50
       }
@@ -252,8 +265,10 @@
       "technique": "B+ no agrupado",
       "operation": "recorrido ordenado",
       "dataset_size": 10000,
-      "milliseconds": 17.96900000772439,
-      "extra": {}
+      "milliseconds": 18.854000023566186,
+      "extra": {
+        "solo_indice_ms": 6.11
+      }
     },
     {
       "technique": "B+ no agrupado",
@@ -270,26 +285,30 @@
       "technique": "B+ no agrupado",
       "operation": "inserciones/eliminaciones",
       "dataset_size": 10000,
-      "milliseconds": 457.482458994491,
+      "milliseconds": 478.4144160221331,
       "extra": {
-        "operaciones": 2000
+        "operaciones": 2000,
+        "nota": "incluye el heap"
       }
     },
     {
       "technique": "hash extendible",
       "operation": "construcción",
       "dataset_size": 10000,
-      "milliseconds": 98.37720799259841,
-      "extra": {}
+      "milliseconds": 134.68220800859854,
+      "extra": {
+        "nota": "incluye el heap"
+      }
     },
     {
       "technique": "hash extendible",
       "operation": "igualdad",
       "dataset_size": 10000,
-      "milliseconds": 9.170792007353157,
+      "milliseconds": 3.4760829876177013,
       "extra": {
         "consultas": 100,
-        "nota": "incluye el salto al heap"
+        "nota": "incluye el salto al heap",
+        "solo_indice_ms": 3.26
       }
     },
     {
@@ -324,23 +343,24 @@
       "technique": "hash extendible",
       "operation": "inserciones/eliminaciones",
       "dataset_size": 10000,
-      "milliseconds": 92.8417080140207,
+      "milliseconds": 45.01154200988822,
       "extra": {
-        "operaciones": 2000
+        "operaciones": 2000,
+        "nota": "incluye el heap"
       }
     },
     {
       "technique": "B+ agrupado",
       "operation": "construcción",
       "dataset_size": 100000,
-      "milliseconds": 4446.459083002992,
+      "milliseconds": 4427.795375027927,
       "extra": {}
     },
     {
       "technique": "B+ agrupado",
       "operation": "igualdad",
       "dataset_size": 100000,
-      "milliseconds": 3.954999992856756,
+      "milliseconds": 4.060500010382384,
       "extra": {
         "consultas": 100
       }
@@ -349,7 +369,7 @@
       "technique": "B+ agrupado",
       "operation": "rango",
       "dataset_size": 100000,
-      "milliseconds": 5.488583003170788,
+      "milliseconds": 5.472666001878679,
       "extra": {
         "ancho": 50
       }
@@ -358,7 +378,7 @@
       "technique": "B+ agrupado",
       "operation": "recorrido ordenado",
       "dataset_size": 100000,
-      "milliseconds": 31.23058399069123,
+      "milliseconds": 31.78866600501351,
       "extra": {}
     },
     {
@@ -376,7 +396,7 @@
       "technique": "B+ agrupado",
       "operation": "inserciones/eliminaciones",
       "dataset_size": 100000,
-      "milliseconds": 1124.1117080207914,
+      "milliseconds": 1129.1091250022873,
       "extra": {
         "operaciones": 20000
       }
@@ -385,24 +405,27 @@
       "technique": "B+ no agrupado",
       "operation": "construcción",
       "dataset_size": 100000,
-      "milliseconds": 25587.49395798077,
-      "extra": {}
+      "milliseconds": 25919.83512500883,
+      "extra": {
+        "nota": "incluye el heap"
+      }
     },
     {
       "technique": "B+ no agrupado",
       "operation": "igualdad",
       "dataset_size": 100000,
-      "milliseconds": 17.127166996942833,
+      "milliseconds": 16.061000002082437,
       "extra": {
         "consultas": 100,
-        "nota": "incluye el salto al heap"
+        "nota": "incluye el salto al heap",
+        "solo_indice_ms": 16.0
       }
     },
     {
       "technique": "B+ no agrupado",
       "operation": "rango",
       "dataset_size": 100000,
-      "milliseconds": 35.08454200346023,
+      "milliseconds": 26.990125013981014,
       "extra": {
         "ancho": 50
       }
@@ -411,8 +434,10 @@
       "technique": "B+ no agrupado",
       "operation": "recorrido ordenado",
       "dataset_size": 100000,
-      "milliseconds": 198.58454199857078,
-      "extra": {}
+      "milliseconds": 199.37012498849072,
+      "extra": {
+        "solo_indice_ms": 78.99
+      }
     },
     {
       "technique": "B+ no agrupado",
@@ -429,26 +454,30 @@
       "technique": "B+ no agrupado",
       "operation": "inserciones/eliminaciones",
       "dataset_size": 100000,
-      "milliseconds": 5018.060916976538,
+      "milliseconds": 5046.924541005865,
       "extra": {
-        "operaciones": 20000
+        "operaciones": 20000,
+        "nota": "incluye el heap"
       }
     },
     {
       "technique": "hash extendible",
       "operation": "construcción",
       "dataset_size": 100000,
-      "milliseconds": 932.8625409980305,
-      "extra": {}
+      "milliseconds": 1317.2411669802386,
+      "extra": {
+        "nota": "incluye el heap"
+      }
     },
     {
       "technique": "hash extendible",
       "operation": "igualdad",
       "dataset_size": 100000,
-      "milliseconds": 12.19708297867328,
+      "milliseconds": 4.286041017621756,
       "extra": {
         "consultas": 100,
-        "nota": "incluye el salto al heap"
+        "nota": "incluye el salto al heap",
+        "solo_indice_ms": 4.0
       }
     },
     {
@@ -483,9 +512,10 @@
       "technique": "hash extendible",
       "operation": "inserciones/eliminaciones",
       "dataset_size": 100000,
-      "milliseconds": 1159.0848329942673,
+      "milliseconds": 531.4296669967007,
       "extra": {
-        "operaciones": 20000
+        "operaciones": 20000,
+        "nota": "incluye el heap"
       }
     }
   ]

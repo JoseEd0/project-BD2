@@ -190,7 +190,7 @@ class HeapFile:
             raise RecordNotFoundError(f"no hay registro en {record_id}") from error
 
     def _load_data_page(self, page_id: int) -> RecordPage:
-        if page_id <= HEADER_PAGE_ID:
+        if not HEADER_PAGE_ID < page_id < self._pager.page_count:
             raise RecordNotFoundError(f"la página {page_id} no contiene datos")
         return self._load(page_id)
 

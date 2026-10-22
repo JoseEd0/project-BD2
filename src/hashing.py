@@ -11,6 +11,7 @@ from hashlib import blake2b
 from typing import Any
 
 HASH_DIGEST_BYTES = 8
+LENGTH_PREFIX_BYTES = 4
 
 
 def stable_hash(raw: bytes, salt: bytes = b"") -> int:
@@ -41,5 +42,11 @@ def canonical_key_bytes(key: Any) -> bytes:
     if isinstance(key, bytes):
         return b"y" + key
     if isinstance(key, tuple):
-        return b"t" + b"\x00".join(canonical_key_bytes(part) for part in key)
+        return b"t" + b"".join(_length_prefixed(canonical_key_bytes(part)) for part in key)
     return b"o" + repr(key).encode()
+
+
+def _length_prefixed(raw: bytes) -> bytes:
+    """Cada parte de una tupla lleva su longitud delante. Con un separador, dos tuplas
+    distintas cuyas partes contienen ese separador podrían dar los mismos bytes."""
+    return len(raw).to_bytes(LENGTH_PREFIX_BYTES, "little") + raw

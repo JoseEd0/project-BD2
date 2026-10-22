@@ -53,6 +53,12 @@ grupos entre `P`, así que con `G` grupos y sitio para `B` hacen falta `⌈log_P
 niveles. Con los valores por omisión (16 particiones, 16 páginas de buffer) y filas de 80
 bytes caben 800 grupos en memoria: un nivel basta hasta 12 800 grupos y dos hasta 204 800.
 
+Los grupos se distinguen por los **mismos bytes canónicos con que se reparten**, no por la
+igualdad de Python. Eso garantiza que repartir termina: una partición que ningún hash puede
+separar más es una cuyas filas comparten bytes, es decir, un solo grupo, y un grupo siempre
+cabe. Con la igualdad de Python no estaba garantizado: NaN no es igual a sí mismo, y mil
+NaN eran mil grupos que caían siempre en la misma partición.
+
 ## JOIN (grace hash join)
 
 ```

@@ -28,16 +28,21 @@ fijo, sin excepción:
 | Tipo | Bytes | Representación |
 |---|---|---|
 | `INT` | 8 | entero con signo de 64 bits; admite un real sin decimales (`10.0`) |
-| `FLOAT` | 8 | doble precisión |
+| `FLOAT` | 8 | doble precisión; solo valores finitos, y `-0.0` se guarda como `0.0` |
 | `BOOL` | 1 | 0 / 1 |
 | `DATE` | 4 | días desde 1970-01-01 (preserva el orden); se acepta como texto ISO `AAAA-MM-DD` |
-| `STRING(n)` | n | UTF-8 rellenado con ceros |
-| `BYTES(n)` | n | crudo rellenado con ceros |
+| `STRING(n)` | n | UTF-8 rellenado con ceros; por eso no admite el carácter NUL |
+| `BYTES(n)` | 4 + n | su longitud y los bytes, rellenados con ceros |
 | `POINT` | 16 | dos dobles (lat, lon) |
-| `VECTOR(n)` | 4n | n flotantes de precisión simple |
+| `VECTOR(n)` | 4n | n flotantes de precisión simple, finitos |
 
 Un valor que no cabe se rechaza con un error del almacenamiento, nunca se trunca: un texto
 más largo que el campo, un entero fuera de los 64 bits, un real con decimales en un `INT`.
+
+Los reales tienen **un solo cero y ningún NaN**. NaN no es igual a sí mismo y `-0.0` tiene
+otros bytes que `0.0` aunque valgan lo mismo: el índice hash y el hashing externo, que
+reparten por bytes, responderían distinto que un recorrido. Unos `BYTES` pueden acabar en
+ceros, así que llevan su longitud; una cadena no, porque el relleno se reconoce al leer.
 
 **¿Por qué tamaño fijo?** Porque hace que la posición de cualquier registro dentro de una
 página sea una multiplicación, no una búsqueda. Sin eso, el archivo secuencial no podría

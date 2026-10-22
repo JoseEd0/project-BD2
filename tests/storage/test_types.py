@@ -164,3 +164,43 @@ def test_the_value_that_fills_a_null_field_can_be_stored(field_type: FieldType, 
     codec = codec_for(field_type, length)
     neutral = codec.neutral_value()
     assert codec.from_slots(codec.to_slots(neutral)) == neutral
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+def test_a_float_has_to_be_finite(value: float):
+    with pytest.raises(InvalidValueError, match="finito"):
+        codec_for(FieldType.FLOAT, None).to_slots(value)
+
+
+def test_negative_zero_is_stored_as_zero():
+    """Con otros bytes que `0.0`, un `-0.0` guardado no aparecería al buscar `0` por hash."""
+    codec = codec_for(FieldType.FLOAT, None)
+    (stored,) = codec.to_slots(-0.0)
+    assert str(stored) == "0.0"
+
+
+def test_a_string_cannot_contain_nul():
+    with pytest.raises(InvalidValueError, match="NUL"):
+        codec_for(FieldType.STRING, 8).to_slots("ab\x00")
+
+
+@pytest.mark.parametrize("value", [b"\x01\x00\x00", b"\x00", b""])
+def test_bytes_keep_their_trailing_zeros(value: bytes):
+    codec = codec_for(FieldType.BYTES, 4)
+    assert codec.from_slots(codec.to_slots(value)) == value
+
+
+@pytest.mark.parametrize("value", [("x", "y"), (True, 1.0), (1.0, None)])
+def test_vector_components_have_to_be_numbers(value: tuple):
+    with pytest.raises(InvalidValueError):
+        codec_for(FieldType.VECTOR, 2).to_slots(value)
+
+
+def test_a_vector_component_has_to_fit_in_32_bits():
+    with pytest.raises(ValueTooLargeError):
+        codec_for(FieldType.VECTOR, 2).to_slots((1e40, 0.0))
+
+
+def test_a_vector_component_has_to_be_finite():
+    with pytest.raises(InvalidValueError, match="finito"):
+        codec_for(FieldType.VECTOR, 2).to_slots((float("nan"), 0.0))

@@ -368,3 +368,14 @@ def test_an_import_directory_allows_loading_from_it(
     with Engine(replace(config, import_directories=(samples,))) as engine:
         engine.execute(f"CREATE TABLE datos FROM FILE '{samples / 'datos.csv'}'")
         assert engine.execute("SELECT nombre FROM datos").rows == (("ana",),)
+
+
+@pytest.mark.parametrize("index", ["", " INDEX HASH", " INDEX BTREE"])
+def test_minus_zero_and_zero_are_the_same_value_with_or_without_index(
+    config: EngineConfig, index: str
+):
+    with Engine(config) as engine:
+        engine.execute(f"CREATE TABLE t (id INT PRIMARY KEY, x FLOAT{index})")
+        engine.execute("INSERT INTO t VALUES (1, -0.0), (2, 0.0)")
+        assert sorted(engine.execute("SELECT id FROM t WHERE x = 0").rows) == [(1,), (2,)]
+        assert sorted(engine.execute("SELECT id FROM t WHERE x = -0.0").rows) == [(1,), (2,)]

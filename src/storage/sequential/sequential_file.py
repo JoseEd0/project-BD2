@@ -11,6 +11,10 @@ Dos archivos trabajan juntos:
 La eliminación es lazy: marca una lápida y deja el registro donde está. Cuando el
 desperdicio (lápidas + registros desplazados al auxiliar) supera el umbral configurado,
 la reorganización reescribe todo en orden y deja las páginas al factor de llenado.
+También reorganiza cuando la cadena de una sola página pasa de
+`sequential_max_chain_pages`: el desperdicio es una medida global, y sin este límite una
+zona que recibe todas las inserciones colgaría de una página una cadena de cientos de
+páginas, que cada búsqueda en esa zona recorrería entera.
 
 Ver `README.md` para el análisis de complejidad.
 """
@@ -53,7 +57,8 @@ class SequentialFile:
 
     Complejidad (con `P` páginas principales y `c` registros por página):
 
-    * búsqueda por igualdad: `O(log P)` lecturas de página más la cadena de desbordamiento;
+    * búsqueda por igualdad: `O(log P)` lecturas de página más la cadena de desbordamiento,
+      que tiene como mucho `sequential_max_chain_pages` páginas;
     * inserción: `O(log P)` para localizar y `O(c)` bytes movidos dentro de la página;
     * recorrido ordenado: `O(P)` lecturas;
     * reorganización: `O(N)` lecturas y escrituras.
@@ -117,13 +122,17 @@ class SequentialFile:
             NullKeyError: si la clave del registro es NULL.
         """
         key = self._key_of(record)
+        chain_pages = 0
         if self._main_page_count == 0:
             self._append_main_page(record)
         else:
-            self._insert_into_main(key, record)
+            chain_pages = self._insert_into_main(key, record)
         self._live_count += 1
         self._write_header()
-        self._reorganize_if_wasteful()
+        if chain_pages > self._config.sequential_max_chain_pages:
+            self.reorganize()
+        else:
+            self._reorganize_if_wasteful()
 
     def search(self, key: Key) -> list[bytes]:
         """Todos los registros vigentes con esa clave."""
@@ -174,7 +183,12 @@ class SequentialFile:
         return removed
 
     def reorganize(self) -> None:
-        """Reescribe el archivo en orden, sin lápidas ni desbordamiento."""
+        """Reescribe el archivo en orden, sin lápidas ni desbordamiento.
+
+        El archivo nuevo se escribe completo —cabecera incluida— y se baja a disco antes de
+        ocupar el lugar del viejo con un `rename`, que es atómico: si el proceso muere a
+        mitad, en disco queda el archivo viejo entero o el nuevo entero, nunca uno a medias.
+        """
         records_per_page = max(1, int(self._capacity * self._config.sequential_fill_factor))
         rebuild_path = self._path.with_name(self._path.name + REBUILD_SUFFIX)
         rebuild_path.unlink(missing_ok=True)
@@ -202,27 +216,31 @@ class SequentialFile:
     ) -> None:
         self.close()
 
-    def _insert_into_main(self, key: Key, record: bytes) -> None:
+    def _insert_into_main(self, key: Key, record: bytes) -> int:
+        """Pone el registro en su página o en la cadena de esta. Devuelve cuántas páginas
+        tiene esa cadena después de la inserción: cero si no hizo falta."""
         page_id = self._last_page_starting(lambda first_key: bool(first_key <= key))
         page = self._load_main(page_id)
         if page.used_slots < self._capacity:
             page.insert_at(self._insert_position(page, key), record)
             self._store_main(page_id, page)
-            return
+            return 0
         if page_id == self._main_page_count and key >= self._last_key(page):
             self._append_main_page(record)
-            return
-        self._insert_into_overflow(page_id, page, record)
+            return 0
+        return self._insert_into_overflow(page_id, page, record)
 
-    def _insert_into_overflow(self, page_id: int, page: RecordPage, record: bytes) -> None:
+    def _insert_into_overflow(self, page_id: int, page: RecordPage, record: bytes) -> int:
+        chain_pages = 0
         chain_page_id = page.next_page
         while chain_page_id != NO_PAGE:
+            chain_pages += 1
             chain_page = self._load_overflow(chain_page_id)
             if chain_page.first_free_slot() is not None:
                 chain_page.insert(record)
                 self._store_overflow(chain_page_id, chain_page)
                 self._overflow_count += 1
-                return
+                return chain_pages
             chain_page_id = chain_page.next_page
         new_page_id = self._overflow.allocate()
         new_page = RecordPage.create(self._overflow.page_size, self._record_size)
@@ -232,6 +250,7 @@ class SequentialFile:
         page.next_page = new_page_id
         self._store_main(page_id, page)
         self._overflow_count += 1
+        return chain_pages + 1
 
     def _append_main_page(self, record: bytes) -> None:
         page_id = self._main.allocate()
@@ -302,8 +321,9 @@ class SequentialFile:
     def _sorted_page_records(self, page: RecordPage) -> list[tuple[Key, bytes]]:
         """Registros vigentes de la página y su cadena, ordenados por clave.
 
-        La cadena de una página es corta por construcción, así que ordenarla en memoria
-        no rompe la regla de no cargar el archivo entero.
+        La cadena tiene como mucho `sequential_max_chain_pages` páginas —al pasarse, el
+        archivo se reorganiza—, así que ordenarla en memoria no rompe la regla de no
+        cargar el archivo entero.
         """
         records = [self._keyed(page, slot) for slot in page.live_slots()]
         for _, chain_page in self._chain(page.next_page):
@@ -366,6 +386,8 @@ class SequentialFile:
             self.reorganize()
 
     def _write_rebuilt_file(self, rebuild_path: Path, records_per_page: int) -> int:
+        """Escribe el archivo reorganizado entero, cabecera incluida, y lo baja a disco al
+        cerrarlo."""
         with Pager(rebuild_path, self._config) as writer:
             writer.allocate()
             written_pages = 0
@@ -381,9 +403,12 @@ class SequentialFile:
                 page.insert_at(page.used_slots, record)
             if page is not None:
                 writer.write(page_id, page.to_bytes())
+            writer.write(HEADER_PAGE_ID, self._header_bytes(written_pages, deleted=0, overflow=0))
         return written_pages
 
     def _replace_files(self, rebuild_path: Path, written_pages: int) -> None:
+        """El `rename` va antes de borrar el auxiliar: entre los dos pasos, el archivo
+        principal nuevo no apunta a ninguna página del auxiliar viejo, que solo sobra."""
         self._main.close()
         self._overflow.close()
         rebuild_path.replace(self._path)
@@ -393,7 +418,6 @@ class SequentialFile:
         self._main_page_count = written_pages
         self._deleted_count = 0
         self._overflow_count = 0
-        self._write_header()
 
     def _load_main(self, page_id: int) -> RecordPage:
         return RecordPage.from_bytes(self._main.read(page_id), self._record_size)
@@ -437,6 +461,14 @@ class SequentialFile:
         self._overflow_count = int(overflow)
 
     def _write_header(self) -> None:
+        self._main.write(
+            HEADER_PAGE_ID,
+            self._header_bytes(
+                self._main_page_count, deleted=self._deleted_count, overflow=self._overflow_count
+            ),
+        )
+
+    def _header_bytes(self, main_pages: int, deleted: int, overflow: int) -> bytes:
         raw = bytearray(self._main.page_size)
         HEADER_FORMAT.pack_into(
             raw,
@@ -444,9 +476,9 @@ class SequentialFile:
             SEQUENTIAL_MAGIC,
             SEQUENTIAL_VERSION,
             self._record_size,
-            self._main_page_count,
+            main_pages,
             self._live_count,
-            self._deleted_count,
-            self._overflow_count,
+            deleted,
+            overflow,
         )
-        self._main.write(HEADER_PAGE_ID, bytes(raw))
+        return bytes(raw)

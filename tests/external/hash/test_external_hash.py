@@ -426,3 +426,18 @@ def test_many_rows_with_a_null_key_never_match_even_when_joined_by_blocks(
         assert joiner.block_joins == 1
     assert found == brute_force_pairs(left, right, Unmatched.BOTH)
     assert sum(found.values()) == HEAVY_KEY_ROWS + 2
+
+
+def test_keys_python_does_not_call_equal_still_end_up_in_one_group(
+    small_buffer: EngineConfig, serializer: RecordSerializer
+):
+    """NaN no es igual a sí mismo, pero todos sus bytes canónicos coinciden: caen siempre en
+    la misma partición. Si los grupos se distinguieran por igualdad, ninguna partición
+    cabría jamás y el reparto no terminaría."""
+    records = [serializer.pack((index, "lima")) for index in range(MANY_KEYS)]
+    with ExternalHashGrouper(
+        small_buffer.data_directory / "g", serializer.size, lambda _: float("nan"), small_buffer
+    ) as grouper:
+        groups = list(grouper.reduce(records, int, count))
+    assert len(groups) == 1
+    assert groups[0][1] == MANY_KEYS

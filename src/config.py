@@ -6,6 +6,7 @@ constantes de comportamiento en el cuerpo de una función.
 
 from __future__ import annotations
 
+import codecs
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -13,6 +14,7 @@ DEFAULT_PAGE_SIZE = 4096
 DEFAULT_BUFFER_POOL_PAGES = 128
 DEFAULT_SEQUENTIAL_WASTE_RATIO = 0.30
 DEFAULT_SEQUENTIAL_FILL_FACTOR = 0.80
+DEFAULT_SEQUENTIAL_MAX_CHAIN_PAGES = 16
 DEFAULT_SORT_BUFFER_PAGES = 16
 DEFAULT_MERGE_FAN_IN = 8
 DEFAULT_HASH_PARTITIONS = 16
@@ -29,6 +31,20 @@ DEFAULT_MAP_POINTS = 5000
 DEFAULT_MAX_RESULT_ROWS = 10_000
 DEFAULT_SESSION_IDLE_SECONDS = 15 * 60
 FALLBACK_DATA_DIRECTORY = "data"
+# Lo justo para la cabecera de un nodo y un par de entradas; con menos, ninguna estructura
+# cabe en una página.
+MIN_PAGE_SIZE = 32
+# El número de ranuras de una página y la ranura de una dirección se guardan en 16 bits.
+MAX_PAGE_SIZE = 1 << 15
+# Una división cuadrática reparte las entradas de un nodo lleno en dos: ninguna de las dos
+# mitades puede exigir más de la mitad.
+MAX_RTREE_MIN_FILL = 0.5
+MIN_MERGE_FAN_IN = 2
+MIN_HASH_PARTITIONS = 2
+
+
+class ConfigurationError(ValueError):
+    """Un parámetro de configuración está fuera de su rango."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,6 +58,8 @@ class EngineConfig:
             reorganización del archivo secuencial.
         sequential_fill_factor: fracción de cada página que la reorganización llena,
             dejando hueco para inserciones futuras.
+        sequential_max_chain_pages: páginas que puede tener la cadena de desbordamiento de
+            una sola página antes de forzar la reorganización.
         sort_buffer_pages: páginas que el ordenamiento externo mantiene en memoria por run.
         merge_fan_in: número de runs que el k-way merge combina en cada pasada.
         hash_partitions: particiones que genera el hashing externo.
@@ -72,6 +90,7 @@ class EngineConfig:
     buffer_pool_pages: int = DEFAULT_BUFFER_POOL_PAGES
     sequential_waste_ratio: float = DEFAULT_SEQUENTIAL_WASTE_RATIO
     sequential_fill_factor: float = DEFAULT_SEQUENTIAL_FILL_FACTOR
+    sequential_max_chain_pages: int = DEFAULT_SEQUENTIAL_MAX_CHAIN_PAGES
     sort_buffer_pages: int = DEFAULT_SORT_BUFFER_PAGES
     merge_fan_in: int = DEFAULT_MERGE_FAN_IN
     hash_partitions: int = DEFAULT_HASH_PARTITIONS
@@ -89,3 +108,59 @@ class EngineConfig:
     session_idle_seconds: float = DEFAULT_SESSION_IDLE_SECONDS
     data_directory: Path = Path(FALLBACK_DATA_DIRECTORY)
     import_directories: tuple[Path, ...] = ()
+
+    def __post_init__(self) -> None:
+        """Rechaza un valor fuera de rango al crear la configuración, no a mitad de una
+        consulta, donde el síntoma sería un error lejano o un bucle sin fin.
+
+        Raises:
+            ConfigurationError: si algún parámetro está fuera de su rango.
+        """
+        _require_between("page_size", self.page_size, MIN_PAGE_SIZE, MAX_PAGE_SIZE)
+        for name in (
+            "buffer_pool_pages",
+            "sequential_max_chain_pages",
+            "sort_buffer_pages",
+            "text_length",
+            "blob_length",
+            "max_upload_bytes",
+            "map_points",
+            "max_result_rows",
+        ):
+            _require_between(name, getattr(self, name), 1, None)
+        _require_between("merge_fan_in", self.merge_fan_in, MIN_MERGE_FAN_IN, None)
+        _require_between("hash_partitions", self.hash_partitions, MIN_HASH_PARTITIONS, None)
+        for name in (
+            "sequential_waste_ratio",
+            "sequential_fill_factor",
+            "hash_merge_fill",
+            "rtree_bulk_fill",
+        ):
+            _require_fraction(name, getattr(self, name), 1.0)
+        _require_fraction("rtree_min_fill", self.rtree_min_fill, MAX_RTREE_MIN_FILL)
+        if self.rtree_bulk_fill < self.rtree_min_fill:
+            raise ConfigurationError("rtree_bulk_fill no puede ser menor que rtree_min_fill")
+        _require_positive("lock_timeout_seconds", self.lock_timeout_seconds)
+        _require_positive("session_idle_seconds", self.session_idle_seconds)
+        if len(self.csv_delimiter) != 1:
+            raise ConfigurationError("csv_delimiter tiene que ser un solo carácter")
+        try:
+            codecs.lookup(self.csv_encoding)
+        except LookupError:
+            raise ConfigurationError(f"codificación desconocida: {self.csv_encoding}") from None
+
+
+def _require_between(name: str, value: int, low: int, high: int | None) -> None:
+    if value < low or (high is not None and value > high):
+        bounds = f"al menos {low}" if high is None else f"entre {low} y {high}"
+        raise ConfigurationError(f"{name} tiene que ser {bounds}, no {value}")
+
+
+def _require_fraction(name: str, value: float, high: float) -> None:
+    if not 0.0 < value <= high:
+        raise ConfigurationError(f"{name} tiene que estar en (0, {high}], no {value}")
+
+
+def _require_positive(name: str, value: float) -> None:
+    if value <= 0:
+        raise ConfigurationError(f"{name} tiene que ser positivo, no {value}")

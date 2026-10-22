@@ -11,6 +11,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable
 from datetime import date, timedelta
 from enum import Enum, unique
+from math import isfinite
 from typing import Any
 
 from spatial.geometry import GeometryError, Point, geographic_point
@@ -21,6 +22,10 @@ MIN_INT = -(1 << (INT_BITS - 1))
 MAX_INT = (1 << (INT_BITS - 1)) - 1
 STRING_PADDING = b"\x00"
 TEXT_ENCODING = "utf-8"
+NUL_CHARACTER = "\x00"
+# Mayor valor finito de un real de 32 bits, que es como se guarda cada componente de un
+# VECTOR: lo que pase de ahí se convertiría en infinito al empaquetarlo.
+FLOAT32_MAX = 3.4028234663852886e38
 
 Value = int | float | bool | str | bytes | date | tuple[float, ...] | None
 
@@ -111,13 +116,20 @@ class IntCodec(FieldCodec):
 
 
 class FloatCodec(FieldCodec):
+    """Real de doble precisión, siempre finito y con un solo cero.
+
+    NaN no es igual a sí mismo y `-0.0` tiene otros bytes que `0.0` aunque valgan lo mismo:
+    los dos romperían cualquier estructura que compare o reparta por bytes —el hash, el
+    agrupamiento externo—, que respondería distinto que un recorrido. Por eso no se guardan.
+    """
+
     format = "d"
     slots = 1
 
     def to_slots(self, value: Value) -> tuple[Any, ...]:
         if isinstance(value, bool) or not isinstance(value, int | float):
             raise InvalidValueError(f"se esperaba un número, llegó {value!r}")
-        return (real_from(value),)
+        return (finite_real(value),)
 
     def from_slots(self, slots: tuple[Any, ...]) -> Value:
         return float(slots[0])
@@ -168,6 +180,10 @@ class StringCodec(FieldCodec):
     def to_slots(self, value: Value) -> tuple[Any, ...]:
         if not isinstance(value, str):
             raise InvalidValueError(f"se esperaba una cadena, llegó {value!r}")
+        if NUL_CHARACTER in value:
+            raise InvalidValueError(
+                "una cadena no puede contener el carácter NUL, que marca su relleno"
+            )
         encoded = value.encode(TEXT_ENCODING)
         if len(encoded) > self.length:
             raise ValueTooLargeError(
@@ -184,11 +200,17 @@ class StringCodec(FieldCodec):
 
 
 class BytesCodec(FieldCodec):
-    slots = 1
+    """Bytes de hasta `length`, con su longitud guardada delante.
+
+    A diferencia de una cadena, unos bytes pueden terminar en ceros: quitar el relleno
+    a ciegas devolvería otro valor.
+    """
+
+    slots = 2
 
     def __init__(self, length: int) -> None:
         self.length = length
-        self.format = f"{length}s"
+        self.format = f"I{length}s"
 
     def to_slots(self, value: Value) -> tuple[Any, ...]:
         if not isinstance(value, bytes):
@@ -197,11 +219,12 @@ class BytesCodec(FieldCodec):
             raise ValueTooLargeError(
                 f"el valor ocupa {len(value)} bytes y el campo admite {self.length}"
             )
-        return (value,)
+        return (len(value), value)
 
     def from_slots(self, slots: tuple[Any, ...]) -> Value:
-        raw: bytes = slots[0]
-        return raw.rstrip(STRING_PADDING)
+        size: int = slots[0]
+        raw: bytes = slots[1]
+        return raw[:size]
 
     def neutral_value(self) -> Value:
         return b""
@@ -238,6 +261,8 @@ class PointCodec(FieldCodec):
 
 
 class VectorCodec(FieldCodec):
+    """Vector de reales de 32 bits, cada componente finito y dentro de su rango."""
+
     def __init__(self, dimension: int) -> None:
         self.dimension = dimension
         self.format = f"{dimension}f"
@@ -248,7 +273,14 @@ class VectorCodec(FieldCodec):
             raise InvalidValueError(
                 f"se esperaba un vector de dimensión {self.dimension}, llegó {value!r}"
             )
-        return tuple(float(component) for component in value)
+        if not all(_is_number(component) for component in value):
+            raise InvalidValueError(f"los componentes de un vector son números, llegó {value!r}")
+        components = tuple(finite_real(component) for component in value)
+        if any(abs(component) > FLOAT32_MAX for component in components):
+            raise ValueTooLargeError(
+                f"un componente de {value!r} no cabe en un real de 32 bits"
+            )
+        return components
 
     def from_slots(self, slots: tuple[Any, ...]) -> Value:
         return tuple(float(component) for component in slots)
@@ -285,6 +317,19 @@ def real_from(value: int | float) -> float:
         raise ValueTooLargeError(
             f"un entero de {len(str(abs(value)))} cifras no cabe en un real"
         ) from None
+
+
+def finite_real(value: int | float) -> float:
+    """El número como real finito, con `-0.0` convertido en `0.0`.
+
+    Raises:
+        ValueTooLargeError: si no cabe en un doble.
+        InvalidValueError: si es NaN o infinito.
+    """
+    real = real_from(value)
+    if not isfinite(real):
+        raise InvalidValueError(f"un real tiene que ser finito, llegó {real!r}")
+    return real + 0.0
 
 
 def _is_number(value: object) -> bool:

@@ -1,0 +1,42 @@
+"""La configuración rechaza valores fuera de rango al crearse."""
+
+import pytest
+
+from config import MAX_PAGE_SIZE, MIN_PAGE_SIZE, ConfigurationError, EngineConfig
+
+INVALID = [
+    {"page_size": MIN_PAGE_SIZE - 1},
+    {"page_size": MAX_PAGE_SIZE + 1},
+    {"buffer_pool_pages": 0},
+    {"sort_buffer_pages": 0},
+    {"merge_fan_in": 1},
+    {"hash_partitions": 1},
+    {"sequential_waste_ratio": 0.0},
+    {"sequential_waste_ratio": -1.0},
+    {"sequential_fill_factor": 5.0},
+    {"sequential_max_chain_pages": 0},
+    {"hash_merge_fill": 1.5},
+    {"rtree_min_fill": 0.7},
+    {"rtree_min_fill": 0.4, "rtree_bulk_fill": 0.3},
+    {"text_length": 0},
+    {"lock_timeout_seconds": 0.0},
+    {"session_idle_seconds": -5.0},
+    {"max_result_rows": 0},
+    {"csv_delimiter": ";;"},
+    {"csv_encoding": "no-existe"},
+]
+
+
+@pytest.mark.parametrize("overrides", INVALID, ids=lambda overrides: ",".join(overrides))
+def test_out_of_range_values_are_rejected(overrides: dict):
+    with pytest.raises(ConfigurationError):
+        EngineConfig(**overrides)
+
+
+def test_the_defaults_are_valid():
+    EngineConfig()
+
+
+def test_the_bounds_themselves_are_valid():
+    EngineConfig(page_size=MIN_PAGE_SIZE, rtree_min_fill=0.5, sequential_waste_ratio=1.0)
+    EngineConfig(page_size=MAX_PAGE_SIZE, merge_fan_in=2, hash_partitions=2)

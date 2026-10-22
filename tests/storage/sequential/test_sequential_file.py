@@ -1,4 +1,5 @@
 import random
+from dataclasses import replace
 
 import pytest
 
@@ -313,3 +314,41 @@ def test_the_file_matches_a_sorted_list_through_random_operations(
             assert keys_of(list(file.range_search(None, high)), serializer) == [
                 key for key in model if key <= high
             ]
+
+
+def test_a_reorganized_file_is_whole_on_disk_before_being_closed(
+    config: EngineConfig, serializer: RecordSerializer
+):
+    """Si el proceso muere tras reorganizar, lo que encuentra quien abra el archivo es el
+    archivo nuevo completo: la cabecera se escribió antes de reemplazar al viejo."""
+    path = config.data_directory / "t.seq"
+    with SequentialFile(path, serializer, "id", config) as written:
+        for key in range(100):
+            written.insert(row(serializer, key))
+        written.flush()
+        written.reorganize()
+        reader = SequentialFile(path, serializer, "id", config)
+        assert reader.record_count == 100
+        assert keys_of(reader.scan(), serializer) == list(range(100))
+
+
+def test_one_page_never_carries_a_longer_chain_than_allowed(
+    config: EngineConfig, serializer: RecordSerializer
+):
+    """Todas las claves nuevas caen entre las dos primeras del archivo, así que van a la
+    cadena de una sola página. El desperdicio global sigue bajo, pero la cadena llega al
+    límite y obliga a reorganizar."""
+    gap = 1000
+    capped = replace(config, sequential_max_chain_pages=2, sequential_waste_ratio=1.0)
+    with SequentialFile(config.data_directory / "t.seq", serializer, "id", capped) as file:
+        for key in range(0, 400 * gap, gap):
+            file.insert(row(serializer, key))
+        file.reorganize()
+        longest = capped.sequential_max_chain_pages * file.slots_per_page
+        for key in range(1, 300):
+            file.insert(row(serializer, key))
+            assert file.overflow_count <= longest
+        assert file.record_count == 400 + 299
+        assert keys_of(file.scan(), serializer) == sorted(
+            [*range(0, 400 * gap, gap), *range(1, 300)]
+        )

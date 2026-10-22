@@ -69,8 +69,9 @@ final, y `id <= 500` empieza en la primera, sin recorrer antes el archivo para a
 dónde acaba.
 
 El recorrido ordenado (`scan`) va página por página y, en cada una, mezcla en memoria las
-ranuras de la página con las de su cadena y las ordena. La cadena es corta por
-construcción, así que esto no viola la regla de no cargar el archivo entero en memoria.
+ranuras de la página con las de su cadena y las ordena. La cadena tiene como mucho
+`sequential_max_chain_pages` páginas (ver abajo), así que esto no viola la regla de no
+cargar el archivo entero en memoria.
 
 ### Borrar — eliminación lazy
 
@@ -95,6 +96,17 @@ reescribe el espacio principal llenando cada página hasta `sequential_fill_fact
 El factor de llenado es deliberado: dejar un 20 % de hueco en cada página hace que las
 inserciones siguientes quepan en el sitio que les toca en vez de irse al desbordamiento.
 
+El desperdicio es una medida **global**, y no basta: si todas las inserciones caen en la
+misma zona, la cadena de una sola página crece sin que el total llegue al 30 %, y cada
+búsqueda en esa zona la recorre entera. Por eso también se reorganiza cuando una cadena
+pasa de `sequential_max_chain_pages` (**16** por defecto). El precio es deliberado: una
+carga que cae siempre en el mismo sitio reorganiza más a menudo, a cambio de que ninguna
+búsqueda lea más de 17 páginas.
+
+La reorganización escribe el archivo nuevo completo, **cabecera incluida**, lo baja a disco
+y solo entonces ocupa el lugar del viejo con un `rename`, que es atómico. Si el proceso
+muere a mitad, en disco queda el archivo viejo entero o el nuevo entero.
+
 ```
 antes:  60 registros, 8 lápidas, 15 en desbordamiento  → desperdicio 34 % ⇒ reorganiza
 después: 52 registros, 0 lápidas, 0 desbordamiento, páginas al 80 %
@@ -104,7 +116,7 @@ después: 52 registros, 0 lápidas, 0 desbordamiento, páginas al 80 %
 
 | Operación | Coste | Nota |
 |---|---|---|
-| Búsqueda por igualdad | `O(log P)` + cadena | P = páginas principales |
+| Búsqueda por igualdad | `O(log P)` + cadena | P = páginas principales; la cadena, ≤ 16 páginas |
 | Inserción | `O(log P)` + `O(c)` bytes movidos | c = registros por página |
 | Búsqueda por rango | `O(log P + k/c)` | k = registros devueltos |
 | Recorrido ordenado | `O(P)` | sin ordenar nada |

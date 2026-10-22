@@ -178,3 +178,14 @@ def test_pages_that_hold_a_single_record(config: EngineConfig):
         assert heap.page_count == pages
         assert heap.record_count == 5
         assert heap.insert(bytes([20]) * wide).page_id not in {item.page_id for item in ids}
+
+
+@pytest.mark.parametrize("page", [0, 1, 99])
+def test_an_address_beyond_the_file_is_not_found(heap: HeapFile, page: int):
+    heap.insert(blob(1))
+    missing = RecordId(page_id=page, slot=0 if page != 1 else 50)
+    with pytest.raises(RecordNotFoundError):
+        heap.read(missing)
+    with pytest.raises(RecordNotFoundError):
+        heap.delete(missing)
+    assert list(heap.read_many([RecordId(page_id=1, slot=0)])) == [blob(1)]

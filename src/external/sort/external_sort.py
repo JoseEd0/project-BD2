@@ -48,7 +48,7 @@ class ExternalSorter:
         self._key_of = key_of
         self._config = config
         self._buffer_records = buffered_records(config, record_size)
-        self._fan_in = max(2, config.merge_fan_in)
+        self._fan_in = config.merge_fan_in
         self._temporary: list[Path] = []
         self._created = 0
         self.run_count = 0

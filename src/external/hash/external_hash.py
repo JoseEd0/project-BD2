@@ -171,11 +171,11 @@ class ExternalHashGrouper:
     ) -> Iterator[tuple[Key, State]]:
         partitioner = self._partition(records, level)
         for index in range(partitioner.partition_count):
-            states = self._states_of(partitioner.read(index), start, step)
-            if states is None:
+            groups = self._groups_of(partitioner.read(index), start, step)
+            if groups is None:
                 yield from self._reduce_level(partitioner.read(index), start, step, level + 1)
             else:
-                yield from states.items()
+                yield from groups
         self._open.remove(partitioner)
         partitioner.close()
 
@@ -190,22 +190,31 @@ class ExternalHashGrouper:
         self.levels = max(self.levels, level + 1)
         return partitioner
 
-    def _states_of(
+    def _groups_of(
         self,
         records: Iterable[bytes],
         start: Callable[[], State],
         step: Callable[[State, bytes], State],
-    ) -> dict[Key, State] | None:
-        """Estado de cada grupo de una partición, o `None` si son más de los que caben."""
-        states: dict[Key, State] = {}
+    ) -> list[tuple[Key, State]] | None:
+        """Clave y estado de cada grupo de una partición, o `None` si no caben.
+
+        Los grupos se distinguen por los mismos bytes con que se reparten. Así, todas las
+        filas de una partición que no se puede volver a separar forman un solo grupo, que
+        siempre cabe: repartir termina. Distinguirlos por la igualdad de Python podría
+        dejar en una misma partición más grupos de los que caben sin que ningún hash los
+        separara nunca.
+        """
+        groups: dict[bytes, tuple[Key, State]] = {}
         for record in records:
             key = self._key_of(record)
-            if key not in states:
-                if len(states) == self._memory_groups:
+            signature = canonical_key_bytes(key)
+            group = groups.get(signature)
+            if group is None:
+                if len(groups) == self._memory_groups:
                     return None
-                states[key] = start()
-            states[key] = step(states[key], record)
-        return states
+                group = (key, start())
+            groups[signature] = (group[0], step(group[1], record))
+        return list(groups.values())
 
 
 class ExternalHashJoin:

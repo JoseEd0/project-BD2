@@ -442,6 +442,16 @@ class SequentialFile:
         self._overflow.write(page_id, page.to_bytes())
 
     @staticmethod
+    def files_of(path: Path) -> list[Path]:
+        """Los archivos de un secuencial guardado en `path`: el principal, el auxiliar y el
+        que deja una reorganización interrumpida."""
+        return [
+            path,
+            SequentialFile._overflow_path(path),
+            path.with_name(path.name + REBUILD_SUFFIX),
+        ]
+
+    @staticmethod
     def _overflow_path(path: Path) -> Path:
         return path.with_name(path.name + OVERFLOW_SUFFIX)
 

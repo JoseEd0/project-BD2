@@ -194,7 +194,7 @@ def usuarios(engine: Engine) -> Engine:
 
 
 def test_a_unique_column_gets_an_index_that_is_used(usuarios: Engine):
-    definition = usuarios.table("usuarios").definition.index_on("correo")
+    (definition,) = usuarios.table("usuarios").definition.indexes_on("correo")
     assert definition is not None and definition.unique and definition.method is IndexType.HASH
     result = usuarios.execute("SELECT id FROM usuarios WHERE correo = 'luis@x'")
     assert result.rows == ((2,),)
@@ -239,7 +239,7 @@ def test_unique_survives_reopening(config: EngineConfig):
         engine.execute("CREATE TABLE u (id INT PRIMARY KEY, correo VARCHAR(12) UNIQUE INDEX BTREE)")
         engine.execute("INSERT INTO u VALUES (1, 'ana@x')")
     with Engine(config) as engine:
-        index = engine.table("u").definition.index_on("correo")
+        (index,) = engine.table("u").definition.indexes_on("correo")
         assert index is not None and index.unique and index.method is IndexType.BTREE
         with pytest.raises(DuplicateValueError):
             engine.execute("INSERT INTO u VALUES (2, 'ana@x')")

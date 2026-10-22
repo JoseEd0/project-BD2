@@ -12,30 +12,24 @@ extra a la página donde vive la fila.
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterator
 from pathlib import Path
-from types import TracebackType
 from typing import Any
 
 from config import EngineConfig
 from index.keys import CompositeKeyCodec, RecordIdKeyCodec, ScalarKeyCodec
+from index.secondary import ColumnIndex
 from storage.record import RecordSerializer
-from storage.record_id import RecordId
+from storage.record_id import HIGHEST_RECORD_ID, LOWEST_RECORD_ID, RecordId
 from storage.types import Key
 
 from .tree import BPlusTree
 
 EMPTY_VALUE = b""
-LOWEST_RECORD_ID = RecordId(page_id=0, slot=0)
-HIGHEST_RECORD_ID = RecordId(page_id=0xFFFFFFFF, slot=0xFFFF)
 
 
-class UnclusteredBPlusIndex:
-    """Índice secundario que apunta a las filas de otro archivo.
-
-    Las filas cuyo campo indexado es NULL no entran en el índice: ninguna búsqueda por
-    igualdad o por rango puede devolverlas, y un NULL no tiene sitio en el orden.
-    """
+class UnclusteredBPlusIndex(ColumnIndex):
+    """Índice secundario que apunta a las filas de otro archivo, en orden de valor."""
 
     def __init__(
         self,
@@ -44,9 +38,8 @@ class UnclusteredBPlusIndex:
         key_field: str,
         config: EngineConfig,
     ) -> None:
-        self._serializer = serializer
-        self._key_position = serializer.schema.position_of(key_field)
-        key_field_definition = serializer.schema.fields[self._key_position]
+        super().__init__(serializer, key_field)
+        key_field_definition = serializer.schema.fields[self._position]
         codec = CompositeKeyCodec([ScalarKeyCodec(key_field_definition), RecordIdKeyCodec()])
         self._tree = BPlusTree(path, codec, len(EMPTY_VALUE), config)
 
@@ -58,35 +51,12 @@ class UnclusteredBPlusIndex:
     def height(self) -> int:
         return self._tree.height
 
-    def build(self, rows: Iterable[tuple[bytes, RecordId]]) -> None:
-        """Indexa de una vez todas las filas de la tabla."""
-        for record, record_id in rows:
-            self.insert(record, record_id)
-
-    def insert(self, record: bytes, record_id: RecordId) -> None:
-        key = self._key_of(record)
-        if key is not None:
-            self._tree.insert((key, record_id), EMPTY_VALUE)
-
-    def search(self, value: Key) -> list[RecordId]:
-        """Direcciones de todas las filas cuyo campo indexado vale `value`.
-
-        Ninguna si `value` es NULL: esas filas no están en el índice.
-        """
-        if value is None:
-            return []
-        return [record_id for _, record_id in self._range(value, value)]
-
     def range_search(self, low: Key | None, high: Key | None) -> Iterator[tuple[Key, RecordId]]:
         """Pares `(valor, dirección)` con `low <= valor <= high`, en orden de valor."""
         return self._range(low, high)
 
     def scan(self) -> Iterator[tuple[Key, RecordId]]:
         return self._range(None, None)
-
-    def delete(self, record: bytes, record_id: RecordId) -> bool:
-        key = self._key_of(record)
-        return key is not None and self._tree.delete((key, record_id))
 
     def describe(self) -> dict[str, Any]:
         return self._tree.describe()
@@ -97,22 +67,17 @@ class UnclusteredBPlusIndex:
     def close(self) -> None:
         self._tree.close()
 
-    def __enter__(self) -> UnclusteredBPlusIndex:
-        return self
+    def _add(self, value: Key, record_id: RecordId) -> None:
+        self._tree.insert((value, record_id), EMPTY_VALUE)
 
-    def __exit__(
-        self,
-        exception_type: type[BaseException] | None,
-        exception: BaseException | None,
-        traceback: TracebackType | None,
-    ) -> None:
-        self.close()
+    def _remove(self, value: Key, record_id: RecordId) -> bool:
+        return self._tree.delete((value, record_id))
+
+    def _find(self, value: Key) -> list[RecordId]:
+        return [record_id for _, record_id in self._range(value, value)]
 
     def _range(self, low: Key | None, high: Key | None) -> Iterator[tuple[Key, RecordId]]:
         lower = None if low is None else (low, LOWEST_RECORD_ID)
         upper = None if high is None else (high, HIGHEST_RECORD_ID)
         for (value, record_id), _ in self._tree.range_scan(lower, upper):
             yield value, record_id
-
-    def _key_of(self, record: bytes) -> Key:
-        return self._serializer.unpack_field(record, self._key_position)

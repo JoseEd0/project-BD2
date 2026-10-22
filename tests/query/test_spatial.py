@@ -523,7 +523,7 @@ def test_structure_describes_the_tree(indexed: Engine):
 def test_rtree_needs_a_point_column(tiendas: Engine):
     with pytest.raises(CatalogError, match="POINT"):
         tiendas.execute("CREATE INDEX idx_nombre ON tiendas USING RTREE (nombre)")
-    assert tiendas.table("tiendas").definition.index_on("nombre") is None
+    assert tiendas.table("tiendas").definition.indexes_on("nombre") == ()
 
 
 @pytest.mark.parametrize("method", ["BTREE", "HASH"])

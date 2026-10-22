@@ -42,6 +42,18 @@ Los **índices secundarios** (`CREATE INDEX … USING BTREE|HASH|RTREE`) solo ex
 heap files, porque necesitan que cada fila tenga una dirección física estable. Un archivo
 secuencial mueve las filas al reorganizarse y un B+ agrupado al dividir nodos.
 
+Una columna puede tener **varios índices, uno por método**: un B+ para los rangos y un hash
+para las igualdades. Qué sabe hacer cada método vive en un solo lugar,
+[`index_methods.py`](index_methods.py): sus capacidades (igualdad, rango, espacial), las
+columnas que admite y las opciones de `WITH (...)` que acepta (hoy, ninguno acepta
+opciones, así que un `WITH` se rechaza en vez de ignorarse). El planificador le pide a ese
+registro el índice de una columna que sepa responder la condición; si hay varios, gana el
+más especializado —para una igualdad, el hash antes que el B+—.
+
+El catálogo lleva **versión de formato** y se escribe **de forma atómica**: en un archivo
+aparte que después ocupa el lugar del anterior con un `rename`. Escribirlo encima y morir a
+mitad dejaría un JSON truncado, y con él se perderían todas las tablas.
+
 Cuando un índice devuelve muchas filas de una zona —una búsqueda por radio o por
 polígono—, las direcciones **se ordenan por página antes de ir al heap**. Llegan repartidas
 al azar, e ir a buscarlas en ese orden relee la misma página una y otra vez; ordenadas, cada

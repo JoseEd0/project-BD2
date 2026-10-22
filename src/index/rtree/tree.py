@@ -22,6 +22,7 @@ from typing import Any, NamedTuple
 
 from config import EngineConfig
 from external.sort import ExternalSorter
+from index.errors import CorruptNodeError
 from spatial.geometry import Point, Rectangle
 from spatial.metrics import Metric
 from storage.layout import FileHeader, FreePageList
@@ -36,7 +37,6 @@ from .node import (
     MINIMUM_ENTRIES_PER_NODE,
     BranchEntry,
     BranchNode,
-    CorruptNodeError,
     LeafEntry,
     LeafNode,
     Node,

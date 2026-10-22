@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { fetchStructure, fetchTablePoints } from "../api";
 import { useLeafletMap } from "../hooks/useLeafletMap";
 import type { Theme } from "../hooks/useTheme";
+import { isIndexedWith } from "../lib/columns";
 import { formatPoint, isGeoPoint } from "../lib/points";
 import { euclideanRing, locatedRows, overlayLabel } from "../lib/spatial";
 import type { LocatedRow } from "../lib/spatial";
@@ -215,8 +216,10 @@ export default function MapPanel({ result, spatial, tables, theme }: MapPanelPro
 
   const table = tables.find((item) => item.name === spatial.table);
   const rowCount = table?.row_count ?? 0;
-  const indexed =
-    table?.columns.find((column) => column.name === spatial.column)?.indexed_with === SPATIAL_INDEX;
+  const indexed = isIndexedWith(
+    table?.columns.find((column) => column.name === spatial.column),
+    SPATIAL_INDEX,
+  );
 
   const context = useTablePoints(spatial, rowCount);
   const tree = useSpatialTree(spatial, showBoxes && indexed, rowCount);

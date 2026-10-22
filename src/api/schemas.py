@@ -25,7 +25,7 @@ class ColumnInfo(BaseModel):
     length: int | None = None
     nullable: bool = True
     primary_key: bool = False
-    indexed_with: str | None = None
+    indexed_with: list[str] = Field(default_factory=list)
     unique: bool = False
 
 

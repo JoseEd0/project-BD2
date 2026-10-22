@@ -7,17 +7,23 @@ Se guarda como JSON junto a los datos, para que el motor sepa al arrancar qué h
 from __future__ import annotations
 
 import json
+import os
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import Enum, unique
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any
 
 from config import EngineConfig
-from sql.nodes import ColumnDefinition, DataTypeKind, IndexType
+from sql.nodes import EMPTY_OPTIONS, ColumnDefinition, DataTypeKind, IndexType, OptionValue
 from storage.schema import Field, Schema
 from storage.types import FieldType
 
 CATALOG_FILENAME = "catalog.json"
+PARTIAL_SUFFIX = ".partial"
+# La 2 admite varios índices por columna, uno por método, y guarda sus opciones.
+CATALOG_VERSION = 2
 
 SQL_TO_STORAGE_TYPE: dict[DataTypeKind, FieldType] = {
     DataTypeKind.INT: FieldType.INT,
@@ -52,7 +58,11 @@ class UnknownIndexError(CatalogError):
 
 
 class DuplicateIndexError(CatalogError):
-    """Ya existe un índice con ese nombre o sobre esa columna."""
+    """Ya existe un índice con ese nombre, o con ese método sobre esa columna."""
+
+
+class CatalogFormatError(CatalogError):
+    """El catálogo en disco es de otra versión del formato."""
 
 
 @unique
@@ -86,12 +96,14 @@ class IndexDefinition:
     Attributes:
         unique: si la columna se declaró `UNIQUE`; el índice es entonces lo que permite
             comprobar, sin recorrer la tabla, que un valor no está ya en otra fila.
+        options: lo que se pidió en su `WITH (...)`, ya validado contra el método.
     """
 
     name: str
     column: str
     method: IndexType
     unique: bool = False
+    options: Mapping[str, OptionValue] = EMPTY_OPTIONS
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -99,6 +111,7 @@ class IndexDefinition:
             "column": self.column,
             "method": self.method.value,
             "unique": self.unique,
+            "options": dict(self.options),
         }
 
     @classmethod
@@ -107,7 +120,8 @@ class IndexDefinition:
             name=raw["name"],
             column=raw["column"],
             method=IndexType(raw["method"]),
-            unique=bool(raw.get("unique", False)),
+            unique=bool(raw["unique"]),
+            options=MappingProxyType(dict(raw["options"])),
         )
 
 
@@ -132,11 +146,13 @@ class TableDefinition:
                 return index
         raise UnknownIndexError(f"la tabla '{self.name}' no tiene el índice '{name}'")
 
-    def index_on(self, column: str) -> IndexDefinition | None:
-        for index in self.indexes:
-            if index.column.lower() == column.lower():
-                return index
-        return None
+    def indexes_on(self, column: str) -> tuple[IndexDefinition, ...]:
+        """Los índices de la columna, en el orden en que se crearon."""
+        return tuple(index for index in self.indexes if index.column.lower() == column.lower())
+
+    def index_with(self, column: str, method: IndexType) -> IndexDefinition | None:
+        """El índice de la columna con ese método, si lo tiene."""
+        return next((index for index in self.indexes_on(column) if index.method is method), None)
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -226,15 +242,20 @@ class Catalog:
     def add_index(self, table: str, index: IndexDefinition) -> None:
         """Registra un índice secundario.
 
+        Una columna puede tener varios índices, uno por método: un B+ para los rangos y un
+        hash para las igualdades, por ejemplo.
+
         Raises:
-            DuplicateIndexError: si el nombre o la columna ya tienen índice.
+            DuplicateIndexError: si el nombre ya existe o la columna ya tiene ese método.
             UnknownTableError: si la tabla no existe.
         """
         definition = self.table(table)
         if any(existing.name.lower() == index.name.lower() for existing in definition.indexes):
             raise DuplicateIndexError(f"el índice '{index.name}' ya existe")
-        if definition.index_on(index.column) is not None:
-            raise DuplicateIndexError(f"la columna '{index.column}' ya tiene un índice")
+        if definition.index_with(index.column, index.method) is not None:
+            raise DuplicateIndexError(
+                f"la columna '{index.column}' ya tiene un índice {index.method.value}"
+            )
         self._replace(definition, indexes=(*definition.indexes, index))
 
     def drop_index(self, table: str, name: str) -> IndexDefinition:
@@ -276,17 +297,39 @@ class Catalog:
         self._save()
 
     def _load(self) -> None:
+        """Lee el catálogo de disco.
+
+        Raises:
+            CatalogFormatError: si es de otra versión del formato.
+        """
         if not self.path.exists():
             return
         raw = json.loads(self.path.read_text(encoding="utf-8"))
+        version = raw.get("version")
+        if version != CATALOG_VERSION:
+            raise CatalogFormatError(
+                f"el catálogo de {self.config.data_directory} es de la versión {version} del "
+                f"formato y este motor lee la {CATALOG_VERSION}: vuelve a poblar ese directorio"
+            )
         self._tables = {
             str(item["name"]).lower(): TableDefinition.from_json(item) for item in raw["tables"]
         }
 
     def _save(self) -> None:
+        """Escribe el catálogo entero en un archivo aparte y lo pone en su lugar con un
+        `rename`, que es atómico. Escribirlo encima del anterior y morir a mitad dejaría un
+        JSON truncado, y con él se perderían todas las tablas."""
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        payload = {"tables": [definition.to_json() for definition in self._tables.values()]}
-        self.path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+        payload = {
+            "version": CATALOG_VERSION,
+            "tables": [definition.to_json() for definition in self._tables.values()],
+        }
+        partial = self.path.with_name(self.path.name + PARTIAL_SUFFIX)
+        with partial.open("w", encoding="utf-8") as output:
+            output.write(json.dumps(payload, indent=2, ensure_ascii=False))
+            output.flush()
+            os.fsync(output.fileno())
+        partial.replace(self.path)
 
 
 def field_from_column(column: ColumnDefinition, config: EngineConfig) -> Field:

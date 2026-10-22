@@ -282,7 +282,7 @@ def test_drop_index_if_exists_drops_an_existing_index(engine: Engine):
     engine.execute("CREATE TABLE t (id INT PRIMARY KEY, v INT)")
     engine.execute("CREATE INDEX idx_v ON t USING HASH (v)")
     engine.execute("DROP INDEX IF EXISTS idx_v")
-    assert engine.table("t").definition.index_on("v") is None
+    assert engine.table("t").definition.indexes_on("v") == ()
 
 
 def test_loading_a_file_with_an_unknown_key_registers_nothing(engine: Engine, tmp_path):

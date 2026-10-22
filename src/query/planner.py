@@ -35,6 +35,7 @@ from query.expressions import (
     subexpressions,
 )
 from query.functions import AGGREGATE_NAMES
+from query.index_methods import Capability
 from query.operators import (
     DISTINCT_DIRECTORY,
     GROUP_DIRECTORY,
@@ -61,7 +62,7 @@ from query.operators import (
 )
 from query.spatial import nearest_search, polygon_search, radius_search
 from query.spatial_operators import SpatialNearestScan, SpatialPolygonScan, SpatialRangeScan
-from query.table import Table
+from query.table import Table, index_with_capability
 from sql.nodes import (
     BetweenPredicate,
     BinaryOperation,
@@ -69,7 +70,6 @@ from sql.nodes import (
     ColumnRef,
     Expression,
     FunctionCall,
-    IndexType,
     InPredicate,
     Join,
     SelectStatement,
@@ -266,8 +266,7 @@ class Planner:
         name = self._column_named(column, alias)
         if name is None:
             return None
-        index = table.definition.index_on(name)
-        return index if index is not None and index.method is IndexType.RTREE else None
+        return index_with_capability(table.definition, name, Capability.SPATIAL)
 
     def _lookup_on_column(
         self, condition: Expression, alias: str
@@ -350,7 +349,7 @@ class Planner:
             return None
         stored = [_stored_key(table, column, value) for value in values]
         keys = [key for key in stored if key is not None]
-        index = table.definition.index_on(column)
+        index = index_with_capability(table.definition, column, Capability.EQUALITY)
         if index is not None:
             return IndexLookup(table, alias, index.name, keys)
         if self._is_primary_key(table, column):
@@ -362,8 +361,8 @@ class Planner:
     ) -> TableOperator | None:
         if self._is_primary_key(table, column) and table.organization in ORDERED_ORGANIZATIONS:
             return PrimaryKeyRange(table, alias, low, high)
-        index = table.definition.index_on(column)
-        if index is None or index.method is not IndexType.BTREE:
+        index = index_with_capability(table.definition, column, Capability.RANGE)
+        if index is None:
             return None
         return IndexRange(table, alias, index.name, low, high)
 

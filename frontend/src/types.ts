@@ -4,7 +4,7 @@ export interface ColumnInfo {
   length: number | null;
   nullable: boolean;
   primary_key: boolean;
-  indexed_with: string | null;
+  indexed_with: string[];
   unique: boolean;
 }
 

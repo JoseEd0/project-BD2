@@ -4,8 +4,8 @@ from collections.abc import Callable
 import pytest
 
 from config import EngineConfig
-from index.bplustree.node import CorruptNodeError, NodeCapacityError
 from index.bplustree.tree import BPlusTree, DuplicateKeyError, TreeFormatError
+from index.errors import CorruptNodeError, NodeCapacityError
 from index.keys import ScalarKeyCodec
 from storage.types import StorageError
 

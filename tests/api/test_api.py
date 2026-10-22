@@ -352,7 +352,7 @@ def test_the_file_panel_shows_the_spatial_index(stores: TestClient):
     (table,) = stores.get("/tables").json()
     column = next(item for item in table["columns"] if item["name"] == "ubicacion")
     assert column["type"] == "POINT"
-    assert column["indexed_with"] == "RTREE"
+    assert column["indexed_with"] == ["RTREE"]
 
 
 def test_a_radius_query_describes_its_circle(stores: TestClient):

@@ -5,8 +5,8 @@ import pytest
 from rtree_support import LIMA, Indexed, TreeValidator, fill, random_points, record_id_of
 
 from config import EngineConfig
+from index.errors import CorruptNodeError, NodeCapacityError
 from index.rtree import RTree, SearchStats
-from index.rtree.node import CorruptNodeError, NodeCapacityError
 from index.rtree.tree import TreeFormatError
 from spatial.geometry import Point, Rectangle
 from spatial.metrics import EUCLIDEAN, HAVERSINE, Metric

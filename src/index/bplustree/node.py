@@ -22,8 +22,9 @@ import struct
 from dataclasses import dataclass, field
 from enum import IntEnum, unique
 
+from index.errors import CorruptNodeError, NodeCapacityError
 from index.keys import KeyCodec
-from storage.types import Key, StorageError
+from storage.types import Key
 
 HEADER_FORMAT = struct.Struct("<BHi")
 HEADER_SIZE = HEADER_FORMAT.size
@@ -33,12 +34,6 @@ NO_NODE = -1
 MINIMUM_CAPACITY = 3
 
 
-class NodeCapacityError(StorageError):
-    """La página es demasiado pequeña para que el árbol funcione."""
-
-
-class CorruptNodeError(StorageError):
-    """Los bytes de la página no describen un nodo válido."""
 
 
 @unique

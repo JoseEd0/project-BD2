@@ -162,7 +162,7 @@ class Service:
                     length=item.length,
                     nullable=item.nullable,
                     primary_key=item.name == definition.primary_key,
-                    indexed_with=_index_method(definition, item.name),
+                    indexed_with=_index_methods(definition, item.name),
                     unique=_is_unique(definition, item.name),
                 )
                 for item in definition.schema
@@ -183,11 +183,9 @@ def _first_point_column(fields: Iterable[Field]) -> str | None:
     return next((field.name for field in fields if field.type is FieldType.POINT), None)
 
 
-def _index_method(definition: TableDefinition, column: str) -> str | None:
-    index = definition.index_on(column)
-    return None if index is None else index.method.value
+def _index_methods(definition: TableDefinition, column: str) -> list[str]:
+    return [index.method.value for index in definition.indexes_on(column)]
 
 
 def _is_unique(definition: TableDefinition, column: str) -> bool:
-    index = definition.index_on(column)
-    return index is not None and index.unique
+    return any(index.unique for index in definition.indexes_on(column))

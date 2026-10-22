@@ -33,6 +33,7 @@ from query.expressions import (
     UnknownColumnError,
 )
 from query.files import resolve_user_file
+from query.index_methods import method_named, secondary_method_names
 from query.journal import DiscardingJournal, Journal
 from query.loader import infer_schema, read_values
 from query.operators import UnsupportedQueryError
@@ -64,13 +65,13 @@ from sql.nodes import (
 )
 from storage.record import Record
 from storage.schema import Field, Schema
-from storage.types import ORDERED_FIELD_TYPES, UNORDERED_FIELD_TYPES, FieldType, Value
+from storage.types import ORDERED_FIELD_TYPES, FieldType, Value
 
 MILLISECONDS = 1000.0
 # Métodos que, declarados sobre una columna al cargar un archivo, la convierten en la clave
 # de la tabla. Un R-Tree no identifica filas: varias pueden compartir ubicación.
 KEY_INDEX_METHODS = frozenset({IndexType.SEQUENTIAL, IndexType.BTREE, IndexType.HASH})
-SECONDARY_INDEX_METHODS = frozenset({IndexType.BTREE, IndexType.HASH, IndexType.RTREE})
+DEFAULT_INDEX_PREFIX = "idx_"
 NO_JOURNAL: Journal = DiscardingJournal()
 
 
@@ -313,7 +314,7 @@ class Engine:
         schema = infer_schema(path, self.config)
         spec = statement.index
         if spec is not None:
-            _require_no_options(spec)
+            _require_known_options(spec)
         if spec is not None and not schema.has_field(spec.columns[0]):
             raise CatalogError(f"la columna '{spec.columns[0]}' no está en '{path.name}'")
         key_spec = spec if spec is not None and spec.method in KEY_INDEX_METHODS else None
@@ -334,7 +335,7 @@ class Engine:
         try:
             loaded = self._load_rows(self.table(definition.name), path, schema)
             if spec is not None and key_spec is None:
-                self._add_index(self.table(definition.name), spec.columns[0], spec.method, None)
+                self._add_index(self.table(definition.name), spec, None)
             self.table(definition.name).flush()
         except Exception:
             self._remove_table(definition.name)
@@ -349,39 +350,43 @@ class Engine:
         column = statement.spec.columns[0]
         if len(statement.spec.columns) > 1:
             raise UnsupportedQueryError("todavía no hay índices sobre varias columnas")
-        _require_no_options(statement.spec)
         if not table.schema.has_field(column):
             raise CatalogError(f"la columna '{column}' no existe en '{table.name}'")
-        if statement.if_not_exists and table.definition.index_on(column) is not None:
-            return QueryResult(message=f"la columna '{column}' ya tenía índice")
-        definition = self._add_index(table, column, statement.spec.method, statement.name)
+        method = statement.spec.method
+        if statement.if_not_exists and table.definition.index_with(column, method) is not None:
+            return QueryResult(message=f"la columna '{column}' ya tenía un índice {method.value}")
+        definition = self._add_index(table, statement.spec, statement.name)
         return QueryResult(
             message=f"índice '{definition.name}' creado sobre {table.name}.{column} "
             f"({definition.method.value})"
         )
 
-    def _add_index(
-        self, table: Table, column: str, method: IndexType, name: str | None
-    ) -> IndexDefinition:
+    def _add_index(self, table: Table, spec: IndexSpec, name: str | None) -> IndexDefinition:
         """Registra un índice secundario y lo construye sobre las filas que ya existen.
 
         Si la construcción falla, el índice se quita del catálogo y sus archivos se borran:
         un índice a medias respondería consultas con filas de menos.
 
         Raises:
-            CatalogError: si la tabla no es un heap file o el método no sirve para la columna.
+            CatalogError: si la tabla no es un heap file, el método no sirve para la columna
+                o pide opciones que el método no tiene.
         """
+        column = spec.columns[0]
         _require_heap_for_secondary_index(table.organization, column)
-        _require_method_for_column(table.schema.field_of(column), method)
+        _require_method_for_column(table.schema.field_of(column), spec.method)
+        _require_known_options(spec)
         definition = IndexDefinition(
-            name=name or f"idx_{table.name}_{column}", column=column, method=method
+            name=name or default_index_name(table.name, column),
+            column=column,
+            method=spec.method,
+            options=spec.options,
         )
         self._catalog.add_index(table.name, definition)
         try:
             table.build_index(definition)
         except Exception:
             self._catalog.drop_index(table.name, definition.name)
-            table.discard_index_files(definition.name)
+            table.discard_index_files(definition)
             raise
         self._reopen(table.name)
         return definition
@@ -433,7 +438,7 @@ class Engine:
         except Exception:
             self._tables.pop(definition.name.lower(), None)
             self._catalog.drop_table(definition.name)
-            discard_table_files(self.config.data_directory, definition.name)
+            discard_table_files(definition, self.config.data_directory)
             raise
 
     def _reopen(self, name: str) -> None:
@@ -471,7 +476,7 @@ class Engine:
             _require_method_for_column(field, method)
             indexes.append(
                 IndexDefinition(
-                    name=f"idx_{statement.name}_{column.name}",
+                    name=default_index_name(statement.name, column.name),
                     column=column.name,
                     method=method,
                     unique=column.unique,
@@ -594,47 +599,40 @@ def _require_heap_for_secondary_index(organization: Organization, column: str) -
 
 
 def _require_method_for_column(field: Field, method: IndexType) -> None:
-    """Un R-Tree indexa puntos y solo puntos; un hash, cualquier cosa menos puntos; un B+,
-    solo lo que tiene orden.
-
-    Un punto o un vector no tienen un orden total que un B+ pueda aprovechar, y un hash
-    sobre puntos solo serviría para encontrar filas en unas coordenadas exactas.
+    """El método tiene que ser de índice secundario y servir para el tipo de la columna
+    (ver `index_methods.py`).
 
     Raises:
-        CatalogError: si el método no corresponde al tipo de la columna.
+        CatalogError: si no lo es o no sirve.
     """
-    if method not in SECONDARY_INDEX_METHODS:
+    known = method_named(method)
+    if known is None:
         raise CatalogError(
             f"el método {method.value} no sirve como índice secundario de '{field.name}': "
-            "los disponibles son BTREE, HASH y RTREE"
+            f"los disponibles son {secondary_method_names()}"
         )
-    is_point = field.type is FieldType.POINT
-    if method is IndexType.RTREE and not is_point:
-        raise CatalogError(
-            f"un índice RTREE necesita una columna POINT y '{field.name}' es {field.type.value}"
-        )
-    if method is not IndexType.RTREE and is_point:
-        raise CatalogError(
-            f"la columna '{field.name}' es POINT: solo admite un índice RTREE, "
-            f"no {method.value}"
-        )
-    if method is IndexType.BTREE and field.type in UNORDERED_FIELD_TYPES:
-        raise CatalogError(
-            f"la columna '{field.name}' es {field.type.value}, que no tiene orden: "
-            "no admite un índice BTREE"
-        )
+    refusal = known.refusal_for(field)
+    if refusal is not None:
+        raise CatalogError(refusal)
 
 
-def _require_no_options(spec: IndexSpec) -> None:
-    """Ningún método de índice del motor tiene opciones: un `WITH` que se aceptara y no
-    se usara haría creer que el índice se construyó con ellas.
+def _require_known_options(spec: IndexSpec) -> None:
+    """Un `WITH` que se aceptara y no se usara haría creer que el índice se construyó con
+    esas opciones. Las organizaciones de tabla no tienen ninguna.
 
     Raises:
-        CatalogError: si la especificación trae opciones.
+        CatalogError: si pide opciones que el método no tiene.
     """
-    if spec.options:
-        names = ", ".join(spec.options)
+    known = method_named(spec.method)
+    unknown = sorted(spec.options) if known is None else known.unknown_options(spec.options)
+    if unknown:
+        names = ", ".join(unknown)
         raise CatalogError(f"el índice {spec.method.value} no admite opciones: {names}")
+
+
+def default_index_name(table: str, column: str) -> str:
+    """Nombre de un índice que no se nombró al crearlo."""
+    return f"{DEFAULT_INDEX_PREFIX}{table}_{column}"
 
 
 def _primary_key_of(statement: CreateTableStatement) -> str | None:

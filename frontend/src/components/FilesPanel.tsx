@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 
+import { indexLabel, ORGANIZATION_LABEL, typeLabel } from "../lib/columns";
 import type { ColumnInfo, TableInfo } from "../types";
 
 interface FilesPanelProps {
@@ -12,22 +13,12 @@ interface FilesPanelProps {
   onEmpty: () => void;
 }
 
-export const ORGANIZATION_LABEL: Record<string, string> = {
-  heap: "heap file",
-  sequential: "secuencial",
-  clustered_btree: "B+ agrupado",
-};
-
-export function typeLabel(column: ColumnInfo): string {
-  return column.length === null ? column.type : `${column.type}(${column.length})`;
-}
-
 function ColumnRow({ column }: { column: ColumnInfo }) {
   return (
     <li className="column">
       <span className="column__key">{column.primary_key ? "PK" : ""}</span>
       <span className="column__name">{column.name}</span>
-      {column.indexed_with && <span className="column__index">{column.indexed_with}</span>}
+      {indexLabel(column) && <span className="column__index">{indexLabel(column)}</span>}
       {column.unique && <span className="column__null">UNIQUE</span>}
       {!column.nullable && <span className="column__null">NOT NULL</span>}
       <span className="column__type">{typeLabel(column)}</span>

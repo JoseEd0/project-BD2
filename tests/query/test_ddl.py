@@ -11,6 +11,7 @@ import pytest
 from config import EngineConfig
 from query.catalog import (
     CatalogError,
+    CatalogFormatError,
     DuplicateIndexError,
     DuplicateTableError,
     UnknownIndexError,
@@ -19,6 +20,7 @@ from query.catalog import (
 from query.engine import Engine, EngineError
 from query.operators import UnsupportedQueryError
 from query.table import DuplicatePrimaryKeyError, DuplicateValueError
+from sql.nodes import IndexType
 from storage.types import InvalidValueError, StorageError
 
 
@@ -155,15 +157,28 @@ def test_an_index_gets_a_name_when_none_is_given(tabla: Engine):
     assert access_path(tabla, "s = 'ana'") == "IndexLookup"
 
 
-def test_an_index_name_or_an_indexed_column_cannot_be_repeated(tabla: Engine):
+def test_an_index_name_or_a_method_on_a_column_cannot_be_repeated(tabla: Engine):
     tabla.execute("CREATE INDEX por_n ON t USING BTREE (n)")
     with pytest.raises(DuplicateIndexError, match="el índice 'por_n' ya existe"):
         tabla.execute("CREATE INDEX por_n ON t USING BTREE (s)")
-    with pytest.raises(DuplicateIndexError, match="la columna 'n' ya tiene un índice"):
-        tabla.execute("CREATE INDEX otro ON t USING HASH (n)")
-    message = tabla.execute("CREATE INDEX IF NOT EXISTS otro ON t USING HASH (n)").message
-    assert "ya tenía índice" in message
+    with pytest.raises(DuplicateIndexError, match="la columna 'n' ya tiene un índice BTREE"):
+        tabla.execute("CREATE INDEX otro ON t USING BTREE (n)")
+    message = tabla.execute("CREATE INDEX IF NOT EXISTS otro ON t USING BTREE (n)").message
+    assert "ya tenía un índice BTREE" in message
     assert index_names(tabla) == ["pk_t", "por_n"]
+
+
+def test_a_column_can_have_one_index_of_each_method(tabla: Engine):
+    """Un B+ para los rangos y un hash para las igualdades: cada condición usa el suyo."""
+    tabla.execute("CREATE INDEX por_n ON t USING BTREE (n)")
+    tabla.execute("CREATE INDEX igual_n ON t USING HASH (n)")
+    assert index_names(tabla) == ["igual_n", "pk_t", "por_n"]
+    equality = tabla.execute("EXPLAIN SELECT * FROM t WHERE n = 3").plan.render()
+    ranged = tabla.execute("EXPLAIN SELECT * FROM t WHERE n > 3").plan.render()
+    assert "IndexLookup" in equality and "igual_n" in equality
+    assert "IndexRange" in ranged and "por_n" in ranged
+    tabla.execute("DROP INDEX igual_n")
+    assert "por_n" in tabla.execute("EXPLAIN SELECT * FROM t WHERE n = 3").plan.render()
 
 
 @pytest.mark.parametrize(
@@ -259,3 +274,27 @@ def test_no_index_holds_the_rows_whose_value_is_null(tabla: Engine, method: str,
     table = tabla.table("t")
     assert list(table.addressed_by_index("i", [None])) == []
     assert tabla.execute(f"SELECT id FROM t WHERE {column} IS NULL ORDER BY id").rows[-1] == (9,)
+
+
+def test_the_catalog_is_written_whole_and_never_half(tabla: Engine):
+    """Se escribe aparte y se renombra: no queda el archivo parcial."""
+    tabla.execute("CREATE INDEX por_n ON t USING BTREE (n)")
+    directory = tabla.config.data_directory
+    assert (directory / "catalog.json").exists()
+    assert not (directory / "catalog.json.partial").exists()
+
+
+def test_a_catalog_of_another_format_version_is_rejected(config: EngineConfig):
+    (config.data_directory / "catalog.json").write_text('{"tables": []}')
+    with pytest.raises(CatalogFormatError, match="vuelve a poblar"):
+        Engine(config)
+
+
+def test_index_definitions_survive_reopening(config: EngineConfig):
+    with Engine(config) as engine:
+        engine.execute("CREATE TABLE t (id INT PRIMARY KEY, n INT)")
+        engine.execute("CREATE INDEX por_n ON t USING BTREE (n)")
+        engine.execute("CREATE INDEX igual_n ON t USING HASH (n)")
+    with Engine(config) as reopened:
+        methods = [index.method for index in reopened.table("t").definition.indexes_on("n")]
+        assert methods == [IndexType.BTREE, IndexType.HASH]

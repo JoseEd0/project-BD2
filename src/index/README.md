@@ -21,6 +21,15 @@ tamaño fijo y se **compara** como valor de Python.
 
 Una clave compuesta con componentes de más o de menos se rechaza con `KeyShapeError`.
 
+## Índices secundarios (`secondary.py`)
+
+Los tres índices que el motor pone sobre una columna de un heap file —B+ no agrupado, hash
+y R-Tree— cumplen el mismo protocolo, `SecondaryIndex`, y heredan de `ColumnIndex` la parte
+que es igual en los tres: sacar de cada fila el valor de su columna y dejar fuera las filas
+en las que es NULL. Cada estructura aporta solo cómo guarda, borra y busca un par
+`(valor, dirección)`. Los errores de nodo que comparten el B+ y el R-Tree viven en
+[`errors.py`](errors.py).
+
 ## Cuál elegir
 
 | Consulta | B+ agrupado | B+ no agrupado | Hash extendible |

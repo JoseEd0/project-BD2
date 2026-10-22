@@ -24,14 +24,15 @@ from dataclasses import dataclass, field
 from enum import IntEnum, unique
 from typing import ClassVar, NamedTuple, Protocol
 
+from index.errors import CorruptNodeError, NodeCapacityError
 from spatial.geometry import Point, Rectangle
-from storage.record_id import RecordId
-from storage.types import StorageError
+from storage.record_id import RECORD_ID_FIELDS, RecordId
 
 # Tipo de nodo y número de entradas.
 HEADER_FORMAT = struct.Struct("<BH")
 HEADER_SIZE = HEADER_FORMAT.size
-LEAF_ENTRY_FORMAT = struct.Struct("<ddIH")
+# Latitud, longitud y la dirección de la fila.
+LEAF_ENTRY_FORMAT = struct.Struct("<dd" + RECORD_ID_FIELDS)
 BRANCH_ENTRY_FORMAT = struct.Struct("<ddddi")
 NO_NODE = -1
 # Con menos de cuatro entradas no se puede dividir un nodo en dos grupos de al menos dos.
@@ -39,12 +40,6 @@ MINIMUM_CAPACITY = 4
 MINIMUM_ENTRIES_PER_NODE = 2
 
 
-class NodeCapacityError(StorageError):
-    """La página es demasiado pequeña para que el árbol funcione."""
-
-
-class CorruptNodeError(StorageError):
-    """Los bytes de la página no describen un nodo válido."""
 
 
 @unique

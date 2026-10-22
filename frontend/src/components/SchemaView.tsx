@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 
 import { inferRelations, layoutInLayers } from "../lib/relations";
 import type { TableInfo } from "../types";
-import { ORGANIZATION_LABEL, typeLabel } from "./FilesPanel";
+import { indexLabel, ORGANIZATION_LABEL, typeLabel } from "../lib/columns";
 
 interface SchemaViewProps {
   tables: TableInfo[];
@@ -153,8 +153,8 @@ export default function SchemaView({ tables, focused, onPreview }: SchemaViewPro
                   >
                     <span className="column__key">{column.primary_key ? "PK" : ""}</span>
                     <span className="column__name">{column.name}</span>
-                    {column.indexed_with && (
-                      <span className="column__index">{column.indexed_with}</span>
+                    {indexLabel(column) && (
+                      <span className="column__index">{indexLabel(column)}</span>
                     )}
                     <span className="column__type">{typeLabel(column)}</span>
                   </li>

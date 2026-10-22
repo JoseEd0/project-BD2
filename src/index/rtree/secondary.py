@@ -9,15 +9,15 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Iterator
 from pathlib import Path
-from types import TracebackType
 from typing import Any
 
 from config import EngineConfig
+from index.secondary import ColumnIndex
 from spatial.geometry import Point, Polygon, Rectangle
 from spatial.metrics import Metric
 from storage.record import RecordSerializer
 from storage.record_id import RecordId
-from storage.types import FieldType, StorageError
+from storage.types import FieldType, Key, StorageError
 
 from .tree import Neighbor, RTree, SearchStats
 
@@ -26,7 +26,7 @@ class NotSpatialColumnError(StorageError):
     """La columna no guarda puntos, así que no se puede indexar con un R-Tree."""
 
 
-class SpatialIndex:
+class SpatialIndex(ColumnIndex):
     """Índice secundario R-Tree: apunta a las filas de un heap file por su ubicación.
 
     Raises:
@@ -40,8 +40,7 @@ class SpatialIndex:
         column: str,
         config: EngineConfig,
     ) -> None:
-        self._serializer = serializer
-        self._position = serializer.schema.position_of(column)
+        super().__init__(serializer, column)
         field = serializer.schema.fields[self._position]
         if field.type is not FieldType.POINT:
             raise NotSpatialColumnError(
@@ -61,22 +60,6 @@ class SpatialIndex:
     def build(self, rows: Iterable[tuple[bytes, RecordId]]) -> None:
         """Indexa de una vez todas las filas de la tabla, con carga masiva."""
         self._tree.bulk_load(self._located(rows))
-
-    def insert(self, record: bytes, record_id: RecordId) -> None:
-        point = self._point_of(record)
-        if point is not None:
-            self._tree.insert(point, record_id)
-
-    def delete(self, record: bytes, record_id: RecordId) -> bool:
-        point = self._point_of(record)
-        return point is not None and self._tree.delete(point, record_id)
-
-    def search(self, value: Any) -> list[RecordId]:
-        """Direcciones de las filas situadas exactamente en ese punto."""
-        if value is None:
-            return []
-        exact = Rectangle.around(Point(*value))
-        return [record_id for _, record_id in self._tree.search_rectangle(exact)]
 
     def within_radius(
         self, center: Point, radius: float, metric: Metric, stats: SearchStats | None = None
@@ -111,23 +94,19 @@ class SpatialIndex:
     def close(self) -> None:
         self._tree.close()
 
-    def __enter__(self) -> SpatialIndex:
-        return self
+    def _add(self, value: Key, record_id: RecordId) -> None:
+        self._tree.insert(Point(*value), record_id)
 
-    def __exit__(
-        self,
-        exception_type: type[BaseException] | None,
-        exception: BaseException | None,
-        traceback: TracebackType | None,
-    ) -> None:
-        self.close()
+    def _remove(self, value: Key, record_id: RecordId) -> bool:
+        return self._tree.delete(Point(*value), record_id)
+
+    def _find(self, value: Key) -> list[RecordId]:
+        """Direcciones de las filas situadas exactamente en ese punto."""
+        exact = Rectangle.around(Point(*value))
+        return [record_id for _, record_id in self._tree.search_rectangle(exact)]
 
     def _located(self, rows: Iterable[tuple[bytes, RecordId]]) -> Iterator[tuple[Point, RecordId]]:
         for record, record_id in rows:
-            point = self._point_of(record)
-            if point is not None:
-                yield point, record_id
-
-    def _point_of(self, record: bytes) -> Point | None:
-        value = self._serializer.unpack_field(record, self._position)
-        return value if isinstance(value, Point) else None
+            value = self._value_of(record)
+            if value is not None:
+                yield Point(*value), record_id

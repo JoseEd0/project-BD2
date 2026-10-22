@@ -13,41 +13,34 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from config import EngineConfig
-from index.bplustree import ClusteredBPlusIndex, UnclusteredBPlusIndex
-from index.hash import ExtendibleHashIndex
-from index.hash.extendible_hash import DIRECTORY_SUFFIX
-from index.keys import ScalarKeyCodec
+from index.bplustree import ClusteredBPlusIndex
 from index.rtree import SearchStats, SpatialIndex
+from index.secondary import RangeIndex, SecondaryIndex
 from query.catalog import IndexDefinition, Organization, TableDefinition
+from query.index_methods import Capability, method_named
 from spatial.geometry import Point, Polygon
 from spatial.metrics import Metric
-from sql.nodes import IndexType
 from storage.heap import HeapFile
 from storage.record import Record, RecordSerializer
-from storage.record_id import RECORD_ID_SIZE, RecordId
+from storage.record_id import RecordId
 from storage.schema import Schema
 from storage.sequential import SequentialFile
-from storage.sequential.sequential_file import OVERFLOW_SUFFIX, REBUILD_SUFFIX
 from storage.types import FieldType, Key, StorageError
 
 HEAP_SUFFIX = ".heap"
 SEQUENTIAL_SUFFIX = ".seq"
 CLUSTERED_SUFFIX = ".bpt"
 INDEX_SUFFIX = ".idx"
+_STORAGE_SUFFIXES = {
+    Organization.HEAP: HEAP_SUFFIX,
+    Organization.SEQUENTIAL: SEQUENTIAL_SUFFIX,
+    Organization.CLUSTERED_BTREE: CLUSTERED_SUFFIX,
+}
 PRIMARY_KEY_INDEX_PREFIX = "pk_"
 # Una fila tal como está guardada, con su dirección si la tabla es un heap file.
 AddressedRecord = tuple[RecordId | None, bytes]
 # Lo que había antes en el lugar de una fila que se inserta: nada, distinto de cualquier valor.
 _NO_ROW = object()
-OWNED_SUFFIXES = (
-    HEAP_SUFFIX,
-    SEQUENTIAL_SUFFIX,
-    OVERFLOW_SUFFIX,
-    REBUILD_SUFFIX,
-    CLUSTERED_SUFFIX,
-    INDEX_SUFFIX,
-    DIRECTORY_SUFFIX,
-)
 
 
 class TableError(StorageError):
@@ -95,82 +88,40 @@ class _UniqueColumn:
     duplicate: Callable[[Key], TableError]
 
 
-def discard_table_files(directory: Path, name: str) -> None:
-    """Borra del disco los archivos de la tabla con ese nombre, y solo esos.
+def table_files(definition: TableDefinition, directory: Path) -> list[Path]:
+    """Los archivos de la tabla: los de su organización y los de cada uno de sus índices.
 
-    Filtrar por sufijo importa: un `productos.csv` del usuario en el mismo directorio
-    también empieza por `productos.`, y no es de la tabla.
+    Se calculan de la definición, no buscando por nombre: un `productos.csv` del usuario en
+    el mismo directorio también empieza por `productos.`, y no es de la tabla.
     """
-    for path in directory.glob(f"{name}.*"):
-        if path.name.endswith(OWNED_SUFFIXES):
-            path.unlink(missing_ok=True)
+    files = _storage_files(definition, directory)
+    for index in definition.indexes:
+        method = method_named(index.method)
+        if method is not None:
+            files.extend(method.files_of(index_path(directory, definition.name, index.name)))
+    return files
 
 
-class SecondaryIndex(Protocol):
-    """Lo que el motor necesita de cualquier índice secundario."""
-
-    def build(self, rows: Iterable[tuple[bytes, RecordId]]) -> None: ...
-
-    def insert(self, record: bytes, record_id: RecordId) -> None: ...
-
-    def delete(self, record: bytes, record_id: RecordId) -> bool: ...
-
-    def search(self, value: Key) -> list[RecordId]: ...
-
-    def describe(self) -> dict[str, Any]: ...
-
-    def flush(self) -> None: ...
-
-    def close(self) -> None: ...
+def discard_table_files(definition: TableDefinition, directory: Path) -> None:
+    """Borra del disco los archivos de la tabla, y solo esos."""
+    for path in table_files(definition, directory):
+        path.unlink(missing_ok=True)
 
 
-class HashSecondaryIndex:
-    """Adapta el hash extendible a la interfaz de índice secundario.
+def index_path(directory: Path, table: str, index: str) -> Path:
+    return directory / f"{table}.{index}{INDEX_SUFFIX}"
 
-    Igual que el B+ no agrupado, deja fuera las filas cuyo campo indexado es NULL.
-    """
 
-    def __init__(
-        self,
-        path: Path,
-        serializer: RecordSerializer,
-        column: str,
-        config: EngineConfig,
-    ) -> None:
-        self._serializer = serializer
-        self._position = serializer.schema.position_of(column)
-        codec = ScalarKeyCodec(serializer.schema.fields[self._position])
-        self._index = ExtendibleHashIndex(path, codec, RECORD_ID_SIZE, config)
+def _storage_path(definition: TableDefinition, directory: Path) -> Path:
+    suffix = _STORAGE_SUFFIXES[definition.organization]
+    return directory / f"{definition.name}{suffix}"
 
-    def build(self, rows: Iterable[tuple[bytes, RecordId]]) -> None:
-        for record, record_id in rows:
-            self.insert(record, record_id)
 
-    def insert(self, record: bytes, record_id: RecordId) -> None:
-        key = self._key_of(record)
-        if key is not None:
-            self._index.insert(key, record_id.pack())
-
-    def delete(self, record: bytes, record_id: RecordId) -> bool:
-        key = self._key_of(record)
-        return key is not None and self._index.delete_entry(key, record_id.pack())
-
-    def search(self, value: Key) -> list[RecordId]:
-        if value is None:
-            return []
-        return [RecordId.unpack(raw) for raw in self._index.search(value)]
-
-    def describe(self) -> dict[str, Any]:
-        return self._index.describe()
-
-    def flush(self) -> None:
-        self._index.flush()
-
-    def close(self) -> None:
-        self._index.close()
-
-    def _key_of(self, record: bytes) -> Key:
-        return self._serializer.unpack_field(record, self._position)
+def _storage_files(definition: TableDefinition, directory: Path) -> list[Path]:
+    path = _storage_path(definition, directory)
+    if definition.organization is Organization.SEQUENTIAL:
+        return SequentialFile.files_of(path)
+    return [path]
 
 
 class Table:
@@ -303,7 +254,7 @@ class Table:
             UnsupportedIndexError: si el índice es hash, que no guarda orden.
         """
         index = self._indexes[index_name]
-        if not isinstance(index, UnclusteredBPlusIndex):
+        if not isinstance(index, RangeIndex):
             raise UnsupportedIndexError(f"el índice '{index_name}' no admite consultas por rango")
         return self._addressed_at(address for _, address in index.range_search(low, high))
 
@@ -478,13 +429,15 @@ class Table:
     def drop_index(self, name: str) -> None:
         index = self._indexes.pop(name)
         index.close()
-        self.discard_index_files(name)
+        self.discard_index_files(self._definition.index_on_name(name))
 
-    def discard_index_files(self, name: str) -> None:
-        """Borra los archivos de un índice, incluido el directorio de un índice hash."""
-        path = self._index_path(name)
-        path.unlink(missing_ok=True)
-        path.with_name(path.name + DIRECTORY_SUFFIX).unlink(missing_ok=True)
+    def discard_index_files(self, definition: IndexDefinition) -> None:
+        """Borra los archivos del índice, sean los que sean según su método."""
+        method = method_named(definition.method)
+        if method is None:
+            return
+        for path in method.files_of(self._index_path(definition.name)):
+            path.unlink(missing_ok=True)
 
     def flush(self) -> None:
         """Escribe en disco las páginas modificadas de la tabla y de todos sus índices."""
@@ -538,7 +491,7 @@ class Table:
     def remove_files(self) -> None:
         """Cierra la tabla y borra del disco los archivos que creó."""
         self.close()
-        discard_table_files(self._directory, self.name)
+        discard_table_files(self._definition, self._directory)
 
     def _unpacked(self, rows: Iterable[AddressedRecord]) -> Iterator[Record]:
         for _, record in rows:
@@ -631,9 +584,11 @@ class Table:
         self._storage.delete(key)
 
     def _primary_key_index(self) -> IndexDefinition | None:
+        """Un índice de la clave que sepa buscar por igualdad, si lo hay."""
         if self._definition.primary_key is None:
             return None
-        return self._definition.index_on(self._definition.primary_key)
+        key = self._definition.primary_key
+        return index_with_capability(self._definition, key, Capability.EQUALITY)
 
     def _filter_scan(self, keys: Sequence[Key]) -> Iterator[AddressedRecord]:
         position = self._primary_key_position()
@@ -751,32 +706,45 @@ class Table:
 
     def _open_storage(self) -> HeapFile | SequentialFile | ClusteredBPlusIndex:
         organization = self._definition.organization
+        path = _storage_path(self._definition, self._directory)
         if organization is Organization.HEAP:
-            path = self._directory / f"{self.name}{HEAP_SUFFIX}"
             return HeapFile(path, self._serializer.size, self._config)
         key_field = self._definition.primary_key
         if key_field is None:
             raise TableError(f"'{self.name}' necesita clave primaria para su organización")
         if organization is Organization.SEQUENTIAL:
-            path = self._directory / f"{self.name}{SEQUENTIAL_SUFFIX}"
             return SequentialFile(path, self._serializer, key_field, self._config)
-        path = self._directory / f"{self.name}{CLUSTERED_SUFFIX}"
         return ClusteredBPlusIndex(path, self._serializer, key_field, self._config)
 
     def _open_index(self, definition: IndexDefinition) -> SecondaryIndex:
+        method = method_named(definition.method)
+        if method is None:
+            raise UnsupportedIndexError(
+                f"el método {definition.method.value} no sirve como índice secundario"
+            )
         path = self._index_path(definition.name)
-        if definition.method is IndexType.HASH:
-            return HashSecondaryIndex(path, self._serializer, definition.column, self._config)
-        if definition.method is IndexType.BTREE:
-            return UnclusteredBPlusIndex(path, self._serializer, definition.column, self._config)
-        if definition.method is IndexType.RTREE:
-            return SpatialIndex(path, self._serializer, definition.column, self._config)
-        raise UnsupportedIndexError(
-            f"el método {definition.method.value} no sirve como índice secundario"
-        )
+        return method.opener(path, self._serializer, definition.column, self._config)
 
     def _index_path(self, name: str) -> Path:
-        return self._directory / f"{self.name}.{name}{INDEX_SUFFIX}"
+        return index_path(self._directory, self.name, name)
+
+
+def index_with_capability(
+    definition: TableDefinition, column: str, capability: Capability
+) -> IndexDefinition | None:
+    """El índice de la columna que mejor responde esa clase de condición.
+
+    Si hay varios, gana el más especializado —el de menos capacidades—: para una igualdad,
+    un hash antes que un B+, que además ordena. Entre dos iguales, el que se creó antes.
+    """
+    candidates = []
+    for index in definition.indexes_on(column):
+        method = method_named(index.method)
+        if method is not None and method.supports(capability):
+            candidates.append((len(method.capabilities), index))
+    if not candidates:
+        return None
+    return min(candidates, key=lambda candidate: candidate[0])[1]
 
 
 def primary_key_index_name(table: str) -> str:

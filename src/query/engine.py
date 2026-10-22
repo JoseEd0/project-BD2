@@ -38,7 +38,7 @@ from query.index_methods import method_named, secondary_method_names
 from query.journal import DiscardingJournal, Journal
 from query.loader import infer_schema, read_values
 from query.operators import UnsupportedQueryError
-from query.plan import PlanNode
+from query.plan import MILLISECONDS_PER_SECOND, PlanNode
 from query.planner import Planner
 from query.row_store import AddressedRecord
 from query.spatial import SpatialView, spatial_view
@@ -69,7 +69,6 @@ from storage.record import Record
 from storage.schema import Field, Schema
 from storage.types import ORDERED_FIELD_TYPES, FieldType, Value
 
-MILLISECONDS = 1000.0
 # Métodos que, declarados sobre una columna al cargar un archivo, la convierten en la clave
 # de la tabla. Un R-Tree no identifica filas: varias pueden compartir ubicación.
 KEY_INDEX_METHODS = frozenset({IndexType.SEQUENTIAL, IndexType.BTREE, IndexType.HASH})
@@ -148,7 +147,7 @@ class Engine:
                 result = self._define(statement)
         else:
             result = self._dispatch(statement, NO_JOURNAL if journal is None else journal)
-        elapsed = (time.perf_counter() - started) * MILLISECONDS
+        elapsed = (time.perf_counter() - started) * MILLISECONDS_PER_SECOND
         return replace(result, elapsed_ms=elapsed)
 
     def table_names(self) -> list[str]:

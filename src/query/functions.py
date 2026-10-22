@@ -26,7 +26,7 @@ from typing import Any
 from errors import DomainError
 from spatial.geometry import MINIMUM_POLYGON_VERTICES, Point, Polygon, geographic_point
 from spatial.metrics import HAVERSINE, Metric, metric_named
-from storage.types import FieldType, ValueTooLargeError, real_from
+from storage.types import NUMERIC_FIELD_TYPES, FieldType, ValueTooLargeError, is_number, real_from
 
 POINT = "POINT"
 POLYGON = "POLYGON"
@@ -35,7 +35,6 @@ INTERSECTS = "intersecta"
 METRIC_KEYWORDS = ("metrica", "metric")
 COORDINATES_PER_POINT = 2
 BINARY_ARGUMENTS = 2
-NUMERIC_COLUMNS = frozenset({FieldType.INT, FieldType.FLOAT})
 POINT_COLUMNS = frozenset({FieldType.POINT})
 # Un polígono solo existe como valor de una consulta: ninguna columna puede serlo.
 NO_COLUMN: frozenset[FieldType] = frozenset()
@@ -167,7 +166,7 @@ def as_point(value: Any) -> Point:
 
 
 def _number(value: Any) -> float:
-    if isinstance(value, bool) or not isinstance(value, int | float):
+    if not is_number(value):
         raise FunctionError(f"se esperaba un número y llegó {value!r}")
     try:
         return real_from(value)
@@ -219,7 +218,7 @@ _SCALAR_FUNCTIONS: dict[str, ScalarFunction] = {
             keywords=(),
             implementation=_point,
             result=FieldType.POINT,
-            column_types=(NUMERIC_COLUMNS,),
+            column_types=(NUMERIC_FIELD_TYPES,),
         ),
         ScalarFunction(
             name=POLYGON,

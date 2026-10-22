@@ -12,7 +12,7 @@ from collections.abc import Callable
 from datetime import date, timedelta
 from enum import Enum, unique
 from math import isfinite
-from typing import Any
+from typing import Any, TypeGuard
 
 from errors import DomainError
 from spatial.geometry import GeometryError, Point, geographic_point
@@ -63,6 +63,7 @@ ORDERED_FIELD_TYPES = frozenset(
     {FieldType.INT, FieldType.FLOAT, FieldType.BOOL, FieldType.STRING, FieldType.DATE}
 )
 UNORDERED_FIELD_TYPES = frozenset({FieldType.POINT, FieldType.VECTOR})
+NUMERIC_FIELD_TYPES = frozenset({FieldType.INT, FieldType.FLOAT})
 
 
 class FieldCodec(ABC):
@@ -132,7 +133,7 @@ class FloatCodec(FieldCodec):
     slots = 1
 
     def to_slots(self, value: Value) -> tuple[Any, ...]:
-        if isinstance(value, bool) or not isinstance(value, int | float):
+        if not is_number(value):
             raise InvalidValueError(f"se esperaba un número, llegó {value!r}")
         return (finite_real(value),)
 
@@ -251,7 +252,7 @@ class PointCodec(FieldCodec):
         if not isinstance(value, tuple) or len(value) != self.COORDINATES:
             raise InvalidValueError(f"se esperaba un punto (latitud, longitud), llegó {value!r}")
         lat, lon = value
-        if not _is_number(lat) or not _is_number(lon):
+        if not is_number(lat) or not is_number(lon):
             raise InvalidValueError(f"las coordenadas de un punto son números, llegó {value!r}")
         try:
             return tuple(geographic_point(lat, lon))
@@ -278,7 +279,7 @@ class VectorCodec(FieldCodec):
             raise InvalidValueError(
                 f"se esperaba un vector de dimensión {self.dimension}, llegó {value!r}"
             )
-        if not all(_is_number(component) for component in value):
+        if not all(is_number(component) for component in value):
             raise InvalidValueError(f"los componentes de un vector son números, llegó {value!r}")
         components = tuple(finite_real(component) for component in value)
         if any(abs(component) > FLOAT32_MAX for component in components):
@@ -337,7 +338,8 @@ def finite_real(value: int | float) -> float:
     return real + 0.0
 
 
-def _is_number(value: object) -> bool:
+def is_number(value: object) -> TypeGuard[int | float]:
+    """Si es un número del dialecto: `True` es un booleano, aunque Python lo cuente como `int`."""
     return isinstance(value, int | float) and not isinstance(value, bool)
 
 

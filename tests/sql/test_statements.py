@@ -365,7 +365,7 @@ def test_composite_primary_key_marks_every_column():
 def test_parsed_options_are_immutable():
     statement = select("SELECT * FROM t WITH (metric = cosine)")
     with pytest.raises(TypeError):
-        statement.options["metric"] = "euclidean"  # type: ignore[index]
+        statement.options["metric"] = "euclidean"
 
 
 def test_insert_rows_must_share_the_same_arity():

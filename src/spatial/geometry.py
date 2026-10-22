@@ -129,14 +129,6 @@ class Rectangle(NamedTuple):
             and other.min_lon <= self.max_lon
         )
 
-    def contains(self, other: Rectangle) -> bool:
-        return (
-            self.min_lat <= other.min_lat
-            and self.min_lon <= other.min_lon
-            and self.max_lat >= other.max_lat
-            and self.max_lon >= other.max_lon
-        )
-
     def contains_point(self, point: Point) -> bool:
         return (
             self.min_lat <= point.lat <= self.max_lat

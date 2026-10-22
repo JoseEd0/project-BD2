@@ -20,7 +20,7 @@ def sequential(config: EngineConfig, serializer: RecordSerializer):
 
 
 def keys_of(records: list[bytes] | object, serializer: RecordSerializer) -> list[int]:
-    return [serializer.unpack(record)[0] for record in records]  # type: ignore[union-attr]
+    return [serializer.unpack(record)[0] for record in records]
 
 
 def row(serializer: RecordSerializer, key: int) -> bytes:

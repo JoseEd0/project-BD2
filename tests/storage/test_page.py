@@ -48,7 +48,7 @@ def test_insert_and_read(page: RecordPage):
 def test_insert_until_full(page: RecordPage):
     for marker in range(page.capacity):
         page.insert(record(marker))
-    assert page.is_full
+    assert page.first_free_slot() is None
     with pytest.raises(PageOverflowError):
         page.insert(record(99))
 
@@ -87,7 +87,7 @@ def test_tombstone_keeps_the_slot_occupied(page: RecordPage):
     page.tombstone(0)
     assert page.state_of(0) is SlotState.DELETED
     assert page.used_slots == 1
-    assert page.deleted_slots() == 1
+    assert page.live_count() == 0
     assert list(page.live_slots()) == []
 
 
@@ -132,14 +132,6 @@ def test_insert_at_on_a_full_page_is_rejected(page: RecordPage):
         page.insert_at(0, record(99))
 
 
-def test_remove_at_shifts_to_the_left(page: RecordPage):
-    for marker in (1, 2, 3):
-        page.insert(record(marker))
-    page.remove_at(0)
-    assert [page.read(slot) for slot in page.live_slots()] == [record(2), record(3)]
-    assert page.used_slots == 2
-
-
 def test_next_page_and_flags_survive_serialization(page: RecordPage):
     page.next_page = 7
     page.flags = 3
@@ -148,12 +140,6 @@ def test_next_page_and_flags_survive_serialization(page: RecordPage):
     assert restored.next_page == 7
     assert restored.flags == 3
     assert restored.read(0) == record(1)
-
-
-def test_remove_at_an_empty_position_is_rejected(page: RecordPage):
-    page.insert(record(1))
-    with pytest.raises(SlotOutOfRangeError):
-        page.remove_at(1)
 
 
 def test_live_count_ignores_freed_and_deleted_slots(page: RecordPage):

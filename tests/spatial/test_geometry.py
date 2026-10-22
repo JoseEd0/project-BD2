@@ -66,10 +66,8 @@ def test_rectangles_that_only_touch_do_intersect():
     assert not Rectangle(0.0, 0.0, 1.0, 1.0).intersects(Rectangle(1.1, 0.0, 2.0, 1.0))
 
 
-def test_rectangle_containment():
+def test_a_point_on_the_border_is_inside_the_rectangle():
     outer = Rectangle(0.0, 0.0, 4.0, 4.0)
-    assert outer.contains(Rectangle(1.0, 1.0, 2.0, 2.0))
-    assert not outer.contains(Rectangle(1.0, 1.0, 5.0, 2.0))
     assert outer.contains_point(Point(4.0, 0.0))
     assert not outer.contains_point(Point(4.1, 0.0))
 

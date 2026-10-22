@@ -10,6 +10,7 @@ TREE_LAST = "└─ "
 TREE_PIPE = "│  "
 TREE_BLANK = "   "
 MS_DECIMALS = 2
+MILLISECONDS_PER_SECOND = 1000.0
 
 
 @dataclass(frozen=True, slots=True)

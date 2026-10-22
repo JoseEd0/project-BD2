@@ -111,9 +111,6 @@ class RecordPage:
         used, next_page, _ = self._header()
         HEADER_FORMAT.pack_into(self._raw, 0, used, next_page, value)
 
-    @property
-    def is_full(self) -> bool:
-        return self.used_slots >= self._capacity and self.first_free_slot() is None
 
     def state_of(self, slot: int) -> SlotState:
         self._check_slot(slot)
@@ -129,9 +126,6 @@ class RecordPage:
         """Número de registros vigentes, contado sin leer ninguno."""
         return self._states().count(SlotState.USED)
 
-    def deleted_slots(self) -> int:
-        states = (self._raw[self._offset(slot)] for slot in range(self.used_slots))
-        return sum(1 for state in states if state == SlotState.DELETED)
 
     def first_free_slot(self) -> int | None:
         """Primera ranura reutilizable, o `None` si la página está llena."""
@@ -201,18 +195,6 @@ class RecordPage:
         self._set_used_slots(used + 1)
         self._raw[source] = SlotState.USED
         self._raw[source + STATE_SIZE : source + self._slot_size] = record
-
-    def remove_at(self, slot: int) -> None:
-        """Elimina desplazando a la izquierda, sin dejar hueco."""
-        used = self.used_slots
-        self._check_slot(slot)
-        if slot >= used:
-            raise SlotOutOfRangeError(f"la ranura {slot} no está ocupada")
-        source = self._offset(slot + 1)
-        end = self._offset(used)
-        self._raw[self._offset(slot) : end - self._slot_size] = self._raw[source:end]
-        self._clear_slot(used - 1)
-        self._set_used_slots(used - 1)
 
     def free(self, slot: int) -> None:
         """Libera la ranura para que otra inserción la reutilice."""

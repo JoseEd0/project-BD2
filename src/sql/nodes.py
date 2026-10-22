@@ -189,6 +189,11 @@ class TableRef:
     name: str
     alias: str | None = None
 
+    @property
+    def reference(self) -> str:
+        """How the query refers to the table: its alias, or its name when it has none."""
+        return self.alias or self.name
+
 
 @dataclass(frozen=True, slots=True)
 class Join:

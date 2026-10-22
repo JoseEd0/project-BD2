@@ -38,7 +38,7 @@ from query.expressions import (
     result_field,
 )
 from query.functions import AggregateKind
-from query.plan import PlanNode
+from query.plan import MILLISECONDS_PER_SECOND, PlanNode
 from query.row_store import AddressedRecord
 from query.table import Table
 from sql.nodes import ColumnRef, Expression, JoinKind, SortDirection
@@ -59,7 +59,6 @@ UNMATCHED_BY_KIND = {
     JoinKind.RIGHT: Unmatched.RIGHT,
     JoinKind.FULL: Unmatched.BOTH,
 }
-MILLISECONDS = 1000.0
 # `COUNT(*)` cuenta filas, no valores: lo que recibe su acumulador es indiferente.
 COUNTED_ROW = True
 
@@ -127,7 +126,7 @@ class Operator(ABC):
         return replace(
             node,
             actual_rows=self._actual_rows,
-            actual_ms=self._elapsed_seconds * MILLISECONDS,
+            actual_ms=self._elapsed_seconds * MILLISECONDS_PER_SECOND,
         )
 
     @abstractmethod

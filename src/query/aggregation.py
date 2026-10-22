@@ -17,11 +17,9 @@ from typing import Any
 from query.expressions import ExpressionError
 from query.functions import AggregateKind
 from sql.nodes import Expression
-from storage.types import FieldType, Value
+from storage.types import NUMERIC_FIELD_TYPES, UNORDERED_FIELD_TYPES, FieldType, Value, is_number
 
-NUMERIC_TYPES = frozenset({FieldType.INT, FieldType.FLOAT})
 # Un punto o un vector se pueden comparar por igualdad, pero ninguno es «menor» que otro.
-UNORDERED_TYPES = frozenset({FieldType.POINT, FieldType.VECTOR})
 ADDING_KINDS = frozenset({AggregateKind.SUM, AggregateKind.AVG})
 EXTREME_KINDS = frozenset({AggregateKind.MIN, AggregateKind.MAX})
 
@@ -73,7 +71,7 @@ class _Sum(Accumulator):
         self._lost = 0.0
 
     def add(self, value: Value) -> None:
-        if isinstance(value, bool) or not isinstance(value, int | float):
+        if not is_number(value):
             raise ExpressionError(f"{self._label} necesita valores numéricos y llegó {value!r}")
         self._count += 1
         if isinstance(value, int) and isinstance(self._total, int):
@@ -125,11 +123,11 @@ def check_argument_type(aggregate: Aggregate, argument: FieldType) -> None:
         ExpressionError: si se suma algo que no es un número o se busca el menor o el
             mayor de valores que no tienen orden.
     """
-    if aggregate.kind in ADDING_KINDS and argument not in NUMERIC_TYPES:
+    if aggregate.kind in ADDING_KINDS and argument not in NUMERIC_FIELD_TYPES:
         raise ExpressionError(
             f"{aggregate.label} necesita valores numéricos y su argumento es {argument.value}"
         )
-    if aggregate.kind in EXTREME_KINDS and argument in UNORDERED_TYPES:
+    if aggregate.kind in EXTREME_KINDS and argument in UNORDERED_FIELD_TYPES:
         raise ExpressionError(
             f"{aggregate.label} necesita valores con orden y un {argument.value} no lo tiene"
         )

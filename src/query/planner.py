@@ -148,7 +148,7 @@ class Planner:
 
     def _scan_of(self, reference: TableRef, where: Expression | None) -> Operator:
         table = self._table(reference.name)
-        alias = reference.alias or reference.name
+        alias = reference.reference
         return self._access_path(table, alias, where)
 
     def access_path(self, table: Table, where: Expression | None) -> TableOperator:
@@ -228,7 +228,7 @@ class Planner:
         if target is None:
             return None
         table = self._table(statement.source.name)
-        alias = statement.source.alias or statement.source.name
+        alias = statement.source.reference
         index = self._spatial_index_on(table, alias, target.column)
         return None if index is None else SpatialNearestScan(table, alias, index.name, target)
 
@@ -246,7 +246,7 @@ class Planner:
             return None
         item = statement.order_by[0]
         table = self._table(statement.source.name)
-        alias = statement.source.alias or statement.source.name
+        alias = statement.source.reference
         if item.direction is not SortDirection.ASCENDING:
             return None
         if table.organization not in ORDERED_ORGANIZATIONS:
@@ -374,7 +374,7 @@ class Planner:
     def _join_all(self, operator: Operator, statement: SelectStatement) -> Operator:
         for join in statement.joins:
             table = self._table(join.table.name)
-            alias = join.table.alias or join.table.name
+            alias = join.table.reference
             right = self._access_path(table, alias, statement.where)
             operator = self._join(operator, right, join)
         return operator

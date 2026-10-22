@@ -50,7 +50,7 @@ from sql.nodes import (
 )
 from storage.record import Record
 from storage.schema import Field, Schema
-from storage.types import FieldType, Value, ValueTooLargeError, real_from
+from storage.types import FieldType, Value, ValueTooLargeError, is_number, real_from
 
 LIKE_ANY = "%"
 LIKE_ONE = "_"
@@ -481,7 +481,7 @@ class ExpressionEvaluator:
 
     @staticmethod
     def _number(value: Value) -> float:
-        if isinstance(value, bool) or not isinstance(value, int | float):
+        if not is_number(value):
             raise ExpressionError(f"se esperaba un número y llegó {value!r}")
         return value
 

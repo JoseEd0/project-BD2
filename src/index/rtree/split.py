@@ -36,7 +36,7 @@ def choose_subtree(entries: Sequence[BranchEntry], bounds: Rectangle) -> int:
     for index, entry in enumerate(entries):
         cover = entry.bounds
         area = cover.area
-        growth = cover.area_with(bounds) - area
+        growth = cover.enlargement(bounds)
         if growth > best_growth:
             continue
         tiebreak = (cover.margin_with(bounds) - cover.margin, area)
@@ -128,8 +128,8 @@ def _pick_next(
     best_growths = ((0.0, 0.0), (0.0, 0.0))
     for position, index in enumerate(remaining):
         box = boxes[index]
-        first_growth = first_cover.area_with(box) - first_area
-        second_growth = second_cover.area_with(box) - second_area
+        first_growth = first_cover.enlargement(box)
+        second_growth = second_cover.enlargement(box)
         difference = abs(first_growth - second_growth)
         if difference < best_difference:
             continue

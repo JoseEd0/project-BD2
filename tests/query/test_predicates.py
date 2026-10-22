@@ -93,8 +93,29 @@ def test_literals_are_named_as_sql_writes_them(datos: Engine):
 
 
 def test_arithmetic_needs_numbers(datos: Engine):
-    with pytest.raises(ExpressionError, match="se esperaba un número y llegó 'ana'"):
+    with pytest.raises(ExpressionError, match="'s \\+ 1' opera con un texto"):
         datos.execute("SELECT s + 1 FROM t")
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "SELECT * FROM v WHERE a = s",
+        "SELECT * FROM v WHERE a < d",
+        "SELECT * FROM v WHERE a LIKE 'x%'",
+        "SELECT * FROM v WHERE s LIKE 5",
+        "SELECT a + s FROM v",
+        "SELECT -s FROM v",
+        "SELECT * FROM v ORDER BY a + s",
+        "SELECT COUNT(a + s) FROM v",
+    ],
+)
+def test_type_clashes_between_columns_fail_before_reading_rows(engine: Engine, query: str):
+    """Sobre una tabla vacía igual que sobre una llena, y sin depender del camino de
+    acceso: el tipo de las columnas ya dice que no se pueden operar."""
+    engine.execute("CREATE TABLE v (id INT PRIMARY KEY, a INT, s VARCHAR(8), d DATE)")
+    with pytest.raises(ExpressionError):
+        engine.execute(query)
 
 
 def test_a_tuple_of_coordinates_with_a_null_is_null(datos: Engine):
@@ -240,3 +261,23 @@ def test_explain_shows_the_operators_before_they_run(datos: Engine):
     analyzed = datos.execute("EXPLAIN ANALYZE SELECT DISTINCT s FROM t ORDER BY s").plan.render()
     assert "ExternalSort: s ASC · en memoria" in analyzed
     assert "Distinct: en memoria" in analyzed
+
+
+@pytest.mark.parametrize(
+    ("condition", "expected"),
+    [
+        ("a NOT BETWEEN NULL AND 2", [1, 4]),
+        ("a NOT BETWEEN 6 AND NULL", [1, 3]),
+        ("a BETWEEN NULL AND 2", []),
+    ],
+)
+def test_between_with_a_null_bound_is_false_when_the_other_bound_decides(
+    engine: Engine, condition: str, expected: list[int]
+):
+    """`x BETWEEN a AND b` es `x >= a AND x <= b`: con un límite NULL, el otro todavía
+    puede hacerla falsa, y entonces `NOT BETWEEN` es verdadera. Lo mismo dan SQLite y
+    PostgreSQL."""
+    engine.execute("CREATE TABLE b (id INT, a INT)")
+    engine.execute("INSERT INTO b VALUES (1, 5), (2, NULL), (3, 1), (4, 7)")
+    rows = engine.execute(f"SELECT id FROM b WHERE {condition}").rows
+    assert sorted(row[0] for row in rows) == expected

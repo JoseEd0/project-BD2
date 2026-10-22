@@ -204,6 +204,12 @@ class PrimaryKeyLookup(TableOperator):
         super().__init__(table, alias)
         self._keys = tuple(keys)
 
+    @property
+    def in_key_order(self) -> bool:
+        """Si entrega las filas en orden de clave: con varias claves salen en el orden en
+        que se escribieron en el `IN`."""
+        return len(self._keys) <= 1
+
     def addressed(self) -> Iterator[AddressedRecord]:
         return self._table.addressed_by_primary_key(self._keys)
 

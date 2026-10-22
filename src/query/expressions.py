@@ -15,9 +15,13 @@ from typing import Any
 
 from errors import DomainError
 from query.comparison import (
+    UNORDERED_FAMILIES,
     ComparisonError,
+    Family,
     comparable,
     describe_value,
+    family_of,
+    family_of_type,
     literal_for,
     orderable,
     plainly_comparable,
@@ -207,11 +211,16 @@ class ExpressionEvaluator:
             UnknownColumnError: si alguna columna no existe.
             AmbiguousColumnError: si alguna columna encaja con más de una tabla.
             ExpressionError: si la expresión usa algo que el evaluador no soporta,
-                compara una columna con una constante de otro tipo o contiene una
-                constante que no se puede calcular, como `1 / 0`.
+                mezcla valores de tipos que no se pueden operar o comparar —también entre
+                dos columnas— o contiene una constante que no se puede calcular, como
+                `1 / 0`.
         """
         if expression is None:
             return
+        self._validate_shape(expression)
+        self._family_of(expression)
+
+    def _validate_shape(self, expression: Expression) -> None:
         if isinstance(expression, Literal):
             return
         if isinstance(expression, ColumnRef):
@@ -223,7 +232,7 @@ class ExpressionEvaluator:
         if isinstance(expression, Star):
             raise ExpressionError("'*' no es una expresión de valor")
         for operand in _operands_of(expression):
-            self.validate(operand)
+            self._validate_shape(operand)
         if _is_constant(expression):
             self.evaluate(expression, NO_ROW)
         for column, value in _column_constant_pairs(expression):
@@ -292,6 +301,76 @@ class ExpressionEvaluator:
             return function is None or function.result in (None, FieldType.BOOL)
         return False
 
+    def _family_of(self, expression: Expression) -> Family | None:
+        """Familia de tipo del resultado, si se sabe sin leer filas, comprobando que cada
+        operación reciba lo que necesita.
+
+        Es la misma regla que se aplica fila a fila, adelantada a lo que dicen los tipos
+        de las columnas y de los literales: así un choque entre dos columnas falla igual
+        sobre una tabla vacía que sobre una llena, y por cualquier camino de acceso. Lo que
+        no se sabe —un NULL, una agregación, una función sin tipo fijo— no se comprueba.
+
+        Raises:
+            ExpressionError: si una operación recibe valores de un tipo que no admite.
+        """
+        if isinstance(expression, Literal):
+            return None if expression.value is None else family_of(expression.value)
+        if isinstance(expression, ColumnRef):
+            field = self._layout.slots[self._position_of(expression)].field
+            return None if field is None else family_of_type(field.type)
+        if isinstance(expression, UnaryOperation):
+            operand = self._family_of(expression.operand)
+            if expression.operator is UnaryOperator.NEGATE:
+                _require_number(operand, expression)
+                return Family.NUMBER
+            return Family.BOOLEAN
+        if isinstance(expression, BinaryOperation):
+            return self._binary_family(expression)
+        if isinstance(expression, BetweenPredicate):
+            operand = self._family_of(expression.operand)
+            for bound in (expression.lower, expression.upper):
+                _require_comparable(operand, self._family_of(bound), True, expression)
+            return Family.BOOLEAN
+        if isinstance(expression, InPredicate):
+            operand = self._family_of(expression.operand)
+            for option in expression.values:
+                _require_comparable(operand, self._family_of(option), False, expression)
+            return Family.BOOLEAN
+        if isinstance(expression, LikePredicate):
+            for side in (expression.operand, expression.pattern):
+                if self._family_of(side) not in (None, Family.TEXT):
+                    raise ExpressionError("LIKE solo se aplica a texto")
+            return Family.BOOLEAN
+        if isinstance(expression, NullPredicate):
+            self._family_of(expression.operand)
+            return Family.BOOLEAN
+        if isinstance(expression, FunctionCall):
+            return self._call_family(expression)
+        if isinstance(expression, TupleExpression):
+            for element in expression.elements:
+                self._family_of(element)
+        return None
+
+    def _binary_family(self, expression: BinaryOperation) -> Family | None:
+        left, right = self._family_of(expression.left), self._family_of(expression.right)
+        if expression.operator in _ARITHMETIC_OPERATORS:
+            _require_number(left, expression)
+            _require_number(right, expression)
+            return Family.NUMBER
+        if expression.operator in _COMPARISONS:
+            ordered = expression.operator not in _EQUALITY_OPERATORS
+            _require_comparable(left, right, ordered, expression)
+        return Family.BOOLEAN
+
+    def _call_family(self, call: FunctionCall) -> Family | None:
+        for argument in [*call.arguments, *call.keyword_arguments.values()]:
+            if _symbol_of(argument) is None:
+                self._family_of(argument)
+        function = scalar_function(call.name)
+        if function is None or function.result is None:
+            return None
+        return family_of_type(function.result)
+
     def _position_of(self, column: ColumnRef) -> int:
         position = self._positions.get(column)
         if position is None:
@@ -302,11 +381,11 @@ class ExpressionEvaluator:
     def _validate_call(self, call: FunctionCall) -> None:
         function = self._function_of(call)
         for argument in call.arguments:
-            self.validate(argument)
+            self._validate_shape(argument)
         options = call.keyword_arguments.values()
         for option in options:
             if _symbol_of(option) is None:
-                self.validate(option)
+                self._validate_shape(option)
         try:
             self._check_column_arguments(function, call)
         except FunctionError as error:
@@ -442,14 +521,26 @@ class ExpressionEvaluator:
         return result
 
     def _between(self, expression: BetweenPredicate, row: Record) -> Value:
+        """`x BETWEEN a AND b` es `x >= a AND x <= b`, con su lógica de tres valores: un
+        límite NULL no lo deja en NULL si el otro ya lo hace falso. Así
+        `5 NOT BETWEEN NULL AND 2` es verdadero."""
         value = self.evaluate(expression.operand, row)
         low = self.evaluate(expression.lower, row)
         high = self.evaluate(expression.upper, row)
-        if value is None or low is None or high is None:
-            return None
-        inside = _compare(BinaryOperator.GREATER_EQUAL, value, low) and _compare(
+        above = None if value is None or low is None else _compare(
+            BinaryOperator.GREATER_EQUAL, value, low
+        )
+        below = None if value is None or high is None else _compare(
             BinaryOperator.LESS_EQUAL, value, high
         )
+        if above is False or below is False:
+            inside: bool | None = False
+        elif above is None or below is None:
+            inside = None
+        else:
+            inside = True
+        if inside is None:
+            return None
         return not inside if expression.negated else inside
 
     def _in(self, expression: InPredicate, row: Record) -> Value:
@@ -897,6 +988,27 @@ def _compare(operator: BinaryOperator, left: Value, right: Value) -> bool:
     except ComparisonError as error:
         raise ExpressionError(str(error)) from error
     return _COMPARISONS[operator](first, second)
+
+
+def _require_number(family: Family | None, expression: Expression) -> None:
+    if family is not None and family is not Family.NUMBER:
+        raise ExpressionError(
+            f"'{describe_expression(expression)}' opera con {family.value}: se esperaba un número"
+        )
+
+
+def _require_comparable(
+    left: Family | None, right: Family | None, ordered: bool, expression: Expression
+) -> None:
+    """La regla de `comparable` y `orderable`, sobre familias en vez de valores. Un texto
+    se compara con una fecha porque puede ser una fecha ISO: eso se comprueba fila a fila."""
+    if left is None or right is None:
+        return
+    shown = describe_expression(expression)
+    if left is not right and {left, right} != {Family.DATE, Family.TEXT}:
+        raise ExpressionError(f"no se puede comparar {left.value} con {right.value}: '{shown}'")
+    if ordered and left in UNORDERED_FAMILIES:
+        raise ExpressionError(f"'{shown}': {left.value} no tiene orden, solo admite = y <>")
 
 
 _EQUALITY_OPERATORS = frozenset({BinaryOperator.EQUAL, BinaryOperator.NOT_EQUAL})

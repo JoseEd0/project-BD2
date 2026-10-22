@@ -19,6 +19,9 @@ Guarda en `catalog.json` qué columnas tiene cada tabla, cómo se almacena y qu�
 tiene. Es la **única** pieza que traduce los tipos de SQL a los del almacenamiento:
 `VARCHAR(30)` → `STRING(30)`, `TEXT` → `STRING(text_length)`, `BIGINT` → `INT`.
 
+Guarda también el tamaño de página con que se escribieron las tablas: abrirlas con otro
+leería mal cada página, así que el motor se niega con un error que lo dice.
+
 ## Tabla (`table.py`)
 
 Une la organización física con sus índices y mantiene la coherencia: si entra o sale una
@@ -128,6 +131,8 @@ no fija el orden en que se evalúan las condiciones, y PostgreSQL se comporta ig
   sobre verdadero, falso y NULL.
 - `x IN (a, b)` es `x = a OR x = b`: con un NULL en la lista, un valor que no aparece da
   NULL, así que `2 NOT IN (1, NULL)` no deja pasar la fila, igual que en PostgreSQL.
+- `x BETWEEN a AND b` es `x >= a AND x <= b`: con un límite NULL, el otro todavía puede
+  hacerla falsa, y entonces `5 NOT BETWEEN NULL AND 2` es verdadera.
 - `%` da el resto con el signo del dividendo (`-7 % 3` es `-1`); `/` siempre da un real
   (`7 / 2` es `3.5`), que es la única desviación deliberada respecto de PostgreSQL.
 - Un resultado real que no cabe en un doble —`1e308 * 10`— es un error, no un infinito.
@@ -146,6 +151,7 @@ vacía. Al construir cada operador se valida:
 |---|---|---|
 | columnas y tablas | `SELECT nada FROM t` | la columna no existe |
 | tipo de una constante frente a su columna | `nombre = -5` | STRING no se compara con un número |
+| tipos de dos expresiones que se comparan u operan | `a = s`, `a + s`, `-s`, `a LIKE 'x%'` | un número no se compara con un texto |
 | constantes que no se pueden calcular | `id = 1 / 0` | división por cero |
 | forma de una llamada | `distancia(p)` | necesita 2 argumentos |
 | tipo de las columnas que recibe una función | `distancia(nombre, POINT(…))` | la columna es STRING |
@@ -349,6 +355,15 @@ fila que no cabe en una página, una clave demasiado larga para un nodo del B+, 
 sobre una columna que no es un punto— no queda ni la entrada del catálogo ni un archivo a
 medias: una tabla registrada que no se puede abrir no se podría consultar, volver a crear
 ni borrar.
+
+**Un directorio de datos lo abre un solo motor.** Al arrancar toma un candado exclusivo
+del sistema operativo sobre `data/.motor.lock`: dos motores sobre el mismo directorio —el
+API y un guion que lo puebla— se pisarían el catálogo. Si el proceso muere, el sistema
+suelta el candado.
+
+El DDL y la apertura de tablas se serializan con un candado propio del motor, que una
+sesión espera **como mucho el plazo de bloqueo** (`lock_timeout_seconds`): un
+`CREATE INDEX` largo no deja a las demás esperando sin límite.
 
 El motor **no sabe qué es una transacción**: solo avisa de cada fila que cambia al
 `Journal` que le pasen. Quien quiera deshacer, que se apunte (ver [`txn/`](../txn/README.md)).

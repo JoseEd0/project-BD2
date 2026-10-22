@@ -121,12 +121,13 @@ class Planner:
         operator = self._join_all(presorted or source, statement)
         if statement.where is not None:
             operator = Filter(operator, statement.where)
-        computed = _Computed({}, ())
+        computed = _Computed({}, (), operator.layout)
         if grouped:
             keys = [
                 group_key(key, statement.projections, operator.layout) for key in statement.group_by
             ]
-            computed = _Computed(labels, _grouped_expressions(keys))
+            grouped_keys = _grouped_expressions(keys, operator.layout)
+            computed = _Computed(labels, grouped_keys, operator.layout)
             operator = HashAggregate(
                 operator, keys, aggregates, self._temporary(GROUP_DIRECTORY), self._config
             )
@@ -256,8 +257,10 @@ class Planner:
         )
         if column is None or not self._is_primary_key(table, column):
             return None
-        if isinstance(source, PrimaryKeyRange | PrimaryKeyLookup):
+        if isinstance(source, PrimaryKeyRange):
             return source
+        if isinstance(source, PrimaryKeyLookup):
+            return source if source.in_key_order else None
         return OrderedScan(table, alias) if isinstance(source, SequentialScan) else None
 
     def _spatial_index_on(
@@ -648,10 +651,14 @@ class _Computed:
         keys: cada clave de agrupación que es una expresión, con la columna que la
             contiene. Es una lista y no un mapa porque una expresión con argumentos con
             nombre no se puede usar de clave de diccionario; son pocas y se comparan.
+            Se guardan con cada columna cualificada por su tabla, para que `a % 3` y
+            `l.a % 3` se reconozcan como la misma clave.
+        layout: las filas que se agrupan, donde se resuelven esas columnas.
     """
 
     aggregates: Mapping[str, str]
     keys: Sequence[tuple[Expression, str]]
+    layout: RowLayout
 
     def reading(self, expression: Expression) -> Expression:
         """La expresión, leyendo de esas columnas lo que la agrupación ya calculó.
@@ -666,15 +673,38 @@ class _Computed:
     def _column_of(self, expression: Expression) -> Expression | None:
         if isinstance(expression, FunctionCall) and _is_aggregate(expression):
             return ColumnRef(self.aggregates[_signature(expression)])
+        if not self.keys:
+            return None
+        resolved = _qualified(expression, self.layout)
         for key, label in self.keys:
-            if key == expression:
+            if key == resolved:
                 return ColumnRef(label)
         return None
 
 
-def _grouped_expressions(keys: Sequence[Expression]) -> list[tuple[Expression, str]]:
-    """Claves de agrupación que no son una columna, con el nombre de la suya en el resultado."""
-    return [(key, grouping_label(key)) for key in keys if not isinstance(key, ColumnRef)]
+def _grouped_expressions(
+    keys: Sequence[Expression], layout: RowLayout
+) -> list[tuple[Expression, str]]:
+    """Claves de agrupación que no son una columna, cualificadas por su tabla, con el
+    nombre de la suya en el resultado."""
+    return [
+        (_qualified(key, layout), grouping_label(key))
+        for key in keys
+        if not isinstance(key, ColumnRef)
+    ]
+
+
+def _qualified(expression: Expression, layout: RowLayout) -> Expression:
+    """La expresión con cada columna escrita como la columna del layout a la que se refiere:
+    `a`, `l.a` y `x.a` son la misma si resuelven a la misma."""
+
+    def resolved(node: Expression) -> Expression | None:
+        if not isinstance(node, ColumnRef) or not layout.has(node.name, node.qualifier):
+            return None
+        slot = layout.slots[layout.position_of(node.name, node.qualifier)]
+        return ColumnRef(slot.name, slot.qualifier)
+
+    return rewritten(expression, resolved)
 
 
 def _signature(call: FunctionCall) -> str:

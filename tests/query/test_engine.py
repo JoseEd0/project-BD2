@@ -1,12 +1,21 @@
+import threading
 from dataclasses import replace
 
 import pytest
 
 from config import EngineConfig
 from query.catalog import CatalogError, UnknownTableError
-from query.engine import Engine, EngineError, QueryResult, TransactionStatementError
+from query.engine import (
+    DataDirectoryInUseError,
+    Engine,
+    EngineBusyError,
+    EngineError,
+    QueryResult,
+    TransactionStatementError,
+)
 from query.expressions import ExpressionError, UnknownColumnError
 from query.files import ForbiddenFileError
+from query.loader import LoaderError
 from query.table import DuplicatePrimaryKeyError
 
 
@@ -379,3 +388,52 @@ def test_minus_zero_and_zero_are_the_same_value_with_or_without_index(
         engine.execute("INSERT INTO t VALUES (1, -0.0), (2, 0.0)")
         assert sorted(engine.execute("SELECT id FROM t WHERE x = 0").rows) == [(1,), (2,)]
         assert sorted(engine.execute("SELECT id FROM t WHERE x = -0.0").rows) == [(1,), (2,)]
+
+
+def test_one_data_directory_is_opened_by_one_engine(config: EngineConfig):
+    """Dos motores sobre el mismo directorio se pisarían el catálogo."""
+    with Engine(config), pytest.raises(DataDirectoryInUseError):
+        Engine(config)
+    with Engine(config) as reopened:
+        assert reopened.table_names() == []
+
+
+def test_tables_are_not_opened_with_another_page_size(config: EngineConfig):
+    with Engine(config) as engine:
+        engine.execute("CREATE TABLE t (id INT PRIMARY KEY)")
+    with pytest.raises(CatalogError, match="páginas"):
+        Engine(replace(config, page_size=config.page_size * 2))
+
+
+@pytest.mark.parametrize("name", ["", "sub", "a\x00b"])
+def test_a_path_that_is_not_a_file_is_a_loading_error(
+    engine: Engine, config: EngineConfig, name: str
+):
+    (config.data_directory / "sub").mkdir()
+    target = config.data_directory / name if name else config.data_directory
+    with pytest.raises(LoaderError):
+        engine.execute(f"CREATE TABLE x FROM FILE '{target}'")
+
+
+def test_a_busy_catalog_gives_up_after_the_lock_timeout(config: EngineConfig):
+    """Un CREATE largo retiene el catálogo; las demás sesiones esperan como mucho el plazo
+    de bloqueo y no sin límite."""
+    quick = replace(config, lock_timeout_seconds=0.05)
+    with Engine(quick) as engine:
+        engine.execute("CREATE TABLE t (id INT PRIMARY KEY)")
+        holding, release = threading.Event(), threading.Event()
+
+        def hold() -> None:
+            with engine._holding_guard():
+                holding.set()
+                release.wait()
+
+        holder = threading.Thread(target=hold)
+        holder.start()
+        holding.wait()
+        try:
+            with pytest.raises(EngineBusyError):
+                engine.table("t")
+        finally:
+            release.set()
+            holder.join()

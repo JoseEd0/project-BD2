@@ -301,7 +301,8 @@ class Catalog:
         """Lee el catálogo de disco.
 
         Raises:
-            CatalogFormatError: si es de otra versión del formato.
+            CatalogFormatError: si es de otra versión del formato o sus tablas usan otro
+                tamaño de página que la configuración.
         """
         if not self.path.exists():
             return
@@ -311,6 +312,12 @@ class Catalog:
             raise CatalogFormatError(
                 f"el catálogo de {self.config.data_directory} es de la versión {version} del "
                 f"formato y este motor lee la {CATALOG_VERSION}: vuelve a poblar ese directorio"
+            )
+        page_size = raw.get("page_size")
+        if page_size != self.config.page_size:
+            raise CatalogFormatError(
+                f"las tablas de {self.config.data_directory} usan páginas de {page_size} bytes "
+                f"y la configuración, de {self.config.page_size}: leerlas así las corrompería"
             )
         self._tables = {
             str(item["name"]).lower(): TableDefinition.from_json(item) for item in raw["tables"]
@@ -323,6 +330,7 @@ class Catalog:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         payload = {
             "version": CATALOG_VERSION,
+            "page_size": self.config.page_size,
             "tables": [definition.to_json() for definition in self._tables.values()],
         }
         partial = self.path.with_name(self.path.name + PARTIAL_SUFFIX)

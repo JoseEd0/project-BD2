@@ -10,6 +10,7 @@ from __future__ import annotations
 import threading
 import time
 from collections.abc import Callable, Iterator, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from types import TracebackType
@@ -33,7 +34,7 @@ from query.expressions import (
     RowLayout,
     UnknownColumnError,
 )
-from query.files import resolve_user_file
+from query.files import DirectoryLock, resolve_user_file
 from query.index_methods import method_named, secondary_method_names
 from query.journal import DiscardingJournal, Journal
 from query.loader import infer_schema, read_values
@@ -84,6 +85,14 @@ class TransactionStatementError(EngineError):
     """El control de transacciones pertenece a la sesión, no al motor."""
 
 
+class EngineBusyError(EngineError):
+    """Otra sesión lleva más del plazo de bloqueo cambiando el catálogo (un CREATE o un DROP)."""
+
+
+class DataDirectoryInUseError(EngineError):
+    """Otro motor ya tiene abierto el directorio de datos."""
+
+
 @dataclass(frozen=True, slots=True)
 class QueryResult:
     """Lo que devuelve una sentencia.
@@ -122,10 +131,21 @@ class Engine:
     _catalog: Catalog = field(init=False)
     _tables: dict[str, Table] = field(default_factory=dict, init=False)
     _guard: threading.RLock = field(default_factory=threading.RLock, init=False)
+    _directory_lock: DirectoryLock = field(init=False)
 
     def __post_init__(self) -> None:
         self.config.data_directory.mkdir(parents=True, exist_ok=True)
-        self._catalog = Catalog(self.config)
+        self._directory_lock = DirectoryLock(self.config.data_directory)
+        if not self._directory_lock.acquire():
+            raise DataDirectoryInUseError(
+                f"otro proceso ya usa {self.config.data_directory}: dos motores sobre el mismo "
+                "directorio se pisarían el catálogo"
+            )
+        try:
+            self._catalog = Catalog(self.config)
+        except BaseException:
+            self._directory_lock.release()
+            raise
 
     def execute(self, sql: str, journal: Journal | None = None) -> QueryResult:
         """Ejecuta una sola sentencia.
@@ -143,7 +163,7 @@ class Engine:
         """Ejecuta una sentencia ya parseada y mide cuánto tarda."""
         started = time.perf_counter()
         if isinstance(statement, DefinitionStatement):
-            with self._guard:
+            with self._holding_guard():
                 result = self._define(statement)
         else:
             result = self._dispatch(statement, NO_JOURNAL if journal is None else journal)
@@ -151,12 +171,12 @@ class Engine:
         return replace(result, elapsed_ms=elapsed)
 
     def table_names(self) -> list[str]:
-        with self._guard:
+        with self._holding_guard():
             return self._catalog.table_names()
 
     def table_of_index(self, name: str) -> str | None:
         """Nombre de la tabla dueña de ese índice, o `None` si el índice no existe."""
-        with self._guard:
+        with self._holding_guard():
             if not self._catalog.has_index(name):
                 return None
             return self._catalog.find_index(name)[0].name
@@ -168,7 +188,7 @@ class Engine:
             UnknownTableError: si no está en el catálogo.
         """
         key = name.lower()
-        with self._guard:
+        with self._holding_guard():
             if key not in self._tables:
                 self._tables[key] = Table(self._catalog.table(name), self.config)
             return self._tables[key]
@@ -182,6 +202,27 @@ class Engine:
             for table in self._tables.values():
                 table.close()
             self._tables.clear()
+            self._directory_lock.release()
+
+    @contextmanager
+    def _holding_guard(self) -> Iterator[None]:
+        """`_guard`, esperando como mucho el plazo de bloqueo de la configuración.
+
+        Un CREATE INDEX sobre una tabla grande lo retiene mientras construye: sin plazo,
+        cualquier otra sesión que abriera una tabla esperaría sin límite.
+
+        Raises:
+            EngineBusyError: si se agota el plazo.
+        """
+        if not self._guard.acquire(timeout=self.config.lock_timeout_seconds):
+            raise EngineBusyError(
+                f"el catálogo lleva más de {self.config.lock_timeout_seconds:g} s ocupado por "
+                "otra sesión (un CREATE o un DROP)"
+            )
+        try:
+            yield
+        finally:
+            self._guard.release()
 
     def __enter__(self) -> Engine:
         return self

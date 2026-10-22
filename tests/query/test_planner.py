@@ -317,3 +317,15 @@ def test_a_limit_stops_reading_an_index_range(engine: Engine, monkeypatch: pytes
     assert "IndexRange" in result.plan.render()
     assert [row[0] for row in result.rows] == [6, 7, 8]
     assert len(read) <= RANGE_LIMIT + 1
+
+
+@pytest.mark.parametrize("method", ["SEQ", "BTREE"])
+def test_order_by_the_key_of_an_in_list_sorts_the_rows(engine: Engine, method: str):
+    """Varias claves de un `IN` salen en el orden en que se escribieron: el plan ordena."""
+    engine.execute(f"CREATE TABLE t (id INT PRIMARY KEY INDEX {method}, a INT)")
+    engine.execute("INSERT INTO t VALUES (1, 1), (2, 2), (3, 3), (4, 4), (5, 5)")
+    result = engine.execute("SELECT id FROM t WHERE id IN (5, 3, 1) ORDER BY id")
+    assert result.rows == ((1,), (3,), (5,))
+    assert engine.execute("SELECT id FROM t WHERE id IN (5, 3, 1) ORDER BY id LIMIT 1").rows == (
+        (1,),
+    )

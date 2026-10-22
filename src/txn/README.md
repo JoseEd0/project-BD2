@@ -135,7 +135,8 @@ comparten.
 Los bloqueos de tabla protegen las filas, pero dos lecturas corren a la vez. Por eso el motor
 no comparte entre consultas nada que se escriba: cada operador que se apoya en disco
 (ordenamiento, `JOIN`, `GROUP BY`, `DISTINCT`) usa un directorio temporal con nombre
-aleatorio, y un lock propio del motor serializa el DDL y la apertura de tablas.
+aleatorio, y un lock propio del motor serializa el DDL y la apertura de tablas, con el
+mismo plazo de espera que los bloqueos de tabla.
 
 ## Decisiones de alcance
 

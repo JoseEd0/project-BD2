@@ -158,3 +158,18 @@ def test_grouping_by_constants_and_by_function_results(medidas: Engine):
 def test_a_tuple_cannot_be_a_grouping_key(medidas: Engine):
     with pytest.raises(ExpressionError, match="no se puede guardar en una columna"):
         medidas.execute("SELECT COUNT(*) FROM t GROUP BY (n, x)")
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "SELECT l.a % 3, COUNT(*) FROM l GROUP BY a % 3",
+        "SELECT a % 3, COUNT(*) FROM l GROUP BY l.a % 3",
+        "SELECT x.a % 3, COUNT(*) FROM l x GROUP BY a % 3",
+        "SELECT a % 3, COUNT(*) FROM l GROUP BY a % 3 ORDER BY l.a % 3",
+    ],
+)
+def test_a_group_key_matches_with_or_without_its_table(engine: Engine, query: str):
+    engine.execute("CREATE TABLE l (id INT, a INT)")
+    engine.execute("INSERT INTO l VALUES (1, 1), (2, 4), (3, 2), (4, 7)")
+    assert sorted(engine.execute(query).rows) == [(1, 3), (2, 1)]

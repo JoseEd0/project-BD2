@@ -1,4 +1,7 @@
+import shutil
 import threading
+from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
@@ -447,9 +450,20 @@ DURABLE_TABLES = [
 ]
 
 
+def disk_snapshot(config: EngineConfig, target: Path) -> EngineConfig:
+    """Copia de los archivos tal como están en disco ahora, para abrirlos con otro motor
+    mientras el primero sigue abierto: el directorio original lo tiene tomado él."""
+    shutil.copytree(config.data_directory, target)
+    return replace(config, data_directory=target)
+
+
 @pytest.mark.parametrize("columns", DURABLE_TABLES)
 def test_a_commit_is_on_disk_before_the_engine_closes(
-    quick_config: EngineConfig, locks: LockManager, manager: TransactionManager, columns: str
+    quick_config: EngineConfig,
+    locks: LockManager,
+    manager: TransactionManager,
+    columns: str,
+    tmp_path: Path,
 ):
     """Política *force*: quien abra los archivos después del COMMIT ve lo confirmado,
     aunque el motor que lo escribió siga abierto con sus páginas en memoria."""
@@ -461,7 +475,7 @@ def test_a_commit_is_on_disk_before_the_engine_closes(
         writer.execute("COMMIT")
         writer.execute("INSERT INTO t VALUES (3, 30, NULL)")
 
-        with Engine(quick_config) as reader:
+        with Engine(disk_snapshot(quick_config, tmp_path / "copia")) as reader:
             assert sorted(reader.execute("SELECT id, v FROM t").rows) == [
                 (1, 11),
                 (2, 20),
@@ -475,8 +489,10 @@ def test_a_commit_is_on_disk_before_the_engine_closes(
             assert nearest.rows == ((1,),)
 
 
-def test_a_new_table_is_on_disk_before_the_engine_closes(quick_config: EngineConfig):
+def test_a_new_table_is_on_disk_before_the_engine_closes(
+    quick_config: EngineConfig, tmp_path: Path
+):
     with Engine(quick_config) as engine:
         engine.execute("CREATE TABLE vacia (id INT PRIMARY KEY, v INT)")
-        with Engine(quick_config) as reader:
+        with Engine(disk_snapshot(quick_config, tmp_path / "copia")) as reader:
             assert reader.execute("SELECT * FROM vacia").rows == ()

@@ -1,4 +1,4 @@
-"""Acceso a disco por páginas con un buffer pool LRU.
+"""Acceso a disco por páginas, a través del buffer pool común.
 
 Ninguna estructura del motor abre un archivo por su cuenta: todas piden páginas al
 `Pager`, que es el único que hace `read`/`write` y el único que decide qué se queda en
@@ -11,13 +11,12 @@ metadata (cabeza de la lista de libres, raíz del árbol, profundidad global, �
 from __future__ import annotations
 
 import os
-import threading
-from collections import OrderedDict
 from pathlib import Path
 from types import TracebackType
 
 from config import EngineConfig
 
+from .buffer_pool import BufferPool
 from .types import StorageError
 
 HEADER_PAGE_ID = 0
@@ -28,27 +27,26 @@ class PageNotFoundError(StorageError):
 
 
 class Pager:
-    """Lee y escribe páginas de tamaño fijo, manteniendo las más recientes en memoria.
+    """Lee y escribe las páginas de tamaño fijo de un archivo, a través del buffer pool.
 
     `read` devuelve una copia: quien quiera modificar la página escribe de vuelta con
     `write`. Es una copia por acceso a cambio de que sea imposible corromper el buffer
     pool por descuido.
+
+    Las páginas en memoria no son de este archivo sino del pool que comparten todos los
+    de la misma configuración (ver `buffer_pool.py`).
     """
 
     def __init__(self, path: Path, config: EngineConfig) -> None:
         self._path = path
         self._page_size = config.page_size
-        self._capacity = config.buffer_pool_pages
         path.parent.mkdir(parents=True, exist_ok=True)
         if not path.exists():
             path.touch()
         self._file = path.open("r+b")
         self._page_count = self._measure_page_count()
-        self._cache: OrderedDict[int, bytearray] = OrderedDict()
-        self._dirty: set[int] = set()
-        # Varias sesiones comparten el mismo paginador: sin este cerrojo, dos hilos
-        # tocando la caché LRU la dejarían inconsistente.
-        self._guard = threading.RLock()
+        self._pool = BufferPool.shared(config)
+        self._owner = self._pool.register(self)
         self.reads = 0
         self.writes = 0
 
@@ -66,12 +64,10 @@ class Pager:
 
     def allocate(self) -> int:
         """Añade una página en blanco al final del archivo y devuelve su número."""
-        with self._guard:
+        with self._pool.guard:
             page_id = self._page_count
             self._page_count += 1
-            self._cache[page_id] = bytearray(self._page_size)
-            self._dirty.add(page_id)
-            self._evict_if_needed()
+            self._pool.put_dirty(self._owner, page_id, bytearray(self._page_size))
             return page_id
 
     def read(self, page_id: int) -> bytes:
@@ -80,7 +76,7 @@ class Pager:
         Raises:
             PageNotFoundError: si la página no existe.
         """
-        with self._guard:
+        with self._pool.guard:
             return bytes(self._load(page_id))
 
     def write(self, page_id: int, data: bytes) -> None:
@@ -94,29 +90,34 @@ class Pager:
             raise StorageError(
                 f"se intentó escribir {len(data)} bytes en una página de {self._page_size}"
             )
-        with self._guard:
+        with self._pool.guard:
             self._check_page(page_id)
-            self._cache[page_id] = bytearray(data)
-            self._cache.move_to_end(page_id)
-            self._dirty.add(page_id)
-            self._evict_if_needed()
+            self._pool.put_dirty(self._owner, page_id, bytearray(data))
 
     def flush(self) -> None:
         """Vuelca a disco todas las páginas modificadas y espera a que el sistema operativo
         las tenga en el dispositivo (`fsync`): un COMMIT se apoya en esto."""
-        with self._guard:
-            for page_id in sorted(self._dirty):
-                self._write_through(page_id, self._cache[page_id])
-            self._dirty.clear()
+        with self._pool.guard:
+            dirty = self._pool.dirty_pages(self._owner)
+            for page_id, page in dirty:
+                self.write_through(page_id, page)
+            self._pool.mark_clean(self._owner, [page_id for page_id, _ in dirty])
             self._file.flush()
             os.fsync(self._file.fileno())
 
     def close(self) -> None:
-        with self._guard:
+        with self._pool.guard:
             if self._file.closed:
                 return
             self.flush()
+            self._pool.unregister(self._owner)
             self._file.close()
+
+    def write_through(self, page_id: int, page: bytearray) -> None:
+        """Escribe la página en su sitio del archivo. La llama el pool al desalojarla."""
+        self._file.seek(page_id * self._page_size)
+        self._file.write(page)
+        self.writes += 1
 
     def __enter__(self) -> Pager:
         return self
@@ -131,29 +132,15 @@ class Pager:
 
     def _load(self, page_id: int) -> bytearray:
         self._check_page(page_id)
-        cached = self._cache.get(page_id)
+        cached = self._pool.get(self._owner, page_id)
         if cached is not None:
-            self._cache.move_to_end(page_id)
             return cached
         self._file.seek(page_id * self._page_size)
         raw = self._file.read(self._page_size)
         self.reads += 1
         page = bytearray(raw.ljust(self._page_size, b"\x00"))
-        self._cache[page_id] = page
-        self._evict_if_needed()
+        self._pool.put_clean(self._owner, page_id, page)
         return page
-
-    def _evict_if_needed(self) -> None:
-        while len(self._cache) > self._capacity:
-            page_id, page = self._cache.popitem(last=False)
-            if page_id in self._dirty:
-                self._write_through(page_id, page)
-                self._dirty.discard(page_id)
-
-    def _write_through(self, page_id: int, page: bytearray) -> None:
-        self._file.seek(page_id * self._page_size)
-        self._file.write(page)
-        self.writes += 1
 
     def _check_page(self, page_id: int) -> None:
         if not 0 <= page_id < self._page_count:

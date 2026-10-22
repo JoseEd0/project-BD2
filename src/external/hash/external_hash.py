@@ -24,7 +24,7 @@ from external.joining import Pair, PairTest, Unmatched, any_pair
 from external.loop import BlockNestedLoopJoin
 from external.runs import RunReader, RunWriter, buffered_records, remove_if_empty
 from hashing import canonical_key_bytes, stable_hash
-from index.keys import Key
+from storage.types import Key
 
 GROUP_PREFIX = "group"
 LEFT_PREFIX = "left"

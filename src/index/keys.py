@@ -10,13 +10,10 @@ from __future__ import annotations
 import struct
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
-from typing import Any
 
 from storage.record_id import RECORD_ID_SIZE, RecordId
 from storage.schema import Field
-from storage.types import StorageError, codec_for
-
-Key = Any
+from storage.types import Key, StorageError, codec_for
 
 
 class KeyShapeError(StorageError):

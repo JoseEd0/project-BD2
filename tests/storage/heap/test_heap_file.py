@@ -125,16 +125,17 @@ def test_read_many_returns_the_records_in_the_order_asked(heap: HeapFile):
     assert list(heap.read_many([])) == []
 
 
-def test_read_many_loads_each_page_once_when_addresses_are_sorted(heap: HeapFile):
+def test_read_many_loads_each_page_once_when_addresses_are_sorted(config: EngineConfig):
     """Es lo que hace barato ir al heap con muchas direcciones: una lectura por página."""
-    addresses = [heap.insert(blob(marker)) for marker in range(200)]
+    path = config.data_directory / "t.heap"
+    with HeapFile(path, RECORD_SIZE, config) as written:
+        addresses = [written.insert(blob(marker)) for marker in range(200)]
     pages = {address.page_id for address in addresses}
     assert len(pages) > 8
-    heap.flush()
-    heap._pager._cache.clear()
-    heap._pager.reads = 0
-    assert len(list(heap.read_many(sorted(addresses)))) == 200
-    assert heap._pager.reads == len(pages)
+    with HeapFile(path, RECORD_SIZE, config) as reopened:
+        reopened._pager.reads = 0
+        assert len(list(reopened.read_many(sorted(addresses)))) == 200
+        assert reopened._pager.reads == len(pages)
 
 
 def test_read_many_rejects_a_freed_slot(heap: HeapFile):

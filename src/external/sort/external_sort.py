@@ -12,15 +12,14 @@ Ver `README.md` para el análisis de por qué el número de pasadas es logarítm
 
 from __future__ import annotations
 
-import heapq
 from collections.abc import Callable, Iterable, Iterator
 from itertools import chain, islice
 from pathlib import Path
 from types import TracebackType
 
 from config import EngineConfig
-from external.runs import RunReader, RunWriter, buffered_records, remove_if_empty
-from index.keys import Key
+from external.runs import RunWriter, buffered_records, merge_sorted_runs, remove_if_empty
+from storage.types import Key
 
 RUN_PREFIX = "run"
 RUN_SUFFIX = ".tmp"
@@ -34,7 +33,8 @@ class ExternalSorter:
     * runs iniciales: `⌈N/B⌉`;
     * pasadas de mezcla: `⌈log_k(N/B)⌉`;
     * coste total de E/S: `O(N · log_k(N/B))`;
-    * memoria: `B` registros en la fase 1 y `k` páginas en la fase 2.
+    * memoria: `B` registros en la fase 1 y una página de cada uno de los `k` runs en la
+      fase 2, dentro del buffer pool común.
 
     Si la entrada cabe en el buffer, se ordena en memoria y no se toca el disco: escribir
     un único run para volver a leerlo no ordena nada.
@@ -78,7 +78,7 @@ class ExternalSorter:
             runs = self._merge_pass(runs)
             self.merge_passes += 1
         self.merge_passes += 1
-        return self._merge_readers(runs)
+        return merge_sorted_runs(runs, self._record_size, self._key_of, self._config)
 
     def close(self) -> None:
         """Borra todos los archivos temporales que quedaron."""
@@ -123,33 +123,12 @@ class ExternalSorter:
             group = runs[start : start + self._fan_in]
             path = self._new_temporary()
             with RunWriter(path, self._record_size, self._config) as writer:
-                writer.extend(self._merge_readers(group))
+                writer.extend(
+                    merge_sorted_runs(group, self._record_size, self._key_of, self._config)
+                )
             merged.append(path)
             self._discard(group)
         return merged
-
-    def _merge_readers(self, runs: list[Path]) -> Iterator[bytes]:
-        """Mezcla k-vías: un montículo con el registro pendiente más pequeño de cada run."""
-        readers = [RunReader(path, self._record_size, self._config) for path in runs]
-        streams = [iter(reader) for reader in readers]
-        heap: list[tuple[Key, int, bytes]] = []
-        for index in range(len(streams)):
-            self._push_next(heap, streams, index)
-        try:
-            while heap:
-                _, index, record = heapq.heappop(heap)
-                yield record
-                self._push_next(heap, streams, index)
-        finally:
-            for reader in readers:
-                reader.close()
-
-    def _push_next(
-        self, heap: list[tuple[Key, int, bytes]], streams: list[Iterator[bytes]], index: int
-    ) -> None:
-        record = next(streams[index], None)
-        if record is not None:
-            heapq.heappush(heap, (self._key_of(record), index, record))
 
     def _new_temporary(self) -> Path:
         """Nombre nunca reutilizado: reciclarlo pisaría un run que aún se está leyendo."""

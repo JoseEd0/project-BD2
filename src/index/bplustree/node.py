@@ -22,8 +22,8 @@ import struct
 from dataclasses import dataclass, field
 from enum import IntEnum, unique
 
-from index.keys import Key, KeyCodec
-from storage.types import StorageError
+from index.keys import KeyCodec
+from storage.types import Key, StorageError
 
 HEADER_FORMAT = struct.Struct("<BHi")
 HEADER_SIZE = HEADER_FORMAT.size

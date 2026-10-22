@@ -16,7 +16,7 @@ from config import EngineConfig
 from index.bplustree import ClusteredBPlusIndex, UnclusteredBPlusIndex
 from index.hash import ExtendibleHashIndex
 from index.hash.extendible_hash import DIRECTORY_SUFFIX
-from index.keys import Key, ScalarKeyCodec
+from index.keys import ScalarKeyCodec
 from index.rtree import SearchStats, SpatialIndex
 from query.catalog import IndexDefinition, Organization, TableDefinition
 from spatial.geometry import Point, Polygon
@@ -28,7 +28,7 @@ from storage.record_id import RECORD_ID_SIZE, RecordId
 from storage.schema import Schema
 from storage.sequential import SequentialFile
 from storage.sequential.sequential_file import OVERFLOW_SUFFIX, REBUILD_SUFFIX
-from storage.types import FieldType, StorageError
+from storage.types import FieldType, Key, StorageError
 
 HEAP_SUFFIX = ".heap"
 SEQUENTIAL_SUFFIX = ".seq"

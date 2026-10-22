@@ -28,6 +28,9 @@ NUL_CHARACTER = "\x00"
 FLOAT32_MAX = 3.4028234663852886e38
 
 Value = int | float | bool | str | bytes | date | tuple[float, ...] | None
+# Lo que ordena o reparte una estructura: un valor o una tupla de valores, comparable con
+# los de su mismo tipo. Los índices y los algoritmos externos solo lo comparan y lo hashean.
+Key = Any
 
 
 class StorageError(Exception):

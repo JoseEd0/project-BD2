@@ -10,7 +10,7 @@ from collections.abc import Callable
 import pytest
 
 from index.bplustree.tree import BPlusTree
-from index.keys import Key
+from storage.types import Key
 
 TreeValidator = Callable[[BPlusTree, set[Key]], None]
 

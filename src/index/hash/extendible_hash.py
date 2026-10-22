@@ -20,14 +20,17 @@ from typing import Any
 
 from config import EngineConfig
 from hashing import stable_hash
-from index.keys import Key, KeyCodec
+from index.keys import KeyCodec
+from storage.layout import FileHeader, FreePageList, chained_pages
 from storage.page import NO_PAGE, RecordPage, slot_capacity
-from storage.pager import HEADER_PAGE_ID, Pager
-from storage.types import StorageError
+from storage.pager import Pager
+from storage.types import Key, StorageError
 
-HEADER_FORMAT = struct.Struct("<4sHIIHiQ")
 HASH_MAGIC = b"EHSH"
-HASH_VERSION = 1
+# La 2 enlaza las páginas libres con `FreePageList` en vez de con cubetas vacías.
+HASH_VERSION = 2
+# Tamaño de clave y de valor, profundidad global, cabeza de páginas libres y entradas.
+HEADER_FIELDS = "IIHiQ"
 DIRECTORY_SUFFIX = ".dir"
 DIRECTORY_ENTRY = struct.Struct("<i")
 MAX_LOCAL_DEPTH = 32
@@ -39,6 +42,9 @@ MAX_BUCKETS_SHOWN = 32
 
 class HashFormatError(StorageError):
     """El archivo no corresponde a este formato de índice hash."""
+
+
+HASH_HEADER = FileHeader(HASH_MAGIC, HASH_VERSION, HEADER_FIELDS, HashFormatError, "un índice hash")
 
 
 class ExtendibleHashIndex:
@@ -71,7 +77,7 @@ class ExtendibleHashIndex:
         self._merge_limit = int(self._bucket_capacity * config.hash_merge_fill)
         self._entries_per_directory_page = config.page_size // DIRECTORY_ENTRY.size
         self._global_depth: int
-        self._free_head: int
+        self._free_pages: FreePageList
         self._entry_count: int
         if self._pager.page_count == 0:
             self._create()
@@ -120,7 +126,6 @@ class ExtendibleHashIndex:
                 break
             directory_index = self._directory_index(key)
         self._entry_count += 1
-        self._write_header()
 
     def search(self, key: Key) -> list[bytes]:
         """Valores asociados a la clave; lista vacía si no está."""
@@ -217,7 +222,6 @@ class ExtendibleHashIndex:
             self._entry_count -= removed
             self._compact_chain(self._directory_entry(directory_index))
             self._shrink(directory_index)
-            self._write_header()
         return removed
 
     def _compact_chain(self, bucket_id: int) -> None:
@@ -336,29 +340,43 @@ class ExtendibleHashIndex:
         self._store(bucket_id, bucket)
 
     def _write_bucket(self, bucket_id: int, entries: list[bytes], local_depth: int) -> None:
+        """Escribe la cubeta con sus entradas, encadenando las páginas que hagan falta.
+
+        La cadena se arma de la cola a la cabeza, una página llena por vez: añadir las
+        entradas de una en una recorrería la cadena entera por cada una.
+        """
+        capacity = self._bucket_capacity
+        chunks = [entries[start : start + capacity] for start in range(0, len(entries), capacity)]
+        following = NO_PAGE
+        for chunk in reversed(chunks[1:]):
+            overflow_id = self._allocate()
+            self._store(overflow_id, self._filled_page(chunk, following, local_depth))
+            following = overflow_id
+        first = chunks[0] if chunks else []
+        self._store(bucket_id, self._filled_page(first, following, local_depth))
+
+    def _filled_page(self, entries: list[bytes], following: int, local_depth: int) -> RecordPage:
         page = RecordPage.create(self._pager.page_size, self._entry_size)
         page.flags = local_depth
-        overflow = entries[self._bucket_capacity :]
-        for entry in entries[: self._bucket_capacity]:
+        page.next_page = following
+        for entry in entries:
             page.insert(entry)
-        self._store(bucket_id, page)
-        for entry in overflow:
-            self._append_to_chain(bucket_id, self._load(bucket_id), entry)
+        return page
 
     def _release_chain(self, bucket_id: int) -> None:
-        page_id = self._load(bucket_id).next_page
-        while page_id != NO_PAGE:
-            page = self._load(page_id)
-            next_page = page.next_page
+        """Devuelve a la lista de libres las páginas de desbordamiento de la cubeta."""
+        overflow = list(self._chain_pages(self._load(bucket_id).next_page))
+        for page_id, _ in overflow:
             self._release(page_id)
-            page_id = next_page
 
-    def _chain_pages(self, bucket_id: int) -> Iterator[tuple[int, RecordPage]]:
-        page_id = bucket_id
-        while page_id != NO_PAGE:
-            page = self._load(page_id)
-            yield page_id, page
-            page_id = page.next_page
+    def _chain_pages(self, first_page_id: int) -> Iterator[tuple[int, RecordPage]]:
+        return chained_pages(
+            first_page_id, self._linked, self._pager.page_count, self._pager.path.name
+        )
+
+    def _linked(self, page_id: int) -> tuple[int, RecordPage]:
+        page = self._load(page_id)
+        return page.next_page, page
 
     def _entries_of(self, bucket_id: int) -> Iterator[bytes]:
         """Entradas completas (clave + valor) de la cubeta y su cadena."""
@@ -400,17 +418,10 @@ class ExtendibleHashIndex:
             self._directory.allocate()
 
     def _allocate(self) -> int:
-        if self._free_head == NO_PAGE:
-            return self._pager.allocate()
-        page_id = self._free_head
-        self._free_head = self._load(page_id).next_page
-        return page_id
+        return self._free_pages.allocate()
 
     def _release(self, page_id: int) -> None:
-        page = RecordPage.create(self._pager.page_size, self._entry_size)
-        page.next_page = self._free_head
-        self._store(page_id, page)
-        self._free_head = page_id
+        self._free_pages.release(page_id)
 
     def _load(self, page_id: int) -> RecordPage:
         return RecordPage.from_bytes(self._pager.read(page_id), self._entry_size)
@@ -427,7 +438,7 @@ class ExtendibleHashIndex:
     def _create(self) -> None:
         self._pager.allocate()
         self._global_depth = INITIAL_GLOBAL_DEPTH
-        self._free_head = NO_PAGE
+        self._free_pages = FreePageList(self._pager, NO_PAGE)
         self._entry_count = 0
         self._grow_directory_pages()
         for index in range(self.directory_size):
@@ -439,32 +450,24 @@ class ExtendibleHashIndex:
         self._write_header()
 
     def _read_header(self) -> None:
-        raw = self._pager.read(HEADER_PAGE_ID)
-        magic, version, key_size, value_size, depth, free_head, count = HEADER_FORMAT.unpack_from(
-            raw, 0
-        )
-        if magic != HASH_MAGIC or version != HASH_VERSION:
-            raise HashFormatError(f"{self._pager.path.name} no es un índice hash válido")
+        key_size, value_size, depth, free_head, count = HASH_HEADER.read(self._pager)
         if key_size != self._key_codec.size or value_size != self._value_size:
             raise HashFormatError(
                 f"el índice guarda claves de {key_size} y valores de {value_size} bytes; "
                 f"se pidieron {self._key_codec.size} y {self._value_size}"
             )
         self._global_depth = int(depth)
-        self._free_head = int(free_head)
+        self._free_pages = FreePageList(self._pager, int(free_head))
         self._entry_count = int(count)
 
     def _write_header(self) -> None:
-        raw = bytearray(self._pager.page_size)
-        HEADER_FORMAT.pack_into(
-            raw,
-            0,
-            HASH_MAGIC,
-            HASH_VERSION,
+        """La cabecera se escribe al volcar o cerrar el índice, no en cada operación: su
+        contenido vive en memoria y solo hace falta en disco cuando lo hacen las páginas."""
+        HASH_HEADER.write(
+            self._pager,
             self._key_codec.size,
             self._value_size,
             self._global_depth,
-            self._free_head,
+            self._free_pages.head,
             self._entry_count,
         )
-        self._pager.write(HEADER_PAGE_ID, bytes(raw))

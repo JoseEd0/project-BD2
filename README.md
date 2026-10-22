@@ -185,6 +185,10 @@ El dataset carga unas 30 000 filas en seis tablas, **cada una con una organizaci
 distinta**, para que las diferencias entre estructuras se vean en la interfaz. Los detalles
 están en [`demos/README.md`](demos/README.md).
 
+Cada archivo del gestor lleva en su cabecera la versión de su formato. Un directorio de
+datos creado con una versión anterior se rechaza con un error que lo dice: basta volver a
+poblarlo con el paso 1.
+
 ### 3.4 Cargar datos desde la interfaz
 
 Con la base vacía también se puede empezar sin la terminal. El botón **Cargar CSV** crea

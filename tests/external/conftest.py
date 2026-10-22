@@ -2,10 +2,9 @@ from collections.abc import Callable
 
 import pytest
 
-from index.keys import Key
 from storage.record import RecordSerializer
 from storage.schema import Field, Schema
-from storage.types import FieldType
+from storage.types import FieldType, Key
 
 CITY_LENGTH = 8
 

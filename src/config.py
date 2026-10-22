@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 DEFAULT_PAGE_SIZE = 4096
-DEFAULT_BUFFER_POOL_PAGES = 128
+DEFAULT_BUFFER_POOL_PAGES = 2048
 DEFAULT_SEQUENTIAL_WASTE_RATIO = 0.30
 DEFAULT_SEQUENTIAL_FILL_FACTOR = 0.80
 DEFAULT_SEQUENTIAL_MAX_CHAIN_PAGES = 16
@@ -53,7 +53,8 @@ class EngineConfig:
 
     Attributes:
         page_size: tamaño de página en bytes; fija la capacidad de todas las estructuras.
-        buffer_pool_pages: páginas residentes en memoria por archivo abierto.
+        buffer_pool_pages: páginas residentes en memoria entre todos los archivos abiertos
+            (ver `storage/buffer_pool.py`).
         sequential_waste_ratio: fracción de espacio desperdiciado que dispara la
             reorganización del archivo secuencial.
         sequential_fill_factor: fracción de cada página que la reorganización llena,

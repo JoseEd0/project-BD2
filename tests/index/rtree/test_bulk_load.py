@@ -16,6 +16,9 @@ from storage.types import StorageError
 
 SEED = 20261004
 MANY = 2_000
+PACKING_SAMPLES = 5
+PACKING_QUERIES = 50
+NEIGHBORS = 10
 
 
 def test_loading_nothing_leaves_an_empty_tree(tree: RTree, assert_tree_is_valid: TreeValidator):
@@ -72,20 +75,25 @@ def test_loaded_tree_accepts_inserts_and_deletes(tree: RTree, assert_tree_is_val
 
 
 def test_loading_packs_tighter_than_inserting(config: EngineConfig):
-    """Menos nodos y, sobre todo, menos nodos abiertos por consulta."""
-    entries = random_points(MANY, SEED)
-    with (
-        RTree(config.data_directory / "masivo.rtree", config) as loaded,
-        RTree(config.data_directory / "uno-a-uno.rtree", config) as inserted,
-    ):
-        loaded.bulk_load(entries)
-        fill(inserted, entries)
-        assert loaded.node_count < inserted.node_count
-        loaded_stats, inserted_stats = SearchStats(), SearchStats()
-        for point, _ in entries[:50]:
-            list(islice(loaded.nearest(point, HAVERSINE, loaded_stats), 10))
-            list(islice(inserted.nearest(point, HAVERSINE, inserted_stats), 10))
-        assert loaded_stats.nodes_visited < inserted_stats.nodes_visited
+    """Menos nodos y, sobre todo, menos nodos abiertos por consulta.
+
+    Lo segundo es una propiedad en promedio, no de cada conjunto de puntos: con una sola
+    muestra, la inserción uno a uno a veces sale mejor por azar. Se suman varias.
+    """
+    loaded_stats, inserted_stats = SearchStats(), SearchStats()
+    for seed in range(SEED, SEED + PACKING_SAMPLES):
+        entries = random_points(MANY, seed)
+        with (
+            RTree(config.data_directory / f"masivo-{seed}.rtree", config) as loaded,
+            RTree(config.data_directory / f"uno-a-uno-{seed}.rtree", config) as inserted,
+        ):
+            loaded.bulk_load(entries)
+            fill(inserted, entries)
+            assert loaded.node_count < inserted.node_count
+            for point, _ in entries[:PACKING_QUERIES]:
+                list(islice(loaded.nearest(point, HAVERSINE, loaded_stats), NEIGHBORS))
+                list(islice(inserted.nearest(point, HAVERSINE, inserted_stats), NEIGHBORS))
+    assert loaded_stats.nodes_visited < inserted_stats.nodes_visited
 
 
 def test_loading_into_a_tree_with_points_is_rejected(tree: RTree):

@@ -9,7 +9,7 @@ import random
 from collections.abc import Callable
 
 from index.rtree import RTree
-from index.rtree.node import MINIMUM_ENTRIES_PER_NODE, NO_NODE, BranchNode, LeafNode
+from index.rtree.node import MINIMUM_ENTRIES_PER_NODE, BranchNode, LeafNode
 from spatial.geometry import Point, Rectangle
 from storage.record_id import RecordId
 
@@ -90,9 +90,4 @@ def assert_tree_is_valid(tree: RTree, expected: set[Indexed]) -> None:
 
 
 def _free_pages(tree: RTree) -> int:
-    count = 0
-    page_id = tree._free_head
-    while page_id != NO_NODE:
-        count += 1
-        page_id = tree._load(page_id).next_free
-    return count
+    return sum(1 for _ in tree._free_pages.pages())

@@ -8,25 +8,28 @@ archivo. Ver `README.md` para el diseño y las complejidades.
 
 from __future__ import annotations
 
-import struct
 from collections.abc import Iterable, Iterator
 from pathlib import Path
 from types import TracebackType
 
 from config import EngineConfig
+from storage.layout import FileHeader
 from storage.page import NO_PAGE, RecordPage, slot_capacity
 from storage.pager import HEADER_PAGE_ID, Pager
 from storage.record_id import RecordId
 from storage.types import StorageError
 
-HEADER_FORMAT = struct.Struct("<4sHIiQ")
 HEAP_MAGIC = b"HEAP"
 HEAP_VERSION = 1
-IN_FREE_LIST = 1
+# Tamaño de registro, cabeza de la lista de páginas con hueco y número de registros.
+HEADER_FIELDS = "IiQ"
 
 
 class HeapFormatError(StorageError):
     """El archivo no es un heap file válido o fue creado con otro formato."""
+
+
+HEAP_HEADER = FileHeader(HEAP_MAGIC, HEAP_VERSION, HEADER_FIELDS, HeapFormatError, "un heap file")
 
 
 class RecordNotFoundError(StorageError):
@@ -49,8 +52,10 @@ class HeapFile:
         self._pager = Pager(path, config)
         if self._pager.page_count == 0:
             self._create_header()
-        self._magic, self._version, stored_size, self._free_head, self._count = self._read_header()
-        self._validate(stored_size)
+        stored_size, free_head, count = HEAP_HEADER.read(self._pager)
+        self._validate(int(stored_size))
+        self._free_head: int = int(free_head)
+        self._count: int = int(count)
 
     @property
     def record_count(self) -> int:
@@ -73,7 +78,6 @@ class HeapFile:
             self._unlink_free_head(page)
         self._store(page_id, page)
         self._count += 1
-        self._write_header()
         return RecordId(page_id=page_id, slot=slot)
 
     def read(self, record_id: RecordId) -> bytes:
@@ -133,7 +137,6 @@ class HeapFile:
             self._link_free_page(record_id.page_id, page)
         self._store(record_id.page_id, page)
         self._count -= 1
-        self._write_header()
 
     def scan(self) -> Iterator[tuple[RecordId, bytes]]:
         """Recorre todos los registros vigentes en orden físico."""
@@ -171,7 +174,6 @@ class HeapFile:
     def _link_free_page(self, page_id: int, page: RecordPage) -> None:
         """Pone a la cabeza de la lista una página que acaba de ganar una ranura libre."""
         page.next_page = self._free_head
-        page.flags |= IN_FREE_LIST
         self._free_head = page_id
 
     def _unlink_free_head(self, page: RecordPage) -> None:
@@ -181,7 +183,6 @@ class HeapFile:
         """
         self._free_head = page.next_page
         page.next_page = NO_PAGE
-        page.flags &= ~IN_FREE_LIST
 
     def _require_live(self, page: RecordPage, record_id: RecordId) -> None:
         try:
@@ -206,23 +207,12 @@ class HeapFile:
         self._count = 0
         self._write_header()
 
-    def _read_header(self) -> tuple[bytes, int, int, int, int]:
-        raw = self._pager.read(HEADER_PAGE_ID)
-        magic, version, record_size, free_head, count = HEADER_FORMAT.unpack_from(raw, 0)
-        return magic, int(version), int(record_size), int(free_head), int(count)
-
     def _write_header(self) -> None:
-        raw = bytearray(self._pager.page_size)
-        HEADER_FORMAT.pack_into(
-            raw, 0, HEAP_MAGIC, HEAP_VERSION, self._record_size, self._free_head, self._count
-        )
-        self._pager.write(HEADER_PAGE_ID, bytes(raw))
+        """La cabecera se escribe al volcar o cerrar el archivo, no en cada operación: su
+        contenido vive en memoria y solo hace falta en disco cuando lo hacen las páginas."""
+        HEAP_HEADER.write(self._pager, self._record_size, self._free_head, self._count)
 
     def _validate(self, stored_size: int) -> None:
-        if self._magic != HEAP_MAGIC:
-            raise HeapFormatError(f"{self._pager.path.name} no es un heap file")
-        if self._version != HEAP_VERSION:
-            raise HeapFormatError(f"versión de heap file no soportada: {self._version}")
         if stored_size != self._record_size:
             raise HeapFormatError(
                 f"el archivo guarda registros de {stored_size} bytes y se pidieron "

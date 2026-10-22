@@ -14,7 +14,6 @@ Ver `README.md` para el recorrido paso a paso de la inserción, la división y e
 from __future__ import annotations
 
 import heapq
-import struct
 from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -25,7 +24,9 @@ from config import EngineConfig
 from external.sort import ExternalSorter
 from spatial.geometry import Point, Rectangle
 from spatial.metrics import Metric
-from storage.pager import HEADER_PAGE_ID, Pager
+from storage.layout import FileHeader, FreePageList
+from storage.page import NO_PAGE
+from storage.pager import Pager
 from storage.record_id import RecordId
 from storage.types import StorageError
 
@@ -33,7 +34,6 @@ from .bulk import tile, tile_sorted
 from .node import (
     LEAF_ENTRY_FORMAT,
     MINIMUM_ENTRIES_PER_NODE,
-    NO_NODE,
     BranchEntry,
     BranchNode,
     CorruptNodeError,
@@ -46,9 +46,11 @@ from .node import (
 )
 from .split import choose_subtree, quadratic_split
 
-HEADER_FORMAT = struct.Struct("<4sHiiQII")
 TREE_MAGIC = b"RTR1"
-TREE_VERSION = 1
+# La 2 enlaza las páginas libres con `FreePageList` y sus nodos ya no llevan ese enlace.
+TREE_VERSION = 2
+# Raíz, cabeza de páginas libres, entradas, altura y nodos.
+HEADER_FIELDS = "iiQII"
 LEAF_LEVEL = 0
 BUILD_SUFFIX = ".build"
 MAX_NODES_SHOWN_PER_LEVEL = 400
@@ -61,6 +63,9 @@ Entry = LeafEntry | BranchEntry
 
 class TreeFormatError(StorageError):
     """El archivo no corresponde a este formato de R-Tree."""
+
+
+TREE_HEADER = FileHeader(TREE_MAGIC, TREE_VERSION, HEADER_FIELDS, TreeFormatError, "un R-Tree")
 
 
 @dataclass(slots=True)
@@ -112,7 +117,7 @@ class RTree:
         self._pager = Pager(path, config)
         self._minimum_fill = config.rtree_min_fill
         self._root: int
-        self._free_head: int
+        self._free_pages: FreePageList
         self._entry_count: int
         self._height: int
         self._node_count: int
@@ -150,7 +155,6 @@ class RTree:
         """Añade el punto al árbol, dividiendo los nodos que se desborden."""
         self._place(leaf_entry(point, record_id), LEAF_LEVEL)
         self._entry_count += 1
-        self._write_header()
 
     def bulk_load(self, entries: Iterable[tuple[Point, RecordId]]) -> None:
         """Construye el árbol de una vez a partir de todos sus puntos (STR).
@@ -173,7 +177,6 @@ class RTree:
             level = [self._add_node(BranchNode(group)) for group in groups]
             self._height += 1
         self._root = level[0].child if level else self._new_empty_leaf()
-        self._write_header()
 
     def delete(self, point: Point, record_id: RecordId) -> bool:
         """Quita la entrada y condensa el árbol. Devuelve si existía.
@@ -192,7 +195,6 @@ class RTree:
             for orphan in orphans:
                 self._place(orphan, level)
         self._shrink_root()
-        self._write_header()
         return True
 
     def search_rectangle(
@@ -498,15 +500,10 @@ class RTree:
 
     def _allocate(self) -> int:
         self._node_count += 1
-        if self._free_head == NO_NODE:
-            return self._pager.allocate()
-        page_id = self._free_head
-        self._free_head = self._load(page_id).next_free
-        return page_id
+        return self._free_pages.allocate()
 
     def _release(self, page_id: int) -> None:
-        self._store(page_id, LeafNode(next_free=self._free_head))
-        self._free_head = page_id
+        self._free_pages.release(page_id)
         self._node_count -= 1
 
     def _load(self, page_id: int) -> Node:
@@ -517,7 +514,7 @@ class RTree:
 
     def _create(self) -> None:
         self._pager.allocate()
-        self._free_head = NO_NODE
+        self._free_pages = FreePageList(self._pager, NO_PAGE)
         self._entry_count = 0
         self._height = 1
         self._node_count = 0
@@ -525,30 +522,24 @@ class RTree:
         self._write_header()
 
     def _read_header(self) -> None:
-        raw = self._pager.read(HEADER_PAGE_ID)
-        magic, version, root, free_head, count, height, nodes = HEADER_FORMAT.unpack_from(raw, 0)
-        if magic != TREE_MAGIC or version != TREE_VERSION:
-            raise TreeFormatError(f"{self._pager.path.name} no es un R-Tree válido")
+        root, free_head, count, height, nodes = TREE_HEADER.read(self._pager)
         self._root = int(root)
-        self._free_head = int(free_head)
+        self._free_pages = FreePageList(self._pager, int(free_head))
         self._entry_count = int(count)
         self._height = int(height)
         self._node_count = int(nodes)
 
     def _write_header(self) -> None:
-        raw = bytearray(self._pager.page_size)
-        HEADER_FORMAT.pack_into(
-            raw,
-            0,
-            TREE_MAGIC,
-            TREE_VERSION,
+        """La cabecera se escribe al volcar o cerrar el árbol, no en cada operación: su
+        contenido vive en memoria y solo hace falta en disco cuando lo hacen las páginas."""
+        TREE_HEADER.write(
+            self._pager,
             self._root,
-            self._free_head,
+            self._free_pages.head,
             self._entry_count,
             self._height,
             self._node_count,
         )
-        self._pager.write(HEADER_PAGE_ID, bytes(raw))
 
 
 def _append(node: Node, entry: Entry) -> None:

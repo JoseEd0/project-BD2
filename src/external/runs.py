@@ -1,19 +1,24 @@
 """Archivos temporales de registros, leídos y escritos página a página.
 
 Los algoritmos externos —ordenamiento y hashing— generan montones de archivos intermedios
-(*runs* y particiones). Todos comparten este par de clases, que garantizan que nunca haya
-más de una página en memoria por archivo abierto.
+(*runs* y particiones). Todos comparten este par de clases, que los recorren página a
+página. Esas páginas pasan por el buffer pool común, así que los temporales no gastan
+memoria fuera del presupuesto del motor, por muchos que haya abiertos a la vez.
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Iterator
+import heapq
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from pathlib import Path
 from types import TracebackType
 
 from config import EngineConfig
 from storage.page import RecordPage, slot_capacity
 from storage.pager import Pager
+from storage.types import Key
+
+Pending = tuple[Key, int, bytes]
 
 
 class RunWriter:
@@ -89,6 +94,42 @@ class RunReader:
         traceback: TracebackType | None,
     ) -> None:
         self.close()
+
+
+def merge_sorted_runs(
+    paths: Sequence[Path],
+    record_size: int,
+    key_of: Callable[[bytes], Key],
+    config: EngineConfig,
+) -> Iterator[bytes]:
+    """Mezcla k-vías de archivos ya ordenados por `key_of`, en un solo recorrido ordenado.
+
+    Un montículo guarda el registro pendiente más pequeño de cada archivo, así que la
+    mezcla lee una página de cada uno a la vez y hace `O(log k)` comparaciones por
+    registro. A igual clave sale antes el del archivo que va primero en `paths`: la mezcla
+    es estable si los archivos lo son.
+    """
+    readers = [RunReader(path, record_size, config) for path in paths]
+    streams = [iter(reader) for reader in readers]
+    pending: list[Pending] = []
+    try:
+        for position, stream in enumerate(streams):
+            _push_next(pending, stream, position, key_of)
+        while pending:
+            _, position, record = heapq.heappop(pending)
+            yield record
+            _push_next(pending, streams[position], position, key_of)
+    finally:
+        for reader in readers:
+            reader.close()
+
+
+def _push_next(
+    pending: list[Pending], stream: Iterator[bytes], position: int, key_of: Callable[[bytes], Key]
+) -> None:
+    record = next(stream, None)
+    if record is not None:
+        heapq.heappush(pending, (key_of(record), position, record))
 
 
 def buffered_records(config: EngineConfig, record_size: int) -> int:

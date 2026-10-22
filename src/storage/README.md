@@ -102,10 +102,18 @@ Dos disciplinas conviven sobre la misma página:
 
 Ninguna estructura abre archivos por su cuenta. Todas piden páginas al `Pager`, que:
 
-1. mantiene en memoria las últimas `buffer_pool_pages` páginas usadas (política **LRU**);
-2. marca como *sucias* las que se modifican y solo las escribe al expulsarlas o al cerrar;
+1. guarda las páginas en el **buffer pool común** (`buffer_pool.py`): un solo LRU con
+   `buffer_pool_pages` páginas (2 048 por omisión, 8 MiB) para **todos** los archivos de
+   la configuración —tablas, índices y temporales de un ordenamiento—;
+2. marca como *sucias* las que se modifican y solo las escribe al expulsarlas, al hacer
+   `flush` (un COMMIT) o al cerrar;
 3. cuenta las lecturas y escrituras físicas (`reads`, `writes`): la diferencia entre
    páginas pedidas y páginas leídas de disco es lo que ahorra el buffer pool.
+
+El pool es uno porque la memoria es una, como en cualquier gestor: un archivo muy
+consultado puede ocupar casi todo el presupuesto mientras otro sin uso no ocupa nada. Con
+una caché por archivo el gasto crecía con el número de archivos abiertos, y un `JOIN` con
+dieciséis particiones abiertas reservaba dieciséis cachés.
 
 `read()` devuelve una **copia** de la página. Cuesta un `memcpy` por acceso y a cambio hace
 imposible corromper el buffer pool por descuido: quien quiera cambiar algo escribe de
@@ -113,6 +121,24 @@ vuelta con `write()`.
 
 Convención de todo el motor: **la página 0 de cada archivo es la cabecera** y pertenece a
 la estructura que lo usa (cabeza de la lista de libres, raíz del árbol, profundidad global…).
+
+### Piezas de formato compartidas (`layout.py`)
+
+Las cinco estructuras de disco usan las mismas tres piezas, escritas una sola vez:
+
+- **`FileHeader`**: la cabecera de la página 0 empieza por una firma de cuatro bytes y una
+  versión del formato. Abrir un archivo de otra estructura, o de una versión anterior del
+  formato, da un error que lo dice («`t.bpt` es un árbol B+ de la versión 1 del formato, y
+  este motor lee la 2») en vez de interpretar mal sus páginas. La cabecera **se escribe al
+  volcar o cerrar el archivo**, no en cada inserción: lo que guarda vive en memoria, y en
+  disco solo hace falta cuando también están las páginas.
+- **`FreePageList`**: el B+, el hash y el R-Tree reutilizan las páginas que liberan al
+  fusionar o dividir. Cada página libre guarda el número de la siguiente; la cabeza va en la
+  cabecera.
+- **`chained_pages`**: el recorrido de una cadena de páginas (el desbordamiento del
+  secuencial y de las cubetas del hash, y la lista de libres). Una cadena no puede tener más
+  páginas que el archivo: si las tiene, una página corrupta apunta hacia atrás, y en vez de
+  girar para siempre se lanza `CorruptFileError`.
 
 ## 5. Las dos organizaciones de archivo
 

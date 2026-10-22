@@ -28,7 +28,8 @@ from spatial.geometry import Point, Rectangle
 from storage.record_id import RecordId
 from storage.types import StorageError
 
-HEADER_FORMAT = struct.Struct("<BHi")
+# Tipo de nodo y número de entradas.
+HEADER_FORMAT = struct.Struct("<BH")
 HEADER_SIZE = HEADER_FORMAT.size
 LEAF_ENTRY_FORMAT = struct.Struct("<ddIH")
 BRANCH_ENTRY_FORMAT = struct.Struct("<ddddi")
@@ -97,14 +98,12 @@ class BranchEntry(NamedTuple):
 @dataclass(slots=True)
 class LeafNode:
     entries: list[LeafEntry] = field(default_factory=list)
-    next_free: int = NO_NODE
     kind: ClassVar[NodeKind] = NodeKind.LEAF
 
 
 @dataclass(slots=True)
 class BranchNode:
     entries: list[BranchEntry] = field(default_factory=list)
-    next_free: int = NO_NODE
     kind: ClassVar[NodeKind] = NodeKind.BRANCH
 
 
@@ -138,20 +137,20 @@ class NodeCodec:
 
     def pack(self, node: Node) -> bytes:
         entry_format = LEAF_ENTRY_FORMAT if isinstance(node, LeafNode) else BRANCH_ENTRY_FORMAT
-        header = HEADER_FORMAT.pack(int(node.kind), len(node.entries), node.next_free)
+        header = HEADER_FORMAT.pack(int(node.kind), len(node.entries))
         body = b"".join(entry_format.pack(*entry) for entry in node.entries)
         return (header + body).ljust(self._page_size, b"\x00")
 
     def unpack(self, raw: bytes) -> Node:
-        kind_value, count, next_free = HEADER_FORMAT.unpack_from(raw, 0)
+        kind_value, count = HEADER_FORMAT.unpack_from(raw, 0)
         if kind_value == NodeKind.LEAF:
             leaf_end = HEADER_SIZE + count * LEAF_ENTRY_FORMAT.size
             leaves = map(LeafEntry._make, LEAF_ENTRY_FORMAT.iter_unpack(raw[HEADER_SIZE:leaf_end]))
-            return LeafNode(entries=list(leaves), next_free=next_free)
+            return LeafNode(entries=list(leaves))
         if kind_value == NodeKind.BRANCH:
             branch_end = HEADER_SIZE + count * BRANCH_ENTRY_FORMAT.size
             branches = map(
                 BranchEntry._make, BRANCH_ENTRY_FORMAT.iter_unpack(raw[HEADER_SIZE:branch_end])
             )
-            return BranchNode(entries=list(branches), next_free=next_free)
+            return BranchNode(entries=list(branches))
         raise CorruptNodeError(f"tipo de nodo desconocido: {kind_value}")

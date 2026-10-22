@@ -9,7 +9,6 @@ Ver `README.md` para el recorrido paso a paso de la división y la fusión de no
 
 from __future__ import annotations
 
-import struct
 from bisect import bisect_left, bisect_right
 from collections.abc import Iterator
 from pathlib import Path
@@ -17,15 +16,19 @@ from types import TracebackType
 from typing import Any
 
 from config import EngineConfig
-from index.keys import Key, KeyCodec
-from storage.pager import HEADER_PAGE_ID, Pager
-from storage.types import StorageError
+from index.keys import KeyCodec
+from storage.layout import FileHeader, FreePageList
+from storage.page import NO_PAGE
+from storage.pager import Pager
+from storage.types import Key, StorageError
 
 from .node import NO_NODE, Node, NodeCodec, NodeKind
 
-HEADER_FORMAT = struct.Struct("<4sHIIiiQI")
 TREE_MAGIC = b"BPT1"
-TREE_VERSION = 1
+# La 2 enlaza las páginas libres con `FreePageList` en vez de con nodos hoja vacíos.
+TREE_VERSION = 2
+# Tamaño de clave y de valor, raíz, cabeza de páginas libres, entradas y altura.
+HEADER_FIELDS = "IIiiQI"
 
 
 MAX_NODES_SHOWN_PER_LEVEL = 8
@@ -34,6 +37,9 @@ MAX_KEYS_SHOWN_PER_NODE = 6
 
 class TreeFormatError(StorageError):
     """El archivo no corresponde a este formato de árbol B+."""
+
+
+TREE_HEADER = FileHeader(TREE_MAGIC, TREE_VERSION, HEADER_FIELDS, TreeFormatError, "un árbol B+")
 
 
 class DuplicateKeyError(StorageError):
@@ -66,7 +72,7 @@ class BPlusTree:
         self._key_codec = key_codec
         self._value_size = value_size
         self._root: int
-        self._free_head: int
+        self._free_pages: FreePageList
         self._entry_count: int
         self._height: int
         if self._pager.page_count == 0:
@@ -115,7 +121,6 @@ class BPlusTree:
         else:
             separator, right_id = self._split_leaf(leaf_id, leaf)
             self._grow(path, leaf_id, separator, right_id)
-        self._write_header()
 
     def search(self, key: Key) -> bytes | None:
         """Valor asociado a la clave, o `None` si no está."""
@@ -157,7 +162,6 @@ class BPlusTree:
         self._entry_count -= 1
         self._store(leaf_id, leaf)
         self._repair(path, leaf_id, leaf)
-        self._write_header()
         return True
 
     def describe(self) -> dict[str, Any]:
@@ -395,15 +399,10 @@ class BPlusTree:
             )
 
     def _allocate(self) -> int:
-        if self._free_head == NO_NODE:
-            return self._pager.allocate()
-        page_id = self._free_head
-        self._free_head = self._load(page_id).next_leaf
-        return page_id
+        return self._free_pages.allocate()
 
     def _release(self, page_id: int) -> None:
-        self._store(page_id, Node(kind=NodeKind.LEAF, next_leaf=self._free_head))
-        self._free_head = page_id
+        self._free_pages.release(page_id)
 
     def _load(self, page_id: int) -> Node:
         return self._codec.unpack(self._pager.read(page_id))
@@ -413,7 +412,7 @@ class BPlusTree:
 
     def _create(self) -> None:
         self._pager.allocate()
-        self._free_head = NO_NODE
+        self._free_pages = FreePageList(self._pager, NO_PAGE)
         self._entry_count = 0
         self._height = 1
         self._root = self._pager.allocate()
@@ -421,34 +420,26 @@ class BPlusTree:
         self._write_header()
 
     def _read_header(self) -> None:
-        raw = self._pager.read(HEADER_PAGE_ID)
-        magic, version, key_size, value_size, root, free_head, count, height = (
-            HEADER_FORMAT.unpack_from(raw, 0)
-        )
-        if magic != TREE_MAGIC or version != TREE_VERSION:
-            raise TreeFormatError(f"{self._pager.path.name} no es un árbol B+ válido")
+        key_size, value_size, root, free_head, count, height = TREE_HEADER.read(self._pager)
         if key_size != self._key_codec.size or value_size != self._value_size:
             raise TreeFormatError(
                 f"el índice guarda claves de {key_size} y valores de {value_size} bytes; "
                 f"se pidieron {self._key_codec.size} y {self._value_size}"
             )
         self._root = int(root)
-        self._free_head = int(free_head)
+        self._free_pages = FreePageList(self._pager, int(free_head))
         self._entry_count = int(count)
         self._height = int(height)
 
     def _write_header(self) -> None:
-        raw = bytearray(self._pager.page_size)
-        HEADER_FORMAT.pack_into(
-            raw,
-            0,
-            TREE_MAGIC,
-            TREE_VERSION,
+        """La cabecera se escribe al volcar o cerrar el árbol, no en cada operación: su
+        contenido vive en memoria y solo hace falta en disco cuando lo hacen las páginas."""
+        TREE_HEADER.write(
+            self._pager,
             self._key_codec.size,
             self._value_size,
             self._root,
-            self._free_head,
+            self._free_pages.head,
             self._entry_count,
             self._height,
         )
-        self._pager.write(HEADER_PAGE_ID, bytes(raw))

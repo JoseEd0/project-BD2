@@ -26,7 +26,6 @@ from external.loop import BlockNestedLoopJoin
 from external.runs import buffered_records
 from external.sort import ExternalSorter
 from hashing import canonical_key_bytes
-from index.keys import Key
 from query.aggregation import Accumulator, Aggregate, accumulator_for, check_argument_type
 from query.comparison import describe_value
 from query.expressions import (
@@ -43,7 +42,7 @@ from query.table import AddressedRecord, Table
 from sql.nodes import ColumnRef, Expression, JoinKind, SortDirection
 from storage.record import Record, RecordSerializer
 from storage.schema import Field, Schema
-from storage.types import UNORDERED_FIELD_TYPES, FieldType, Value
+from storage.types import UNORDERED_FIELD_TYPES, FieldType, Key, Value
 
 SORT_DIRECTORY = "sort"
 SORT_KEY_LABEL = "clave"

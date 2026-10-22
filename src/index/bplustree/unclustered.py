@@ -18,9 +18,10 @@ from types import TracebackType
 from typing import Any
 
 from config import EngineConfig
-from index.keys import CompositeKeyCodec, Key, RecordIdKeyCodec, ScalarKeyCodec
+from index.keys import CompositeKeyCodec, RecordIdKeyCodec, ScalarKeyCodec
 from storage.record import RecordSerializer
 from storage.record_id import RecordId
+from storage.types import Key
 
 from .tree import BPlusTree
 

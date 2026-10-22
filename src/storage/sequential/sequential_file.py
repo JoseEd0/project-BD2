@@ -21,27 +21,26 @@ Ver `README.md` para el análisis de complejidad.
 
 from __future__ import annotations
 
-import struct
 from bisect import bisect_left, bisect_right
 from collections.abc import Callable, Iterator
 from pathlib import Path
 from types import TracebackType
-from typing import Any
 
 from config import EngineConfig
+from storage.layout import FileHeader, chained_pages
 from storage.page import NO_PAGE, RecordPage, SlotState, slot_capacity
 from storage.pager import HEADER_PAGE_ID, Pager
 from storage.record import RecordSerializer
-from storage.types import StorageError
+from storage.types import Key, StorageError
 
-HEADER_FORMAT = struct.Struct("<4sHIIQQQ")
 SEQUENTIAL_MAGIC = b"SEQF"
 SEQUENTIAL_VERSION = 1
+# Tamaño de registro, páginas principales, vigentes, lápidas y registros en desbordamiento.
+HEADER_FIELDS = "IIQQQ"
 OVERFLOW_SUFFIX = ".overflow"
 REBUILD_SUFFIX = ".rebuild"
 FIRST_MAIN_PAGE = HEADER_PAGE_ID + 1
 
-Key = Any
 
 
 class SequentialFormatError(StorageError):
@@ -50,6 +49,15 @@ class SequentialFormatError(StorageError):
 
 class NullKeyError(StorageError):
     """La clave de ordenamiento no admite NULL."""
+
+
+SEQUENTIAL_HEADER = FileHeader(
+    SEQUENTIAL_MAGIC,
+    SEQUENTIAL_VERSION,
+    HEADER_FIELDS,
+    SequentialFormatError,
+    "un archivo secuencial",
+)
 
 
 class SequentialFile:
@@ -128,7 +136,6 @@ class SequentialFile:
         else:
             chain_pages = self._insert_into_main(key, record)
         self._live_count += 1
-        self._write_header()
         if chain_pages > self._config.sequential_max_chain_pages:
             self.reorganize()
         else:
@@ -178,7 +185,6 @@ class SequentialFile:
             return 0
         self._live_count -= removed
         self._deleted_count += removed
-        self._write_header()
         self._reorganize_if_wasteful()
         return removed
 
@@ -357,11 +363,13 @@ class SequentialFile:
         return removed
 
     def _chain(self, first_page_id: int) -> Iterator[tuple[int, RecordPage]]:
-        page_id = first_page_id
-        while page_id != NO_PAGE:
-            page = self._load_overflow(page_id)
-            yield page_id, page
-            page_id = page.next_page
+        return chained_pages(
+            first_page_id, self._linked_overflow, self._overflow.page_count, self._path.name
+        )
+
+    def _linked_overflow(self, page_id: int) -> tuple[int, RecordPage]:
+        page = self._load_overflow(page_id)
+        return page.next_page, page
 
     def _page_keys(self, page: RecordPage) -> list[Key]:
         """Claves de todas las ranuras ocupadas, incluidas las lápidas, en orden."""
@@ -403,7 +411,9 @@ class SequentialFile:
                 page.insert_at(page.used_slots, record)
             if page is not None:
                 writer.write(page_id, page.to_bytes())
-            writer.write(HEADER_PAGE_ID, self._header_bytes(written_pages, deleted=0, overflow=0))
+            SEQUENTIAL_HEADER.write(
+                writer, self._record_size, written_pages, self._live_count, 0, 0
+            )
         return written_pages
 
     def _replace_files(self, rebuild_path: Path, written_pages: int) -> None:
@@ -444,12 +454,7 @@ class SequentialFile:
         self._write_header()
 
     def _read_header(self) -> None:
-        raw = self._main.read(HEADER_PAGE_ID)
-        magic, version, record_size, pages, live, deleted, overflow = HEADER_FORMAT.unpack_from(
-            raw, 0
-        )
-        if magic != SEQUENTIAL_MAGIC or version != SEQUENTIAL_VERSION:
-            raise SequentialFormatError(f"{self._path.name} no es un archivo secuencial válido")
+        record_size, pages, live, deleted, overflow = SEQUENTIAL_HEADER.read(self._main)
         if record_size != self._record_size:
             raise SequentialFormatError(
                 f"el archivo guarda registros de {record_size} bytes y se pidieron "
@@ -461,24 +466,13 @@ class SequentialFile:
         self._overflow_count = int(overflow)
 
     def _write_header(self) -> None:
-        self._main.write(
-            HEADER_PAGE_ID,
-            self._header_bytes(
-                self._main_page_count, deleted=self._deleted_count, overflow=self._overflow_count
-            ),
-        )
-
-    def _header_bytes(self, main_pages: int, deleted: int, overflow: int) -> bytes:
-        raw = bytearray(self._main.page_size)
-        HEADER_FORMAT.pack_into(
-            raw,
-            0,
-            SEQUENTIAL_MAGIC,
-            SEQUENTIAL_VERSION,
+        """La cabecera se escribe al volcar o cerrar el archivo, no en cada operación: su
+        contenido vive en memoria y solo hace falta en disco cuando lo hacen las páginas."""
+        SEQUENTIAL_HEADER.write(
+            self._main,
             self._record_size,
-            main_pages,
+            self._main_page_count,
             self._live_count,
-            deleted,
-            overflow,
+            self._deleted_count,
+            self._overflow_count,
         )
-        return bytes(raw)

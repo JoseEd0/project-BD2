@@ -5,8 +5,8 @@ import pytest
 
 from config import EngineConfig
 from external.sort import ExternalSorter
-from index.keys import Key
 from storage.record import RecordSerializer
+from storage.types import Key
 
 SHUFFLE_SEED = 13
 

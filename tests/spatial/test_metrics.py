@@ -12,7 +12,7 @@ import pytest
 
 from spatial.geometry import Point, Rectangle
 from spatial.metrics import (
-    BOUND_SLACK,
+    BOUND_SLACK_METERS,
     EARTH_RADIUS_METERS,
     EUCLIDEAN,
     HAVERSINE,
@@ -88,7 +88,8 @@ def test_euclidean_min_distance_to_a_corner_and_to_a_side():
 def test_haversine_min_distance_along_a_meridian():
     rectangle = Rectangle(10.0, 20.0, 20.0, 30.0)
     expected = EARTH_RADIUS_METERS * pi / 180.0 * 5.0
-    assert HAVERSINE.min_distance(Point(5.0, 25.0), rectangle) == pytest.approx(expected)
+    bound = HAVERSINE.min_distance(Point(5.0, 25.0), rectangle)
+    assert bound == pytest.approx(expected, abs=BOUND_SLACK_METERS)
 
 
 def test_haversine_min_distance_is_not_always_at_a_corner():
@@ -104,7 +105,8 @@ def test_haversine_min_distance_is_not_always_at_a_corner():
 def test_haversine_min_distance_wraps_around_the_antimeridian():
     rectangle = Rectangle(-1.0, 170.0, 1.0, 179.0)
     expected = HAVERSINE.distance(Point(0.0, -179.0), Point(0.0, 179.0))
-    assert HAVERSINE.min_distance(Point(0.0, -179.0), rectangle) == pytest.approx(expected)
+    bound = HAVERSINE.min_distance(Point(0.0, -179.0), rectangle)
+    assert bound == pytest.approx(expected, abs=BOUND_SLACK_METERS)
 
 
 def _random_rectangle(generator: random.Random) -> Rectangle:
@@ -195,4 +197,34 @@ def test_the_slack_taken_off_the_haversine_bound_is_negligible():
     rectangle = Rectangle(10.0, 20.0, 20.0, 30.0)
     exact = EARTH_RADIUS_METERS * pi / 180.0 * 5.0
     bound = HAVERSINE.min_distance(Point(5.0, 25.0), rectangle)
-    assert exact * (1.0 - 2.0 * BOUND_SLACK) < bound < exact
+    assert exact - 2.0 * BOUND_SLACK_METERS < bound < exact
+
+
+def test_the_haversine_bound_holds_next_to_the_antipode():
+    """Caso hallado al auditar: cerca de las antípodas la distancia calculada avanza a
+    saltos y la cota de un rectángulo diminuto llegó a pasarse 17 cm de la distancia a un
+    punto de su interior. Un margen relativo no lo cubría; el absoluto sí."""
+    point = Point(-9.181660360798645, 116.33926384110356)
+    rectangle = Rectangle(
+        9.181659243425718, -63.660737276269366, 9.181661478171572, -63.660735041523516
+    )
+    inside = Point(9.18166062122827, -63.660735476227515)
+    assert HAVERSINE.min_distance(point, rectangle) <= HAVERSINE.distance(point, inside)
+
+
+def test_the_haversine_bound_holds_for_tiny_rectangles_around_the_antipode():
+    generator = random.Random(SEED + 3)
+    for _ in range(RANDOM_CASES * 20):
+        point = Point(generator.uniform(-80.0, 80.0), generator.uniform(-180.0, 180.0))
+        lat = -point.lat + generator.uniform(-1e-5, 1e-5)
+        lon = point.lon - 180.0 if point.lon > 0 else point.lon + 180.0
+        lon += generator.uniform(-1e-5, 1e-5)
+        side = generator.uniform(1e-7, 1e-5)
+        rectangle = Rectangle(lat, lon, lat + side, lon + side)
+        bound = HAVERSINE.min_distance(point, rectangle)
+        for _ in range(5):
+            inside = Point(
+                generator.uniform(rectangle.min_lat, rectangle.max_lat),
+                generator.uniform(rectangle.min_lon, rectangle.max_lon),
+            )
+            assert bound <= HAVERSINE.distance(point, inside)

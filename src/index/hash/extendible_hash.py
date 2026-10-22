@@ -115,7 +115,7 @@ class ExtendibleHashIndex:
                 bucket.insert(entry)
                 self._store(bucket_id, bucket)
                 break
-            if bucket.flags >= MAX_LOCAL_DEPTH or not self._split(directory_index):
+            if bucket.flags >= MAX_LOCAL_DEPTH or not self._split(directory_index, entry):
                 self._append_to_chain(bucket_id, bucket, entry)
                 break
             directory_index = self._directory_index(key)
@@ -288,19 +288,23 @@ class ExtendibleHashIndex:
                 return
             self._global_depth -= 1
 
-    def _split(self, directory_index: int) -> bool:
-        """Parte la cubeta apuntada por esa entrada. Devuelve si el reparto sirvió de algo.
+    def _split(self, directory_index: int, incoming: bytes) -> bool:
+        """Parte la cubeta apuntada por esa entrada. Devuelve `False` si partir no puede
+        hacer sitio para `incoming`, y entonces quien llama encadena.
 
-        Comprobar antes de duplicar es lo que evita que un montón de claves repetidas
-        —que siempre caen del mismo lado— haga crecer el directorio sin repartir nada.
+        Partir no sirve cuando la entrada nueva y todas las de la cubeta tienen el mismo
+        hash —una clave muy repetida—: ningún bit las separa, y cada intento duplicaría el
+        directorio dejando una mitad vacía, hasta `MAX_LOCAL_DEPTH`. Si hay hashes
+        distintos se parte aunque este bit no los separe: `insert` vuelve a intentarlo, y
+        el bit siguiente sí lo hará.
         """
         bucket_id = self._directory_entry(directory_index)
         local_depth = self._load(bucket_id).flags
         high_bit = 1 << local_depth
         entries = list(self._entries_of(bucket_id))
-        moving = [entry for entry in entries if self._bit_is_set(entry, high_bit)]
-        if not moving:
+        if len({self._hash_of(entry) for entry in [*entries, incoming]}) == 1:
             return False
+        moving = [entry for entry in entries if self._bit_is_set(entry, high_bit)]
         staying = [entry for entry in entries if not self._bit_is_set(entry, high_bit)]
         if local_depth == self._global_depth:
             self._double_directory()
@@ -363,7 +367,10 @@ class ExtendibleHashIndex:
                 yield page.read(slot)
 
     def _bit_is_set(self, entry: bytes, high_bit: int) -> bool:
-        return bool(stable_hash(entry[: self._key_codec.size]) & high_bit)
+        return bool(self._hash_of(entry) & high_bit)
+
+    def _hash_of(self, entry: bytes) -> int:
+        return stable_hash(entry[: self._key_codec.size])
 
     def _directory_index(self, key: Key) -> int:
         return stable_hash(self._key_codec.pack(key)) & (self.directory_size - 1)

@@ -17,12 +17,13 @@ from .geometry import Point, Rectangle
 # Radio medio de la Tierra (IUGG). Es el que usa PostGIS al medir sobre la esfera, así que
 # las distancias de este motor y las de `ST_DistanceSphere` coinciden.
 EARTH_RADIUS_METERS = 6_371_008.8
-# Fracción que se le resta a la cota de Haversine. El redondeo puede dejar la cota una
-# cifra por encima de la distancia real, y el árbol descartaría un nodo que sí guarda un
-# resultado. El error relativo de la fórmula ronda 1e-15 y llega a 1e-10 cerca de las
-# antípodas, donde el arcoseno lo amplifica: este margen lo cubre y no le quita poda.
-BOUND_SLACK = 1e-9
-_BOUND_FACTOR = 1.0 - BOUND_SLACK
+# Metros que se le restan a la cota de Haversine. El redondeo puede dejar la cota por
+# encima de la distancia calculada a un punto del rectángulo, y el árbol descartaría un
+# nodo que sí guarda un resultado. Lejos de las antípodas el error es de nanómetros. Cerca
+# de ellas, el arcoseno recibe valores tan próximos a 1 que la distancia avanza a saltos de
+# √(2ε) radianes —unos 0,2 m— y deja de crecer de forma monótona: el margen tiene que ser
+# absoluto, no relativo. Un metro cubre ese salto con holgura y no cambia qué nodos se abren.
+BOUND_SLACK_METERS = 1.0
 FULL_TURN_DEGREES = 360.0
 HALF_TURN_DEGREES = 180.0
 
@@ -86,20 +87,24 @@ class HaversineMetric(Metric):
         `atan2(sin φ, cos φ · cos Δλ)`, así que basta comparar ese punto con los dos
         extremos del borde.
 
-        El resultado se rebaja en `BOUND_SLACK`, para que el redondeo nunca lo deje por
-        encima de la distancia a un punto del rectángulo.
+        El resultado se rebaja en `BOUND_SLACK_METERS`, para que el redondeo nunca lo deje
+        por encima de la distancia a un punto del rectángulo.
         """
         lon_gap = _longitude_gap(point.lon, rectangle.min_lon, rectangle.max_lon)
         if lon_gap == 0.0:
             lat_gap = max(rectangle.min_lat - point.lat, 0.0, point.lat - rectangle.max_lat)
-            return EARTH_RADIUS_METERS * radians(lat_gap) * _BOUND_FACTOR
+            return _lowered(EARTH_RADIUS_METERS * radians(lat_gap))
         candidates = [rectangle.min_lat, rectangle.max_lat]
         closest_lat = degrees(
             atan2(sin(radians(point.lat)), cos(radians(point.lat)) * cos(radians(lon_gap)))
         )
         if rectangle.min_lat <= closest_lat <= rectangle.max_lat:
             candidates.append(closest_lat)
-        return min(_great_circle(point.lat, lat, lon_gap) for lat in candidates) * _BOUND_FACTOR
+        return _lowered(min(_great_circle(point.lat, lat, lon_gap) for lat in candidates))
+
+
+def _lowered(bound: float) -> float:
+    return max(0.0, bound - BOUND_SLACK_METERS)
 
 
 def _great_circle(first_lat: float, second_lat: float, lon_difference: float) -> float:

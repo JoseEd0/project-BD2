@@ -99,3 +99,19 @@ def test_searching_for_null_finds_nothing(
     index.insert(serializer.pack((2, "n2", None)), RecordId(page_id=1, slot=1))
     assert index.search(None) == []
     assert len(list(index.range_search(None, None))) == 1
+
+
+def test_state_survives_reopening(config: EngineConfig, serializer: RecordSerializer):
+    path = config.data_directory / "u.bpt"
+    cities = ["lima", "cusco", "piura"]
+    expected: dict[str, list[RecordId]] = {city: [] for city in cities}
+    with UnclusteredBPlusIndex(path, serializer, "ciudad", config) as written:
+        for key in range(120):
+            city = cities[key % len(cities)]
+            address = RecordId(page_id=key // 7 + 1, slot=key % 7)
+            written.insert(row(serializer, key, city), address)
+            expected[city].append(address)
+    with UnclusteredBPlusIndex(path, serializer, "ciudad", config) as reopened:
+        assert reopened.entry_count == 120
+        for city in cities:
+            assert sorted(reopened.search(city)) == sorted(expected[city])

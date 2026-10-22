@@ -91,11 +91,40 @@ def test_repeated_keys_are_all_kept(index: ExtendibleHashIndex):
     assert index.entry_count == 200
 
 
-def test_repeated_keys_do_not_blow_up_the_directory(index: ExtendibleHashIndex):
-    """Todas caen del mismo lado: la cubeta se encadena en vez de duplicar el directorio."""
-    for value in range(300):
-        index.insert(7, payload(value))
-    assert index.global_depth <= index.bucket_capacity
+def key_whose_hash_has_low_bits_set(key_codec: ScalarKeyCodec, bits: int) -> int:
+    mask = (1 << bits) - 1
+    return next(key for key in range(10**6) if stable_hash(key_codec.pack(key)) & mask == mask)
+
+
+def test_a_repeated_key_never_grows_the_directory(
+    index: ExtendibleHashIndex, key_codec: ScalarKeyCodec
+):
+    """Todas las copias tienen el mismo hash: ningún bit las separa. La cubeta se encadena
+    en vez de duplicar el directorio. Una clave con muchos bits bajos en 1 es el peor caso:
+    cada división las movería todas a la mitad nueva y dejaría la vieja vacía."""
+    key = key_whose_hash_has_low_bits_set(key_codec, 12)
+    for value in range(index.bucket_capacity * 3):
+        index.insert(key, payload(value))
+    assert index.global_depth == 1
+    assert index.describe()["bucket_count"] == 2
+    assert len(index.search(key)) == index.bucket_capacity * 3
+
+
+def test_distinct_keys_that_share_a_bit_still_split(
+    index: ExtendibleHashIndex, key_codec: ScalarKeyCodec
+):
+    """Claves distintas que coinciden en el bit de una división: esa división deja una
+    mitad vacía, pero la siguiente las separa. Nada se encadena."""
+    shared_bits = 0b11
+    keys = [
+        key
+        for key in range(10**5)
+        if stable_hash(key_codec.pack(key)) & shared_bits == shared_bits
+    ][: index.bucket_capacity * 2]
+    for key in keys:
+        index.insert(key, payload(key))
+    assert all(bucket["overflow_pages"] == 0 for bucket in index.describe()["buckets"])
+    assert all(index.search(key) == [payload(key)] for key in keys)
 
 
 def test_delete_removes_every_entry_with_that_key(index: ExtendibleHashIndex):
@@ -281,3 +310,44 @@ def test_a_file_that_is_not_a_hash_index_is_rejected(
     path.write_bytes(b"x" * config.page_size)
     with pytest.raises(HashFormatError, match="no es un índice hash"):
         ExtendibleHashIndex(path, key_codec, VALUE_SIZE, config)
+
+
+RANDOM_SEEDS = range(12)
+RANDOM_OPERATIONS = 600
+KEY_RANGE = 60
+REOPEN_EVERY = 150
+
+
+@pytest.mark.parametrize("seed", RANDOM_SEEDS)
+def test_random_operations_match_a_dictionary(
+    config: EngineConfig, key_codec: ScalarKeyCodec, assert_hash_is_valid: HashValidator, seed: int
+):
+    """Inserciones con claves muy repetidas, borrados de una entrada y de una clave entera,
+    y reaperturas, contra un modelo en memoria. Las claves repetidas fuerzan cadenas; los
+    borrados, fusiones de cubetas gemelas y reducciones del directorio."""
+    generator = random.Random(seed)
+    path = config.data_directory / "h.hash"
+    model: dict[int, list[bytes]] = {}
+    index = ExtendibleHashIndex(path, key_codec, VALUE_SIZE, config)
+    try:
+        for step in range(RANDOM_OPERATIONS):
+            key = generator.randrange(KEY_RANGE)
+            action = generator.random()
+            if action < 0.6:
+                value = payload(step)
+                index.insert(key, value)
+                model.setdefault(key, []).append(value)
+            elif action < 0.85 and model.get(key):
+                value = generator.choice(model[key])
+                assert index.delete_entry(key, value)
+                model[key].remove(value)
+            else:
+                assert index.delete(key) == len(model.pop(key, []))
+            if step % REOPEN_EVERY == 0:
+                index.close()
+                index = ExtendibleHashIndex(path, key_codec, VALUE_SIZE, config)
+        for key in range(KEY_RANGE):
+            assert sorted(index.search(key)) == sorted(model.get(key, []))
+        assert_hash_is_valid(index, [key for key, values in model.items() for _ in values])
+    finally:
+        index.close()

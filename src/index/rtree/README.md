@@ -194,9 +194,9 @@ Es la distancia al punto más cercano, no una aproximación, y los tests la comp
 mínimo real sobre una malla densa. Pero una cota tiene que ser inferior **también después
 de redondear**: la distancia a un punto y la cota de su rectángulo se calculan por caminos
 distintos, y bastaba que la cota saliera una cifra por encima para que el árbol podara un
-nodo con un resultado justo en el borde del radio. Por eso se le resta una fracción de
-`10⁻⁹` (`BOUND_SLACK`, seis milímetros en 6 000 km): cubre con holgura el error de
-redondeo de la fórmula y no le quita poda al árbol.
+nodo con un resultado justo en el borde del radio. Por eso se le resta un metro
+(`BOUND_SLACK_METERS`): cubre con holgura el error de redondeo de la fórmula, que cerca de
+las antípodas llega a unos 0,2 m, y no le quita poda al árbol.
 
 ## Complejidad
 

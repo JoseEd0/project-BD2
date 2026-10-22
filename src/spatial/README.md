@@ -83,9 +83,12 @@ de larga, el árbol podaría un nodo que sí tenía resultados.
 Una cota tiene que ser inferior **también después de redondear**. La distancia a un punto
 y la cota de su rectángulo se calculan por caminos distintos, y con que la cota saliera
 una cifra por encima el R-Tree perdía un resultado situado justo en el borde del radio.
-Por eso a la de Haversine se le resta una fracción de `10⁻⁹` (`BOUND_SLACK`): cubre de
-sobra el error de la fórmula —del orden de `10⁻¹⁵`, y hasta `10⁻¹⁰` cerca de las
-antípodas— y no cambia qué nodos se abren.
+Por eso a la de Haversine se le resta **un metro** (`BOUND_SLACK_METERS`). Tiene que ser
+un margen absoluto: lejos de las antípodas el error es de nanómetros, pero cerca de ellas
+el arcoseno recibe valores tan próximos a 1 que la distancia calculada avanza a saltos de
+unos 0,2 m y deja de crecer de forma monótona. Un margen relativo de `10⁻⁹`, que es el que
+había antes, se quedaba corto ahí: la auditoría encontró un rectángulo cuya cota se pasaba
+17 cm. Un metro no cambia qué nodos se abren.
 
 ## Tests
 

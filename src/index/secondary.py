@@ -27,6 +27,8 @@ class SecondaryIndex(Protocol):
 
     def delete(self, record: bytes, record_id: RecordId) -> bool: ...
 
+    def update(self, old: bytes, new: bytes, record_id: RecordId) -> None: ...
+
     def search(self, value: Key) -> list[RecordId]: ...
 
     def describe(self) -> dict[str, Any]: ...
@@ -69,6 +71,15 @@ class ColumnIndex(ABC):
         """Quita la fila del índice. Devuelve si estaba."""
         value = self._value_of(record)
         return value is not None and self._remove(value, record_id)
+
+    def update(self, old: bytes, new: bytes, record_id: RecordId) -> None:
+        """La fila de `record_id` pasó de `old` a `new` sin cambiar de dirección. Si el
+        valor de la columna es el mismo, el índice no se toca: un `UPDATE` de otra columna
+        no paga un borrado y una inserción en cada índice de la tabla."""
+        if self._value_of(old) == self._value_of(new):
+            return
+        self.delete(old, record_id)
+        self.insert(new, record_id)
 
     def search(self, value: Key) -> list[RecordId]:
         """Direcciones de las filas cuyo valor es `value`; ninguna si es NULL."""

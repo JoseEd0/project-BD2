@@ -3,7 +3,8 @@
 import dataclasses
 import random
 import tracemalloc
-from collections.abc import Iterator
+from array import array
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 
 import pytest
@@ -18,7 +19,17 @@ from inverted_support import (
 
 from config import EngineConfig
 from index.inverted import InvertedIndex
-from index.inverted.format import FIRST_GENERATION, build_directory, lexicon_path, segment_base
+from index.inverted.blocks import Block, MergePasses, merge_sources
+from index.inverted.format import (
+    FIRST_GENERATION,
+    POSTING_FIELDS,
+    POSTING_TYPECODE,
+    build_directory,
+    decode_postings,
+    encode_postings,
+    lexicon_path,
+    segment_base,
+)
 from index.inverted.spimi import POSTING_ENTRY_BYTES, TERM_ENTRY_BYTES, SpimiBlock
 from storage.record_id import RecordId
 from text import Analyzer
@@ -35,6 +46,7 @@ WORDS_PER_DOCUMENT = 30
 # Si la memoria creciera con N, cuadruplicar los documentos la multiplicaría casi por
 # cuatro; el margen solo absorbe el ruido del intérprete.
 MEMORY_GROWTH_TOLERANCE = 1.25
+SHARED_TERM = b"cas"
 
 
 def with_blocks(config: EngineConfig, block_bytes: int, fan_in: int) -> EngineConfig:
@@ -152,3 +164,48 @@ def test_build_memory_does_not_grow_with_the_number_of_documents(config: EngineC
     with InvertedIndex(config.data_directory / "muchos.inv", bounded) as index:
         assert index.block_count > 4
     assert many <= few * MEMORY_GROWTH_TOLERANCE
+
+
+class CollectingSink:
+    """Un `TermSink` que guarda los postings de cada término, ya decodificados."""
+
+    def __init__(self) -> None:
+        self.postings: dict[bytes, list[int]] = {}
+
+    def add_term(
+        self, term: bytes, document_frequency: int, total_frequency: int, postings: Iterable[bytes]
+    ) -> None:
+        self.postings[term] = list(decode_postings(b"".join(postings)))
+
+
+def one_document_blocks(passes: MergePasses, count: int) -> list[Block]:
+    """`count` bloques con el mismo término, cada uno con el documento de su posición."""
+    return [
+        passes.write_block(
+            lambda sink, doc_id=doc_id: sink.add_term(
+                SHARED_TERM, 1, 1, (encode_postings(array(POSTING_TYPECODE, [doc_id, 1])),)
+            )
+        )
+        for doc_id in range(count)
+    ]
+
+
+@pytest.mark.parametrize(
+    ("block_count", "fan_in", "untouched"),
+    [(9, 8, 7), (8, 8, 8), (20, 8, 6), (5, 2, 1), (100, 8, 0)],
+)
+def test_a_merge_pass_rewrites_only_the_trailing_blocks_it_needs(
+    config: EngineConfig, block_count: int, fan_in: int, untouched: int
+):
+    passes = MergePasses(config.data_directory / "mezcla", with_blocks(config, 1, fan_in))
+    try:
+        blocks = one_document_blocks(passes, block_count)
+        remaining = passes.reduce(blocks)
+        assert len(remaining) == min(block_count, fan_in)
+        assert remaining[:untouched] == blocks[:untouched]
+        sink = CollectingSink()
+        merge_sources(remaining, config, sink)
+        doc_ids = sink.postings[SHARED_TERM][0::POSTING_FIELDS]
+        assert doc_ids == list(range(block_count))
+    finally:
+        passes.remove_all()

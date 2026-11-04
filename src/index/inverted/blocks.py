@@ -276,17 +276,36 @@ class MergePasses:
 
     def reduce(self, sources: Sequence[TermSource]) -> list[TermSource]:
         """Las fuentes que quedan tras las pasadas necesarias, en el mismo orden."""
-        fan_in = self._config.merge_fan_in
         remaining = list(sources)
-        while len(remaining) > fan_in:
-            merged: list[TermSource] = []
-            for start in range(0, len(remaining), fan_in):
-                group = remaining[start : start + fan_in]
-                merged.append(self.write_block(partial(merge_sources, group, self._config)))
-                self._release(group)
-            remaining = merged
+        while len(remaining) > self._config.merge_fan_in:
+            remaining = self._merge_pass(remaining)
             self.passes += 1
         return remaining
+
+    def _merge_pass(self, sources: list[TermSource]) -> list[TermSource]:
+        """Junta, desde el final y en grupos de hasta `merge_fan_in`, solo las fuentes
+        necesarias para que queden `merge_fan_in`; si no alcanza una pasada, las junta todas.
+
+        Con 9 bloques y abanico 8 basta juntar los dos últimos, y no reescribir los nueve
+        (medido en el README). Se junta por el final porque ahí están las fuentes más
+        chicas: el último bloque de SPIMI es el que quedó a medias y los segmentos más
+        nuevos del índice son los menores.
+        """
+        fan_in = self._config.merge_fan_in
+        excess = len(sources) - fan_in
+        end = len(sources)
+        merged: list[TermSource] = []
+        while excess > 0 and end > 1:
+            start = end - min(fan_in, excess + 1, end)
+            merged.insert(0, self._merge_group(sources[start:end]))
+            excess -= end - start - 1
+            end = start
+        return [*sources[:end], *merged]
+
+    def _merge_group(self, group: Sequence[TermSource]) -> Block:
+        block = self.write_block(partial(merge_sources, group, self._config))
+        self._release(group)
+        return block
 
     def remove_all(self) -> None:
         for block in self._owned:

@@ -39,6 +39,15 @@ en las que es NULL. Cada estructura aporta solo cómo guarda, borra y busca un p
 `(valor, dirección)`. Los errores de nodo que comparten el B+ y el R-Tree viven en
 [`errors.py`](errors.py).
 
+Un `UPDATE` avisa a cada índice con `update(fila vieja, fila nueva, dirección)`: si el valor
+de su columna no cambió, el índice no se toca. Sin eso, cambiar el precio de una fila
+borraba y volvía a insertar su entrada en todos los índices de la tabla, y en el índice
+invertido eso es volver a analizar el texto y dejar una lápida.
+
+El índice invertido entra por la misma puerta: `TextSearchIndex`
+([`inverted/secondary.py`](inverted/secondary.py)) es un `ColumnIndex` cuyo valor es un
+texto y que no responde igualdades, sino búsquedas rankeadas.
+
 ## Cuál elegir
 
 | Consulta | B+ agrupado | B+ no agrupado | Hash extendible |

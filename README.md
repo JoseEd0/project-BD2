@@ -364,6 +364,28 @@ ejecución pasa de `SequentialScan` a `SpatialRangeScan`, `SpatialNearestScan` o
 `SpatialPolygonScan` y dice cuántos nodos del árbol abrió. La gramática completa está en
 [`src/sql/README.md`](src/sql/README.md).
 
+### Búsqueda de texto
+
+```sql
+CREATE TABLE productos FROM FILE "productos.csv" USING INDEX INVERTED(texto);
+CREATE INDEX ON articulos USING INVERTED (texto) WITH (idioma='es');   -- o idioma='en'
+
+-- los dos ejemplos del enunciado
+SELECT * FROM documentos WHERE MATCH(contenido, 'base de datos vectorial') USING TF_IDF LIMIT 10;
+SELECT *, SCORE() AS relevancia FROM articulos WHERE MATCH(texto, 'machine learning')
+    USING BM25 ORDER BY relevancia DESC;
+-- con filtros, parámetros de BM25 y reuniones
+SELECT p.titulo, m.pais, SCORE() FROM productos p JOIN marcas m ON p.marca = m.marca
+    WHERE MATCH(p.texto, 'auriculares bluetooth') AND p.precio < 100
+    WITH (k1 = 1.5, b = 0.6) ORDER BY SCORE() DESC LIMIT 10;
+```
+
+`MATCH` necesita un índice `INVERTED` sobre su columna (`VARCHAR` o `TEXT`); sin `USING`, el
+ranking es BM25. El plan pasa a `TextSearchScan`, que entrega las filas en orden de puntaje
+con `SCORE()` como columna, lleva el `LIMIT` hasta el top-k y dice qué términos buscó, con
+su df, cuántos postings leyó y cuántos documentos puntuó
+([`src/query/README.md`](src/query/README.md#búsqueda-de-texto)).
+
 ### Desde Python
 
 ```python

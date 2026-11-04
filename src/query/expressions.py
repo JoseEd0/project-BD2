@@ -28,6 +28,7 @@ from query.comparison import (
 )
 from query.functions import (
     AGGREGATE_NAMES,
+    SEARCH_FUNCTION_PLACES,
     FunctionError,
     ScalarFunction,
     scalar_function,
@@ -82,12 +83,15 @@ class ColumnSlot:
     """Una columna de la fila en curso, con la tabla de la que viene.
 
     `field` es su definición cuando la columna sale tal cual de una tabla; permite
-    comprobar los tipos de una condición antes de leer ninguna fila.
+    comprobar los tipos de una condición antes de leer ninguna fila. Una columna `virtual`
+    no es de la tabla sino del camino de acceso —el puntaje de un `MATCH`—: se lee por su
+    nombre, pero `*` no la despliega.
     """
 
     qualifier: str | None
     name: str
     field: Field | None = None
+    virtual: bool = False
 
 
 class RowLayout:
@@ -861,9 +865,23 @@ def conjuncts(expression: Expression | None) -> list[Expression]:
     return [expression]
 
 
+def all_of(conditions: Sequence[Expression]) -> Expression | None:
+    """Las condiciones unidas por AND, o `None` si no hay ninguna: lo contrario de `conjuncts`."""
+    combined: Expression | None = None
+    for condition in conditions:
+        combined = (
+            condition
+            if combined is None
+            else BinaryOperation(BinaryOperator.AND, combined, condition)
+        )
+    return combined
+
+
 def _unusable_function_message(name: str) -> str:
     if name.upper() in AGGREGATE_NAMES:
         return f"la función de agregación '{name}' no se puede usar aquí"
+    if name.upper() in SEARCH_FUNCTION_PLACES:
+        return SEARCH_FUNCTION_PLACES[name.upper()]
     available = ", ".join(scalar_function_names())
     return f"la función '{name}' no existe; las disponibles son: {available}"
 

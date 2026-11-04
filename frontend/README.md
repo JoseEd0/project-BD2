@@ -1,12 +1,21 @@
 # Frontend
 
-Interfaz tipo IDE de base de datos, en React + TypeScript + Vite. Los cuatro paneles que
-pide el enunciado están **visibles a la vez**, para que en una sola pantalla se vea la
-consulta, sus filas y cómo se ejecutó.
+Interfaz tipo IDE de base de datos, en React + TypeScript + Vite, con **una página por parte
+del proyecto** dentro de la misma aplicación:
+
+| Página | Dirección | Qué tiene |
+|---|---|---|
+| **Consola SQL** | `#/` | las Partes 1 y 2: archivos, editor, resultados, plan, mapa y esquema |
+| **Texto** | `#/texto` | la Parte 3: TF-IDF y BM25 lado a lado sobre el índice invertido |
+
+Las dos comparten el cliente del API, **la sesión** —y con ella la transacción abierta—, el
+catálogo de tablas, el tema y el build. En la consola, los cuatro paneles que pide el
+enunciado están **visibles a la vez**, para que en una sola pantalla se vea la consulta, sus
+filas y cómo se ejecutó.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│ Minigestor   [Consulta] [Esquema]        ● Autocommit   [Actualizar] │
+│ Gestor  Consola SQL · Texto  [Consulta][Esquema]  ● Autocommit  [⟳] │
 ├──────────────╥───────────────────────────────────────────────────────┤
 │ ARCHIVOS     ║ CONSULTAS         1 sentencia  [Historial] [Ejecutar] │
 │  ⌕ filtro    ║  1  SELECT ciudad, COUNT(*) AS total                  │
@@ -21,7 +30,32 @@ consulta, sus filas y cómo se ejecutó.
    ║ y ═ son divisores arrastrables
 ```
 
-## Las dos vistas
+## Navegación entre páginas
+
+La cabecera lleva los enlaces a las páginas. El router es **la parte de la URL tras `#`**,
+hecho a mano en [`src/routes.ts`](src/routes.ts) y
+[`src/hooks/useHashRoute.ts`](src/hooks/useHashRoute.ts) (`useSyncExternalStore` sobre el
+evento `hashchange`), sin dependencias: no hace falta configurar el servidor, y «atrás» y
+«adelante» del navegador funcionan solos.
+
+- **Cada página es un trozo aparte del bundle** (`React.lazy` + `Suspense`): se descarga la
+  primera vez que se abre. Mientras llega, se ven la cabecera y la barra de estado de
+  siempre.
+- **Una página abierta sigue montada, oculta**, al pasar a otra: la consola conserva su
+  editor, su resultado y su mapa, y la página de texto su búsqueda.
+- Lo compartido vive en [`useWorkspace`](src/hooks/useWorkspace.ts): la sesión, la
+  transacción, las tablas, la conexión, el tema y la regla de **una petición a la vez**. Una
+  búsqueda de la página «Texto» corre dentro del `BEGIN` que se abrió en la consola.
+
+| Bundle (`npm run build`) | Antes | Ahora |
+|---|---:|---:|
+| JS inicial (`index-*.js`) | 363,0 kB (112,2 kB gzip) | 151,1 kB (49,2 kB gzip) |
+| CSS inicial (`index-*.css`) | 41,0 kB (12,0 kB gzip) | 31,0 kB (6,6 kB gzip) |
+| consola (`ConsolePage-*`), perezosa | — | 212,5 kB JS + 15,6 kB CSS (Leaflet) |
+| texto (`TextSearchPage-*`), perezosa | — | 17,4 kB JS |
+| compartido por las dos (`InvertedIndexView-*`) | — | 9,0 kB JS |
+
+## Las dos vistas de la consola
 
 ### Consulta
 
@@ -54,9 +88,9 @@ consulta, sus filas y cómo se ejecutó.
 - **Consultas** — editor con **numeración de líneas y resaltado de sintaxis**, `⌘↵` /
   `Ctrl↵` para ejecutar, `Tab` para indentar e historial de las últimas 25 consultas.
   Admite **varias sentencias separadas por `;`**: se ejecutan en orden y el panel muestra
-  las filas de la última consulta. Debajo, **51 atajos** agrupados por bloque de la
-  exposición —*Carga*, *Índices*, *Plan*, *Externos*, *SQL*, *Borrar*, *Transacciones*
-  y *Espacial*—; un clic escribe la consulta en el editor. Todos se pueden lanzar varias veces sin error: los que
+  las filas de la última consulta. Debajo, **62 atajos** agrupados por bloque de la
+  exposición —*Carga*, *Índices*, *Plan*, *Externos*, *SQL*, *Borrar*, *Transacciones*,
+  *Espacial* y *Texto*—; un clic escribe la consulta en el editor. Todos se pueden lanzar varias veces sin error: los que
   crean o borran tablas usan `IF [NOT] EXISTS`, y los de *Borrar* trabajan sobre filas de
   prueba que insertan ellos mismos, así que no tocan el dataset. Para editarlos, ver
   [`src/snippets.ts`](src/snippets.ts).
@@ -101,6 +135,55 @@ dependencia para que las flechas no se crucen. Las flechas son **relaciones dedu
 el nombre de la columna** (`curso_id` → `cursos.id`): el motor todavía no declara claves
 foráneas, así que son una lectura del esquema y no una restricción que la base de datos
 imponga. Al pie se listan todas.
+
+## Texto
+
+La página de la Parte 3. **Todo va por `POST /query` con SQL**: la página arma la misma
+consulta que se escribiría en la consola y la muestra en «Cómo se ejecutó». No hay rutas del
+API propias de esta página.
+
+- **Dónde buscar.** Las columnas con índice `INVERTED`, leídas del catálogo (`/tables`). Si
+  no hay ninguna, la página lo explica y ofrece crear el índice sobre una columna de texto
+  (con el `CREATE INDEX` a la vista) o cargar el catálogo de demostración
+  (`CREATE TABLE catalogo FROM FILE 'demos/samples/esci/productos.csv' USING INDEX
+  INVERTED("texto")`, que necesita `demos/samples` en `MINIGESTOR_IMPORT_DIRS`).
+- **Búsqueda.** Una caja de texto, ejemplos de un clic sobre la muestra ESCI y el número de
+  resultados. Cada búsqueda lanza **dos consultas**, una con `USING TF_IDF` y otra con
+  `USING BM25`, y pone los rankings **lado a lado**: puesto, puntaje, título y marca, un
+  fragmento del texto alrededor de la primera coincidencia y, en cada documento, en qué
+  puesto quedó en el otro ranking (en naranja si cambió).
+- **Filtro relacional.** `columna = valor` junto al `MATCH` (por omisión, la marca; vacío,
+  sin filtro): el plan muestra el `Filter` sobre el `TextSearchScan`.
+- **`k1` y `b` de BM25.** Vacíos, la consulta no lleva `WITH` y el motor usa los suyos, que
+  la respuesta trae (`text.k1`, `text.b`) y la página muestra como sugerencia. Con valores,
+  la consulta lleva `WITH (k1 = …, b = …)`; un valor fuera de rango lo rechaza el motor y el
+  error sale en la columna de BM25.
+- **Cómo se ejecutó.** El SQL de cada ranking y su plan, con el mismo `PlanPanel` de la
+  consola: el `TextSearchScan` con sus términos, su df, los postings leídos y los documentos
+  puntuados.
+- **El índice invertido.** Documentos, vocabulario, postings, segmentos de SPIMI y el bloque
+  en memoria, borrados, los términos con más df (con su fracción de documentos) y el tamaño
+  de cada archivo en disco. Es la misma vista que abre `⌬` en la consola.
+
+### El resaltado
+
+El API devuelve los términos **ya analizados** —plegados, sin stopwords y reducidos a su
+raíz: «auriculares inalámbricos» llega como `auricular`, `inalambr`—, y en pantalla está el
+texto original. [`lib/textHighlight.ts`](src/lib/textHighlight.ts) corta el texto en
+palabras y cifras con la misma regla que el analizador del motor, pliega cada palabra igual
+que él (NFKC, minúsculas, sin tildes ni diéresis salvo la ñ, sin apóstrofos) y marca las que
+**empiezan por** una raíz; una cifra, solo si es igual a un término numérico.
+
+Es una aproximación, porque el stemmer de Snowball no se repite en el navegador:
+
+- una raíz que el stemmer reescribe en vez de recortar («potencia» → `potent`) no marca la
+  palabra;
+- una raíz marca también palabras más largas que empiezan igual (`mochil` marca
+  «mochilero»);
+- una raíz de menos de tres letras solo marca la palabra idéntica, para que la `c` de
+  «usb-c» no ilumine media ficha.
+
+Las funciones son puras y tienen tests (`npm test`, ver abajo).
 
 ## Detalles de la interfaz
 
@@ -152,22 +235,38 @@ Lo que la interfaz cuida además:
 ```bash
 npm run build     # comprobación de tipos + bundle de producción en dist/
 npm run lint      # solo comprobación de tipos
+npm test          # tests de lib/ con el ejecutor de Node, sin dependencias
 ```
+
+`npm test` corre `tests/*.test.ts` con `node --test`, que lee TypeScript directamente desde
+Node 22.18 (o 23.6): no hace falta instalar un ejecutor de tests. El resto de la interfaz
+funciona con Node 18.
 
 ## Organización del código
 
 ```
 src/
-  App.tsx                estado de la aplicación y disposición de los paneles
+  App.tsx                las páginas: carga perezosa y las ya abiertas, montadas
+  routes.ts              las páginas y su dirección tras el #
   api.ts                 único punto que habla con el API
   config.ts              direcciones externas, leídas de las variables de entorno
   types.ts               tipos compartidos, espejo de los esquemas del API
-  snippets.ts            guion de demostración
+  snippets.ts            guion de demostración de la consola
+  textExamples.ts        ejemplos de la página de texto y el catálogo de demostración
+  pages/
+    ConsolePage.tsx      la consola SQL: estado y disposición de sus paneles
+    TextSearchPage.tsx   la búsqueda de texto: estado y disposición
   hooks/
+    useWorkspace.ts      sesión, transacción, tablas, tema y una petición a la vez
+    useHashRoute.ts      la página que pide la dirección
+    useInvertedIndex.ts  forma del índice invertido de una columna
     useSplitter.ts       divisores arrastrables
     useTheme.ts          tema claro u oscuro, recordado entre visitas
     useLeafletMap.ts     ciclo de vida del mapa de Leaflet
   lib/
+    textHighlight.ts     resaltado de los términos analizados sobre el texto original
+    textSearch.ts        objetivos de búsqueda, SQL de cada ranking y tarjetas
+    bytes.ts             tamaños en B, KB y MB
     highlight.ts         tokenizador de SQL para el resaltado
     relations.ts         inferencia de relaciones y reparto en columnas
     exporting.ts         CSV y portapapeles
@@ -175,18 +274,26 @@ src/
     spatial.ts           filas con ubicación, textos de la leyenda, ocupación del R-Tree
     csvFiles.ts          cabecera de un CSV y plantilla de CREATE TABLE
   components/
+    TopBar.tsx           cabecera común: páginas, transacción y tema
     SqlEditor.tsx        editor con gutter y resaltado
+    SqlBlock.tsx         SQL de solo lectura con el mismo resaltado
+    FailureNotice.tsx    un error con su tipo y su posición
+    Stat.tsx             una cifra con su etiqueta
+    InvertedIndexView.tsx  forma del índice invertido (en ⌬ y en la página de texto)
     QueryPanel.tsx       cabecera del editor, historial y atajos
     FilesPanel.tsx       panel de archivos con filtro
     ResultsPanel.tsx     pestañas de filas, mensajes y mapa; exportación y errores
     MapPanel.tsx         mapa con el resultado, las figuras y los MBR
     PlanPanel.tsx        árbol del plan con leyenda
-    StructureDialog.tsx  estructura física: B+, hash, R-Tree y valores TEXT
+    StructureDialog.tsx  estructura física: B+, hash, R-Tree, invertido y valores TEXT
     UploadDialog.tsx     carga de CSV
     SchemaView.tsx       diagrama de esquema y relaciones
     StatusBar.tsx        barra de estado
+    text/                la página de texto: formulario, rankings, resultados, plan
   styles.css             los dos temas, por variables CSS
+tests/                   tests de lib/ (node --test)
 ```
 
-Los componentes no contienen lógica de negocio: reciben datos y los dibujan. Todo el estado
-vive en `App.tsx`, todas las llamadas de red en `api.ts` y todo el cálculo en `lib/`.
+Los componentes no contienen lógica de negocio: reciben datos y los dibujan. El estado
+compartido vive en `useWorkspace`, el de cada página en su componente de `pages/`, todas
+las llamadas de red en `api.ts` y todo el cálculo en `lib/`.

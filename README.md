@@ -82,7 +82,7 @@ operador lleva las filas que entregó y el tiempo que tardó.
 | Euclidiana y Haversine | una sola implementación compartida | [`spatial`](src/spatial/README.md) |
 | Índice invertido con SPIMI | bloques con memoria acotada y mezcla k-vías; léxico ordenado, listas contiguas | [`index/inverted`](src/index/inverted/README.md) |
 | TF-IDF + coseno y BM25 | SMART lnc.ltc e idf de Lucene, término a término sobre el mismo índice; top-k con montículo | [`index/inverted`](src/index/inverted/README.md#ranking) |
-| Interfaz y panel de mapa | cuatro paneles visibles a la vez; mapa con Leaflet | [`frontend`](frontend/README.md) |
+| Interfaz, panel de mapa y página de texto | cuatro paneles visibles a la vez; mapa con Leaflet; TF-IDF y BM25 lado a lado con los términos resaltados | [`frontend`](frontend/README.md) |
 | Comparación experimental | tres experimentos medidos, con resultados crudos y gráficas | [`benchmarks`](benchmarks/README.md) |
 
 ---
@@ -114,7 +114,7 @@ benchmarks/          experimentos reproducibles
   results/           medidas crudas en JSON
   figures/           gráficas generadas a partir de esos JSON
 demos/               generador del dataset, descarga de lugares reales y simulación de concurrencia
-  samples/           los CSV del dataset de demostración
+  samples/           los CSV del dataset de demostración; en esci/, la muestra real de Amazon
 docs/                informe.pdf y su fuente LaTeX
 ```
 
@@ -140,7 +140,7 @@ proyecto:
 | [`src/query/`](src/query/) | catálogo, planificador, ejecutor | [README](src/query/README.md) |
 | [`src/txn/`](src/txn/) | transacciones y concurrencia | [README](src/txn/README.md) |
 | [`src/api/`](src/api/) | API REST | [README](src/api/README.md) |
-| [`frontend/`](frontend/) | interfaz de 4 paneles y panel de mapa | [README](frontend/README.md) |
+| [`frontend/`](frontend/) | consola SQL de 4 paneles con panel de mapa, y página de búsqueda de texto | [README](frontend/README.md) |
 | [`benchmarks/`](benchmarks/) | comparación experimental, con resultados y gráficas | [README](benchmarks/README.md) |
 | [`demos/`](demos/) | datasets de demostración y simulación de concurrencia | [README](demos/README.md) |
 
@@ -182,7 +182,8 @@ cp .env.example .env
 ### 3.3 Poblar la base de datos y arrancar
 
 ```bash
-# 1. dataset de demostración: un e-commerce de cinco tablas y 3 000 tiendas con ubicación
+# 1. dataset de demostración: un e-commerce de cinco tablas, 3 000 tiendas con ubicación
+#    y 2 000 productos reales de Amazon con su índice invertido
 .venv/bin/python demos/poblar_ecommerce.py --data-dir ./data
 
 # 2. API, en http://localhost:8000 (documentación interactiva en /docs)
@@ -192,9 +193,9 @@ cp .env.example .env
 npm --prefix frontend run dev
 ```
 
-El dataset carga unas 30 000 filas en seis tablas, **cada una con una organización física
-distinta**, para que las diferencias entre estructuras se vean en la interfaz. Los detalles
-están en [`demos/README.md`](demos/README.md).
+El dataset carga unas 33 000 filas en nueve tablas, **cada una con una organización física
+o un índice distinto**, para que las diferencias entre estructuras se vean en la interfaz.
+Los detalles están en [`demos/README.md`](demos/README.md).
 
 Cada archivo del gestor lleva en su cabecera la versión de su formato. Un directorio de
 datos creado con una versión anterior se rechaza con un error que lo dice: basta volver a
@@ -213,17 +214,20 @@ organización que se elija:
 | **B+ agrupado** | las filas viven en las hojas del árbol |
 | **Archivo secuencial** | filas ordenadas por la clave |
 
-Los seis CSV del dataset están en [`demos/samples/`](demos/samples/):
+Los CSV del dataset están en [`demos/samples/`](demos/samples/):
 
 | Archivo | Organización | Clave |
 |---|---|---|
 | `categorias.csv`, `clientes.csv`, `detalle_pedidos.csv`, `tiendas.csv` | Heap file + índice hash | `id` |
 | `productos.csv` | B+ agrupado | `id` |
 | `pedidos.csv` | Archivo secuencial | `id` |
+| `esci/productos.csv` (como `catalogo`), `esci/consultas.csv` | Heap file + índice hash | `id`, `query_id` |
+| `esci/juicios.csv` | Sin índice | — |
 
 Después, el atajo **Carga → Índices tras cargar CSV** crea los dos índices secundarios del
-e-commerce, y **Espacial → Crear R-Tree**, el de `tiendas.ubicacion`. Con eso los 51 atajos
-del editor quedan listos para usarse.
+e-commerce, **Espacial → Crear R-Tree**, el de `tiendas.ubicacion`, y **Texto → Índice
+invertido**, el de `catalogo.texto`. Con eso los 62 atajos del editor quedan listos para
+usarse.
 
 **Datos espaciales reales.** Para probar el R-Tree con lugares de verdad —unos 128 000
 puntos de interés del Perú, de OpenStreetMap— hay un guion que los descarga en el formato
@@ -268,6 +272,7 @@ silencio en cualquier otra.
 .venv/bin/mypy                                # tipos, en modo estricto
 .venv/bin/python -m pytest -q                 # tests
 npm --prefix frontend run build               # tipos y bundle de la interfaz
+npm --prefix frontend test                    # resaltado y SQL de la página de texto
 ```
 
 Lo mismo corre en GitHub Actions ([`.github/workflows/ci.yml`](.github/workflows/ci.yml))
@@ -385,6 +390,11 @@ ranking es BM25. El plan pasa a `TextSearchScan`, que entrega las filas en orden
 con `SCORE()` como columna, lleva el `LIMIT` hasta el top-k y dice qué términos buscó, con
 su df, cuántos postings leyó y cuántos documentos puntuó
 ([`src/query/README.md`](src/query/README.md#búsqueda-de-texto)).
+
+En la interfaz, la página **Texto** (pestaña de la cabecera) lanza la misma búsqueda con
+TF-IDF y con BM25 y pone los dos rankings lado a lado, con los términos resaltados, un
+filtro relacional, `k1` y `b` ajustables, el SQL y el plan de cada una y la forma del
+índice invertido ([`frontend/README.md`](frontend/README.md#texto)).
 
 ### Desde Python
 

@@ -147,7 +147,9 @@ Las cinco estructuras de disco usan las mismas tres piezas, escritas una sola ve
 - **`chained_pages`**: el recorrido de una cadena de páginas (el desbordamiento del
   secuencial y de las cubetas del hash, y la lista de libres). Una cadena no puede tener más
   páginas que el archivo: si las tiene, una página corrupta apunta hacia atrás, y en vez de
-  girar para siempre se lanza `CorruptFileError`.
+  girar para siempre se lanza `CorruptFileError`. `chained_links` es el mismo recorrido con
+  enlaces de cualquier tipo: el archivo de valores variables encadena direcciones de
+  registro, no páginas.
 
 ## 5. Las dos organizaciones de archivo
 
@@ -158,6 +160,16 @@ Las cinco estructuras de disco usan las mismas tres piezas, escritas una sola ve
 | Búsqueda por clave | O(P) — recorrido completo | O(log P) |
 | Recorrido ordenado | requiere ordenar | gratis |
 | Borrado | libera la ranura | lápida + reorganización |
+
+## 6. Valores de longitud variable
+
+Los registros de tamaño fijo no sirven para un documento de varios KB. El
+[archivo de valores de longitud variable](varlen/README.md) (`varlen/`) guarda bytes de
+cualquier longitud en **páginas ranuradas** —un directorio de `(desplazamiento, longitud)` y
+los datos creciendo desde el final, compactados cuando hace falta— y parte los que no caben
+en una página en **fragmentos encadenados**. La dirección de un valor es la `RecordId` de su
+primer fragmento. Un **mapa de espacio libre**, un byte por página en páginas de posición
+fija, encuentra un hueco sin recorrer el archivo.
 
 ## Cómo se prueba
 

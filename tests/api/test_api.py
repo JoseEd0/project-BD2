@@ -65,6 +65,18 @@ def test_select_returns_columns_rows_and_plan(client: TestClient):
     assert body["elapsed_ms"] >= 0
 
 
+def test_a_text_column_travels_as_a_whole_string(client: TestClient):
+    long_text = "documento " * 2_000
+    run(client, "CREATE TABLE docs (id INT PRIMARY KEY, cuerpo TEXT)")
+    run(client, f"INSERT INTO docs VALUES (1, '{long_text}'), (2, NULL)")
+    body = run(client, "SELECT cuerpo FROM docs ORDER BY id")
+    assert body["rows"] == [[long_text], [None]]
+    column = client.get("/tables").json()[0]["columns"][1]
+    assert (column["type"], column["length"]) == ("TEXT", None)
+    values = client.get("/tables/docs/structure").json()["text_values"]
+    assert (values["values"], values["value_bytes"]) == (1, len(long_text))
+
+
 def test_syntax_error_reports_its_position(client: TestClient):
     response = client.post("/query", json={"sql": "SELECT FROM"})
     assert response.status_code == 400

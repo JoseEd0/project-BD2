@@ -22,8 +22,9 @@ dentro de un archivo, y cómo se recupera?** No sabe nada de SQL.
 
 ## 1. Tipos (`types.py`)
 
-Cada tipo de dato sabe convertirse en bytes mediante un **códec**. Los tipos son de tamaño
-fijo, sin excepción:
+Cada tipo de dato sabe convertirse en bytes mediante un **códec**. Dentro del registro
+todos ocupan un tamaño fijo; el `TEXT` lo consigue guardando ahí solo la dirección de su
+valor (sección 7):
 
 | Tipo | Bytes | Representación |
 |---|---|---|
@@ -35,6 +36,7 @@ fijo, sin excepción:
 | `BYTES(n)` | 4 + n | su longitud y los bytes, rellenados con ceros |
 | `POINT` | 16 | dos dobles (lat, lon) |
 | `VECTOR(n)` | 4n | n flotantes de precisión simple, finitos |
+| `TEXT` | 6 | la dirección `(página, ranura)` del texto en el archivo de valores de la tabla |
 
 Un valor que no cabe se rechaza con un error del almacenamiento, nunca se trunca: un texto
 más largo que el campo, un entero fuera de los 64 bits, un real con decimales en un `INT`.
@@ -171,11 +173,78 @@ en una página en **fragmentos encadenados**. La dirección de un valor es la `R
 primer fragmento. Un **mapa de espacio libre**, un byte por página en páginas de posición
 fija, encuentra un hueco sin recorrer el archivo.
 
+## 7. Columnas TEXT fuera de la fila (`out_of_row.py`)
+
+Un `TEXT` no tiene longitud máxima. En el registro ocupa 6 bytes, la dirección de su valor,
+y el texto vive en el archivo de valores de longitud variable de la tabla,
+`<tabla>.text`. Un `VARCHAR(n)` sigue en la fila: es lo que conviene a un texto corto que se
+filtra, se indexa o es clave.
+
+```
+  fila lógica (7, "un documento de 8 KB…")
+        │
+        ▼   OutOfRowSerializer         put del texto → dirección (12:3)
+   registro: │ mapa │ id = 7 │ (12:3) │       ── tabla.heap / .seq / .bpt
+        │
+        ▼   VariableLengthFile         "un documento de 8 KB…"   ── tabla.text
+```
+
+`OutOfRowSerializer` es el **único** lugar donde una dirección se convierte en texto y al
+revés. Compone el `RecordSerializer` de siempre —que sigue siendo puro: para él un `TEXT`
+son 6 bytes— con el archivo de valores:
+
+| Método | Qué hace |
+|---|---|
+| `normalized(fila)` | valida la fila y la devuelve como quedaría guardada, sin escribir nada |
+| `pack(fila)` | valida la fila **entera**, guarda cada texto y devuelve el registro |
+| `repack(registro, antes, después)` | reutiliza la dirección de un texto que no cambia; reemplaza en su sitio el que cambia; borra el que pasa a NULL |
+| `unpack(registro)`, `unpack_field(registro, i)` | la fila o el campo, con cada texto ya leído |
+| `release(registro)` | borra los textos de un registro que deja de existir |
+
+Un esquema sin `TEXT` no paga nada: cada método es directamente el del `RecordSerializer`.
+
+**Por encima, una fila siempre lleva el texto como `str`.** La tabla traduce al escribir y al
+leer, así que el ejecutor, las comparaciones, `LIKE`, `ORDER BY`, `GROUP BY`, el API y el
+registro de deshacer de las transacciones no ven nunca una dirección. Los operadores que
+vuelcan filas a disco (ordenamiento, hashing y reunión externos) usan la misma clase con un
+archivo de valores temporal en su directorio, que se borra al terminar
+([`query/spill.py`](../query/spill.py)).
+
+**Los índices leen el texto, no la dirección.** Un índice secundario saca el valor de su
+columna con `unpack_field` de un `FieldReader` (`record.py`). La tabla le entrega su
+`OutOfRowSerializer`, así que un índice sobre una columna `TEXT` —el índice invertido de la
+Parte 3— recibe el texto de cada fila sin saber dónde vive. El B+, el hash y el R-Tree
+guardan el valor entero en cada clave de tamaño fijo, así que rechazan una columna `TEXT`
+(y una `TEXT` no puede ser clave primaria): para eso está `VARCHAR(n)`.
+
+**Cuándo se libera un texto.** Al borrar la fila o al cambiarle el texto, en el acto. El
+registro de deshacer de una transacción guarda filas lógicas, con el texto entero, y no
+direcciones: deshacer un `DELETE` vuelve a insertar la fila y con ella guarda otra vez su
+texto. Liberar al confirmar obligaría a que el deshacer guardara direcciones y a llevar la
+cuenta de qué valores siguen vivos por transacción; así, en cambio, el archivo de valores
+tiene siempre exactamente un valor por cada `TEXT` no nulo de la tabla.
+
+**Sin huérfanos ni reescrituras.** La tabla valida todas las filas de una sentencia antes de
+escribir la primera, y `pack` valida la fila entera antes de guardar el primer texto: una
+sentencia que falla no deja valores sueltos. Un `UPDATE` que no cambia el texto no lo
+reescribe: el registro conserva la misma dirección.
+
+**Lo que cuesta.** Leer una fila con `TEXT` lee además las páginas de su texto: una si cabe
+en una página, una por fragmento si no. Los valores escritos uno tras otro quedan juntos en
+el archivo y el buffer pool es el de todo el motor, así que un recorrido lee el archivo de
+valores casi en orden. El texto se lee siempre al leer la fila, se use o no en la consulta:
+leerlo solo cuando una expresión lo pide obligaría a llevar por el ejecutor un valor
+pendiente de resolver, y cada comparación, función y serialización tendría que saberlo.
+
 ## Cómo se prueba
 
 ```bash
 .venv/bin/python -m pytest tests/storage -q
 ```
+
+`test_out_of_row.py` cubre las filas con `TEXT`: ida y vuelta con textos largos, vacíos y
+nulos, una fila inválida que no guarda nada, `repack` que conserva la dirección del texto que
+no cambia y deja exactamente los valores vivos en cada transición, y `release`.
 
 Los tests usan páginas de 256 bytes a propósito: con páginas pequeñas cualquier prueba
 cruza varias páginas y los errores de frontera aparecen enseguida.

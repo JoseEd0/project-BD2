@@ -22,7 +22,7 @@ DEFAULT_HASH_PARTITIONS = 16
 DEFAULT_HASH_MERGE_FILL = 0.50
 DEFAULT_RTREE_MIN_FILL = 0.40
 DEFAULT_RTREE_BULK_FILL = 0.90
-DEFAULT_TEXT_LENGTH = 256
+DEFAULT_INLINE_STRING_LIMIT = 256
 DEFAULT_BLOB_LENGTH = 256
 DEFAULT_LOCK_TIMEOUT_SECONDS = 5.0
 DEFAULT_CSV_DELIMITER = ","
@@ -72,7 +72,9 @@ class EngineConfig:
             ella el nodo se disuelve y sus entradas se reinsertan.
         rtree_bulk_fill: fracción de cada nodo que llena la carga masiva del R-Tree,
             dejando hueco para inserciones futuras.
-        text_length: longitud fija que se asigna a las columnas TEXT.
+        inline_string_limit: bytes del texto más largo que la carga de un CSV guarda en la
+            fila, como `VARCHAR(n)`; una columna con un valor más largo se carga como TEXT,
+            fuera de la fila, y ningún valor se recorta.
         blob_length: longitud fija que se asigna a las columnas BLOB.
         lock_timeout_seconds: espera máxima de una transacción por un bloqueo.
         csv_delimiter: separador de los archivos que carga `CREATE TABLE ... FROM FILE`.
@@ -99,7 +101,7 @@ class EngineConfig:
     hash_merge_fill: float = DEFAULT_HASH_MERGE_FILL
     rtree_min_fill: float = DEFAULT_RTREE_MIN_FILL
     rtree_bulk_fill: float = DEFAULT_RTREE_BULK_FILL
-    text_length: int = DEFAULT_TEXT_LENGTH
+    inline_string_limit: int = DEFAULT_INLINE_STRING_LIMIT
     blob_length: int = DEFAULT_BLOB_LENGTH
     lock_timeout_seconds: float = DEFAULT_LOCK_TIMEOUT_SECONDS
     csv_delimiter: str = DEFAULT_CSV_DELIMITER
@@ -123,7 +125,7 @@ class EngineConfig:
             "buffer_pool_pages",
             "sequential_max_chain_pages",
             "sort_buffer_pages",
-            "text_length",
+            "inline_string_limit",
             "blob_length",
             "max_upload_bytes",
             "map_points",

@@ -17,7 +17,8 @@ De un texto SQL a un resultado. Cinco piezas, cada una con una responsabilidad:
 
 Guarda en `catalog.json` qué columnas tiene cada tabla, cómo se almacena y qué índices
 tiene. Es la **única** pieza que traduce los tipos de SQL a los del almacenamiento:
-`VARCHAR(30)` → `STRING(30)`, `TEXT` → `STRING(text_length)`, `BIGINT` → `INT`.
+`VARCHAR(30)` → `STRING(30)`, `TEXT` → `TEXT`, `BIGINT` → `INT`. Un `VARCHAR(n)` va en la
+fila; un `TEXT` no tiene longitud máxima y vive fuera de ella (siguiente sección).
 
 Guarda también el tamaño de página con que se escribieron las tablas: abrirlas con otro
 leería mal cada página, así que el motor se niega con un error que lo dice.
@@ -71,6 +72,32 @@ página se lee una sola vez. Es la idea del *bitmap heap scan* de PostgreSQL.
 Un índice secundario **no guarda las filas cuyo valor es NULL**: ninguna búsqueda por
 igualdad o por rango puede devolverlas, y un B+ no sabría dónde ordenarlas. La fila sigue
 en la tabla y `IS NULL` la encuentra recorriéndola.
+
+### Columnas TEXT
+
+El texto de una columna `TEXT` vive en `<tabla>.text`, un
+[archivo de valores de longitud variable](../storage/varlen/README.md), y la fila guarda su
+dirección. La tabla es la única pieza que traduce: escribe con
+[`OutOfRowSerializer`](../storage/README.md#7-columnas-text-fuera-de-la-fila-out_of_rowpy)
+y lee con él, así que lo que sale de una tabla —hacia el ejecutor, el registro de deshacer o
+el API— lleva el texto como `str`. Funciona igual con las tres organizaciones: el registro
+con la dirección es el que guardan el heap, el secuencial o las hojas del B+ agrupado.
+
+| Operación | Qué pasa con el texto |
+|---|---|
+| `INSERT` | se guarda después de validar todas las filas de la sentencia |
+| `DELETE` | se libera en el acto; deshacerlo en una transacción lo vuelve a guardar |
+| `UPDATE` que cambia el texto | se reemplaza en su sitio si cabe en su página |
+| `UPDATE` que no lo cambia | no se toca: la fila conserva la dirección |
+| `DROP TABLE` | `<tabla>.text` se borra con los demás archivos de la tabla |
+
+Un índice B+ o hash, una restricción `UNIQUE` y una clave primaria sobre un `TEXT` se
+rechazan con un error que lo explica: guardan el valor entero en una clave de tamaño fijo.
+
+Los operadores que vuelcan filas a disco —`ExternalSort`, `HashAggregate`, `HashJoin`,
+`NestedLoopJoin` y `Distinct`— trabajan con registros de tamaño fijo, así que sus `TEXT` van
+a un archivo de valores temporal en el directorio del operador ([`spill.py`](spill.py)),
+que se crea con el primer texto y se borra al terminar.
 
 ### Escrituras: todo o nada
 
@@ -348,7 +375,9 @@ Ejecuta `CREATE`/`DROP TABLE`, `CREATE`/`DROP INDEX`, `INSERT`, `UPDATE`, `DELET
 Al cargar un CSV (`loader.py`) el tipo de cada columna se deduce de todos sus valores:
 entero, real, fecha ISO, booleano (`true`/`false`), punto (`POINT(lat, lon)`) o texto, y
 una celda vacía es NULL. Una columna toma el tipo que admite todo lo que trae; si mezcla
-tipos que no conviven, es texto.
+tipos que no conviven, es texto. Una columna de texto cuyo valor más largo cabe en
+`inline_string_limit` bytes (256 por omisión, en `EngineConfig`) es un `VARCHAR` con un
+poco de margen; si alguno pasa de ahí, es `TEXT`. Ningún valor se recorta.
 
 **Crear una tabla o un índice es todo o nada.** Si los archivos no se pueden crear —una
 fila que no cabe en una página, una clave demasiado larga para un nodo del B+, un R-Tree

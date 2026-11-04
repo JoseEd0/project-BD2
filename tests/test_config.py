@@ -18,7 +18,7 @@ INVALID = [
     {"hash_merge_fill": 1.5},
     {"rtree_min_fill": 0.7},
     {"rtree_min_fill": 0.4, "rtree_bulk_fill": 0.3},
-    {"text_length": 0},
+    {"inline_string_limit": 0},
     {"lock_timeout_seconds": 0.0},
     {"session_idle_seconds": -5.0},
     {"max_result_rows": 0},

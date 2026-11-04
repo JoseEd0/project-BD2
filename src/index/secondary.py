@@ -13,7 +13,7 @@ from collections.abc import Iterable, Iterator
 from types import TracebackType
 from typing import Any, Protocol, Self, runtime_checkable
 
-from storage.record import RecordSerializer
+from storage.record import FieldReader
 from storage.record_id import RecordId
 from storage.types import Key
 
@@ -51,7 +51,7 @@ class ColumnIndex(ABC):
     por cercanía puede devolverlas, y un NULL no tiene sitio en ningún orden.
     """
 
-    def __init__(self, serializer: RecordSerializer, column: str) -> None:
+    def __init__(self, serializer: FieldReader, column: str) -> None:
         self._serializer = serializer
         self._position = serializer.schema.position_of(column)
 

@@ -23,16 +23,19 @@ from query.row_store import AddressedRecord, HeapStore, KeyedStore, RowStore
 from spatial.geometry import Point, Polygon
 from spatial.metrics import Metric
 from storage.heap import HeapFile
+from storage.out_of_row import OutOfRowSerializer, out_of_row_positions
 from storage.record import Record, RecordSerializer
 from storage.record_id import RecordId
 from storage.schema import Schema
 from storage.sequential import SequentialFile
 from storage.types import FieldType, Key, StorageError
+from storage.varlen import VariableLengthFile
 
 HEAP_SUFFIX = ".heap"
 SEQUENTIAL_SUFFIX = ".seq"
 CLUSTERED_SUFFIX = ".bpt"
 INDEX_SUFFIX = ".idx"
+TEXT_VALUES_SUFFIX = ".text"
 _STORAGE_SUFFIXES = {
     Organization.HEAP: HEAP_SUFFIX,
     Organization.SEQUENTIAL: SEQUENTIAL_SUFFIX,
@@ -119,9 +122,19 @@ def _storage_path(definition: TableDefinition, directory: Path) -> Path:
 
 def _storage_files(definition: TableDefinition, directory: Path) -> list[Path]:
     path = _storage_path(definition, directory)
-    if definition.organization is Organization.SEQUENTIAL:
-        return SequentialFile.files_of(path)
-    return [path]
+    sequential = definition.organization is Organization.SEQUENTIAL
+    files = SequentialFile.files_of(path) if sequential else [path]
+    if _has_text_values(definition):
+        files.append(_text_values_path(definition, directory))
+    return files
+
+
+def _text_values_path(definition: TableDefinition, directory: Path) -> Path:
+    return directory / f"{definition.name}{TEXT_VALUES_SUFFIX}"
+
+
+def _has_text_values(definition: TableDefinition) -> bool:
+    return bool(out_of_row_positions(definition.schema))
 
 
 class Table:
@@ -134,7 +147,10 @@ class Table:
         self._directory = config.data_directory
         self._storage = self._open_storage()
         self._indexes: dict[str, SecondaryIndex] = {}
+        self._text_values: VariableLengthFile | None = None
         try:
+            self._text_values = self._open_text_values()
+            self._rows = OutOfRowSerializer(self._serializer, self._text_values)
             for index in definition.indexes:
                 self._indexes[index.name] = self._open_index(index)
         except Exception:
@@ -171,9 +187,9 @@ class Table:
         Raises:
             DuplicatePrimaryKeyError: si la clave primaria ya existe.
         """
-        record = self._serializer.pack(values)
-        self._reject_repeated_values([record])
-        self._store(record)
+        row = self._rows.normalized(values)
+        self._reject_repeated_values([row])
+        self._store(row)
 
     def insert_all(self, rows: Sequence[Record], changes: RowChanges) -> None:
         """Inserta todas las filas o ninguna: los valores y las claves se comprueban antes
@@ -184,11 +200,11 @@ class Table:
             DuplicateValueError: si lo que se repite es el valor de una columna `UNIQUE`.
             StorageError: si algún valor no corresponde a su columna.
         """
-        records = [self._serializer.pack(values) for values in rows]
-        self._reject_repeated_values(records)
-        for record in records:
-            self._store(record)
-            changes.inserted(self._serializer.unpack(record))
+        normalized = [self._rows.normalized(values) for values in rows]
+        self._reject_repeated_values(normalized)
+        for row in normalized:
+            self._store(row)
+            changes.inserted(row)
 
     def scan(self) -> Iterator[Record]:
         """Todas las filas. El orden depende de la organización."""
@@ -295,7 +311,8 @@ class Table:
         return self._addressed_in_page_order(found)
 
     def unpack(self, record: bytes) -> Record:
-        return self._serializer.unpack(record)
+        """La fila lógica de un registro guardado, con cada TEXT leído de su archivo."""
+        return self._rows.unpack(record)
 
     def sample_points(self, column: str, limit: int) -> list[Point]:
         """Hasta `limit` puntos de la columna, tomados a intervalos regulares de la tabla.
@@ -357,24 +374,29 @@ class Table:
             StorageError: si algún valor nuevo no corresponde a su columna.
         """
         victims = self._matching(candidates, matches)
-        replacements = [self._serializer.pack(transform(row)) for _, _, row in victims]
-        moving = self._rows_changing_key([record for _, record, _ in victims], replacements)
+        replacements = [self._rows.normalized(transform(row)) for _, _, row in victims]
+        moving = self._rows_changing_key([row for _, _, row in victims], replacements)
         for position, (address, record, row) in enumerate(victims):
             if position not in moving:
-                self._update_one(address, record, replacements[position])
-                changes.updated(row, self._serializer.unpack(replacements[position]))
+                self._update_one(address, record, row, replacements[position])
+                changes.updated(row, replacements[position])
         for position in moving:
             address, record, row = victims[position]
             self._delete_one(address, record)
             changes.deleted(row)
         for position in moving:
             self._store(replacements[position])
-            changes.inserted(self._serializer.unpack(replacements[position]))
+            changes.inserted(replacements[position])
         return len(victims)
 
-    def _update_one(self, address: RecordId | None, old: bytes, new: bytes) -> None:
+    def _update_one(
+        self, address: RecordId | None, old: bytes, before: Record, after: Record
+    ) -> None:
+        """Reescribe la fila. Los índices la quitan antes de tocar sus TEXT, porque uno sobre
+        un TEXT lee el texto viejo del archivo de valores para saber qué quitar."""
         for index in self._indexes.values():
             index.delete(old, _located(address))
+        new = self._rows.repack(old, before, after)
         self._storage.update(address, old, new)
         for index in self._indexes.values():
             index.insert(new, _located(address))
@@ -382,7 +404,7 @@ class Table:
     def delete_first(self, target: Record) -> bool:
         """Borra una sola fila igual a `target`. Lo usa el deshacer de una inserción."""
         for address, record in self._addressed_like(target):
-            if self._serializer.unpack(record) == target:
+            if self._rows.unpack(record) == target:
                 self._delete_one(address, record)
                 return True
         return False
@@ -390,8 +412,8 @@ class Table:
     def update_first(self, target: Record, replacement: Record) -> bool:
         """Reemplaza una sola fila igual a `target`. Lo usa el deshacer de un UPDATE."""
         for address, record in self._addressed_like(target):
-            if self._serializer.unpack(record) == target:
-                self._update_one(address, record, self._serializer.pack(replacement))
+            if self._rows.unpack(record) == target:
+                self._update_one(address, record, target, self._rows.normalized(replacement))
                 return True
         return False
 
@@ -423,11 +445,15 @@ class Table:
     def flush(self) -> None:
         """Escribe en disco las páginas modificadas de la tabla y de todos sus índices."""
         self._storage.flush()
+        if self._text_values is not None:
+            self._text_values.flush()
         for index in self._indexes.values():
             index.flush()
 
     def close(self) -> None:
         self._storage.close()
+        if self._text_values is not None:
+            self._text_values.close()
         for index in self._indexes.values():
             index.close()
 
@@ -438,6 +464,7 @@ class Table:
             "organization": self.organization.value,
             "rows": self.row_count,
             "storage": self._storage.describe(),
+            "text_values": None if self._text_values is None else self._text_values.describe(),
             "indexes": [
                 {
                     "name": definition.name,
@@ -456,7 +483,7 @@ class Table:
 
     def _unpacked(self, rows: Iterable[AddressedRecord]) -> Iterator[Record]:
         for _, record in rows:
-            yield self._serializer.unpack(record)
+            yield self._rows.unpack(record)
 
     def _addressed_at(self, addresses: Iterable[RecordId]) -> Iterator[AddressedRecord]:
         """El salto al heap: la fila que vive en cada dirección que devolvió un índice.
@@ -517,20 +544,24 @@ class Table:
         """
         found = []
         for address, record in candidates:
-            row = self._serializer.unpack(record)
+            row = self._rows.unpack(record)
             if matches(row):
                 found.append((address, record, row))
         return found
 
-    def _store(self, record: bytes) -> None:
+    def _store(self, row: Record) -> None:
+        record = self._rows.pack(row)
         address = self._storage.insert(record)
         for index in self._indexes.values():
             index.insert(record, _located(address))
 
     def _delete_one(self, address: RecordId | None, record: bytes) -> None:
+        """Quita la fila y libera en el acto sus TEXT: si una transacción la devuelve, el
+        deshacer la inserta otra vez, con sus textos, desde la fila lógica que guardó."""
         for index in self._indexes.values():
             index.delete(record, _located(address))
         self._storage.delete(address, record)
+        self._rows.release(record)
 
     def _primary_key_index(self) -> IndexDefinition | None:
         """Un índice de la clave que sepa buscar por igualdad, si lo hay."""
@@ -539,16 +570,14 @@ class Table:
         key = self._definition.primary_key
         return index_with_capability(self._definition, key, Capability.EQUALITY)
 
-    def _reject_repeated_values(self, records: Sequence[bytes]) -> None:
+    def _reject_repeated_values(self, rows: Sequence[Record]) -> None:
         """Comprueba que unas filas nuevas no repiten la clave ni un valor `UNIQUE`."""
         for column in self._unique_columns():
-            incoming = [
-                self._serializer.unpack_field(record, column.position) for record in records
-            ]
-            self._changing(column, [_NO_ROW] * len(records), incoming)
+            incoming = [row[column.position] for row in rows]
+            self._changing(column, [_NO_ROW] * len(rows), incoming)
 
     def _rows_changing_key(
-        self, current: Sequence[bytes], replacements: Sequence[bytes]
+        self, current: Sequence[Record], replacements: Sequence[Record]
     ) -> list[int]:
         """Posiciones de las filas de un UPDATE cuya clave primaria cambia.
 
@@ -560,10 +589,8 @@ class Table:
         """
         moving: list[int] = []
         for column in self._unique_columns():
-            before = [self._serializer.unpack_field(record, column.position) for record in current]
-            after = [
-                self._serializer.unpack_field(record, column.position) for record in replacements
-            ]
+            before = [row[column.position] for row in current]
+            after = [row[column.position] for row in replacements]
             changing = self._changing(column, before, after)
             if self._is_primary_key(column):
                 moving = changing
@@ -663,7 +690,14 @@ class Table:
                 f"el método {definition.method.value} no sirve como índice secundario"
             )
         path = self._index_path(definition.name)
-        return method.opener(path, self._serializer, definition.column, self._config)
+        return method.opener(path, self._rows, definition.column, self._config)
+
+    def _open_text_values(self) -> VariableLengthFile | None:
+        """El archivo donde viven los valores de las columnas TEXT, si la tabla tiene alguna."""
+        if not _has_text_values(self._definition):
+            return None
+        path = _text_values_path(self._definition, self._directory)
+        return VariableLengthFile(path, self._config)
 
     def _index_path(self, name: str) -> Path:
         return index_path(self._directory, self.name, name)

@@ -38,6 +38,7 @@ Contenido de este documento:
                        src/storage/    registros · páginas · buffer pool
                             │          heap file · archivo secuencial
                        src/spatial/    puntos, rectángulos, polígonos y distancias
+                       src/text/       analizador de texto: plegado, tokens, stopwords, raíces
 ```
 
 **Cada capa solo conoce a la de abajo**: el motor no sabe qué es una transacción, y ninguna
@@ -97,6 +98,7 @@ src/                 raíz de importación: un paquete por módulo del motor
     rtree/           R-Tree
   external/          algoritmos externos: sort/, hash/ y loop/
   spatial/           geometría y métricas de distancia; no depende de ningún otro paquete
+  text/              analizador de texto de documentos y consultas; stopwords en stopwords/
   query/             catálogo, tabla, planificador, operadores y motor
   txn/               gestor de bloqueos, transacciones y sesiones
   api/               API REST (FastAPI) sobre el motor
@@ -125,6 +127,7 @@ proyecto:
 | [`src/index/hash/`](src/index/hash/) | hash extendible | [README](src/index/hash/README.md) |
 | [`src/index/rtree/`](src/index/rtree/) | R-Tree: radio, k-NN, polígono, carga masiva | [README](src/index/rtree/README.md) |
 | [`src/spatial/`](src/spatial/) | geometría y métricas euclidiana y Haversine | [README](src/spatial/README.md) |
+| [`src/text/`](src/text/) | analizador de texto: plegado, tokens, stopwords y raíces | [README](src/text/README.md) |
 | [`src/external/`](src/external/) | ordenamiento, hashing y bucles anidados externos | [README](src/external/README.md) |
 | [`src/query/`](src/query/) | catálogo, planificador, ejecutor | [README](src/query/README.md) |
 | [`src/txn/`](src/txn/) | transacciones y concurrencia | [README](src/txn/README.md) |
@@ -282,6 +285,10 @@ Los tests siguen la estructura de `src/`, así que se pueden ejecutar por módul
 .venv/bin/python demos/descargar_lugares.py --salida data/datasets/lugares_peru.csv
 BENCH_POSTGRES_DSN="dbname=minigestor_bench" .venv/bin/python -m benchmarks.spatial_benchmark \
     --sizes 1000 10000 100000 --points-file data/datasets/lugares_peru.csv
+
+# velocidad del analizador de texto, sobre texto real en español
+.venv/bin/python -m benchmarks.text_analyzer_benchmark --repetitions 5 \
+    --input Proyecto_Integrador_BD2.md docs/latex/informe/*.tex
 
 .venv/bin/python -m benchmarks.plot           # redibuja las gráficas
 .venv/bin/python demos/concurrencia.py        # race condition, transacciones e interbloqueo

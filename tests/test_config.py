@@ -19,6 +19,8 @@ INVALID = [
     {"rtree_min_fill": 0.7},
     {"rtree_min_fill": 0.4, "rtree_bulk_fill": 0.3},
     {"text_length": 0},
+    {"text_min_token_length": 0},
+    {"text_min_token_length": 5, "text_max_token_length": 4},
     {"lock_timeout_seconds": 0.0},
     {"session_idle_seconds": -5.0},
     {"max_result_rows": 0},
@@ -45,3 +47,4 @@ def test_the_defaults_are_valid():
 def test_the_bounds_themselves_are_valid():
     EngineConfig(page_size=MIN_PAGE_SIZE, rtree_min_fill=0.5, sequential_waste_ratio=1.0)
     EngineConfig(page_size=MAX_PAGE_SIZE, merge_fan_in=2, hash_partitions=2)
+    EngineConfig(text_min_token_length=1, text_max_token_length=1)

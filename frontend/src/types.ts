@@ -170,11 +170,24 @@ export interface SequentialStorage {
   waste_ratio: number;
 }
 
+/** El archivo donde viven los valores de las columnas TEXT de una tabla. */
+export interface TextValuesStorage {
+  kind: "varlen";
+  pages: number;
+  data_pages: number;
+  map_pages: number;
+  values: number;
+  value_bytes: number;
+  inline_limit: number;
+  chunk_size: number;
+}
+
 export interface TableStructure {
   table: string;
   organization: string;
   rows: number;
   storage: HeapStorage | SequentialStorage | TreeStructure;
+  text_values: TextValuesStorage | null;
   indexes: {
     name: string;
     column: string;

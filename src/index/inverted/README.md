@@ -434,8 +434,15 @@ documento, más el conjunto de los borrados: son las *norms* que Lucene tiene en
 por la misma razón. Con 100 000 documentos ocupan 2 MB. Cada inserción y cada borrado las
 actualiza en el momento.
 
-**Top-k.** `heapq.nsmallest(k, (-puntaje, dirección, doc_id))`, un montículo de tamaño
-`k`: `O(C log k)` para `C` candidatos, sin leer ninguna página para devolverlos.
+**Top-k.** `heapq.nlargest(k, puntajes)`, un montículo de tamaño `k` sobre los puntajes
+sueltos, da el `k`-ésimo mejor; solo los documentos que lo alcanzan reciben su clave
+`(-puntaje, doc_id)` y se ordenan, con la dirección de la fila para los empatados.
+`O(C log k)` para `C` candidatos, sin leer ninguna página para devolverlos. Antes se
+armaba la tupla de los `C` candidatos y se le pedía el top a `heapq.nsmallest`; con las
+150 consultas de ESCI y 100 000 fichas (tiempo de CPU, la mejor de 15 pasadas, alternando
+las dos versiones, mismo resultado), elegir sobre los puntajes sueltos baja TF-IDF de
+0,46 / 2,38 / 5,61 ms a **0,35 / 1,83 / 4,31 ms** con 1 / 3 / 5+ palabras, y BM25 (ya
+con la poda de abajo) de 0,46 / 1,63 / 4,37 ms a **0,34 / 1,44 / 4,13 ms**.
 
 ### Poda MaxScore en el top-k de BM25
 

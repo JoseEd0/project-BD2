@@ -779,6 +779,32 @@ Con `T` postings en el índice, `P` en los segmentos pendientes, `S` segmentos y
 | fusión completa | `O(T)`, `⌈log_k S⌉` pasadas; con borrados, decodifica cada lista |
 | memoria | el bloque en memoria (`spimi_block_bytes`) y una página por flujo de cada segmento en la mezcla |
 
+## Optimizaciones medidas que no entraron
+
+**Postings con deltas y VByte.** Guardar cada `doc_id` como la diferencia con el anterior
+y cada número en bytes de 7 bits reduciría los postings de las 100 000 fichas de ESCI de
+60,2 MiB a **16,7 MiB**, 3,6 veces menos, lo que hace GIN. Pero decodificar VByte es un
+bucle de Python por byte, y el ancho fijo es un solo `array.frombytes` en C. Medido sobre
+las listas de las 150 consultas, decodificar cuesta por consulta 0,26 / 1,45 / 3,58 ms con
+VByte frente a 0,001 / 0,003 / 0,006 ms con ancho fijo (1 / 3 / 5+ palabras): más que toda
+la consulta de hoy. Se queda el ancho fijo; el espacio es la desventaja que el experimento
+reporta frente a GIN.
+
+**Leer el TEXT solo cuando se usa.** El valor de una columna TEXT se lee de su archivo al
+leer la fila, aunque la consulta no lo use (medido al añadir las columnas TEXT: recorrer
+10 000 filas con 1 KB de texto cuesta 81 ms, frente a 62 ms sin leerlo). Leerlo a demanda obligaría a que una fila lleve
+direcciones sin resolver por el ejecutor, los índices y el registro de deshacer, y la
+invariante de [`storage/out_of_row.py`](../../storage/out_of_row.py) es justamente la
+contraria: por encima del serializador una fila es siempre la tupla lógica. Hacerlo
+limpio es podar columnas en el planificador (que cada recorrido sepa qué columnas pide),
+un cambio del ejecutor entero. No toca este experimento: el índice se construye y se
+consulta sin leer la tabla.
+
+**Un stemmer en C.** `snowballstemmer` usa PyStemmer si está instalado, y el stemmer es
+lo que más cuesta del análisis que queda (265 769 llamadas con las 100 000 fichas). No se
+probó: cambiaría una dependencia del proyecto y habría que comprobar que las dos
+implementaciones dan las mismas raíces.
+
 ## Lo que todavía no hace
 
 - **SQL.** `CREATE INDEX … USING INVERTED`, `MATCH` y `SCORE()` son la integración con el

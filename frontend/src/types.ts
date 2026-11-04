@@ -66,6 +66,15 @@ export interface StatementOutcome {
   returned_rows: number;
 }
 
+/** Dónde buscó el `MATCH` y con qué términos ya analizados (plegados y reducidos a su raíz). */
+export interface TextSearchInfo {
+  table: string;
+  column: string;
+  query: string;
+  method: "TF_IDF" | "BM25";
+  terms: string[];
+}
+
 export interface QueryResponse {
   statements: StatementOutcome[];
   columns: string[];
@@ -78,6 +87,7 @@ export interface QueryResponse {
   elapsed_ms: number;
   in_transaction: boolean;
   spatial: SpatialInfo | null;
+  text: TextSearchInfo | null;
 }
 
 export interface QueryFailure {
@@ -151,7 +161,26 @@ export interface RTreeStructure {
   levels: RTreeLevel[];
 }
 
-export type IndexStructure = TreeStructure | HashStructure | RTreeStructure;
+export interface InvertedTerm {
+  term: string;
+  document_frequency: number;
+  total_frequency: number;
+}
+
+export interface InvertedStructure {
+  kind: "inverted";
+  language: string;
+  documents: number;
+  deleted: number;
+  average_length: number;
+  vocabulary: number;
+  postings: number;
+  segments: { generation: number; terms: number; postings: number }[];
+  pending: { documents: number; terms: number; postings: number };
+  top_terms: InvertedTerm[];
+}
+
+export type IndexStructure = TreeStructure | HashStructure | RTreeStructure | InvertedStructure;
 
 export interface HeapStorage {
   kind: "heap";

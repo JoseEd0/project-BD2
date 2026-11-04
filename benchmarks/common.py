@@ -76,12 +76,17 @@ class Report:
         return path
 
     def render(self) -> str:
-        """Tabla Markdown con una fila por medida."""
+        """Tabla Markdown con una fila por medida. Los detalles que son listas o
+        diccionarios, como el desglose por consulta, quedan solo en el JSON."""
         header = "| Técnica | Operación | Tamaño | Tiempo (ms) | Detalle |"
         separator = "|---|---|---:|---:|---|"
         lines = [header, separator]
         for item in self.measurements:
-            detail = ", ".join(f"{key}={value}" for key, value in item.extra.items())
+            detail = ", ".join(
+                f"{key}={value}"
+                for key, value in item.extra.items()
+                if not isinstance(value, list | dict)
+            )
             lines.append(
                 f"| {item.technique} | {item.operation} | {item.dataset_size} | "
                 f"{item.milliseconds:.2f} | {detail} |"

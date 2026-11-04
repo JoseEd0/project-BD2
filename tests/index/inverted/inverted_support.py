@@ -7,6 +7,9 @@ from pathlib import Path
 
 from config import EngineConfig
 from index.inverted import InvertedIndex, lnc_norm
+from index.inverted.format import DOCUMENT_RECORD, FIRST_DATA_PAGE, documents_path
+from storage.page import RecordPage, slot_capacity
+from storage.pager import Pager
 from storage.record_id import RecordId
 from text import Analyzer
 
@@ -28,6 +31,19 @@ def documents_of(texts: list[str]) -> Iterator[tuple[RecordId, str]]:
 
 def build(path: Path, texts: list[str], config: EngineConfig) -> InvertedIndex:
     return InvertedIndex.build(path, documents_of(texts), Analyzer(config), config)
+
+
+def mark_deleted(path: Path, config: EngineConfig, doc_ids: list[int]) -> None:
+    """Marca documentos como borrados directamente en la tabla de documentos de un índice
+    cerrado: el mantenimiento que lo hará por API todavía no existe."""
+    capacity = slot_capacity(config.page_size, DOCUMENT_RECORD.size)
+    with Pager(documents_path(path), config) as pager:
+        for doc_id in doc_ids:
+            page_index, slot = divmod(doc_id, capacity)
+            page_id = FIRST_DATA_PAGE + page_index
+            page = RecordPage.from_bytes(pager.read(page_id), DOCUMENT_RECORD.size)
+            page.tombstone(slot)
+            pager.write(page_id, page.to_bytes())
 
 
 def vocabulary(size: int, seed: int) -> list[str]:

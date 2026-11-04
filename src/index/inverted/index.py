@@ -17,7 +17,7 @@ from typing import Any
 from config import EngineConfig
 from text import Analyzer
 
-from .documents import DocumentTable
+from .documents import DocumentColumns, DocumentTable
 from .format import (
     POSTING_BYTES,
     DocumentEntry,
@@ -159,6 +159,11 @@ class InvertedIndex:
         """Raises:
         DocumentNotFoundError: si no hay documento con ese `doc_id`."""
         return self._documents.entry(doc_id)
+
+    def document_columns(self) -> DocumentColumns:
+        """La longitud y la norma de cada documento en memoria, y los borrados: lo que el
+        ranking consulta por cada posting. Se carga la primera vez, `O(N)`."""
+        return self._documents.columns()
 
     def documents(self) -> Iterator[DocumentEntry]:
         """Todos los documentos en orden de `doc_id`."""

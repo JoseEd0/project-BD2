@@ -437,6 +437,63 @@ actualiza en el momento.
 **Top-k.** `heapq.nsmallest(k, (-puntaje, dirección, doc_id))`, un montículo de tamaño
 `k`: `O(C log k)` para `C` candidatos, sin leer ninguna página para devolverlos.
 
+### Poda MaxScore en el top-k de BM25
+
+Para los `k` mejores no hace falta el puntaje de todos los candidatos, solo saber que los
+demás no pueden entrar. Es la poda **MaxScore** de Turtle y Flood (1995), en su versión
+término a término:
+
+```
+cota(t) = idf_t · (k1 + 1)          (tf / (tf + k1 · (…)) no pasa de 1)
+tras puntuar cada término:
+    resto  = Σ cota de los términos que faltan
+    umbral = k-ésimo mejor puntaje parcial entre los vivos
+    si resto < umbral:
+        ningún documento nuevo puede entrar: de las listas que faltan solo se
+        puntúan los que ya tienen acumulador (`PostingList.restricted_to`)
+        y se descarta el que tiene parcial + resto < umbral
+```
+
+- **El resultado es el mismo, bit a bit.** Los términos se recorren en el orden de la
+  consulta, como sin poda, así que cada documento que sigue suma las mismas
+  contribuciones en el mismo orden. El umbral nunca pasa del `k`-ésimo puntaje final,
+  porque los puntajes solo crecen; un documento se descarta solo si su cota queda **por
+  debajo**, nunca si lo iguala, para que el empate lo siga resolviendo la dirección de la
+  fila. Las cotas se inflan en `UPPER_BOUND_SLACK_FACTOR` (1 + 10⁻⁹) contra el redondeo,
+  y el umbral no cuenta a los borrados. Un test compara el top-k podado con los `k`
+  primeros del orden completo (`ranked`, que no poda) en corpus al azar, con cuatro
+  pares de `k1` y `b` y `k` de 1, 3 y 10.
+- **Solo en `top_k`.** `ranked` no sabe cuántos documentos le van a pedir.
+- **La lista se lee igual,** porque las listas no tienen saltos: lo que se ahorra es
+  puntuar. Restringir una lista a los que siguen se hace con `map` y `compress`, en C.
+- **El plan lo dice:** `EXPLAIN ANALYZE` añade «poda MaxScore desde *término*».
+- **Las cotas no se guardan:** `idf · (k1 + 1)` sale del df y de los parámetros de la
+  consulta. En el orden de la consulta, la poda empieza tras haber puntuado entero el 60 %
+  de los postings con tres palabras y el 70 % con cinco o más. Recorriendo los términos
+  de mayor a menor cota bajaría al 33 % y al 27 %, y con la cota exacta de cada lista (su
+  contribución máxima, que habría que guardar en el léxico) al 31 % y al 23 %; pero el
+  orden de las sumas cambiaría, y con él el último bit de algunos puntajes.
+
+Medido sobre las 150 consultas de ESCI con 100 000 fichas (tiempo de CPU, la mejor de
+15 pasadas, alternando las dos versiones; el resultado es idéntico en las 300
+búsquedas):
+
+| BM25, `k = 10` | 1 palabra | 3 palabras | 5+ palabras |
+|---|---:|---:|---:|
+| sin poda | 0,44 ms | 2,25 ms | 5,34 ms |
+| con poda | 0,45 ms | **1,60 ms** | **4,35 ms** |
+
+Con una palabra no hay nada que podar.
+
+**TF-IDF no poda.** Sin estadísticas por lista, la única cota de un término es `q_t`, la
+del coseno de un documento de un solo término: `(1 + log₁₀ tf) / ‖d‖` no pasa de 1. Una
+ficha tiene decenas de términos y su cociente real es mucho menor, así que la poda casi no
+se activa: con la cota exacta de cada lista se habría saltado el 12 % de los postings con
+tres palabras y el 17 % con cinco o más, y con `q_t`, ninguno y el 3 %. Una versión que
+podaba también TF-IDF lo confirmó: buscar el umbral costaba más de lo que ahorraba, y
+TF-IDF tardaba 3,1 ms en lugar de 2,6 con tres palabras y 8,3 ms en lugar de 6,1 con
+cinco o más.
+
 **El iterador perezoso** (`ranked`) es para una consulta con filtros (`AND precio < 100`)
 que no sabe cuántos documentos va a consumir. Forma un montículo con todos los candidatos,
 `O(C)`, y saca uno por cada documento que se pide, `O(log C)`. Ordenar todo de una vez
@@ -752,7 +809,10 @@ el término en todos los documentos, empates, documentos borrados, que el iterad
 perezoso da el mismo orden que el top-k completo, las estadísticas, el idioma del índice,
 los parámetros por omisión de la configuración y la validación de `k1` y `b`. El
 oráculo vive en `inverted_support.py`, indexado por la dirección de la fila, para que lo
-use también el mantenimiento.
+use también el mantenimiento. La poda MaxScore se compara además, bit a bit, con el orden
+completo sin poda: en corpus al azar (y se comprueba que la poda llegó a activarse), en un
+corpus hecho para que pode, con más empatados que `k` y con borrados que, si contaran en
+el umbral, harían descartar documentos vivos.
 
 El mantenimiento (`test_maintenance.py`) cubre la inserción que aparece antes y después del
 `flush`, el borrado que deja de aparecer, borrar lo que no está, la dirección repetida, el

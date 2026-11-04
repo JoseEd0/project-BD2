@@ -8,8 +8,9 @@ principio del flujo; el léxico la guarda junto al número de postings de la lis
 from __future__ import annotations
 
 from array import array
-from collections.abc import Iterable, Sequence
+from collections.abc import Container, Iterable, Sequence
 from dataclasses import dataclass
+from itertools import compress
 from pathlib import Path
 
 from config import EngineConfig
@@ -56,6 +57,19 @@ class PostingList:
             doc_ids.extend(part.doc_ids)
             frequencies.extend(part.term_frequencies)
         return cls(doc_ids, frequencies)
+
+    def restricted_to(self, documents: Container[int]) -> PostingList:
+        """Solo los postings de esos documentos, en el mismo orden.
+
+        Recorre la lista con iteradores de C (`map` y `compress`), sin un bucle de Python
+        por posting: es lo que abarata la poda del ranking, que solo puntúa a unos pocos
+        documentos de las listas largas.
+        """
+        kept = list(map(documents.__contains__, self.doc_ids))
+        return PostingList(
+            array(POSTING_TYPECODE, compress(self.doc_ids, kept)),
+            array(POSTING_TYPECODE, compress(self.term_frequencies, kept)),
+        )
 
     def __len__(self) -> int:
         return len(self.doc_ids)

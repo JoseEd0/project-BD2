@@ -451,7 +451,9 @@ ellas.
 
 **`EXPLAIN`** dice qué se busca, con qué ranking y con cuántas filas, y los términos ya
 analizados con su df, que salen del léxico sin leer ninguna lista; **`EXPLAIN ANALYZE`**
-añade los postings leídos y los documentos puntuados (`RankingStats`). Con los 1 000
+añade los postings leídos y los documentos puntuados (`RankingStats`) y, si el top-k de
+BM25 podó, desde qué término («poda MaxScore desde usb»; ver el
+[ranking](../index/inverted/README.md#poda-maxscore-en-el-top-k-de-bm25)). Con los 1 000
 productos de ESCI:
 
 ```

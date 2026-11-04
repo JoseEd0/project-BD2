@@ -396,6 +396,17 @@ def test_explain_analyze_adds_the_work_of_the_ranking(tienda: Engine):
     )
 
 
+def test_explain_analyze_tells_where_maxscore_started_to_prune(tienda: Engine):
+    """Tras `tecl`, lo más que puede sumar `usb` ya no alcanza al mejor: de su lista solo
+    se puntúan los dos teclados, y el resultado es el primero del orden completo."""
+    query = "SELECT id FROM productos WHERE MATCH(texto, 'teclado usb')"
+    result = tienda.execute(f"EXPLAIN ANALYZE {query} LIMIT 1")
+    assert "8 postings leídos, 2 documentos puntuados, poda MaxScore desde usb" in (
+        scan_detail(result)
+    )
+    assert tienda.execute(f"{query} LIMIT 1").rows == tienda.execute(query).rows[:1]
+
+
 def test_a_query_with_only_stopwords_finds_nothing(tienda: Engine):
     result = tienda.execute("SELECT id FROM productos WHERE MATCH(texto, 'de la para con')")
     assert result.rows == ()

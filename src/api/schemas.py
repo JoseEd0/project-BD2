@@ -80,6 +80,19 @@ class SpatialInfo(BaseModel):
     overlays: list[OverlayInfo] = Field(default_factory=list)
 
 
+class TextSearchInfo(BaseModel):
+    """Dónde buscó el `MATCH` de la consulta y con qué términos, para resaltarlos."""
+
+    table: str
+    column: str
+    query: str = Field(description="La consulta tal como se escribió")
+    method: Literal["TF_IDF", "BM25"]
+    terms: list[str] = Field(
+        default_factory=list,
+        description="Términos ya analizados: plegados, sin stopwords y reducidos a su raíz",
+    )
+
+
 class TablePoints(BaseModel):
     """Puntos de una tabla para pintarla en el mapa; una muestra si la tabla es grande."""
 
@@ -114,6 +127,7 @@ class QueryResponse(BaseModel):
     elapsed_ms: float = 0.0
     in_transaction: bool = False
     spatial: SpatialInfo | None = None
+    text: TextSearchInfo | None = None
 
 
 class FileUploadResponse(BaseModel):

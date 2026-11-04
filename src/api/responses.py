@@ -11,10 +11,12 @@ from api.schemas import (
     QueryResponse,
     SpatialInfo,
     StatementOutcome,
+    TextSearchInfo,
 )
 from query.engine import QueryResult
 from query.plan import PlanNode
 from query.spatial import SpatialView
+from query.text_search import TextView
 from spatial.geometry import Point
 from sql.nodes import Statement
 from storage.types import Value
@@ -66,6 +68,19 @@ def as_response(
         elapsed_ms=total,
         in_transaction=in_transaction,
         spatial=_as_spatial(last_query.spatial),
+        text=_as_text_search(last_query.text),
+    )
+
+
+def _as_text_search(view: TextView | None) -> TextSearchInfo | None:
+    if view is None:
+        return None
+    return TextSearchInfo(
+        table=view.table,
+        column=view.column,
+        query=view.query,
+        method=view.method.value,
+        terms=list(view.terms),
     )
 
 

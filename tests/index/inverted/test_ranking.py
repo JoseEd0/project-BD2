@@ -280,3 +280,93 @@ def test_tf_idf_takes_no_parameters(path: Path, config: EngineConfig):
             ranker.top_k("teclado", TF_IDF, 10, Bm25Parameters(DEFAULT_K1, DEFAULT_B))
         with pytest.raises(RankingParameterError):
             ranker.ranked("teclado", TF_IDF, Bm25Parameters(DEFAULT_K1, DEFAULT_B))
+
+
+# Un término raro (zafiro) y uno que está en todos los documentos (cable): tras puntuar el
+# raro, lo más que puede sumar el común ya no alcanza al décimo, y la poda de BM25 se activa.
+RARE_DOCUMENTS = 14
+COMMON_DOCUMENTS = 300
+PRUNING_QUERY = "zafiro cable"
+PRUNING_TOP_K = 10
+
+
+def pruning_texts() -> list[str]:
+    rare = [" ".join(["zafiro cable"] + ["funda"] * extra) for extra in range(RARE_DOCUMENTS)]
+    common = [" ".join(["cable"] + ["teclado"] * (extra % 7)) for extra in range(COMMON_DOCUMENTS)]
+    return rare + common
+
+
+def exhaustive_top_k(
+    ranker: Ranker, query: str, k: int, parameters: Bm25Parameters | None = None
+) -> list[ScoredDocument]:
+    """Los `k` primeros del orden completo, que no poda nada."""
+    return list(itertools.islice(ranker.ranked(query, BM25, parameters), k))
+
+
+@pytest.mark.parametrize("seed", SEEDS)
+def test_the_pruned_top_k_is_the_exhaustive_one_bit_for_bit(
+    seed: int, path: Path, config: EngineConfig
+):
+    texts = random_texts(CORPUS_SIZE, seed)
+    generator = random.Random(seed)
+    words = vocabulary(400, seed)
+    pruned_queries = 0
+    with build(path, texts, config) as index:
+        ranker = Ranker(index, config)
+        for _ in range(QUERIES_PER_CORPUS):
+            query = random_query(generator, words)
+            for k1, b in BM25_SETTINGS:
+                parameters = Bm25Parameters(k1, b)
+                for k in TOP_KS:
+                    stats = RankingStats()
+                    top = ranker.top_k(query, BM25, k, parameters, stats)
+                    assert top == exhaustive_top_k(ranker, query, k, parameters)
+                    pruned_queries += stats.pruned_from is not None
+    assert pruned_queries > 0
+
+
+def test_bm25_prunes_what_cannot_reach_the_top_k(path: Path, config: EngineConfig):
+    with build(path, pruning_texts(), config) as index:
+        ranker = Ranker(index, config)
+        pruned, exhaustive = RankingStats(), RankingStats()
+        top = ranker.top_k(PRUNING_QUERY, BM25, PRUNING_TOP_K, stats=pruned)
+        everything = list(ranker.ranked(PRUNING_QUERY, BM25, stats=exhaustive))
+        assert top == everything[:PRUNING_TOP_K]
+        assert pruned.postings_read == exhaustive.postings_read
+        assert exhaustive.documents_scored == RARE_DOCUMENTS + COMMON_DOCUMENTS
+        assert pruned.documents_scored <= RARE_DOCUMENTS
+        assert pruned.pruned_from == "cabl"
+
+
+def test_tf_idf_scores_every_candidate(path: Path, config: EngineConfig):
+    with build(path, pruning_texts(), config) as index:
+        stats = RankingStats()
+        Ranker(index, config).top_k(PRUNING_QUERY, TF_IDF, PRUNING_TOP_K, stats=stats)
+        assert stats.documents_scored == RARE_DOCUMENTS + COMMON_DOCUMENTS
+        assert stats.pruned_from is None
+
+
+def test_pruning_keeps_the_documents_that_tie_with_the_kth(path: Path, config: EngineConfig):
+    """Más documentos empatados que `k`: los decide la dirección de la fila, no la poda."""
+    texts = ["zafiro cable"] * (2 * PRUNING_TOP_K) + ["cable teclado"] * COMMON_DOCUMENTS
+    with build(path, texts, config) as index:
+        ranker = Ranker(index, config)
+        for k in (1, PRUNING_TOP_K, 2 * PRUNING_TOP_K - 1):
+            top = ranker.top_k(PRUNING_QUERY, BM25, k)
+            assert top == exhaustive_top_k(ranker, PRUNING_QUERY, k)
+            assert [document.doc_id for document in top] == list(range(k))
+
+
+def test_the_pruning_threshold_ignores_deleted_documents(path: Path, config: EngineConfig):
+    """Los más cortos son los mejores; si contaran estando borrados, el umbral subiría y
+    la poda descartaría documentos vivos que sí entran."""
+    k = PRUNING_TOP_K // 2
+    with build(path, pruning_texts(), config) as index:
+        for doc_id in range(k):
+            assert index.delete(record_id_of(doc_id))
+        ranker = Ranker(index, config)
+        stats = RankingStats()
+        top = ranker.top_k(PRUNING_QUERY, BM25, k, stats=stats)
+        assert top == exhaustive_top_k(ranker, PRUNING_QUERY, k)
+        assert [document.doc_id for document in top] == list(range(k, 2 * k))
+        assert stats.pruned_from == "cabl"

@@ -13,9 +13,10 @@ from __future__ import annotations
 import heapq
 import math
 from array import array
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from enum import Enum, unique
+from functools import partial
 from typing import NamedTuple
 
 from config import EngineConfig, bm25_parameters_error
@@ -30,6 +31,10 @@ from .weights import log_frequency_weight
 # La corrección de Robertson y Spärck Jones: medio documento a cada lado del cociente, para
 # que el idf no se indefina cuando el término está en ninguno o en todos los documentos.
 BM25_DOCUMENT_FREQUENCY_SMOOTHING = 0.5
+# Cada contribución se redondea al sumarse, y un puntaje puede pasar la suma de sus cotas
+# por unos pocos ulp (del orden de 1e-16 en relativo). La poda infla las cotas en este
+# factor para no descartar nunca, por redondeo, un documento que alcanza el umbral.
+UPPER_BOUND_SLACK_FACTOR = 1 + 1e-9
 
 Accumulators = dict[int, float]
 # Puntaje negado y `doc_id`: lo que ordena el montículo. A igual puntaje, el orden de
@@ -85,13 +90,17 @@ class RankingStats:
     Attributes:
         document_frequencies: cada término de la consulta ya analizado, en el orden en
             que aparece, con su df; 0 si no está en el índice.
-        postings_read: postings recorridos entre todas las listas.
-        documents_scored: documentos no borrados que recibieron un puntaje.
+        postings_read: postings leídos entre todas las listas.
+        documents_scored: documentos no borrados que recibieron su puntaje completo.
+        pruned_from: con la poda MaxScore de `top_k` con BM25, el primer término cuya
+            lista solo se puntuó para los documentos que aún podían quedar entre los `k`
+            mejores; `None` si se puntuó todo.
     """
 
     document_frequencies: dict[str, int] = field(default_factory=dict)
     postings_read: int = 0
     documents_scored: int = 0
+    pruned_from: str | None = None
 
 
 class _QueryTerm(NamedTuple):
@@ -137,7 +146,7 @@ class Ranker:
         """
         if k < 0:
             raise RankingParameterError(f"k tiene que ser al menos 0, no {k}")
-        keys = _ranking_keys(self._scores(query, method, parameters, stats))
+        keys = _ranking_keys(self._scores(query, method, parameters, stats, k))
         if k == 0:
             return []
         # Uno de más para saber si el último puntaje que entra empata con alguno que queda
@@ -164,7 +173,7 @@ class Ranker:
         Raises:
             RankingParameterError: si se dan parámetros para TF-IDF.
         """
-        keys = _ranking_keys(self._scores(query, method, parameters, stats))
+        keys = _ranking_keys(self._scores(query, method, parameters, stats, None))
         heapq.heapify(keys)
         return self._pop_in_order(keys)
 
@@ -182,7 +191,11 @@ class Ranker:
         method: RankingMethod,
         parameters: Bm25Parameters | None,
         stats: RankingStats | None,
+        k: int | None,
     ) -> Accumulators:
+        """El puntaje de cada documento que contiene algún término. Con BM25 y `k`
+        positivo, solo se garantiza que estén los que pueden quedar entre los `k` mejores
+        (ver `_bm25`)."""
         stats = RankingStats() if stats is None else stats
         require_fitting_parameters(method, parameters)
         query_terms = self._query_terms(query, stats)
@@ -194,7 +207,7 @@ class Ranker:
             accumulators = self._tf_idf(query_terms, stats)
         else:
             bm25 = self._default_bm25 if parameters is None else parameters
-            accumulators = self._bm25(query_terms, bm25, stats)
+            accumulators = self._bm25(query_terms, bm25, stats, k)
         deleted = self._index.document_columns().deleted
         if deleted:
             accumulators = {doc: score for doc, score in accumulators.items() if doc not in deleted}
@@ -215,7 +228,12 @@ class Ranker:
     def _tf_idf(self, query_terms: list[_QueryTerm], stats: RankingStats) -> Accumulators:
         """lnc.ltc: `Σ_t q_t · (1 + log₁₀ tf_t,d) / ‖d‖`, con `q_t` el peso ltc de la consulta
         ya normalizado. La norma del documento es común a todos sus términos, así que se
-        divide una sola vez, al final."""
+        divide una sola vez, al final.
+
+        No poda como BM25: la cota de un término sin estadísticas por lista es `q_t`, la
+        de un documento de un solo término, y una ficha tiene decenas. Con las 100 000
+        fichas de ESCI la poda casi no se activaba y buscar el umbral costaba más de lo
+        que ahorraba (medido en el README)."""
         document_count = self._index.document_count
         weights = [
             log_frequency_weight(term.query_frequency)
@@ -234,25 +252,98 @@ class Ranker:
         return {doc_id: score / norms[doc_id] for doc_id, score in accumulators.items()}
 
     def _bm25(
-        self, query_terms: list[_QueryTerm], parameters: Bm25Parameters, stats: RankingStats
+        self,
+        query_terms: list[_QueryTerm],
+        parameters: Bm25Parameters,
+        stats: RankingStats,
+        k: int | None,
     ) -> Accumulators:
         """`Σ_t idf_t · tf · (k1 + 1) / (tf + k1 · (1 - b + b · dl / avgdl))` sobre los
-        términos distintos de la consulta."""
-        if not query_terms:
-            return {}
+        términos distintos de la consulta.
+
+        Con `k` positivo, poda **MaxScore** (Turtle y Flood, 1995), término a término y
+        en el orden de la consulta. Un término aporta como mucho `idf_t · (k1 + 1)`,
+        porque `tf / (tf + k1 · (…))` no pasa de 1. Tras cada término, si lo que pueden
+        sumar los que faltan no alcanza al `k`-ésimo puntaje parcial, ningún documento
+        nuevo puede entrar entre los `k` mejores, y uno que ya está solo sigue si su
+        puntaje más esa cota lo alcanza (`_prune`). Desde ahí, de cada lista solo se
+        puntúan los documentos que siguen. Sus puntajes son los mismos que sin poda: cada
+        uno suma las mismas contribuciones en el mismo orden.
+        """
         document_count = self._index.document_count
         k1, b = parameters.k1, parameters.b
+        scaled_idfs = [
+            _bm25_idf(document_count, self._document_frequency(term.entry)) * (k1 + 1)
+            for term in query_terms
+        ]
         # k1 · (1 - b + b · dl / avgdl) = intercept + slope · dl; `_scores` ya descartó
         # avgdl = 0.
-        intercept = k1 * (1 - b)
-        slope = k1 * b / self._index.average_length
-        lengths = self._index.document_columns().lengths
+        add = partial(
+            _add_bm25,
+            intercept=k1 * (1 - b),
+            slope=k1 * b / self._index.average_length,
+            lengths=self._index.document_columns().lengths,
+        )
+        return self._accumulate_with_pruning(query_terms, scaled_idfs, add, stats, k)
+
+    def _accumulate_with_pruning(
+        self,
+        query_terms: list[_QueryTerm],
+        scaled_idfs: list[float],
+        add: Callable[[Accumulators, PostingList, float], None],
+        stats: RankingStats,
+        k: int | None,
+    ) -> Accumulators:
+        """Término a término, con la poda MaxScore de `_bm25` si `k` es positivo: el
+        `scaled_idf` de cada término es a la vez su peso y su cota."""
         accumulators: Accumulators = {}
-        for term in query_terms:
-            idf = _bm25_idf(document_count, self._document_frequency(term.entry))
+        seen_bound = 0.0
+        pruning = False
+        for position, (term, scaled_idf, remaining_bound) in enumerate(
+            zip(query_terms, scaled_idfs, _remaining_sums(scaled_idfs), strict=True)
+        ):
             postings = self._read(term.entry, stats)
-            _add_bm25(accumulators, postings, idf * (k1 + 1), intercept, slope, lengths)
+            if pruning:
+                postings = postings.restricted_to(accumulators)
+            add(accumulators, postings, scaled_idf)
+            seen_bound += scaled_idf
+            # Ningún parcial pasa de `seen_bound`: si lo que falta llega a eso, no hay nada
+            # que podar; tras el último término, podar ya no ahorra ninguna lista.
+            if not k or position == len(query_terms) - 1 or remaining_bound >= seen_bound:
+                continue
+            pruned = self._prune(accumulators, k, remaining_bound)
+            if pruned is None:
+                continue
+            if not pruning:
+                stats.pruned_from = query_terms[position + 1].entry.term
+            accumulators = pruned
+            pruning = True
         return accumulators
+
+    def _prune(
+        self, accumulators: Accumulators, k: int, remaining_bound: float
+    ) -> Accumulators | None:
+        """Los acumuladores de los documentos que todavía pueden quedar entre los `k`
+        mejores, o `None` si los términos que faltan aún pueden meter a cualquiera.
+
+        El umbral es el `k`-ésimo mejor puntaje parcial entre los documentos vivos: los
+        puntajes solo crecen, así que nunca pasa del `k`-ésimo final. Un documento se
+        descarta solo si su cota queda **por debajo** del umbral, nunca si lo iguala: un
+        empate con el `k`-ésimo lo resuelve después la dirección de la fila.
+        """
+        deleted = self._index.document_columns().deleted
+        best = heapq.nlargest(
+            k, (score for doc_id, score in accumulators.items() if doc_id not in deleted)
+        )
+        if len(best) < k or remaining_bound * UPPER_BOUND_SLACK_FACTOR >= best[-1]:
+            return None
+        threshold = best[-1]
+        return {
+            doc_id: score
+            for doc_id, score in accumulators.items()
+            if (score + remaining_bound) * UPPER_BOUND_SLACK_FACTOR >= threshold
+            and doc_id not in deleted
+        }
 
     def _document_frequency(self, entry: TermEntry) -> int:
         """El df con que pesa el término. Hasta la próxima fusión cuenta documentos
@@ -334,6 +425,11 @@ def _add_bm25(
     for doc_id, frequency in zip(postings.doc_ids, postings.term_frequencies, strict=True):
         saturation = frequency / (frequency + intercept + slope * lengths[doc_id])
         accumulators[doc_id] = current(doc_id, 0.0) + scaled_idf * saturation
+
+
+def _remaining_sums(bounds: list[float]) -> list[float]:
+    """Para cada posición, la suma de las cotas que vienen después."""
+    return [math.fsum(bounds[after:]) for after in range(1, len(bounds) + 1)]
 
 
 def _ranking_keys(scores: Accumulators) -> list[RankingKey]:

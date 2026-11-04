@@ -89,6 +89,8 @@ class TextSearchScan(TableOperator):
                 f"{detail} · {self._stats.postings_read} postings leídos, "
                 f"{self._stats.documents_scored} documentos puntuados"
             )
+            if self._stats.pruned_from is not None:
+                detail = f"{detail}, poda MaxScore desde {self._stats.pruned_from}"
         return PlanNode("TextSearchScan", detail)
 
     def _ranking(self) -> str:

@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from config import EngineConfig
-from external.runs import RunReader, RunWriter, merge_sorted_runs
+from external.runs import RunReader, RunWriter, merge_sorted_runs, merge_sorted_streams
 from storage.page import slot_capacity
 
 RECORD_SIZE = 8
@@ -50,3 +50,24 @@ def test_merging_keeps_the_order_and_is_stable(config: EngineConfig):
 
 def test_merging_nothing_gives_nothing(config: EngineConfig):
     assert list(merge_sorted_runs([], RECORD_SIZE, key_of, config)) == []
+
+
+def test_merging_streams_tags_each_item_with_its_stream_and_is_stable():
+    streams = [iter([(1, "a"), (3, "a")]), iter([]), iter([(1, "c"), (2, "c")])]
+    merged = list(merge_sorted_streams(streams, key_of=lambda item: item[0]))
+    assert merged == [(0, (1, "a")), (2, (1, "c")), (2, (2, "c")), (0, (3, "a"))]
+
+
+def test_merging_streams_pulls_the_next_item_only_when_asked():
+    pulled: list[int] = []
+
+    def numbers(values: list[int]):
+        for value in values:
+            pulled.append(value)
+            yield value
+
+    merged = merge_sorted_streams([numbers([1, 4]), numbers([2, 3])], key_of=lambda value: value)
+    assert next(merged) == (0, 1)
+    assert pulled == [1, 2]
+    assert next(merged) == (1, 2)
+    assert pulled == [1, 2, 4]

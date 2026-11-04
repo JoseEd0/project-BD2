@@ -7,8 +7,8 @@ su manera; aquí vive una sola vez:
 * `FileHeader`: la página 0, con una firma que distingue un archivo de otro y una versión
   que distingue un formato de otro, antes de interpretar ninguna página;
 * `FreePageList`: las páginas liberadas, enlazadas a través de ellas mismas;
-* `chained_pages`: el recorrido de una cadena de páginas, que una página corrupta no puede
-  convertir en un bucle sin fin.
+* `chained_pages` y `chained_links`: el recorrido de una cadena de páginas o de registros,
+  que una página corrupta no puede convertir en un bucle sin fin.
 """
 
 from __future__ import annotations
@@ -22,6 +22,7 @@ from .pager import HEADER_PAGE_ID, Pager
 from .types import StorageError
 
 Page = TypeVar("Page")
+Link = TypeVar("Link")
 SIGNATURE_FORMAT = "<4sH"
 FREE_LINK = struct.Struct("<i")
 
@@ -131,19 +132,40 @@ def chained_pages(
 ) -> Iterator[tuple[int, Page]]:
     """Las páginas de una cadena, empezando por `first`, con lo que `load` lee de cada una.
 
-    `load` devuelve el número de la página siguiente y la página. Una cadena no puede tener
-    más páginas que el archivo: si las tiene, alguna página corrupta apunta hacia atrás, y
-    seguirla sería girar para siempre.
+    `load` devuelve el número de la página siguiente y la página; la cadena acaba en
+    `NO_PAGE`.
 
     Raises:
         CorruptFileError: si la cadena tiene un ciclo.
     """
-    page_id = first
+    return chained_links(first, load, NO_PAGE, page_count, file_name)
+
+
+def chained_links(
+    first: Link,
+    load: Callable[[Link], tuple[Link, Page]],
+    end: Link,
+    limit: int,
+    file_name: str,
+) -> Iterator[tuple[Link, Page]]:
+    """Los eslabones de una cadena, empezando por `first` y hasta el enlace `end`, con lo que
+    `load` lee de cada uno. El enlace es lo que la estructura guarda para llegar al siguiente:
+    un número de página o la dirección de un registro.
+
+    `load` devuelve el enlace siguiente y el eslabón. Quien llama sabe cuántos eslabones
+    puede tener la cadena como mucho (`limit`), por ejemplo las páginas del archivo cuando
+    no hay dos en la misma página: si tiene más, alguno corrupto apunta hacia atrás, y
+    seguirlo sería girar para siempre.
+
+    Raises:
+        CorruptFileError: si la cadena tiene un ciclo.
+    """
+    link = first
     visited = 0
-    while page_id != NO_PAGE:
+    while link != end:
         visited += 1
-        if visited > page_count:
+        if visited > limit:
             raise CorruptFileError(f"{file_name} tiene una cadena de páginas que vuelve sobre sí")
-        following, page = load(page_id)
-        yield page_id, page
-        page_id = following
+        following, page = load(link)
+        yield link, page
+        link = following

@@ -3,7 +3,13 @@
 import pytest
 
 from config import EngineConfig
-from storage.layout import CorruptFileError, FileHeader, FreePageList, chained_pages
+from storage.layout import (
+    CorruptFileError,
+    FileHeader,
+    FreePageList,
+    chained_links,
+    chained_pages,
+)
 from storage.page import NO_PAGE
 from storage.pager import Pager
 from storage.types import StorageError
@@ -68,6 +74,20 @@ def test_a_chain_ends_at_no_page():
         return (page_id + 1 if page_id < 2 else NO_PAGE), f"p{page_id}"
 
     assert list(chained_pages(0, ending, 10, "t")) == [(0, "p0"), (1, "p1"), (2, "p2")]
+
+
+def test_a_chain_of_any_kind_of_link_ends_at_its_end_link():
+    links = {("a", 1): ("b", 2), ("b", 2): ("fin", 0)}
+
+    def follow(link: tuple[str, int]) -> tuple[tuple[str, int], int]:
+        return links[link], link[1]
+
+    assert list(chained_links(("a", 1), follow, ("fin", 0), 5, "t")) == [
+        (("a", 1), 1),
+        (("b", 2), 2),
+    ]
+    with pytest.raises(CorruptFileError):
+        list(chained_links(("a", 1), follow, ("fin", 0), 1, "t"))
 
 
 def test_a_header_that_does_not_fit_in_a_page_is_a_format_error(config: EngineConfig):

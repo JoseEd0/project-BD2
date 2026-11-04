@@ -46,7 +46,8 @@ def test_a_varchar_column_takes_one_as_well(productos: Engine):
 
 @pytest.mark.parametrize("language", ["en", "EN", " es "])
 def test_the_language_is_an_option(productos: Engine, language: str):
-    productos.execute(f"CREATE INDEX i ON productos USING INVERTED (texto) WITH (idioma='{language}')")
+    options = f"WITH (idioma='{language}')"
+    productos.execute(f"CREATE INDEX i ON productos USING INVERTED (texto) {options}")
     index = productos.table("productos").text_search_index("i").inverted_index
     assert index.language == language.strip().lower()
 

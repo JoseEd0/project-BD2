@@ -16,6 +16,9 @@ cuatro órdenes de magnitud, así que en escala lineal solo se vería la técnic
 En un eje logarítmico una recta es una ley de potencia y su pendiente dice cómo escala la
 técnica: plana si no depende del tamaño, a 45° si crece en proporción.
 
+Las medidas que son fracciones de 0 a 1, como la precisión, van en barras agrupadas sobre
+un eje lineal, con un panel por medida y una fila por tamaño.
+
 Qué se dibuja está declarado en `benchmarks/plots/`, un módulo por experimento.
 """
 

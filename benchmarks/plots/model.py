@@ -1,4 +1,9 @@
-"""Lo que se dibuja, declarado como datos: técnicas, series, magnitudes, paneles y figuras."""
+"""Lo que se dibuja, declarado como datos: técnicas, series, magnitudes, paneles y figuras.
+
+Hay dos clases de figura: `Figure`, con una línea por técnica frente al tamaño de los datos
+en ejes logarítmicos, y `BarFigure`, con barras agrupadas en un eje lineal de 0 a 1 para
+medidas que son fracciones, como la precisión.
+"""
 
 from __future__ import annotations
 
@@ -114,3 +119,41 @@ def compare(
         for technique in techniques
     )
     return Panel(title, measure, lines, note)
+
+
+@dataclass(frozen=True, slots=True)
+class BarGroup:
+    """Un grupo de barras: la operación de los resultados y su rótulo en el eje."""
+
+    label: str
+    operation: str
+
+
+@dataclass(frozen=True, slots=True)
+class BarPanel:
+    """Barras agrupadas de una fracción: un grupo por operación y una barra por técnica.
+
+    `title` puede citar los parámetros de la ejecución, como `Precision@{k}`; `field` es la
+    clave de `extra` de donde sale cada valor.
+    """
+
+    title: str
+    axis: str
+    field: str
+    groups: tuple[BarGroup, ...]
+    techniques: tuple[Technique, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class BarFigure:
+    """Una imagen de barras: una columna por panel y una fila por cada tamaño medido.
+
+    `sizes_label` dice qué cuenta el tamaño en el título de cada panel: documentos, filas.
+    """
+
+    filename: str
+    report: str
+    title: str
+    subtitle: str
+    sizes_label: str
+    panels: tuple[BarPanel, ...]

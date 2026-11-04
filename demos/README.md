@@ -1,7 +1,8 @@
 # Demostraciones
 
-Tres guiones pensados para la exposición del proyecto: un dataset relacional que se genera
-solo, uno espacial **real** que se descarga, y una simulación de concurrencia.
+Cuatro guiones pensados para la exposición del proyecto: un dataset relacional que se genera
+solo, uno espacial **real** que se descarga, un corpus de texto real con juicios de
+relevancia, y una simulación de concurrencia.
 
 ## 1. Poblar la base de datos — `poblar_ecommerce.py`
 
@@ -156,7 +157,13 @@ Este es también el dataset del **experimento espacial**
 [ODbL](https://opendatacommons.org/licenses/odbl/): © colaboradores de OpenStreetMap. Por
 eso el CSV no está en el repositorio (`data/` se ignora): quien lo quiera, lo descarga.
 
-## 3. Concurrencia — `concurrencia.py`
+## 3. Corpus de texto con juicios de relevancia
+
+El corpus del experimento de texto (Amazon ESCI en español, con consultas reales y juicios
+de relevancia) no se genera aquí: su descarga y sus subconjuntos viven junto al experimento
+que los usa, en [`benchmarks/esci/`](../benchmarks/esci/README.md).
+
+## 4. Concurrencia — `concurrencia.py`
 
 ```bash
 .venv/bin/python demos/concurrencia.py

@@ -32,6 +32,11 @@ DEFAULT_TEXT_MAX_TOKEN_LENGTH = 40
 # salen 9 bloques; entre 8 y 32 MiB el tiempo de construcción no cambia (lo domina el
 # análisis del texto) y la memoria sí, así que no hay razón para un bloque mayor.
 DEFAULT_SPIMI_BLOCK_BYTES = 16 * 1024 * 1024
+# Los valores de Robertson y Zaragoza («The Probabilistic Relevance Framework: BM25 and
+# Beyond», 2009), que también son los de Lucene: k1 entre 1,2 y 2 satura pronto la
+# frecuencia, y b = 0,75 normaliza la longitud sin anularla.
+DEFAULT_BM25_K1 = 1.2
+DEFAULT_BM25_B = 0.75
 DEFAULT_LOCK_TIMEOUT_SECONDS = 5.0
 DEFAULT_CSV_DELIMITER = ","
 DEFAULT_CSV_ENCODING = "utf-8"
@@ -50,6 +55,9 @@ MAX_PAGE_SIZE = 1 << 15
 MAX_RTREE_MIN_FILL = 0.5
 MIN_MERGE_FAN_IN = 2
 MIN_HASH_PARTITIONS = 2
+MIN_BM25_K1 = 0.0
+MIN_BM25_B = 0.0
+MAX_BM25_B = 1.0
 
 
 class ConfigurationError(ValueError):
@@ -87,6 +95,10 @@ class EngineConfig:
         text_max_token_length: caracteres a partir de los cuales un token se descarta.
         spimi_block_bytes: memoria que el bloque de SPIMI puede ocupar, según la estimación
             de `index/inverted/spimi.py`, antes de escribirse a disco como un bloque.
+        bm25_k1: saturación de la frecuencia en BM25; con 0 solo cuenta si el término
+            aparece. Una consulta puede cambiarlo.
+        bm25_b: cuánto normaliza BM25 por la longitud del documento, de 0 (nada) a 1
+            (del todo). Una consulta puede cambiarlo.
         lock_timeout_seconds: espera máxima de una transacción por un bloqueo.
         csv_delimiter: separador de los archivos que carga `CREATE TABLE ... FROM FILE`.
         csv_encoding: codificación de esos archivos.
@@ -117,6 +129,8 @@ class EngineConfig:
     text_min_token_length: int = DEFAULT_TEXT_MIN_TOKEN_LENGTH
     text_max_token_length: int = DEFAULT_TEXT_MAX_TOKEN_LENGTH
     spimi_block_bytes: int = DEFAULT_SPIMI_BLOCK_BYTES
+    bm25_k1: float = DEFAULT_BM25_K1
+    bm25_b: float = DEFAULT_BM25_B
     lock_timeout_seconds: float = DEFAULT_LOCK_TIMEOUT_SECONDS
     csv_delimiter: str = DEFAULT_CSV_DELIMITER
     csv_encoding: str = DEFAULT_CSV_ENCODING
@@ -163,6 +177,9 @@ class EngineConfig:
         _require_between(
             "text_max_token_length", self.text_max_token_length, self.text_min_token_length, None
         )
+        bm25_error = bm25_parameters_error(self.bm25_k1, self.bm25_b)
+        if bm25_error is not None:
+            raise ConfigurationError(bm25_error)
         _require_positive("lock_timeout_seconds", self.lock_timeout_seconds)
         _require_positive("session_idle_seconds", self.session_idle_seconds)
         if len(self.csv_delimiter) != 1:
@@ -171,6 +188,20 @@ class EngineConfig:
             codecs.lookup(self.csv_encoding)
         except LookupError:
             raise ConfigurationError(f"codificación desconocida: {self.csv_encoding}") from None
+
+
+def bm25_parameters_error(k1: float, b: float) -> str | None:
+    """Por qué `k1` y `b` no sirven para BM25, o `None` si sirven: `k1` finito y no
+    negativo, `b` entre 0 y 1. La usan la configuración y los parámetros de cada consulta,
+    cada una con su propio error.
+
+    Escrita en positivo para que un NaN no pase ninguna cota.
+    """
+    if not MIN_BM25_K1 <= k1 < math.inf:
+        return f"k1 tiene que ser finito y al menos {MIN_BM25_K1}, no {k1}"
+    if not MIN_BM25_B <= b <= MAX_BM25_B:
+        return f"b tiene que estar entre {MIN_BM25_B} y {MAX_BM25_B}, no {b}"
+    return None
 
 
 def _require_between(name: str, value: int, low: int, high: int | None) -> None:

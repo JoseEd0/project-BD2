@@ -469,15 +469,15 @@ Tiempo por consulta, en milisegundos:
 
 | Palabras | Técnica | 1 000 | 10 000 | 100 000 |
 |---|---|---:|---:|---:|
-| 1 palabra | TF-IDF + coseno | 0.030 | 0.069 | **0.35** |
-|  | BM25 | **0.029** | **0.065** | 0.42 |
-|  | GIN | 0.052 | 0.12 | 0.67 |
-| 3 palabras | TF-IDF + coseno | 0.083 | 0.22 | **1.98** |
-|  | BM25 | **0.081** | **0.21** | 2.48 |
-|  | GIN | 0.22 | 2.17 | 21.5 |
-| 5 o más | TF-IDF + coseno | 0.11 | **0.44** | 6.99 |
-|  | BM25 | **0.11** | 0.44 | **6.33** |
-|  | GIN | 0.38 | 5.78 | 56.1 |
+| 1 palabra | TF-IDF + coseno | 0.023 | 0.055 | 0.30 |
+|  | BM25 | **0.020** | **0.053** | **0.30** |
+|  | GIN | 0.074 | 0.097 | 0.60 |
+| 3 palabras | TF-IDF + coseno | 0.068 | 0.20 | 1.58 |
+|  | BM25 | **0.066** | **0.19** | **1.48** |
+|  | GIN | 0.20 | 1.83 | 19.0 |
+| 5 o más | TF-IDF + coseno | **0.097** | 0.42 | 3.64 |
+|  | BM25 | 0.098 | **0.41** | **3.56** |
+|  | GIN | 0.38 | 4.84 | 50.0 |
 
 ### Dónde se va el tiempo
 
@@ -487,9 +487,9 @@ de cada una y calcula `ts_rank_cd`. El `EXPLAIN ANALYZE` separa las dos partes:
 
 | Palabras | Postings leídos (1 000) | (10 000) | (100 000) | Candidatos del motor (100 000) | Filas de GIN (100 000) | GIN: índice (ms) | GIN: ejecución completa (ms) |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| 1 palabra | 9 | 176 | 1 620 | 1 464 | 235 | 0.012 | 0.46 |
-| 3 palabras | 130 | 915 | 8 781 | 8 203 | 6 986 | 0.44 | 22.8 |
-| 5 o más | 206 | 2 252 | 21 911 | 18 296 | 15 747 | 1.41 | 60.2 |
+| 1 palabra | 9 | 176 | 1 620 | 1 464 | 235 | 0.009 | 0.39 |
+| 3 palabras | 130 | 915 | 8 781 | 8 203 | 6 986 | 0.37 | 18.5 |
+| 5 o más | 206 | 2 252 | 21 911 | 18 296 | 15 747 | 1.08 | 49.8 |
 
 ### Relevancia
 
@@ -532,16 +532,16 @@ un top 10 perfecto llega siempre a un Recall@10 de 1.
 
 | Medida | Técnica | 1 000 | 10 000 | 100 000 |
 |---|---|---:|---:|---:|
-| Construcción (ms) | índice invertido (SPIMI) | 376 | 2 288 | 22 262 |
-|  | GIN, total | **110** | **1 161** | **12 073** |
-|  | GIN: columna `tsvector` | 85.7 | 871 | 9 229 |
-|  | GIN: `CREATE INDEX` | 23.9 | 290 | 2 844 |
-| Espacio del índice (KiB) | índice invertido (SPIMI) | **1 064** | 7 832 | 69 208 |
-|  | GIN | 1 080 | **6 360** | **37 840** |
+| Construcción (ms) | índice invertido (SPIMI) | 361 | 2 194 | 20 422 |
+|  | GIN, total | **99.9** | **1 038** | **10 720** |
+|  | GIN: columna `tsvector` | 78.6 | 816 | 8 303 |
+|  | GIN: `CREATE INDEX` | 21.3 | 222 | 2 416 |
+| Espacio del índice (KiB) | índice invertido (SPIMI) | 1 088 | 7 968 | 71 056 |
+|  | GIN | **1 080** | **6 360** | **37 840** |
 |  | GIN: columna `tsvector` | 1 136 | 11 641 | 117 420 |
-| Memoria pico al construir (KiB) | índice invertido (SPIMI) | 4 846 | 21 055 | 27 224 |
-| Memoria pico al consultar (KiB) | TF-IDF + coseno | 69.9 | 853 | 17 384 |
-|  | BM25 | **44.4** | **850** | **16 799** |
+| Memoria pico al construir (KiB) | índice invertido (SPIMI) | 4 847 | 21 056 | 27 225 |
+| Memoria pico al consultar (KiB) | TF-IDF + coseno | 70.2 | 853 | 17 087 |
+|  | BM25 | **44.7** | **850** | **16 279** |
 
 El espacio del índice invertido son sus cuatro archivos: con 100 000 productos, léxico
 4 624 KiB, términos 1 020, postings 61 696 y documentos 1 868. El de GIN es
@@ -568,26 +568,24 @@ experimento que más depende de una opción: `--ts-rank-normalization` la cambia
 
 **El motor responde antes que PostgreSQL con 3 palabras o más**, y la tabla de arriba dice
 por qué. Con 100 000 productos y 5 o más palabras, el GIN encuentra las
-15 747 filas en 1.41 ms, el 2.3 % de la ejecución; el resto es leer el `tsvector` de cada fila
-y puntuarla, unos 3.8 µs por fila. El motor tiene la frecuencia de cada término dentro
+15 747 filas en 1.08 ms, el 2.2 % de la ejecución; el resto es leer el `tsvector` de cada fila
+y puntuarla, unos 3.2 µs por fila. El motor tiene la frecuencia de cada término dentro
 del posting y la longitud de cada documento en memoria: puntuar le cuesta unos
-289 ns por posting con BM25 y 319 con TF-IDF. GIN es C y el motor Python, pero la
+162 ns por posting con BM25 y 166 con TF-IDF. GIN es C y el motor Python, pero la
 diferencia no está en el lenguaje sino en lo que cada uno guarda en el índice: GIN está
 hecho para responder qué filas coinciden, no para ordenarlas. Con una palabra hay pocas filas
-que leer y la distancia se acorta (1.6 veces con 100 000 productos, frente a
-9 con 3 palabras).
+que leer y la distancia se acorta (2.0 veces con 100 000 productos, frente a
+13 con 3 palabras).
 
 **El tiempo del motor sigue a los postings que lee.** De 10 000 a 100 000 productos, una
-consulta de 5 o más palabras lee 9.7 veces más postings y BM25 tarda 14.2 veces más. Que
-tarde algo más de lo que crecen los postings encaja con la caché, aunque no se midió aparte:
-con 10 000 productos el archivo de postings (6.0 MiB) cabe en el buffer pool de 8 MiB, y
-con 100 000 (60 MiB) no.
+consulta de 5 o más palabras lee 9.7 veces más postings y BM25 tarda 8.7 veces más: el
+costo de una consulta es recorrer sus listas, y crece con ellas, no con el tamaño de la colección.
 
 **GIN construye más rápido y ocupa menos.** Con 100 000 productos, PostgreSQL calcula la
-columna y crea el índice en 12.1 s; el motor tarda 22.3 s, 1.8 veces más, la mayor parte
-analizando el texto en Python (lo mide el [README del índice](../src/index/inverted/README.md#medido-con-esci)). El índice GIN ocupa 37.0 MiB y el invertido 67.6 MiB
-(1.8 veces más): GIN comprime sus listas, y el motor guarda los postings sin
-comprimir, 8 bytes cada uno, para decodificarlos en C; son el 89 % de sus archivos.
+columna y crea el índice en 10.7 s; el motor tarda 20.4 s, 1.9 veces más, la mayor parte
+analizando el texto en Python (lo mide el [README del índice](../src/index/inverted/README.md#medido-con-esci)). El índice GIN ocupa 37.0 MiB y el invertido 69.4 MiB
+(1.9 veces más): GIN comprime sus listas, y el motor guarda los postings sin
+comprimir, 8 bytes cada uno, para decodificarlos en C; son el 87 % de sus archivos.
 Pero el ranking de GIN necesita además la columna `tsvector`, que ocupa 115 MiB.
 
 **La memoria de SPIMI está acotada.** Con 100 000 productos la construcción escribe
@@ -598,8 +596,8 @@ Pero el ranking de GIN necesita además la columna `tsvector`, que ocupa 115 MiB
 
 | | TF-IDF + coseno | BM25 | GIN (PostgreSQL) |
 |---|---|---|---|
-| **Ventajas** | Sin parámetros que ajustar · la norma del documento se calcula al indexar y no cambia · empata con BM25 en consultas de una palabra | El más relevante: Precision@10 de 0.35 con 100 000 productos · satura la frecuencia y normaliza por longitud · el mismo índice y las mismas listas que TF-IDF | Construye 1.8 veces más rápido · índice 1.8 veces más chico · maduro, transaccional y concurrente |
-| **Desventajas** | Pierde frente a BM25 en consultas largas: 0.22 contra 0.29 con 5 o más palabras · el idf solo pesa en la consulta | Dos parámetros (`k1`, `b`) que dependen del corpus · necesita la longitud de cada documento a mano en memoria | No ordena por sí mismo: `ts_rank_cd` relee el `tsvector` de cada fila, 9 veces más lento que BM25 con 5 o más palabras · con la normalización por omisión prefiere textos largos: Precision@10 de 0.15 · el ranking necesita además la columna `tsvector` (115 MiB) |
+| **Ventajas** | Sin parámetros que ajustar · la norma del documento se calcula al indexar y no cambia · empata con BM25 en consultas de una palabra | El más relevante: Precision@10 de 0.35 con 100 000 productos · satura la frecuencia y normaliza por longitud · el mismo índice y las mismas listas que TF-IDF | Construye 1.9 veces más rápido · índice 1.9 veces más chico · maduro, transaccional y concurrente |
+| **Desventajas** | Pierde frente a BM25 en consultas largas: 0.22 contra 0.29 con 5 o más palabras · el idf solo pesa en la consulta | Dos parámetros (`k1`, `b`) que dependen del corpus · necesita la longitud de cada documento a mano en memoria | No ordena por sí mismo: `ts_rank_cd` relee el `tsvector` de cada fila, 14 veces más lento que BM25 con 5 o más palabras · con la normalización por omisión prefiere textos largos: Precision@10 de 0.15 · el ranking necesita además la columna `tsvector` (115 MiB) |
 | **Se elige cuando** | Consultas cortas o un corpus donde no hay con qué ajustar `k1` y `b` | Búsqueda por relevancia en general, sobre todo con consultas de varias palabras | Hace falta filtrar por palabras dentro de un PostgreSQL y el orden importa poco |
 
 ### Reproducirlo

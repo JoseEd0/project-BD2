@@ -22,10 +22,11 @@ El parser acepta el núcleo relacional de la Parte 1 y las extensiones espacial,
 multimedia de las Partes 2 a 4. **No valida nombres ni tipos contra el catálogo**: eso lo
 hace el motor al construir el plan, antes de leer ninguna fila.
 
-La sintaxis de texto y multimedia (`MATCH`, `SCORE()`, `SIMILAR_TO`, `SIMILARITY_SCORE()`,
-`USING TF_IDF | BM25 | HNSW | IVF`, los índices `INVERTED`, `IVF` y `HNSW`) hoy **solo se
-analiza**: el motor la rechaza con un error que lo dice, antes de leer ninguna fila, hasta
-que las Partes 3 y 4 traigan sus estructuras.
+La sintaxis de texto de la Parte 3 (`MATCH`, `SCORE()`, `USING TF_IDF | BM25`, `WITH (k1,
+b)` y el índice `INVERTED`) ya se ejecuta: ver [Búsqueda de texto](#búsqueda-de-texto). La
+multimedia (`SIMILAR_TO`, `SIMILARITY_SCORE()`, `USING HNSW | IVF`, los índices `IVF` y
+`HNSW`) hoy **solo se analiza**: el motor la rechaza con un error que lo dice, antes de leer
+ninguna fila, hasta que la Parte 4 traiga sus estructuras.
 
 ```bash
 .venv/bin/python -m pytest tests/sql -q
@@ -182,6 +183,44 @@ SELECT * FROM tiendas WHERE intersecta(ubicacion,
 
 Un índice `RTREE` solo se declara sobre una columna `POINT`, y una columna `POINT` solo
 admite `RTREE`. En un CSV, un punto se escribe igual que en SQL: `"POINT(-12.0464, -77.0428)"`.
+
+### Búsqueda de texto
+
+Las de la Parte 3. `MATCH` y `SCORE()` se escriben como llamadas a función, pero no se
+evalúan fila a fila: las resuelve el índice invertido de la columna.
+
+| Forma | Qué es |
+|---|---|
+| `CREATE INDEX [nombre] ON t USING INVERTED (col) [WITH (idioma='es')]` | índice invertido sobre una columna `VARCHAR` o `TEXT`; `idioma` es `es` (por omisión) o `en` |
+| `CREATE TABLE t FROM FILE "ruta.csv" USING INDEX INVERTED(col)` | la tabla es un heap y el índice se construye al cargar, como con `RTREE` |
+| `WHERE MATCH(col, 'consulta')` | las filas que tienen algún término de la consulta |
+| `USING TF_IDF` / `USING BM25` | el ranking; sin `USING`, **BM25** |
+| `WITH (k1 = 1.5, b = 0.6)` | los parámetros de BM25 de esta consulta; el que falte sale de la configuración |
+| `SCORE()` | el puntaje de cada fila, en cualquier expresión del mismo `SELECT` |
+
+```sql
+CREATE INDEX ON productos USING INVERTED (texto) WITH (idioma='es');
+
+SELECT id, titulo, SCORE() AS relevancia FROM productos
+    WHERE MATCH(texto, 'auriculares inalámbricos') AND precio < 100
+    USING BM25 WITH (k1 = 1.5, b = 0.6)
+    ORDER BY relevancia DESC LIMIT 10;
+```
+
+Lo que el motor exige, con un error antes de leer ninguna fila:
+
+- `MATCH(columna, 'consulta')`: dos argumentos, una columna `VARCHAR` o `TEXT` con índice
+  `INVERTED` (si no lo tiene, el error dice el `CREATE INDEX` que falta) y una consulta que
+  sea un texto constante;
+- va en el `WHERE` de un `SELECT`, unida al resto con `AND`: no dentro de un `OR` ni de un
+  `NOT`, ni en el `SELECT`, el `ORDER BY`, un `UPDATE` o un `DELETE`; y una sola por
+  consulta;
+- `SCORE()` no lleva argumentos y solo existe en un `SELECT` con un `MATCH`;
+- `USING` es `TF_IDF` o `BM25`; `WITH` lleva solo `k1` y `b`, números en rango, y solo con
+  BM25.
+
+El planificador y sus decisiones están en
+[`query/README.md`](../query/README.md#búsqueda-de-texto).
 
 ### Ejemplos del enunciado
 

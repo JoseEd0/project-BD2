@@ -39,8 +39,10 @@ en las que es NULL. Cada estructura aporta solo cómo guarda, borra y busca un p
 `(valor, dirección)`. Los errores de nodo que comparten el B+ y el R-Tree viven en
 [`errors.py`](errors.py).
 
-Un `UPDATE` avisa a cada índice con `update(fila vieja, fila nueva, dirección)`: si el valor
-de su columna no cambió, el índice no se toca. Sin eso, cambiar el precio de una fila
+Antes de un `UPDATE`, la tabla le pregunta a cada índice con `changes(fila vieja, fila
+nueva)` —las filas lógicas, con el texto de cada TEXT— si el valor de su columna cambia: si
+no, el índice no se toca; si sí, la fila sale del índice antes de reescribirse y vuelve a
+entrar después. Sin eso, cambiar el precio de una fila
 borraba y volvía a insertar su entrada en todos los índices de la tabla, y en el índice
 invertido eso es volver a analizar el texto y dejar una lápida.
 

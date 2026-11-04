@@ -91,6 +91,8 @@ class TextSearchInfo(BaseModel):
         default_factory=list,
         description="Términos ya analizados: plegados, sin stopwords y reducidos a su raíz",
     )
+    k1: float | None = Field(default=None, description="El k1 con que puntuó BM25")
+    b: float | None = Field(default=None, description="El b con que puntuó BM25")
 
 
 class TablePoints(BaseModel):

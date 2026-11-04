@@ -75,12 +75,15 @@ def as_response(
 def _as_text_search(view: TextView | None) -> TextSearchInfo | None:
     if view is None:
         return None
+    parameters = view.parameters
     return TextSearchInfo(
         table=view.table,
         column=view.column,
         query=view.query,
         method=view.method.value,
         terms=list(view.terms),
+        k1=None if parameters is None else parameters.k1,
+        b=None if parameters is None else parameters.b,
     )
 
 

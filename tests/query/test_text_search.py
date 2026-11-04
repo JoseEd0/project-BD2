@@ -16,7 +16,7 @@ from tests.index.inverted.inverted_support import (
 )
 
 from config import EngineConfig
-from index.inverted import RankingMethod, RankingParameterError
+from index.inverted import Bm25Parameters, RankingMethod, RankingParameterError
 from query.engine import Engine, QueryResult
 from query.expressions import AmbiguousColumnError, ExpressionError, UnknownColumnError
 from query.operators import UnsupportedQueryError
@@ -411,7 +411,20 @@ def test_the_result_tells_the_interface_what_to_highlight(tienda: Engine):
     assert result.text.query == "Teclados inalámbricos"
     assert result.text.method is RankingMethod.TF_IDF
     assert result.text.terms == ("tecl", "inalambr")
+    assert result.text.parameters is None
     assert tienda.execute("SELECT id FROM productos").text is None
+
+
+def test_the_result_tells_which_bm25_parameters_scored_it(tienda: Engine):
+    defaults = Bm25Parameters.from_config(tienda.config)
+    chosen = tienda.execute(
+        "SELECT id FROM productos WHERE MATCH(texto, 'teclado') USING BM25 WITH (k1 = 2.0)"
+    )
+    assert chosen.text is not None
+    assert chosen.text.parameters == Bm25Parameters(2.0, defaults.b)
+    default = tienda.execute("SELECT id FROM productos WHERE MATCH(texto, 'teclado')")
+    assert default.text is not None
+    assert default.text.parameters == defaults
 
 
 @pytest.mark.parametrize(

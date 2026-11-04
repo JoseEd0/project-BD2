@@ -73,6 +73,9 @@ export interface TextSearchInfo {
   query: string;
   method: "TF_IDF" | "BM25";
   terms: string[];
+  /** Los parámetros con que puntuó BM25: los del `WITH` o los del motor; `null` con TF-IDF. */
+  k1: number | null;
+  b: number | null;
 }
 
 export interface QueryResponse {
@@ -167,16 +170,36 @@ export interface InvertedTerm {
   total_frequency: number;
 }
 
+/** Un segmento del índice en disco: lo que dejó un bloque de SPIMI o una fusión. */
+export interface InvertedSegment {
+  generation: number;
+  terms: number;
+  postings: number;
+  blocks: number;
+  merge_passes: number;
+}
+
 export interface InvertedStructure {
   kind: "inverted";
   language: string;
   documents: number;
+  /** Documentos borrados con lápida; los postings de algunos siguen en disco hasta fusionar. */
   deleted: number;
+  deleted_with_postings: number;
+  total_length: number;
   average_length: number;
   vocabulary: number;
   postings: number;
-  segments: { generation: number; terms: number; postings: number }[];
-  pending: { documents: number; terms: number; postings: number };
+  /** Bloques de SPIMI escritos a disco, y fusiones de segmentos hechas. */
+  blocks: number;
+  merges: number;
+  segments: InvertedSegment[];
+  /** El bloque de SPIMI que todavía vive en memoria. */
+  pending: { documents: number; terms: number; postings: number; estimated_bytes: number };
+  term_bytes: number;
+  postings_bytes: number;
+  /** Bytes en disco de cada archivo del índice: léxico, términos, postings, documentos… */
+  file_bytes: Record<string, number>;
   top_terms: InvertedTerm[];
 }
 

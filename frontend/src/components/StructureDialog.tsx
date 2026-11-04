@@ -2,13 +2,14 @@ import { useEffect, useState } from "react";
 
 import { ApiError, fetchStructure } from "../api";
 import { averageFill } from "../lib/spatial";
+import InvertedIndexView from "./InvertedIndexView";
 import Modal from "./Modal";
+import Stat from "./Stat";
 import type {
   Bounds,
   HashStructure,
   HeapStorage,
   IndexStructure,
-  InvertedStructure,
   RTreeStructure,
   SequentialStorage,
   TableInfo,
@@ -28,17 +29,6 @@ const PERCENT = 100;
 /** Lado mayor del dibujo de los MBR, en unidades del SVG. */
 const DRAWING_SIZE = 1000;
 const DEGREES_TO_RADIANS = Math.PI / 180;
-
-function Stat({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div className="stat">
-      <span className="stat__value">
-        {typeof value === "number" ? value.toLocaleString("es") : value}
-      </span>
-      <span className="stat__label">{label}</span>
-    </div>
-  );
-}
 
 function TreeView({ tree }: { tree: TreeStructure }) {
   return (
@@ -216,45 +206,10 @@ function RTreeView({ tree }: { tree: RTreeStructure }) {
   );
 }
 
-function InvertedView({ inverted }: { inverted: InvertedStructure }) {
-  return (
-    <>
-      <div className="stats">
-        <Stat label="documentos" value={inverted.documents} />
-        <Stat label="borrados sin fusionar" value={inverted.deleted} />
-        <Stat label="vocabulario" value={inverted.vocabulary} />
-        <Stat label="postings" value={inverted.postings} />
-        <Stat label="segmentos" value={inverted.segments.length} />
-        <Stat label="documentos en memoria" value={inverted.pending.documents} />
-        <Stat label="términos por documento" value={inverted.average_length.toFixed(1)} />
-        <Stat label="idioma" value={inverted.language} />
-      </div>
-      <table className="grid grid--compact">
-        <thead>
-          <tr>
-            <th>Término</th>
-            <th>Documentos (df)</th>
-            <th>Apariciones</th>
-          </tr>
-        </thead>
-        <tbody>
-          {inverted.top_terms.map((term) => (
-            <tr key={term.term}>
-              <td>{term.term}</td>
-              <td className="is-number">{term.document_frequency.toLocaleString("es")}</td>
-              <td className="is-number">{term.total_frequency.toLocaleString("es")}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </>
-  );
-}
-
 function IndexView({ structure }: { structure: IndexStructure }) {
   if (structure.kind === "bplustree") return <TreeView tree={structure} />;
   if (structure.kind === "rtree") return <RTreeView tree={structure} />;
-  if (structure.kind === "inverted") return <InvertedView inverted={structure} />;
+  if (structure.kind === "inverted") return <InvertedIndexView inverted={structure} />;
   return <HashView hash={structure} />;
 }
 

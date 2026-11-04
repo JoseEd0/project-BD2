@@ -59,7 +59,7 @@ function TableGroup({
         <button
           className="icon-button"
           onClick={onInspect}
-          title="Estructura física: niveles del B+, cubetas del hash, MBR del R-Tree"
+          title="Estructura física: niveles del B+, cubetas del hash, MBR del R-Tree, índice invertido"
           type="button"
         >
           ⌬

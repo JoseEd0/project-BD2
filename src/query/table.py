@@ -373,11 +373,9 @@ class Table:
         return len(victims)
 
     def _update_one(self, address: RecordId | None, old: bytes, new: bytes) -> None:
-        for index in self._indexes.values():
-            index.delete(old, _located(address))
         self._storage.update(address, old, new)
         for index in self._indexes.values():
-            index.insert(new, _located(address))
+            index.update(old, new, _located(address))
 
     def delete_first(self, target: Record) -> bool:
         """Borra una sola fila igual a `target`. Lo usa el deshacer de una inserción."""

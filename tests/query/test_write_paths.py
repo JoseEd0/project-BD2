@@ -10,6 +10,7 @@ from collections.abc import Iterator
 import pytest
 
 from config import EngineConfig
+from index.secondary import ColumnIndex
 from query.engine import Engine
 from query.table import Table
 from txn import LockManager, Session, TransactionManager
@@ -73,3 +74,23 @@ def test_a_rollback_finds_each_row_by_its_key(
 
 def test_a_condition_without_a_path_still_scans(keyed: Engine):
     assert keyed.execute("DELETE FROM t WHERE v > 50").affected_rows == ROWS - 51
+
+
+def test_an_update_that_keeps_the_indexed_value_leaves_the_index_alone(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch
+):
+    engine.execute("CREATE TABLE u (id INT PRIMARY KEY, v INT, w INT)")
+    engine.execute("CREATE INDEX ON u USING BTREE (v)")
+    engine.execute("INSERT INTO u VALUES " + ", ".join(f"({i}, {i}, {i})" for i in range(ROWS)))
+
+    def untouchable(*_: object) -> None:
+        raise AssertionError("se tocó un índice cuyo valor no cambió")
+
+    monkeypatch.setattr(ColumnIndex, "insert", untouchable)
+    monkeypatch.setattr(ColumnIndex, "delete", untouchable)
+    assert engine.execute("UPDATE u SET w = -1 WHERE id < 10").affected_rows == 10
+    monkeypatch.undo()
+    assert engine.execute("UPDATE u SET v = v + 1000 WHERE id = 3").affected_rows == 1
+    assert engine.execute("SELECT id FROM u WHERE v = 1003").rows == ((3,),)
+    assert engine.execute("SELECT COUNT(*) FROM u WHERE v = 3").rows == ((0,),)
+    assert engine.execute("SELECT COUNT(*) FROM u WHERE w = -1").rows == ((10,),)

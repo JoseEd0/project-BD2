@@ -12,14 +12,18 @@ demo enseñe de un vistazo por qué existen las tres:
 Y una sexta, `tiendas`, con la ubicación de cada local en Lima y un índice R-Tree, para
 las consultas espaciales: por radio, por cercanía y por distrito.
 
+Las tres últimas no se generan: `catalogo`, `consultas` y `juicios` se cargan de la muestra
+real de Amazon que vive en `demos/samples/esci/` (ver `demos/muestra_esci.py`), y
+`catalogo` lleva un índice invertido para la búsqueda de texto con `MATCH`.
+
 Ejecutar (requiere `pip install -e .`):
 
     .venv/bin/python demos/poblar_ecommerce.py --data-dir ./data
     .venv/bin/python demos/poblar_ecommerce.py --data-dir ./data --escala 3 --reiniciar
 
-Deja además los CSV —por defecto en `<data-dir>/csv/`, o donde diga `--csv-dir`—, que
-sirven para probar la carga de archivos desde la interfaz. Los de `demos/samples/` salen
-de este mismo script con la semilla y la escala por defecto.
+Deja además los CSV de las tablas generadas —por defecto en `<data-dir>/csv/`, o donde
+diga `--csv-dir`—, que sirven para probar la carga de archivos desde la interfaz. Los de
+`demos/samples/` salen de este mismo script con la semilla y la escala por defecto.
 """
 
 from __future__ import annotations
@@ -41,6 +45,7 @@ from spatial.geometry import Point, Polygon
 
 MILLISECONDS = 1000.0
 CSV_DIRECTORY = "csv"
+ESCI_SAMPLE_DIRECTORY = Path(__file__).resolve().parent / "samples" / "esci"
 DEFAULT_SEED = 20260828
 DEFAULT_SCALE = 1.0
 
@@ -241,6 +246,64 @@ SPECS: tuple[TableSpec, ...] = (
 )
 
 
+@dataclass(frozen=True, slots=True)
+class SampleTable:
+    """Una tabla que no se genera: se carga tal cual de un CSV de la muestra ESCI."""
+
+    spec: TableSpec
+    file_name: str
+
+
+# La muestra trae el formato del corpus (`benchmarks/esci/corpus.py`): el `id` es el ASIN de
+# Amazon, de 10 caracteres, y los VARCHAR caben el título y la marca más largos que tiene.
+ESCI_TABLES: tuple[SampleTable, ...] = (
+    SampleTable(
+        TableSpec(
+            name="catalogo",
+            ddl=(
+                "CREATE TABLE catalogo ("
+                " id VARCHAR(10) PRIMARY KEY,"
+                " titulo VARCHAR(240),"
+                " marca VARCHAR(50),"
+                " texto TEXT )"
+            ),
+            header=("id", "titulo", "marca", "texto"),
+            description="heap file + índice invertido en 'texto' (MATCH con TF-IDF o BM25)",
+            after_load=("CREATE INDEX idx_catalogo_texto ON catalogo USING INVERTED (texto)",),
+        ),
+        "productos.csv",
+    ),
+    SampleTable(
+        TableSpec(
+            name="consultas",
+            ddl=(
+                "CREATE TABLE consultas ("
+                " query_id INT PRIMARY KEY,"
+                " consulta VARCHAR(48),"
+                " palabras INT )"
+            ),
+            header=("query_id", "consulta", "palabras"),
+            description="heap file: consultas reales de la tienda",
+        ),
+        "consultas.csv",
+    ),
+    SampleTable(
+        TableSpec(
+            name="juicios",
+            ddl=(
+                "CREATE TABLE juicios ("
+                " query_id INT INDEX BTREE,"
+                " product_id VARCHAR(10),"
+                " etiqueta VARCHAR(1) )"
+            ),
+            header=("query_id", "product_id", "etiqueta"),
+            description="heap file + B+ en 'query_id': etiqueta E, S, C o I de cada producto",
+        ),
+        "juicios.csv",
+    ),
+)
+
+
 class Generator:
     """Produce filas verosímiles y coherentes entre tablas."""
 
@@ -408,6 +471,9 @@ def suggest_queries() -> None:
         ("R-Tree: las 10 tiendas más cercanas (k-NN)",
          "SELECT nombre, rubro, ubicacion FROM tiendas "
          "ORDER BY distancia(ubicacion, POINT(-12.0464, -77.0428)) LIMIT 10;"),
+        ("índice invertido: los 10 productos más relevantes con BM25",
+         "SELECT titulo, marca, SCORE() AS relevancia FROM catalogo "
+         "WHERE MATCH(texto, 'auriculares inalámbricos') USING BM25 LIMIT 10;"),
     ):
         print(f"  -- {description}\n  {query}\n")
 
@@ -422,6 +488,12 @@ def main() -> None:
         type=Path,
         default=None,
         help=f"dónde dejar los CSV (por defecto <data-dir>/{CSV_DIRECTORY})",
+    )
+    parser.add_argument(
+        "--muestra-esci",
+        type=Path,
+        default=ESCI_SAMPLE_DIRECTORY,
+        help="carpeta de la muestra ESCI de la que se cargan las tablas de texto",
     )
     parser.add_argument(
         "--reiniciar",
@@ -444,6 +516,10 @@ def main() -> None:
             inserted, elapsed = load(engine, spec, path)
             print(f"  {spec.name:<18} {written:>8,} filas → {inserted:,} insertadas")
             measured.append((spec, inserted, elapsed))
+        for sample in ESCI_TABLES:
+            inserted, elapsed = load(engine, sample.spec, arguments.muestra_esci / sample.file_name)
+            print(f"  {sample.spec.name:<18} {inserted:>8,} filas de la muestra ESCI")
+            measured.append((sample.spec, inserted, elapsed))
     report(measured)
     suggest_queries()
 

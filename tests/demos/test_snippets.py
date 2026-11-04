@@ -50,6 +50,8 @@ def client(tmp_path_factory: pytest.TempPathFactory, dataset: ModuleType) -> Ite
         for spec in dataset.SPECS:
             path, _ = dataset.write_csv(directory / "csv", spec, generator.rows_of(spec.name))
             dataset.load(engine, spec, path)
+        for sample in dataset.ESCI_TABLES:
+            dataset.load(engine, sample.spec, dataset.ESCI_SAMPLE_DIRECTORY / sample.file_name)
     with TestClient(create_app(config)) as instance:
         yield instance
 

@@ -92,7 +92,7 @@ operador lleva las filas que entregó y el tiempo que tardó.
 ```
 src/                 raíz de importación: un paquete por módulo del motor
   sql/               tokens, lexer, AST inmutable y parser (con la gramática en su README)
-  storage/           tipos, registros, páginas y paginador
+  storage/           tipos, registros (y sus TEXT fuera de la fila), páginas y paginador
     heap/            heap file
     sequential/      archivo secuencial paginado
     varlen/          valores de longitud variable en fragmentos encadenados
@@ -125,7 +125,7 @@ proyecto:
 | Carpeta | Contenido | Documentación |
 |---|---|---|
 | [`src/sql/`](src/sql/) | lexer, AST y parser | [README y gramática](src/sql/README.md) |
-| [`src/storage/`](src/storage/) | tipos, registros, páginas, paginador | [README](src/storage/README.md) |
+| [`src/storage/`](src/storage/) | tipos, registros, columnas TEXT fuera de la fila, páginas, paginador | [README](src/storage/README.md) |
 | [`src/storage/heap/`](src/storage/heap/) | heap file | [README](src/storage/heap/README.md) |
 | [`src/storage/sequential/`](src/storage/sequential/) | archivo secuencial paginado | [README](src/storage/sequential/README.md) |
 | [`src/storage/varlen/`](src/storage/varlen/) | valores de longitud variable | [README](src/storage/varlen/README.md) |
@@ -221,7 +221,7 @@ Los seis CSV del dataset están en [`demos/samples/`](demos/samples/):
 | `pedidos.csv` | Archivo secuencial | `id` |
 
 Después, el atajo **Carga → Índices tras cargar CSV** crea los dos índices secundarios del
-e-commerce, y **Espacial → Crear R-Tree**, el de `tiendas.ubicacion`. Con eso los 50 atajos
+e-commerce, y **Espacial → Crear R-Tree**, el de `tiendas.ubicacion`. Con eso los 51 atajos
 del editor quedan listos para usarse.
 
 **Datos espaciales reales.** Para probar el R-Tree con lugares de verdad —unos 128 000

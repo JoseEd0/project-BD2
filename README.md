@@ -81,6 +81,7 @@ operador lleva las filas que entregó y el tiempo que tardó.
 | Radio, k-NN y polígono | poda por distancia al MBR, búsqueda primero-el-mejor, filtrar y refinar | [`index/rtree`](src/index/rtree/README.md), [`spatial`](src/spatial/README.md) |
 | Euclidiana y Haversine | una sola implementación compartida | [`spatial`](src/spatial/README.md) |
 | Índice invertido con SPIMI | bloques con memoria acotada y mezcla k-vías; léxico ordenado, listas contiguas | [`index/inverted`](src/index/inverted/README.md) |
+| TF-IDF + coseno y BM25 | SMART lnc.ltc e idf de Lucene, término a término sobre el mismo índice; top-k con montículo | [`index/inverted`](src/index/inverted/README.md#ranking) |
 | Interfaz y panel de mapa | cuatro paneles visibles a la vez; mapa con Leaflet | [`frontend`](frontend/README.md) |
 | Comparación experimental | tres experimentos medidos, con resultados crudos y gráficas | [`benchmarks`](benchmarks/README.md) |
 
@@ -98,7 +99,7 @@ src/                 raíz de importación: un paquete por módulo del motor
     bplustree/       árbol B+ agrupado y no agrupado
     hash/            hash extendible
     rtree/           R-Tree
-    inverted/        índice invertido construido con SPIMI
+    inverted/        índice invertido construido con SPIMI y su ranking TF-IDF y BM25
   external/          algoritmos externos: sort/, hash/ y loop/
   spatial/           geometría y métricas de distancia; no depende de ningún otro paquete
   text/              analizador de texto de documentos y consultas; stopwords en stopwords/
@@ -129,7 +130,7 @@ proyecto:
 | [`src/index/bplustree/`](src/index/bplustree/) | árbol B+ agrupado y no agrupado | [README](src/index/bplustree/README.md) |
 | [`src/index/hash/`](src/index/hash/) | hash extendible | [README](src/index/hash/README.md) |
 | [`src/index/rtree/`](src/index/rtree/) | R-Tree: radio, k-NN, polígono, carga masiva | [README](src/index/rtree/README.md) |
-| [`src/index/inverted/`](src/index/inverted/) | índice invertido: SPIMI, léxico, postings y documentos | [README](src/index/inverted/README.md) |
+| [`src/index/inverted/`](src/index/inverted/) | índice invertido: SPIMI, léxico, postings, documentos y ranking | [README](src/index/inverted/README.md) |
 | [`src/spatial/`](src/spatial/) | geometría y métricas euclidiana y Haversine | [README](src/spatial/README.md) |
 | [`src/text/`](src/text/) | analizador de texto: plegado, tokens, stopwords y raíces | [README](src/text/README.md) |
 | [`src/external/`](src/external/) | ordenamiento, hashing y bucles anidados externos | [README](src/external/README.md) |

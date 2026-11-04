@@ -22,6 +22,12 @@ INVALID = [
     {"text_min_token_length": 0},
     {"text_min_token_length": 5, "text_max_token_length": 4},
     {"spimi_block_bytes": 0},
+    {"bm25_k1": -0.1},
+    {"bm25_k1": float("inf")},
+    {"bm25_k1": float("nan")},
+    {"bm25_b": -0.1},
+    {"bm25_b": 1.1},
+    {"bm25_b": float("nan")},
     {"lock_timeout_seconds": 0.0},
     {"session_idle_seconds": -5.0},
     {"max_result_rows": 0},
@@ -49,3 +55,5 @@ def test_the_bounds_themselves_are_valid():
     EngineConfig(page_size=MIN_PAGE_SIZE, rtree_min_fill=0.5, sequential_waste_ratio=1.0)
     EngineConfig(page_size=MAX_PAGE_SIZE, merge_fan_in=2, hash_partitions=2)
     EngineConfig(text_min_token_length=1, text_max_token_length=1)
+    EngineConfig(bm25_k1=0.0, bm25_b=0.0)
+    EngineConfig(bm25_k1=0.0, bm25_b=1.0)

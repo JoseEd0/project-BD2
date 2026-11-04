@@ -17,6 +17,8 @@ from typing import Any, TypeGuard
 from errors import DomainError
 from spatial.geometry import GeometryError, Point, geographic_point
 
+from .record_id import RECORD_ID_SIZE
+
 EPOCH = date(1970, 1, 1)
 INT_BITS = 64
 MIN_INT = -(1 << (INT_BITS - 1))
@@ -56,6 +58,7 @@ class FieldType(Enum):
     POINT = "POINT"
     VECTOR = "VECTOR"
     BYTES = "BYTES"
+    TEXT = "TEXT"
 
 
 SIZED_FIELD_TYPES = frozenset({FieldType.STRING, FieldType.VECTOR, FieldType.BYTES})
@@ -64,6 +67,9 @@ ORDERED_FIELD_TYPES = frozenset(
 )
 UNORDERED_FIELD_TYPES = frozenset({FieldType.POINT, FieldType.VECTOR})
 NUMERIC_FIELD_TYPES = frozenset({FieldType.INT, FieldType.FLOAT})
+# Tipos cuyo valor no vive en el registro: el registro guarda su dirección en el archivo de
+# valores de la tabla (ver `out_of_row.py`).
+OUT_OF_ROW_FIELD_TYPES = frozenset({FieldType.TEXT})
 
 
 class FieldCodec(ABC):
@@ -236,6 +242,29 @@ class BytesCodec(FieldCodec):
         return b""
 
 
+class TextReferenceCodec(FieldCodec):
+    """Un TEXT dentro del registro: la dirección de su valor, como los bytes de su `RecordId`.
+
+    El texto no pasa por aquí. Lo guarda y lo lee `OutOfRowSerializer`, que es quien conoce
+    el archivo de valores; este códec solo reserva en el registro el sitio de la dirección.
+    """
+
+    format = f"{RECORD_ID_SIZE}s"
+    slots = 1
+
+    def to_slots(self, value: Value) -> tuple[Any, ...]:
+        if not isinstance(value, bytes) or len(value) != RECORD_ID_SIZE:
+            raise InvalidValueError(f"se esperaba la dirección de un valor TEXT, llegó {value!r}")
+        return (value,)
+
+    def from_slots(self, slots: tuple[Any, ...]) -> Value:
+        reference: bytes = slots[0]
+        return reference
+
+    def neutral_value(self) -> Value:
+        return bytes(RECORD_ID_SIZE)
+
+
 class PointCodec(FieldCodec):
     """Guarda un punto geográfico como dos dobles: latitud y longitud.
 
@@ -349,6 +378,7 @@ _UNSIZED_CODECS: dict[FieldType, FieldCodec] = {
     FieldType.BOOL: BoolCodec(),
     FieldType.DATE: DateCodec(),
     FieldType.POINT: PointCodec(),
+    FieldType.TEXT: TextReferenceCodec(),
 }
 
 _SIZED_CODEC_FACTORIES: dict[FieldType, Callable[[int], FieldCodec]] = {

@@ -16,6 +16,10 @@ export interface SnippetGroup {
  *
  * Los del grupo «Espacial» usan la tabla `tiendas`. Sus coordenadas son las del generador:
  * la Plaza de Armas de Lima, el Parque Kennedy y el contorno simplificado de Miraflores.
+ *
+ * Los del grupo «Texto» usan `catalogo`, `consultas` y `juicios`, la muestra real de Amazon
+ * de `demos/samples/esci/`. Sus búsquedas son temas de esa muestra: auriculares, zapatillas,
+ * mochilas, cafeteras, fundas y aceite de oliva.
  */
 export const SNIPPET_GROUPS: SnippetGroup[] = [
   {
@@ -557,6 +561,120 @@ WHERE distancia(ubicacion, POINT(-12.0464, -77.0428)) < 5000;`,
 SELECT nombre, ubicacion
 FROM tiendas
 ORDER BY distancia(ubicacion, POINT(-12.0464, -77.0428))
+LIMIT 10;`,
+      },
+    ],
+  },
+  {
+    name: "Texto",
+    snippets: [
+      {
+        label: "Índice invertido",
+        description:
+          "SPIMI sobre catalogo.texto: plegado, stopwords y raíces en español; MATCH ya responde",
+        sql: `CREATE INDEX IF NOT EXISTS idx_catalogo_texto
+  ON catalogo USING INVERTED (texto) WITH (idioma = 'es');
+
+SELECT titulo, marca, SCORE() AS relevancia
+FROM catalogo
+WHERE MATCH(texto, 'auriculares inalámbricos')
+LIMIT 10;`,
+      },
+      {
+        label: "Enunciado: TF-IDF",
+        description: "El primer ejemplo del enunciado: TF-IDF con similitud del coseno y LIMIT",
+        sql: `SELECT * FROM catalogo
+WHERE MATCH(texto, 'cafetera italiana inducción')
+USING TF_IDF
+LIMIT 10;`,
+      },
+      {
+        label: "Enunciado: BM25",
+        description:
+          "El segundo ejemplo del enunciado: SCORE() con alias y ORDER BY sin volver a ordenar",
+        sql: `SELECT *, SCORE() AS relevancia FROM catalogo
+WHERE MATCH(texto, 'zapatillas running mujer')
+USING BM25
+ORDER BY relevancia DESC;`,
+      },
+      {
+        label: "Ranking TF-IDF",
+        description: "Top 10 por coseno entre vectores TF-IDF; compáralo con el de BM25",
+        sql: `SELECT id, titulo, SCORE() AS puntaje
+FROM catalogo
+WHERE MATCH(texto, 'auriculares inalámbricos bluetooth')
+USING TF_IDF
+LIMIT 10;`,
+      },
+      {
+        label: "Ranking BM25",
+        description: "La misma consulta con BM25: satura la frecuencia y castiga los textos largos",
+        sql: `SELECT id, titulo, SCORE() AS puntaje
+FROM catalogo
+WHERE MATCH(texto, 'auriculares inalámbricos bluetooth')
+USING BM25
+LIMIT 10;`,
+      },
+      {
+        label: "BM25 con k1 y b",
+        description: "WITH (k1, b) cambia los parámetros de BM25 solo para esta consulta",
+        sql: `SELECT titulo, SCORE() AS relevancia
+FROM catalogo
+WHERE MATCH(texto, 'mochila portátil impermeable')
+USING BM25 WITH (k1 = 2.0, b = 0.2)
+LIMIT 10;`,
+      },
+      {
+        label: "MATCH + filtro",
+        description: "El índice da los candidatos por puntaje y el Filter descarta las otras marcas",
+        sql: `SELECT titulo, marca, SCORE() AS relevancia
+FROM catalogo
+WHERE MATCH(texto, 'zapatillas running mujer') AND marca = 'PUMA'
+ORDER BY relevancia DESC
+LIMIT 10;`,
+      },
+      {
+        label: "Puntaje por marca",
+        description: "SCORE() dentro de un agregado: la mejor coincidencia de cada marca",
+        sql: `SELECT marca, COUNT(*) AS productos, MAX(SCORE()) AS mejor
+FROM catalogo
+WHERE MATCH(texto, 'cafetera italiana')
+GROUP BY marca
+ORDER BY mejor DESC
+LIMIT 10;`,
+      },
+      {
+        label: "Juicios de Amazon",
+        description:
+          "JOIN con juicios: la etiqueta (E exacto, S sustituto, I irrelevante) del top 10 de BM25; 11202 es «auriculares sin cable» en consultas",
+        sql: `SELECT c.titulo, j.etiqueta, SCORE() AS relevancia
+FROM catalogo AS c
+LEFT JOIN juicios AS j ON j.product_id = c.id AND j.query_id = 11202
+WHERE MATCH(c.texto, 'auriculares sin cable')
+ORDER BY relevancia DESC
+LIMIT 10;`,
+      },
+      {
+        label: "EXPLAIN de MATCH",
+        description: "TextSearchScan: términos analizados con su df, postings leídos y top-k",
+        sql: `EXPLAIN ANALYZE
+SELECT titulo, SCORE()
+FROM catalogo
+WHERE MATCH(texto, 'mochila portátil impermeable')
+LIMIT 10;`,
+      },
+      {
+        label: "Desde CSV con índice",
+        description:
+          "CREATE TABLE ... FROM FILE con USING INDEX INVERTED: carga el heap y construye el índice",
+        sql: `DROP TABLE IF EXISTS catalogo_copia;
+
+CREATE TABLE catalogo_copia FROM FILE 'demos/samples/esci/productos.csv'
+  USING INDEX INVERTED("texto");
+
+SELECT titulo, SCORE() AS relevancia
+FROM catalogo_copia
+WHERE MATCH(texto, 'aceite de oliva virgen extra')
 LIMIT 10;`,
       },
     ],

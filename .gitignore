@@ -108,6 +108,7 @@ config.local.*
 *.parquet
 *.jsonl
 !**/samples/*.csv
+!demos/samples/esci/*.csv
 *.jpg
 *.jpeg
 *.png

@@ -1,14 +1,16 @@
 # Demostraciones
 
-Cuatro guiones pensados para la exposición del proyecto: un dataset relacional que se genera
-solo, uno espacial **real** que se descarga, un corpus de texto real con juicios de
-relevancia, y una simulación de concurrencia.
+Cinco guiones pensados para la exposición del proyecto: un dataset relacional que se genera
+solo, uno espacial **real** que se descarga, una muestra de productos reales de Amazon para
+la búsqueda de texto, el corpus completo con juicios de relevancia, y una simulación de
+concurrencia.
 
 ## 1. Poblar la base de datos — `poblar_ecommerce.py`
 
 Genera y carga un **e-commerce con cinco tablas relacionadas**, cada una con una
-organización física distinta, para que en la misma demo se vean las tres funcionando, y
-una sexta con datos espaciales:
+organización física distinta, para que en la misma demo se vean las tres funcionando, una
+sexta con datos espaciales y tres más, de texto, que no se generan sino que se cargan de la
+muestra ESCI versionada (sección 2):
 
 ```
 categorias ──< productos ──┐
@@ -23,6 +25,9 @@ categorias ──< productos ──┐
 | `pedidos` | 6 000 | **archivo secuencial** | ordenado por `id` |
 | `detalle_pedidos` | 18 000 | heap file | clave primaria + **B+ en `pedido_id`** |
 | `tiendas` | 3 000 | heap file | clave primaria + **R-Tree en `ubicacion`** |
+| `catalogo` | 2 000 | heap file | clave primaria + **índice invertido en `texto`** |
+| `consultas` | 36 | heap file | clave primaria |
+| `juicios` | 894 | heap file | **B+ en `query_id`** |
 
 `tiendas` es la tabla de la Parte 2: cada local tiene un rubro, un distrito de Lima y su
 ubicación como `POINT(latitud, longitud)`. Los puntos se generan dentro del contorno de
@@ -38,16 +43,17 @@ mano**, no límites oficiales.
 | Argumento | Para qué |
 |---|---|
 | `--data-dir` | dónde vive la base de datos; si es el del API, el servidor tiene que estar detenido: un directorio lo abre un solo motor a la vez |
-| `--escala` | multiplica el número de filas; `3` da unas 90 000 |
+| `--escala` | multiplica el número de filas de las tablas generadas; `3` da unas 90 000 |
 | `--seed` | semilla del generador; misma semilla, mismos datos |
 | `--reiniciar` | borra el directorio antes de cargar |
-| `--csv-dir` | dónde dejar los CSV; por defecto `<data-dir>/csv/` |
+| `--csv-dir` | dónde dejar los CSV generados; por defecto `<data-dir>/csv/` |
+| `--muestra-esci` | carpeta de la muestra de texto; por defecto `demos/samples/esci/` |
 
 Deja además los CSV, que sirven para probar **Cargar CSV** desde la interfaz.
 
 ### `samples/`: los CSV versionados
 
-[`samples/`](samples/) guarda los seis CSV de la escala por defecto, para que quien clone
+[`samples/`](samples/) guarda los seis CSV generados de la escala por defecto, para que quien clone
 el repositorio pueda probar la carga de archivos sin ejecutar nada. Salen de este mismo
 script, con la semilla por defecto, así que se regeneran idénticos byte a byte (hay un
 test que lo comprueba, `tests/demos/test_dataset.py`):
@@ -81,8 +87,67 @@ reales de la sección siguiente.
 | `… WHERE distancia(ubicacion, POINT(-12.0464, -77.0428)) < 5000` | `SpatialRangeScan` sobre el R-Tree y los nodos que abrió |
 | `… ORDER BY distancia(ubicacion, POINT(…)) LIMIT 10` | `SpatialNearestScan`: k-NN sin ordenar nada |
 | `… WHERE intersecta(ubicacion, POLYGON(…))` | `SpatialPolygonScan` |
+| `… WHERE MATCH(texto, 'auriculares inalámbricos') USING BM25 LIMIT 10` | `TextSearchScan`: términos con su df, postings leídos y top 10 |
 
-## 2. Lugares reales — `descargar_lugares.py`
+## 2. Productos reales para la búsqueda de texto — `muestra_esci.py`
+
+[`samples/esci/`](samples/esci/) guarda una muestra de **2 000 productos reales de Amazon
+España** del Shopping Queries Dataset (ESCI), con el formato del corpus del experimento de
+texto: `productos.csv` (`id, titulo, marca, texto`), `consultas.csv` y `juicios.csv`. Es
+lo que carga `poblar_ecommerce.py` en `catalogo`, `consultas` y `juicios`, y lo que usan la
+página «Texto» del frontend y los atajos del grupo *Texto*.
+
+| Dato | Valor |
+|---|---:|
+| productos | 2 000 |
+| consultas elegidas a mano | 36 |
+| juicios (E, S, C o I) | 894 |
+| productos juzgados por alguna consulta | 867 |
+| productos de relleno, al azar | 1 133 |
+| palabras por documento (media / mediana / máximo) | 205 / 152 / 771 |
+| `productos.csv` | 2,9 MB (0,96 MB comprimido) |
+
+**Cómo se elige.** Treinta y seis consultas reales de la tienda, elegidas por tema
+—auriculares, zapatillas, mochilas, cafeteras, portátiles, fundas, cargadores, aceite de
+oliva y freidoras— y con varias por tema, para que compartan vocabulario. Entran **todos**
+los productos que un anotador juzgó para ellas, exactos o no, y el resto son productos del
+catálogo tomados al azar con la semilla. Así cada búsqueda de la demo tiene decenas de
+candidatos parecidos, que es donde TF-IDF y BM25 dejan de coincidir, y el relleno hace de
+ruido. Con `juicios` se ve además si el ranking pone arriba lo que Amazon calificó como
+exacto (atajo *Texto → Juicios de Amazon*).
+
+**Los textos van enteros.** No se recortan: BM25 normaliza por la longitud del documento, y
+un corte igualaría longitudes que en el catálogo son muy distintas. Por eso el CSV pesa
+2,9 MB, casi el triple que los seis del e-commerce juntos.
+
+**Regenerarla** necesita el corpus descargado (ver
+[`benchmarks/esci/`](../benchmarks/esci/README.md)) y se lanza desde la raíz como módulo,
+porque reutiliza su lectura y su escritura:
+
+```bash
+.venv/bin/python -m demos.muestra_esci --corpus data/datasets/esci_es --salida demos/samples/esci
+```
+
+| Argumento | Para qué |
+|---|---|
+| `--corpus` | carpeta del corpus completo |
+| `--salida` | dónde escribir los tres CSV |
+| `--productos` | tamaño de la muestra; por omisión 2 000 |
+| `--seed` | semilla del relleno; por omisión, la de los subconjuntos del experimento |
+
+Misma semilla, misma muestra byte a byte. `tests/demos/test_dataset.py` comprueba siempre
+que la muestra tenga todas las consultas, todos sus juzgados y el formato que espera la
+carga; con `ESCI_CORPUS_DIR=data/datasets/esci_es`, además, que se regenere idéntica.
+
+**Licencia.** El Shopping Queries Dataset es de Amazon y se distribuye bajo
+[Apache-2.0](https://github.com/amazon-science/esci-data/blob/main/LICENSE):
+© Amazon.com, Inc. Referencia: Reddy et al., *Shopping Queries Dataset: A Large-Scale ESCI
+Benchmark for Improving Product Search* (2022),
+[github.com/amazon-science/esci-data](https://github.com/amazon-science/esci-data). La
+muestra es un extracto sin otra modificación que la del corpus del experimento: el HTML
+quitado y el documento armado con título, viñetas, descripción y marca.
+
+## 3. Lugares reales — `descargar_lugares.py`
 
 Descarga los **puntos de interés de OpenStreetMap** de un país y los deja en un CSV que el
 gestor carga tal cual: restaurantes, farmacias, colegios, bancos, gasolineras… cada uno con
@@ -157,13 +222,14 @@ Este es también el dataset del **experimento espacial**
 [ODbL](https://opendatacommons.org/licenses/odbl/): © colaboradores de OpenStreetMap. Por
 eso el CSV no está en el repositorio (`data/` se ignora): quien lo quiera, lo descarga.
 
-## 3. Corpus de texto con juicios de relevancia
+## 4. Corpus de texto con juicios de relevancia
 
-El corpus del experimento de texto (Amazon ESCI en español, con consultas reales y juicios
-de relevancia) no se genera aquí: su descarga y sus subconjuntos viven junto al experimento
-que los usa, en [`benchmarks/esci/`](../benchmarks/esci/README.md).
+El corpus completo del experimento de texto (Amazon ESCI en español, 260 000 productos con
+consultas reales y juicios de relevancia) no se versiona: su descarga y sus subconjuntos
+viven junto al experimento que los usa, en [`benchmarks/esci/`](../benchmarks/esci/README.md).
+La muestra de la sección 2 sale de él.
 
-## 4. Concurrencia — `concurrencia.py`
+## 5. Concurrencia — `concurrencia.py`
 
 ```bash
 .venv/bin/python demos/concurrencia.py

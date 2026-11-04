@@ -87,6 +87,11 @@ class ExtendibleHashIndex:
         else:
             self._read_header()
 
+    @staticmethod
+    def files_of(path: Path) -> list[Path]:
+        """Los archivos que ocupa un índice guardado en `path`: las cubetas y el directorio."""
+        return [path, path.with_name(path.name + DIRECTORY_SUFFIX)]
+
     @property
     def entry_count(self) -> int:
         return self._entry_count

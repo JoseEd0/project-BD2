@@ -304,7 +304,7 @@ Python 3.12. La memoria pico de Python se midió con `tracemalloc` en una ejecuc
 | postings | 6,3 MB | 63,2 MB |
 | documentos | 0,2 MB | 1,9 MB |
 
-Diez veces más documentos cuestan un **35 % más de memoria**, no diez veces más: es el
+Diez veces más documentos cuestan un **39 % más de memoria** (el pico de `tracemalloc`), no diez veces más: es el
 bloque acotado. Del tiempo, 9,4 s de los 15 son el análisis del texto (plegado, tokens
 y raíces), medido aparte sobre los mismos 100 000 documentos; leer el CSV, los bloques y
 la mezcla suman el resto. La memoria residente incluye la caché de términos del

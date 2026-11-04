@@ -3,11 +3,20 @@
 import itertools
 import math
 import random
-from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
-from inverted_support import build, mark_deleted, random_texts, record_id_of, vocabulary
+from inverted_support import (
+    DEFAULT_B,
+    DEFAULT_K1,
+    TOLERANCE,
+    Oracle,
+    assert_same_ranking,
+    build,
+    random_texts,
+    record_id_of,
+    vocabulary,
+)
 
 from config import EngineConfig
 from index.inverted import (
@@ -19,11 +28,9 @@ from index.inverted import (
     RankingStats,
     ScoredDocument,
 )
-from text import AnalyzedText, Analyzer
+from storage.record_id import RecordId
+from text import Analyzer
 
-TOLERANCE = 1e-9
-DEFAULT_K1 = 1.2
-DEFAULT_B = 0.75
 BM25_SETTINGS = [(DEFAULT_K1, DEFAULT_B), (0.0, 0.5), (2.0, 0.0), (0.5, 1.0)]
 SEEDS = [1, 2, 3]
 CORPUS_SIZE = 250
@@ -36,101 +43,6 @@ BM25 = RankingMethod.BM25
 @pytest.fixture
 def path(config: EngineConfig) -> Path:
     return config.data_directory / "productos.inv"
-
-
-@dataclass(frozen=True)
-class Oracle:
-    """Las fórmulas de TF-IDF (lnc.ltc) y BM25 aplicadas directo a los textos, sin índice."""
-
-    documents: list[AnalyzedText]
-    analyzer: Analyzer
-
-    @classmethod
-    def of(cls, texts: list[str], analyzer: Analyzer) -> "Oracle":
-        return cls([analyzer.analyze(text) for text in texts], analyzer)
-
-    def scores(
-        self, query: str, method: RankingMethod, k1: float = DEFAULT_K1, b: float = DEFAULT_B
-    ) -> dict[int, float]:
-        query_frequencies = self.analyzer.analyze(query).frequencies
-        present = [term for term in query_frequencies if self._document_frequency(term) > 0]
-        matches = [
-            doc_id
-            for doc_id, document in enumerate(self.documents)
-            if any(term in document.frequencies for term in present)
-        ]
-        if method is TF_IDF:
-            return self._tf_idf(query_frequencies, present, matches)
-        return self._bm25(present, matches, k1, b)
-
-    def _tf_idf(self, query_frequencies, present, matches) -> dict[int, float]:
-        count = len(self.documents)
-        query_weights = {
-            term: (1 + math.log10(query_frequencies[term]))
-            * math.log10(count / self._document_frequency(term))
-            for term in present
-        }
-        query_norm = math.sqrt(sum(weight**2 for weight in query_weights.values()))
-        scores = {}
-        for doc_id in matches:
-            frequencies = self.documents[doc_id].frequencies
-            norm = math.sqrt(sum((1 + math.log10(tf)) ** 2 for tf in frequencies.values()))
-            scores[doc_id] = sum(
-                (query_weights[term] / query_norm if query_norm else 0.0)
-                * (1 + math.log10(frequencies[term]))
-                / norm
-                for term in present
-                if term in frequencies
-            )
-        return scores
-
-    def _bm25(self, present, matches, k1, b) -> dict[int, float]:
-        count = len(self.documents)
-        average_length = sum(document.length for document in self.documents) / count
-        scores = {}
-        for doc_id in matches:
-            document = self.documents[doc_id]
-            score = 0.0
-            for term in present:
-                tf = document.frequencies.get(term, 0)
-                if tf == 0:
-                    continue
-                df = self._document_frequency(term)
-                idf = math.log(1 + (count - df + 0.5) / (df + 0.5))
-                score += (
-                    idf
-                    * tf
-                    * (k1 + 1)
-                    / (tf + k1 * (1 - b + b * document.length / average_length))
-                )
-            scores[doc_id] = score
-        return scores
-
-    def _document_frequency(self, term: str) -> int:
-        return sum(1 for document in self.documents if term in document.frequencies)
-
-
-def expected_order(scores: dict[int, float]) -> list[int]:
-    return sorted(scores, key=lambda doc_id: (-scores[doc_id], doc_id))
-
-
-def assert_same_ranking(
-    actual: list[ScoredDocument], expected: dict[int, float], limit: int | None = None
-) -> None:
-    """Mismos puntajes (con tolerancia) y mismo orden; dos documentos solo pueden cambiar
-    de lugar respecto del oráculo si sus puntajes difieren menos que la tolerancia, que
-    es lo que puede mover el redondeo de sumar en otro orden."""
-    order = expected_order(expected)[:limit]
-    assert len(actual) == len(order)
-    for position, document in enumerate(actual):
-        assert document.record_id == record_id_of(document.doc_id)
-        assert document.score == pytest.approx(expected[document.doc_id], abs=TOLERANCE)
-        expected_doc = order[position]
-        if document.doc_id != expected_doc:
-            assert expected[document.doc_id] == pytest.approx(
-                expected[expected_doc], abs=TOLERANCE
-            )
-    assert actual == sorted(actual, key=lambda document: (-document.score, document.doc_id))
 
 
 def random_query(generator: random.Random, words: list[str]) -> str:
@@ -150,7 +62,7 @@ def test_scores_and_top_k_match_the_formulas_on_random_corpora(
 ):
     texts = random_texts(CORPUS_SIZE, seed)
     analyzer = Analyzer(config)
-    oracle = Oracle.of(texts, analyzer)
+    oracle = Oracle.of_texts(texts, analyzer)
     generator = random.Random(seed)
     words = vocabulary(400, seed)
     with build(path, texts, config) as index:
@@ -206,7 +118,7 @@ def test_an_unknown_term_adds_nothing(method: RankingMethod, path: Path, config:
 
 def test_a_repeated_query_term_weighs_more_in_tf_idf_only(path: Path, config: EngineConfig):
     texts = random_texts(150, seed=7)
-    oracle = Oracle.of(texts, Analyzer(config))
+    oracle = Oracle.of_texts(texts, Analyzer(config))
     with build(path, texts, config) as index:
         ranker = Ranker(index, config)
         once, twice = "teclado raton", "teclado teclado raton"
@@ -258,27 +170,40 @@ def test_a_term_in_every_document_scores_zero_in_tf_idf(path: Path, config: Engi
 
 
 @pytest.mark.parametrize("method", list(RankingMethod))
-def test_equal_scores_are_ordered_by_doc_id(
+def test_equal_scores_are_ordered_by_row_address(
     method: RankingMethod, path: Path, config: EngineConfig
 ):
+    """El empate lo decide la dirección de la fila, no el orden de llegada al índice."""
     texts = ["cable rojo", "teclado", "cable rojo", "raton", "cable rojo"]
-    with build(path, texts, config) as index:
+    addresses = [RecordId(9, 0), RecordId(1, 0), RecordId(0, 5), RecordId(2, 0), RecordId(0, 7)]
+    documents = list(zip(addresses, texts, strict=True))
+    with InvertedIndex.build(path, documents, Analyzer(config), config) as index:
         ranked = Ranker(index, config).top_k("cable", method, 10)
-        assert [document.doc_id for document in ranked] == [0, 2, 4]
+        assert [document.record_id for document in ranked] == [
+            RecordId(0, 5),
+            RecordId(0, 7),
+            RecordId(9, 0),
+        ]
+        assert [document.doc_id for document in ranked] == [2, 4, 0]
         assert ranked[0].score == ranked[1].score == ranked[2].score
+        ranker = Ranker(index, config)
+        assert ranker.top_k("cable", method, 2) == ranked[:2]
+        assert ranker.top_k("cable", method, 1) == ranked[:1]
+        assert list(ranker.ranked("cable", method)) == ranked
 
 
 @pytest.mark.parametrize("method", list(RankingMethod))
 def test_deleted_documents_are_left_out(method: RankingMethod, path: Path, config: EngineConfig):
+    """Hasta la próxima fusión, el df cuenta a los borrados; N y avgdl, solo a los vivos."""
     texts = random_texts(200, seed=8)
-    oracle = Oracle.of(texts, Analyzer(config))
     deleted = [0, 3, 50, 51, 199]
-    build(path, texts, config).close()
-    mark_deleted(path, config, deleted)
+    live = {record_id_of(doc): text for doc, text in enumerate(texts) if doc not in deleted}
+    oracle = Oracle.of(live, Analyzer(config), [texts[doc] for doc in deleted])
+    with build(path, texts, config) as index:
+        for doc in deleted:
+            assert index.delete(record_id_of(doc))
     query = "teclado cable raton bateria"
-    expected = {
-        doc: score for doc, score in oracle.scores(query, method).items() if doc not in deleted
-    }
+    expected = oracle.scores(query, method)
     with InvertedIndex(path, config) as index:
         ranker = Ranker(index, config)
         stats = RankingStats()

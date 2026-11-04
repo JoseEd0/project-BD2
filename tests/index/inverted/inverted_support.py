@@ -1,17 +1,19 @@
-"""Construcción de índices de prueba y un índice de referencia en memoria."""
+"""Construcción de índices de prueba, un índice de referencia en memoria y el oráculo del
+ranking."""
 
+import itertools
+import math
 import random
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
+import pytest
+
 from config import EngineConfig
-from index.inverted import InvertedIndex, lnc_norm
-from index.inverted.format import DOCUMENT_RECORD, FIRST_DATA_PAGE, documents_path
-from storage.page import RecordPage, slot_capacity
-from storage.pager import Pager
+from index.inverted import InvertedIndex, RankingMethod, ScoredDocument, lnc_norm
 from storage.record_id import RecordId
-from text import Analyzer
+from text import AnalyzedText, Analyzer
 
 # Palabras que el analizador deja casi intactas, con ñ, cifras y una stopword («para»).
 WORDS = [
@@ -31,19 +33,6 @@ def documents_of(texts: list[str]) -> Iterator[tuple[RecordId, str]]:
 
 def build(path: Path, texts: list[str], config: EngineConfig) -> InvertedIndex:
     return InvertedIndex.build(path, documents_of(texts), Analyzer(config), config)
-
-
-def mark_deleted(path: Path, config: EngineConfig, doc_ids: list[int]) -> None:
-    """Marca documentos como borrados directamente en la tabla de documentos de un índice
-    cerrado: el mantenimiento que lo hará por API todavía no existe."""
-    capacity = slot_capacity(config.page_size, DOCUMENT_RECORD.size)
-    with Pager(documents_path(path), config) as pager:
-        for doc_id in doc_ids:
-            page_index, slot = divmod(doc_id, capacity)
-            page_id = FIRST_DATA_PAGE + page_index
-            page = RecordPage.from_bytes(pager.read(page_id), DOCUMENT_RECORD.size)
-            page.tombstone(slot)
-            pager.write(page_id, page.to_bytes())
 
 
 def vocabulary(size: int, seed: int) -> list[str]:
@@ -109,3 +98,122 @@ def assert_matches_reference(index: InvertedIndex, reference: ReferenceIndex) ->
         assert document.length == reference.lengths[doc_id]
         assert document.norm == reference.norms[doc_id]
         assert not document.deleted
+
+
+TOLERANCE = 1e-9
+DEFAULT_K1 = 1.2
+DEFAULT_B = 0.75
+
+
+@dataclass(frozen=True)
+class Oracle:
+    """Las fórmulas de TF-IDF (lnc.ltc) y BM25 aplicadas directo a los textos, sin índice.
+
+    `documents` son los vivos, por la dirección de su fila: N y avgdl salen de ellos. El df
+    cuenta además `counted_deleted`, los borrados cuyos postings siguen en el índice hasta
+    la próxima fusión, acotado a N como en el ranking.
+    """
+
+    documents: dict[RecordId, AnalyzedText]
+    analyzer: Analyzer
+    counted_deleted: tuple[AnalyzedText, ...] = ()
+
+    @classmethod
+    def of(
+        cls, documents: dict[RecordId, str], analyzer: Analyzer, deleted: Iterable[str] = ()
+    ) -> "Oracle":
+        return cls(
+            {record_id: analyzer.analyze(text) for record_id, text in documents.items()},
+            analyzer,
+            tuple(analyzer.analyze(text) for text in deleted),
+        )
+
+    @classmethod
+    def of_texts(cls, texts: list[str], analyzer: Analyzer) -> "Oracle":
+        return cls.of(dict(documents_of(texts)), analyzer)
+
+    def scores(
+        self, query: str, method: RankingMethod, k1: float = DEFAULT_K1, b: float = DEFAULT_B
+    ) -> dict[RecordId, float]:
+        query_frequencies = self.analyzer.analyze(query).frequencies
+        present = [term for term in query_frequencies if self._document_frequency(term) > 0]
+        matches = [
+            record_id
+            for record_id, document in self.documents.items()
+            if any(term in document.frequencies for term in present)
+        ]
+        if not matches:
+            return {}
+        if method is RankingMethod.TF_IDF:
+            return self._tf_idf(query_frequencies, present, matches)
+        return self._bm25(present, matches, k1, b)
+
+    def _tf_idf(self, query_frequencies, present, matches) -> dict[RecordId, float]:
+        count = len(self.documents)
+        query_weights = {
+            term: (1 + math.log10(query_frequencies[term]))
+            * math.log10(count / self._document_frequency(term))
+            for term in present
+        }
+        query_norm = math.sqrt(sum(weight**2 for weight in query_weights.values()))
+        scores = {}
+        for record_id in matches:
+            frequencies = self.documents[record_id].frequencies
+            norm = math.sqrt(sum((1 + math.log10(tf)) ** 2 for tf in frequencies.values()))
+            scores[record_id] = sum(
+                (query_weights[term] / query_norm if query_norm else 0.0)
+                * (1 + math.log10(frequencies[term]))
+                / norm
+                for term in present
+                if term in frequencies
+            )
+        return scores
+
+    def _bm25(self, present, matches, k1, b) -> dict[RecordId, float]:
+        count = len(self.documents)
+        average_length = sum(document.length for document in self.documents.values()) / count
+        scores = {}
+        for record_id in matches:
+            document = self.documents[record_id]
+            score = 0.0
+            for term in present:
+                tf = document.frequencies.get(term, 0)
+                if tf == 0:
+                    continue
+                df = self._document_frequency(term)
+                idf = math.log(1 + (count - df + 0.5) / (df + 0.5))
+                score += (
+                    idf
+                    * tf
+                    * (k1 + 1)
+                    / (tf + k1 * (1 - b + b * document.length / average_length))
+                )
+            scores[record_id] = score
+        return scores
+
+    def _document_frequency(self, term: str) -> int:
+        counted = itertools.chain(self.documents.values(), self.counted_deleted)
+        found = sum(1 for document in counted if term in document.frequencies)
+        return min(found, len(self.documents))
+
+
+def expected_order(scores: dict[RecordId, float]) -> list[RecordId]:
+    return sorted(scores, key=lambda record_id: (-scores[record_id], record_id))
+
+
+def assert_same_ranking(
+    actual: list[ScoredDocument], expected: dict[RecordId, float], limit: int | None = None
+) -> None:
+    """Mismos puntajes (con tolerancia) y mismo orden; dos documentos solo pueden cambiar
+    de lugar respecto del oráculo si sus puntajes difieren menos que la tolerancia, que
+    es lo que puede mover el redondeo de sumar en otro orden."""
+    order = expected_order(expected)[:limit]
+    assert len(actual) == len(order)
+    for position, document in enumerate(actual):
+        assert document.score == pytest.approx(expected[document.record_id], abs=TOLERANCE)
+        expected_record = order[position]
+        if document.record_id != expected_record:
+            assert expected[document.record_id] == pytest.approx(
+                expected[expected_record], abs=TOLERANCE
+            )
+    assert actual == sorted(actual, key=lambda document: (-document.score, document.record_id))

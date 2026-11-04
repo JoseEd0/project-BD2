@@ -143,7 +143,7 @@ class Lexicon:
         self.merge_passes: int = passes
         self._terms = ByteStreamReader(self._terms_pager, FIRST_DATA_PAGE, term_bytes)
         self._capacity = slot_capacity(config.page_size, LEXICON_RECORD.size)
-        self.record_page_count = -(-term_count // self._capacity)
+        self.record_page_count: int = -(-term_count // self._capacity)
         self._fences = self._load_fences(fence_bytes)
 
     @property

@@ -12,6 +12,7 @@ import type {
   SequentialStorage,
   TableInfo,
   TableStructure,
+  TextValuesStorage,
   TreeStructure,
 } from "../types";
 
@@ -242,6 +243,18 @@ function FileView({ storage }: { storage: HeapStorage | SequentialStorage }) {
   );
 }
 
+function TextValuesView({ values }: { values: TextValuesStorage }) {
+  return (
+    <div className="stats">
+      <Stat label="valores" value={values.values} />
+      <Stat label="bytes de texto" value={values.value_bytes} />
+      <Stat label="páginas de datos" value={values.data_pages} />
+      <Stat label="páginas de mapa" value={values.map_pages} />
+      <Stat label="bytes en una página" value={values.inline_limit} />
+    </div>
+  );
+}
+
 export default function StructureDialog({
   table,
   sessionId,
@@ -277,6 +290,12 @@ export default function StructureDialog({
                   <FileView storage={structure.storage} />
                 )}
               </section>
+              {structure.text_values !== null && (
+                <section className="structure">
+                  <h3 className="structure__title">Valores TEXT, fuera de la fila</h3>
+                  <TextValuesView values={structure.text_values} />
+                </section>
+              )}
               {structure.indexes.map((index) => (
                 <section className="structure" key={index.name}>
                   <h3 className="structure__title">

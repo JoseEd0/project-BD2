@@ -5,7 +5,9 @@ una condición sobre una columna indexada, se usa el índice; si no, se recorre 
 decisión es la que el panel de plan de ejecución enseña al usuario.
 
 Las consultas espaciales siguen la misma regla con el R-Tree: un radio o un polígono en el
-WHERE, o un ORDER BY por distancia, se resuelven con el índice si la columna lo tiene.
+WHERE, o un ORDER BY por distancia, se resuelven con el índice si la columna lo tiene. Un
+`MATCH` en el WHERE se resuelve siempre con el índice invertido de su columna, que es el
+único que sabe puntuar: su acceso entrega el puntaje que leen `SCORE()` y el ORDER BY.
 """
 
 from __future__ import annotations
@@ -25,6 +27,7 @@ from query.expressions import (
     ExpressionEvaluator,
     RowLayout,
     UnknownColumnError,
+    all_of,
     column_literal,
     conjuncts,
     constant_value,
@@ -63,6 +66,8 @@ from query.operators import (
 from query.spatial import nearest_search, polygon_search, radius_search
 from query.spatial_operators import SpatialNearestScan, SpatialPolygonScan, SpatialRangeScan
 from query.table import Table, index_with_capability
+from query.text_operators import TextSearchScan
+from query.text_search import TextSearch, ordered_by_score, served, text_search
 from sql.nodes import (
     BetweenPredicate,
     BinaryOperation,
@@ -103,21 +108,30 @@ class Planner:
         self._tables = tables
         self._config = config
         self._single_source = True
+        self._text_search: TextSearch | None = None
+        self._ranked_limit: int | None = None
 
     def plan(self, statement: SelectStatement) -> Operator:
         """Árbol de operadores listo para ejecutar.
 
         Raises:
             UnsupportedQueryError: si la consulta usa algo que el ejecutor no implementa.
+            TextSearchError: si su búsqueda de texto no se puede responder (`text_search`).
         """
+        self._text_search = text_search(statement, self._tables, self._config)
+        if self._text_search is not None:
+            statement = served(statement, self._text_search)
         _require_search(statement)
         self._single_source = not statement.joins
         aggregates, labels = self._aggregates_of(statement)
         grouped = bool(aggregates or statement.group_by)
+        self._ranked_limit = _ranked_limit(statement, grouped)
         source = self._scan_of(statement.source, statement.where)
         presorted = self._nearest_scan(statement, source, grouped)
         if presorted is None:
             presorted = self._key_ordered(statement, source, grouped)
+        if presorted is None:
+            presorted = self._score_ordered(statement, source, grouped)
         operator = self._join_all(presorted or source, statement)
         if statement.where is not None:
             operator = Filter(operator, statement.where)
@@ -169,7 +183,13 @@ class Planner:
         mismo tipo gana el primero que aparece. El planificador es por reglas, no por
         costos: no sabe cuántas filas deja pasar cada condición, y por eso el filtro del
         WHERE se aplica igual sobre lo que devuelva el camino elegido.
+
+        La tabla de un `MATCH` va siempre por su índice invertido: es el único acceso que
+        sabe puntuar, y el `MATCH` ya salió del WHERE (`served`).
         """
+        search = self._text_search
+        if search is not None and search.reference.lower() == alias.lower():
+            return TextSearchScan(table, alias, search, self._ranked_limit)
         candidates: list[tuple[int, TableOperator]] = []
         ranges: dict[str, tuple[str, Value | None, Value | None]] = {}
         for condition in conjuncts(where):
@@ -262,6 +282,16 @@ class Planner:
         if isinstance(source, PrimaryKeyLookup):
             return source if source.in_key_order else None
         return OrderedScan(table, alias) if isinstance(source, SequentialScan) else None
+
+    def _score_ordered(
+        self, statement: SelectStatement, source: Operator, grouped: bool
+    ) -> Operator | None:
+        """El acceso de texto, si el ORDER BY pide el orden en que ya entrega las filas: de
+        mayor a menor puntaje. Un filtro o un `DISTINCT` lo conservan; un JOIN o una
+        agrupación no."""
+        if not isinstance(source, TextSearchScan) or grouped or statement.joins:
+            return None
+        return source if ordered_by_score(statement) else None
 
     def _spatial_index_on(
         self, table: Table, alias: str, column: ColumnRef
@@ -398,7 +428,7 @@ class Planner:
         if not left_keys:
             return NestedLoopJoin(left, right, join.kind, join.condition, directory, self._config)
         return HashJoin(
-            left, right, join.kind, left_keys, right_keys, _all_of(rest), directory, self._config
+            left, right, join.kind, left_keys, right_keys, all_of(rest), directory, self._config
         )
 
     def _order(
@@ -440,6 +470,8 @@ class Planner:
         layout: RowLayout, star: Star, expressions: list[Expression], names: list[str]
     ) -> None:
         for slot in layout.slots:
+            if slot.virtual:
+                continue
             if star.qualifier is not None and (slot.qualifier or "").lower() != (
                 star.qualifier.lower()
             ):
@@ -610,32 +642,37 @@ def _field_of(expression: Expression, layout: RowLayout) -> Field | None:
 
 
 def _require_search(statement: SelectStatement) -> None:
-    """`USING` y `WITH` en un SELECT eligen el índice de una búsqueda `MATCH` o
-    `SIMILAR_TO`. Sin ninguna de las dos no tienen a qué aplicarse, y ignorarlos en
-    silencio haría creer que la consulta usó el método pedido.
+    """`USING` y `WITH` en un SELECT eligen el ranking de una búsqueda `MATCH` o
+    `SIMILAR_TO`. La de texto ya los consumió (`served`); si quedan, no tienen a qué
+    aplicarse, e ignorarlos en silencio haría creer que la consulta usó el método pedido.
 
     Raises:
-        UnsupportedQueryError: si el SELECT trae `USING` o `WITH`.
+        UnsupportedQueryError: si el SELECT trae `USING` o `WITH` sin un `MATCH`.
     """
     if statement.search_method is None and not statement.options:
         return
     asked = "WITH" if statement.search_method is None else f"USING {statement.search_method.value}"
     raise UnsupportedQueryError(
-        f"{asked} en un SELECT solo acompaña a una búsqueda MATCH o SIMILAR_TO, y este motor "
-        "todavía no las ejecuta"
+        f"{asked} en un SELECT elige el ranking de una búsqueda MATCH o SIMILAR_TO, y esta "
+        "consulta no tiene un MATCH en su WHERE (SIMILAR_TO todavía no se ejecuta)"
     )
 
 
-def _all_of(conditions: Sequence[Expression]) -> Expression | None:
-    """Las condiciones unidas por AND, o `None` si no hay ninguna."""
-    combined: Expression | None = None
-    for condition in conditions:
-        combined = (
-            condition
-            if combined is None
-            else BinaryOperation(BinaryOperator.AND, combined, condition)
-        )
-    return combined
+def _ranked_limit(statement: SelectStatement, grouped: bool) -> int | None:
+    """Cuántas filas pedirle al acceso de texto: `LIMIT + OFFSET`, si entre él y el `LIMIT`
+    nada puede descartar ni reordenar filas; `None` si no.
+
+    Lo descartan un filtro residual, un JOIN, una agrupación o un `DISTINCT`, y lo reordena
+    un ORDER BY por otra cosa que el puntaje de mayor a menor. Entonces el acceso entrega
+    el orden perezoso y el `LIMIT` corta igual, pidiéndole filas hasta completar las suyas.
+    """
+    if statement.limit is None or grouped or statement.joins or statement.distinct:
+        return None
+    if statement.where is not None:
+        return None
+    if statement.order_by and not ordered_by_score(statement):
+        return None
+    return statement.limit + (statement.offset or 0)
 
 
 def _belongs_to(expression: Expression, layout: RowLayout) -> bool:

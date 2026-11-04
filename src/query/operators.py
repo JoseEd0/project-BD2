@@ -310,7 +310,7 @@ class Filter(Operator):
                 yield row
 
     def _plan_node(self) -> PlanNode:
-        return PlanNode("Filter", "condición del WHERE", (self._child.plan(),))
+        return PlanNode("Filter", describe_expression(self._predicate), (self._child.plan(),))
 
 
 class Sort(Operator):

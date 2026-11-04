@@ -44,6 +44,7 @@ from query.planner import Planner
 from query.row_store import AddressedRecord
 from query.spatial import SpatialView, spatial_view
 from query.table import Table, discard_table_files, primary_key_index_name
+from query.text_search import TextView, text_view
 from sql import parse_script
 from sql.nodes import (
     Assignment,
@@ -106,6 +107,7 @@ class QueryResult:
         elapsed_ms: tiempo de ejecución medido.
         spatial: tabla, columna y figuras que el panel de mapa debe dibujar, si la consulta
             toca alguna columna POINT.
+        text: tabla, columna y términos analizados de su `MATCH`, para resaltarlos.
     """
 
     columns: tuple[str, ...] = ()
@@ -115,6 +117,7 @@ class QueryResult:
     affected_rows: int = 0
     elapsed_ms: float = 0.0
     spatial: SpatialView | None = None
+    text: TextView | None = None
 
 
 @dataclass
@@ -278,6 +281,7 @@ class Engine:
             plan=operator.plan(),
             affected_rows=len(rows),
             spatial=spatial_view(statement, tables),
+            text=text_view(statement, tables, self.config),
         )
 
     def _explain(self, statement: ExplainStatement) -> QueryResult:

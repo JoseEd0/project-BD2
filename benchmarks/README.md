@@ -10,6 +10,8 @@ gráficas de [`figures/`](figures/) y todas las tablas de este documento.
 .venv/bin/python -m benchmarks.index_benchmark   --sizes 1000 10000 100000 --queries 100
 .venv/bin/python -m benchmarks.spatial_benchmark --sizes 1000 10000 100000 --queries 100 \
     --points-file data/datasets/lugares_peru.csv
+.venv/bin/python -m benchmarks.text_analyzer_benchmark --repetitions 5 \
+    --input Proyecto_Integrador_BD2.md docs/latex/informe/*.tex
 .venv/bin/python -m benchmarks.plot              # redibuja todas las gráficas
 ```
 
@@ -22,6 +24,7 @@ gráficas de [`figures/`](figures/) y todas las tablas de este documento.
 | `--radii-km`, `--neighbours` | radios y valores de `k` del experimento espacial |
 | `--points-file` | CSV con una columna `POINT` del que tomar puntos reales (experimento espacial) |
 | `--postgres-dsn` | conexión al PostgreSQL contra el que se mide GiST |
+| `--input`, `--repetitions`, `--language` | textos, pasadas calientes e idioma de la medida del analizador de texto ([resultado](../src/text/README.md#velocidad-medida)) |
 | `--output` | dónde dejar el JSON |
 
 | Experimento | Qué compara | Gráficas |

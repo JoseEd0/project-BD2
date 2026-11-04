@@ -142,15 +142,40 @@ proyecto. Recibe la palabra **ya sin tildes**, y por eso `baterías`, `baterias`
 y `bateria` dan todas `bateri`; con la tilde puesta el stemmer las reparte entre `bat` y
 `bateri`. Las cifras no pasan por el stemmer ni por las stopwords.
 
-Las raíces se **memoizan** en una caché LRU por analizador de `STEM_CACHE_ENTRIES` = 65 536
-palabras. El vocabulario sigue la ley de Zipf: unas decenas de miles de palabras cubren casi
-todas las apariciones, mientras que la cola de modelos, marcas y erratas crece con el
-corpus. Acotada, la caché se queda con las frecuentes y la memoria no crece con la cola.
+### La caché de términos
+
+Cada analizador **recuerda el término de cada token** que ya vio: su raíz, su cifra con
+punto decimal, o que se descarta (stopword o longitud fuera de rango). Un token repetido
+cuesta entonces una sola búsqueda en un diccionario, sin volver a mirar su longitud ni las
+stopwords ni a llamar al stemmer.
+
+El vocabulario sigue la ley de Zipf: unas decenas de miles de palabras cubren casi todas
+las apariciones, mientras que la cola de modelos, marcas y erratas crece con el corpus. Por
+eso la caché está acotada, en **dos generaciones** de `TERM_CACHE_GENERATION_ENTRIES` =
+65 536 tokens: cuando la reciente se llena pasa a ser la anterior y la anterior se olvida;
+un token que aparece en la anterior vuelve a la reciente. Las palabras frecuentes se
+quedan siempre, la cola se va, y la memoria no pasa de 131 072 tokens.
+
+Antes era una `functools.lru_cache` de 65 536 raíces. Con las 100 000 fichas de ESCI
+(189 000 palabras distintas) la LRU llamaba al stemmer 285 545 veces: la cola expulsaba
+palabras que volvían a aparecer. Medido sobre esas fichas, con el plegado ya optimizado y el
+mismo resultado término a término:
+
+| Caché | Llamadas al stemmer | Análisis de las 100 000 fichas | Pico de `tracemalloc` al construir el índice |
+|---|---:|---:|---:|
+| LRU de 65 536 raíces | 285 545 | 10,4 s | 27,2 MiB |
+| dos generaciones de 65 536 tokens | 265 769 | **9,2 s** | **24,9 MiB** |
+
+Gana sobre todo por los aciertos: un `dict.get` en lugar de la llamada a la LRU, que además
+mueve la entrada al frente de su lista; y la caché, sin esa lista, ocupa menos. Se probaron
+generaciones más grandes: con 131 072 tokens el análisis baja a 8,1 s, pero lo que la
+caché retiene al terminar las fichas pasa de 11,8 a 20,7 MiB, casi el doble, por un 12 %
+menos de tiempo.
 
 El stemmer de Snowball guarda estado mientras procesa una palabra, así que dos consultas
 concurrentes sobre el mismo índice lo romperían. Se protege con un candado que solo se toma
-cuando la palabra **no** está en la caché; un test con ocho hilos lo comprueba, y sin el
-candado falla.
+cuando el token **no** está en la caché; dos tests con ocho hilos lo comprueban (uno con
+una caché diminuta que rota todo el tiempo), y sin el candado fallan.
 
 ## Idiomas (`languages.py`)
 
@@ -178,11 +203,23 @@ Apple M4 Pro, Python 3.12.
 
 | Pasada | Tiempo | Tokens por segundo |
 |---|---:|---:|
-| fría (caché de raíces vacía) | 36,1 ms | 243 227 |
-| caliente (mediana de 5) | 7,9 ms | **1 116 951** |
+| fría (caché de términos vacía) | 21,4 ms | 410 289 |
+| caliente (mediana de 5) | 3,0 ms | **2 937 921** |
 
 La pasada caliente es la que importa al indexar un corpus grande, donde casi todas las
-palabras ya se vieron: el stemmer solo trabaja la primera vez que aparece cada una.
+palabras ya se vieron: el stemmer solo trabaja la primera vez que aparece cada una. Con el
+plegado por `str.translate` y la LRU de raíces, el mismo comando en la misma máquina daba
+23,4 ms y 5,1 ms (1 723 696 tokens por segundo).
+
+Sobre las 100 000 fichas de ESCI, lo que analiza la construcción del índice del
+experimento de la Parte 3, cada optimización por separado (mediana de 3 pasadas; el índice
+que sale es idéntico byte a byte):
+
+| | Análisis | Construcción del índice |
+|---|---:|---:|
+| `str.translate` y LRU de raíces | 15,1 s | 20,7 s |
+| plegado con expresión regular | 10,4 s | 16,3 s |
+| y caché de términos en dos generaciones | **9,2 s** | **14,6 s** |
 
 ## Tests
 

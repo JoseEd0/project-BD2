@@ -11,18 +11,18 @@
       "technique": "analizador",
       "operation": "pasada fría",
       "dataset_size": 871,
-      "milliseconds": 36.09391604550183,
+      "milliseconds": 21.397124975919724,
       "extra": {
-        "tokens_por_segundo": 243227
+        "tokens_por_segundo": 410289
       }
     },
     {
       "technique": "analizador",
       "operation": "pasada caliente (mediana)",
       "dataset_size": 871,
-      "milliseconds": 7.85979104693979,
+      "milliseconds": 2.9881669906899333,
       "extra": {
-        "tokens_por_segundo": 1116951
+        "tokens_por_segundo": 2937921
       }
     }
   ]

@@ -29,7 +29,8 @@ consulta, sus filas y cómo se ejecutó.
   B+ agrupado), número de filas, columnas con su tipo, marca de clave primaria, `NOT NULL`
   y **con qué índice está indexada cada columna**. Tiene filtro por nombre de tabla o de
   columna, y cuatro botones por tabla: `▦` abre sus datos, `⌬` su **estructura física**
-  (niveles del B+ con sus separadores y ocupación, o profundidad global y cubetas del hash),
+  (niveles del B+ con sus separadores y ocupación, o profundidad global y cubetas del hash,
+  y el archivo de valores de sus columnas `TEXT`),
   `ⓘ` la enfoca en el diagrama y `🗑` la elimina (con confirmación que avisa de cuántas
   filas e índices se pierden).
   El botón **Cargar CSV** abre el diálogo de ingesta, con dos modos. *Crear la tabla
@@ -53,15 +54,16 @@ consulta, sus filas y cómo se ejecutó.
 - **Consultas** — editor con **numeración de líneas y resaltado de sintaxis**, `⌘↵` /
   `Ctrl↵` para ejecutar, `Tab` para indentar e historial de las últimas 25 consultas.
   Admite **varias sentencias separadas por `;`**: se ejecutan en orden y el panel muestra
-  las filas de la última consulta. Debajo, **50 atajos** agrupados por bloque de la
+  las filas de la última consulta. Debajo, **51 atajos** agrupados por bloque de la
   exposición —*Carga*, *Índices*, *Plan*, *Externos*, *SQL*, *Borrar*, *Transacciones*
   y *Espacial*—; un clic escribe la consulta en el editor. Todos se pueden lanzar varias veces sin error: los que
   crean o borran tablas usan `IF [NOT] EXISTS`, y los de *Borrar* trabajan sobre filas de
   prueba que insertan ellos mismos, así que no tocan el dataset. Para editarlos, ver
   [`src/snippets.ts`](src/snippets.ts).
 - **Resultados** — *Filas* con la tabla de resultados (números alineados a la
-  derecha, `NULL` en cursiva, cabecera fija al hacer scroll y columna `#` fija a la
-  izquierda), *Mensajes* con qué hizo cada sentencia del script y cuánto tardó, y *Mapa*
+  derecha, `NULL` en cursiva, cabecera fija al hacer scroll, columna `#` fija a la
+  izquierda y celdas largas —un `TEXT` de varios KB— recortadas, con el valor completo al
+  pasar el cursor), *Mensajes* con qué hizo cada sentencia del script y cuánto tardó, y *Mapa*
   cuando la consulta toca una columna `POINT` (ver más abajo). Botones
   para **copiar** al portapapeles y **exportar CSV**. Los errores salen aquí con su tipo y
   el **cursor bajo la posición exacta** que devuelve el parser.
@@ -179,7 +181,7 @@ src/
     ResultsPanel.tsx     pestañas de filas, mensajes y mapa; exportación y errores
     MapPanel.tsx         mapa con el resultado, las figuras y los MBR
     PlanPanel.tsx        árbol del plan con leyenda
-    StructureDialog.tsx  estructura física: B+, hash y R-Tree
+    StructureDialog.tsx  estructura física: B+, hash, R-Tree y valores TEXT
     UploadDialog.tsx     carga de CSV
     SchemaView.tsx       diagrama de esquema y relaciones
     StatusBar.tsx        barra de estado

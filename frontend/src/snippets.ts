@@ -63,6 +63,21 @@ INSERT INTO resenas VALUES
 
 SELECT * FROM resenas WHERE producto_id = 10;`,
       },
+      {
+        label: "Columna TEXT",
+        description:
+          "Un TEXT no tiene longitud máxima: la fila guarda su dirección y el texto vive en notas.text",
+        sql: `DROP TABLE IF EXISTS notas;
+
+CREATE TABLE notas (id INT PRIMARY KEY, asunto VARCHAR(30), cuerpo TEXT);
+
+INSERT INTO notas VALUES
+  (1, 'Envío', 'El pedido salió del almacén de Lima el lunes por la mañana y llegó al cliente de Arequipa dos días después. El repartidor dejó el paquete en la recepción del edificio, firmado por el conserje, y el cliente confirmó por correo que todo llegó completo y sin golpes. Se cierra la incidencia abierta por el retraso de la semana anterior.'),
+  (2, 'Devolución', 'El cliente pidió devolver las zapatillas porque la talla no le quedaba. Se generó la etiqueta de envío de vuelta y se le explicó que el reembolso se hace al mismo medio de pago en cuanto el almacén reciba el producto.'),
+  (3, 'Sin detalle', NULL);
+
+SELECT id, asunto, cuerpo FROM notas WHERE cuerpo LIKE '%almacén%' ORDER BY cuerpo;`,
+      },
     ],
   },
   {

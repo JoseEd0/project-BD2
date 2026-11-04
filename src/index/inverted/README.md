@@ -17,6 +17,11 @@ Sobre el mismo índice, `Ranker` ordena los documentos que contienen algún tér
 consulta con las dos técnicas que pide el enunciado: **TF-IDF + similitud del coseno** y
 **BM25** (ver [Ranking](#ranking)).
 
+Después de construirse, el índice admite inserciones y borrados sin reconstruirse: los
+documentos nuevos van a **segmentos** que se fusionan con la misma mezcla de SPIMI, y los
+borrados dejan una **lápida** (ver [Mantenimiento](#mantenimiento-segmentos-y-lápidas)).
+`TextSearchIndex` lo conecta a una tabla como índice secundario, con sus transacciones.
+
 ## Uso
 
 ```python
@@ -34,6 +39,9 @@ with InvertedIndex.build(ruta, documentos, Analyzer(config), config) as indice:
     indice.document_count, indice.average_length
 
 InvertedIndex(ruta, config)                     # abrir uno ya construido
+indice.insert(record_id, "teclado mecánico")    # doc_id nuevo; las búsquedas ya lo ven
+indice.delete(record_id)                        # lápida, O(1) páginas
+indice.flush()                                  # escribe el segmento y fusiona si toca
 
 ranker = Ranker(indice, config)                 # analiza la consulta en el idioma del índice
 ranker.top_k("cable usb", RankingMethod.BM25, 10)          # list[ScoredDocument]
@@ -46,33 +54,41 @@ for documento in ranker.ranked("cable usb", RankingMethod.TF_IDF):   # perezoso,
 |---|---|
 | `InvertedIndex.build(path, documents, analyzer, config)` | construye con SPIMI y abre; `InvertedIndexExistsError` si ya hay uno |
 | `InvertedIndex(path, config)` | abre; `InvertedIndexNotFoundError` o `InvertedFormatError` |
-| `files_of(path)` | los cuatro archivos, para `DROP INDEX` |
-| `lookup(term) -> LexiconEntry \| None` | término, df, frecuencia total y posición de su lista |
-| `postings(term)`, `postings_of(entry) -> PostingList` | la lista, vacía si el término no está |
-| `document_frequency(term)` | df, 0 si no está |
+| `files_of(path)` | todos sus archivos, los de cada segmento incluidos, para `DROP INDEX` |
+| `lookup(term) -> TermEntry \| None` | término, df y frecuencia total sumados entre segmentos, y dónde está su lista en cada uno |
+| `postings(term)`, `postings_of(entry) -> PostingList` | la lista de todos los segmentos, en orden de `doc_id`; vacía si el término no está |
+| `document_frequency(term)` | df, 0 si no está; cuenta los borrados hasta la próxima fusión |
 | `document(doc_id) -> DocumentEntry` | `record_id`, `length`, `norm`, `deleted`; `DocumentNotFoundError` |
 | `documents()`, `terms()` | recorridos completos en orden de `doc_id` y de término |
-| `document_count`, `total_length`, `average_length` | N, suma de longitudes y la `avgdl` de BM25 |
+| `document_count`, `deleted_count`, `total_length`, `average_length` | N y la suma de longitudes de los vivos, los borrados y la `avgdl` de BM25 |
 | `vocabulary_size`, `posting_count`, `block_count`, `merge_passes`, `language` | forma del índice |
-| `document_columns() -> DocumentColumns` | longitudes y normas por `doc_id` en memoria, y los borrados; se carga la primera vez |
-| `describe(top_terms=10)` | todo lo anterior, tamaños y los términos con más df |
-| `flush()`, `close()`, `with` | como el resto de estructuras de disco |
+| `segment_count`, `pending_document_count`, `merge_count` | segmentos en disco, documentos aún en memoria y fusiones completas |
+| `document_columns() -> DocumentColumns` | longitudes, normas y direcciones por `doc_id` en memoria, y los borrados; se carga la primera vez y se mantiene al día |
+| `insert(record_id, text) -> int`, `delete(record_id) -> bool` | indexar una fila y quitarla; `DocumentAlreadyIndexedError` si la dirección ya tiene documento |
+| `flush()`, `merge()` | volcar (escribe el bloque en memoria y fusiona si toca) y fusionar todo ya |
+| `describe(top_terms=10)` | todo lo anterior, los segmentos, el bloque en memoria, tamaños y los términos con más df |
+| `close()`, `with` | `flush` y soltar los archivos |
 
 `weights.py` tiene el peso `1 + log₁₀ tf` y la norma lnc. El ranking (TF-IDF y BM25) usa
 esas mismas funciones para la consulta, así que los dos lados del coseno salen de una sola
 fórmula.
 
-## Los cuatro archivos
+## Los archivos
 
-Una ruta base `productos.inv` da cuatro archivos con sufijo. La página 0 de cada uno es su
+Una ruta base `productos.inv` da varios archivos con sufijo. Los que guardan términos y
+listas forman un **segmento** (léxico, términos y postings); la construcción escribe el
+primero, el `seg0`, y el mantenimiento añade otros. La tabla de documentos, el manifiesto
+y el mapa de direcciones son uno por índice. La página 0 de cada archivo paginado es su
 cabecera, con firma y versión (`FileHeader`): abrir un archivo de otra estructura o de
 otro formato da `InvertedFormatError` en vez de leer basura.
 
 ```
-productos.inv.lexicon     IVLX  │ cabecera │ registros del léxico (fijos, ordenados) │ fronteras │
-productos.inv.terms       IVTM  │ cabecera │ cabl teclad usb … (términos seguidos, sin relleno) │
-productos.inv.postings    IVPS  │ cabecera │ lista de cabl │ lista de teclad │ lista de usb │ … │
-productos.inv.documents   IVDC  │ cabecera │ doc 0 │ doc 1 │ doc 2 │ … (registros fijos) │
+productos.inv.seg0.lexicon      IVLX  │ cabecera │ registros del léxico (fijos, ordenados) │ fronteras │
+productos.inv.seg0.terms        IVTM  │ cabecera │ cabl teclad usb … (términos seguidos, sin relleno) │
+productos.inv.seg0.postings     IVPS  │ cabecera │ lista de cabl │ lista de teclad │ lista de usb │ … │
+productos.inv.documents         IVDC  │ cabecera │ doc 0 │ doc 1 │ doc 2 │ … (registros fijos) │
+productos.inv.manifest          IVMF  │ cabecera │ generación de cada segmento │   (sin páginas)
+productos.inv.docmap, .docmap.dir     hash extendible: dirección de la fila → doc_id
 ```
 
 | Archivo | Registro | Bytes | Por página de 4 KB |
@@ -85,10 +101,14 @@ productos.inv.documents   IVDC  │ cabecera │ doc 0 │ doc 1 │ doc 2 │ �
 Las cabeceras guardan:
 
 - **léxico**: idioma del analizador, número de términos, bytes de términos, número de
-  postings, bytes de las fronteras, bloques y pasadas de mezcla de la construcción;
+  postings, bytes de las fronteras, y los bloques (o segmentos fusionados) y las pasadas
+  de mezcla con que se escribió el segmento;
 - **términos**: sus bytes, que tienen que coincidir con los del léxico;
 - **postings**: su número, que tiene que coincidir con el del léxico;
-- **documentos**: N y la suma de las longitudes.
+- **documentos**: los `doc_id` repartidos, cuántos están borrados y la suma de las
+  longitudes de los vivos;
+- **manifiesto**: la siguiente generación, los borrados ya purgados, las fusiones hechas y
+  cuántos segmentos enumera.
 
 Si los contadores repetidos no coinciden, los archivos no son del mismo índice y abrirlo es
 un `InvertedFormatError`.
@@ -102,10 +122,13 @@ un `InvertedFormatError`.
 3. **Los términos de una página del léxico son contiguos** en el archivo de términos, en el
    mismo orden. Una página se resuelve leyendo un solo tramo.
 4. **El `doc_id` es la posición del documento** en la tabla de documentos: denso, desde 0,
-   en el orden en que llegaron. Llegar a uno es una división.
+   en el orden en que llegaron, y **nunca se reutiliza**. Llegar a uno es una división.
 5. **La marca de borrado es el estado de la ranura** (`SlotState.DELETED`), la lápida de
-   `RecordPage`: no cuesta un byte más. Hoy siempre es falsa; la usará el mantenimiento.
+   `RecordPage`: no cuesta un byte más.
 6. Las **fronteras** son el primer término de cada página del léxico, en orden.
+7. **Cada segmento tiene `doc_id` mayores que los del anterior** en el manifiesto, y el
+   bloque en memoria, mayores que todos: la lista de un término en el índice es la
+   concatenación de sus listas en ese orden, ya ordenada.
 
 ### Por qué así
 
@@ -215,8 +238,8 @@ anterior**: concatenar sus listas en el orden de los bloques da una lista ordena
 
 Si hay más bloques que `merge_fan_in`, se mezclan por pasadas, como en el ordenamiento
 externo: cada grupo de `k` bloques **consecutivos** pasa a ser un bloque, lo que conserva
-el orden de los `doc_id` entre bloques. La última pasada escribe el índice definitivo. Si
-todo cupo en un bloque, va directo de memoria al índice, sin pasar por disco.
+el orden de los `doc_id` entre bloques. La última pasada escribe el primer segmento del
+índice. Si todo cupo en un bloque, va directo de memoria al segmento, sin pasar por disco.
 
 La mezcla recibe **fuentes** (`TermSource`): cualquier cosa que entregue términos en orden
 y, tras cada uno, su lista. Al construir son bloques; al mantener el índice, sus segmentos
@@ -232,7 +255,7 @@ El índice que sale es **idéntico byte a byte** se use un bloque o muchos (salv
 contadores de bloques y pasadas de la cabecera): el léxico, los términos, las listas y la
 tabla de documentos. Es el test central del módulo, y también se comprobó con las 10 000
 fichas de ESCI: con un bloque de 512 KB y abanico 2 salen **111 bloques y 7 pasadas**, y los
-cuatro archivos coinciden con los del índice de un solo bloque.
+archivos coinciden con los del índice de un solo bloque.
 
 ### Complejidad
 
@@ -272,7 +295,9 @@ Python 3.12. La memoria pico de Python se midió con `tracemalloc` en una ejecuc
 Diez veces más documentos cuestan un **30 % más de memoria**, no diez veces más: es el
 bloque acotado. Del tiempo, unos 17 s de los 24 son el análisis del texto (plegado, tokens
 y raíces), medido aparte sobre los mismos 100 000 documentos; los bloques y la mezcla
-suman los 7 s restantes.
+suman los 7 s restantes. Estas cifras son de SPIMI solo: la construcción escribe además el
+mapa de direcciones del mantenimiento, que con 99 000 documentos suma 1,1 s y 1,9 MB (ver
+[De la dirección de la fila al `doc_id`](#de-la-dirección-de-la-fila-al-doc_id)).
 
 Con 100 000 documentos el tamaño del bloque no cambia el tiempo, solo la memoria:
 
@@ -356,13 +381,15 @@ configuración (`bm25_parameters_error`, en `config.py`).
 | Caso | Qué pasa | Por qué |
 |---|---|---|
 | término repetido en la consulta | TF-IDF lo pondera con `1 + log₁₀ tf(t, q)`; BM25 lo cuenta **una vez** | es la «l» de ltc; en BM25 es la fórmula sin el factor de la consulta (`k3 = 0` de Robertson), la de consultas cortas. Tras el stemming, una repetición suele ser la misma palabra en singular y plural («funda fundas»), que no debería pesar el doble |
-| empate de puntaje | primero el de menor `doc_id` | el resultado es determinista y coincide con el orden de carga |
+| empate de puntaje | primero la fila de menor dirección (`RecordId`) | el orden depende solo de las filas vivas, no de cuándo llegó cada una al índice: tras un `ROLLBACK` o un `UPDATE` del texto, la fila tiene un `doc_id` nuevo pero la misma posición entre sus empates. En un índice recién construido desde una tabla coincide con el orden de `doc_id`, porque el heap se recorre en orden de dirección |
 | término en todos los documentos | TF-IDF le da idf 0: los documentos que solo tienen ese término **entran con puntaje 0** | el conjunto de resultados es el mismo con los dos rankings (los documentos con algún término), que es lo que comparan el experimento y `MATCH` sin `LIMIT` |
 | todos los términos en todos los documentos | la consulta es el vector nulo: coseno 0 para todos | el coseno con un vector nulo no está definido; 0 es el valor que no ordena nada |
 | `k = 0` | lista vacía | es `LIMIT 0` |
 | `k < 0` | `RankingParameterError` | no hay `LIMIT` negativo |
 | `k > N` | todos los que coinciden | |
-| documento borrado | no sale ni cuenta en `documents_scored` | se filtra al final, sobre los acumuladores; N, `avgdl` y df son los que da el índice, y el mantenimiento decide cuándo dejan de contarlo |
+| documento borrado | no sale ni cuenta en `documents_scored` | se filtra al final, sobre los acumuladores. N y `avgdl` ya no lo cuentan; el df sí, hasta la próxima fusión (ver [Mantenimiento](#mantenimiento-segmentos-y-lápidas)) |
+| df mayor que N | se usa `min(df, N)` | solo pasa con borrados sin fusionar: con `df > N`, el idf de TF-IDF, `log₁₀(N/df)`, sería negativo y contener el término restaría. Tras una fusión `df ≤ N` y la cota no cambia nada |
+| ningún documento vivo con términos | no devuelve nada | lo que quede en las listas es de borrados, y N o `avgdl` serían 0 en las fórmulas |
 
 ### Evaluación término a término
 
@@ -383,25 +410,25 @@ quitar los borrados
   calculados una vez por consulta.
 - La división por `‖d‖` se hace una vez por documento y no una vez por posting.
 
-**Las longitudes y normas en memoria.** BM25 necesita el `dl` de cada posting y el coseno
-la norma de cada documento puntuado, que con una consulta de cinco palabras pueden ser
-18 000 de 100 000. Leerlas de la tabla de documentos costaría una página por documento.
-`document_columns()` las carga una vez por índice abierto en dos `array` (`I` y `d`), 12
-bytes por documento, más el conjunto de los borrados: son las *norms* que Lucene tiene en
-memoria por la misma razón. Con 100 000 documentos ocupan 1,2 MB y se cargan en 93 ms. El
-mantenimiento, que marcará borrados y añadirá documentos, las actualiza en la misma tabla.
+**Las longitudes, normas y direcciones en memoria.** BM25 necesita el `dl` de cada
+posting y el coseno la norma de cada documento puntuado, que con una consulta de cinco
+palabras pueden ser 18 000 de 100 000; el desempate, la dirección de la fila de cada uno.
+Leerlas de la tabla de documentos costaría una página por documento. `document_columns()`
+las carga una vez por índice abierto en tres `array` (`I`, `d` y `Q`, con la dirección
+como el entero `página << 16 | ranura`, que se ordena igual que ella), 20 bytes por
+documento, más el conjunto de los borrados: son las *norms* que Lucene tiene en memoria
+por la misma razón. Con 100 000 documentos ocupan 2 MB. Cada inserción y cada borrado las
+actualiza en el momento.
 
-**Top-k.** `heapq.nsmallest(k, (-puntaje, doc_id))`, un montículo de tamaño `k`:
-`O(C log k)` para `C` candidatos. La dirección de la fila solo se lee para los `k` que se
-devuelven.
+**Top-k.** `heapq.nsmallest(k, (-puntaje, dirección, doc_id))`, un montículo de tamaño
+`k`: `O(C log k)` para `C` candidatos, sin leer ninguna página para devolverlos.
 
 **El iterador perezoso** (`ranked`) es para una consulta con filtros (`AND precio < 100`)
 que no sabe cuántos documentos va a consumir. Forma un montículo con todos los candidatos,
 `O(C)`, y saca uno por cada documento que se pide, `O(log C)`. Ordenar todo de una vez
 cuesta `O(C log C)` aunque solo se consuman diez. Medido con 20 000 candidatos: sacar 10
 cuesta 0,56 ms con el montículo y 2,7 ms ordenando; sacar 1 000, 0,81 ms frente a 2,7 ms;
-solo al consumirlos **todos** gana ordenar (2,8 ms frente a 5,4 ms), y ese caso ya paga
-una página por documento devuelto.
+solo al consumirlos **todos** gana ordenar (2,8 ms frente a 5,4 ms).
 
 ### Complejidad del ranking
 
@@ -410,12 +437,14 @@ términos en la consulta:
 
 | | Coste |
 |---|---|
-| analizar y buscar los términos | `O(q log V)` y una página del léxico por término |
-| leer las listas | `⌈8·df / página⌉ + 1` páginas por término |
+| analizar y buscar los términos | `O(q · S log V)` y una página del léxico por término y segmento |
+| leer las listas | `⌈8·df / página⌉ + 1` páginas por término y segmento |
 | puntuar | `O(P)` sumas en los acumuladores, más `O(C)` para normas y borrados |
-| `top_k` | `O(C log k)` y una página por documento devuelto |
-| `ranked` | `O(C)` al llamarse, y `O(log C)` más una página por documento que se pide |
-| memoria | los `C` acumuladores, más las columnas de 12 bytes por documento |
+| `top_k` | `O(C log k)` |
+| `ranked` | `O(C)` al llamarse, y `O(log C)` por documento que se pide |
+| memoria | los `C` acumuladores, más las columnas de 20 bytes por documento |
+
+`S` es el número de segmentos: 1 tras una fusión.
 
 ### El ranking medido con ESCI
 
@@ -448,11 +477,234 @@ Precision@10, como comprobación de que el ranking ordena (no es el experimento)
 relevantes en el corpus. Con una palabra los dos rankings casi empatan; con tres o más,
 BM25 gana por 5 a 14 puntos.
 
+## Mantenimiento: segmentos y lápidas
+
+Una tabla con índice invertido tiene que admitir `INSERT`, `UPDATE`, `DELETE` y `ROLLBACK`
+como cualquier otra, sin reconstruir el índice en cada cambio. El diseño es el de Lucene:
+lo nuevo va a **segmentos** pequeños que después se fusionan, y lo borrado deja una
+**lápida** que la fusión limpia.
+
+```
+insert ──► bloque SPIMI en memoria ──flush──► seg5 ─┐
+                                               seg4 ─┤ compactar (más de 7 pendientes)
+                                               seg3 ─┘        │
+seg0 (principal) ◄──────── fusión completa (lo nuevo o lo borrado pasa del 30 %) ◄──┘
+delete ──► lápida en la tabla de documentos (la fusión completa quita sus postings)
+```
+
+### Insertar
+
+El documento recibe el siguiente `doc_id`, se analiza y sus postings van a un
+`SpimiBlock` en memoria, **la misma clase** que llena la construcción. Se apunta en la
+tabla de documentos (una página) y en el mapa de direcciones (ver más abajo). Las
+búsquedas lo ven al instante: el índice se lee como una lista de segmentos —los de disco y,
+al final, el bloque en memoria— y la lista de un término es la concatenación de las suyas,
+ya ordenada por el invariante 7. El ranking no sabe cuántos segmentos hay: recibe una sola
+`PostingList` por término (`postings_of`).
+
+Si el bloque llega a `spimi_block_bytes` a mitad de una sentencia, se escribe como un
+segmento más, sin fusionar: la memoria queda acotada también al insertar.
+
+### Borrar
+
+La tabla avisa con la dirección de la fila. El mapa de direcciones da el `doc_id`, y el
+documento queda marcado como borrado en la tabla de documentos: `O(1)` páginas. Sus
+postings siguen en los segmentos; el ranking los descarta sobre los acumuladores.
+
+- **N y la longitud media cambian al instante**: la cabecera de la tabla de documentos
+  lleva los borrados y la suma de las longitudes de los vivos, y las columnas en memoria
+  se actualizan en el momento.
+- **El df sigue contando al documento borrado hasta la próxima fusión completa**, como en
+  Lucene: saber qué términos tenía obligaría a volver a analizar su texto y a guardar un
+  contador por término. Para que el idf de TF-IDF no se vuelva negativo cuando quedan más
+  borrados que vivos, el ranking usa `min(df, N)`.
+
+Con `cable rojo`, `cable azul usb` y `teclado`, borrar el segundo deja (son los números
+del test):
+
+| | antes de fusionar | después |
+|---|---:|---:|
+| N | 2 | 2 |
+| suma de longitudes / `avgdl` | 3 / 1,5 | 3 / 1,5 |
+| df de `cabl` | **2** | 1 |
+| df de `azul` | **1** | 0 |
+| vocabulario / postings | 5 / 6 | 3 / 3 |
+
+Un `UPDATE` que cambia el texto es un borrado y una inserción, con `doc_id` nuevo. Uno que
+no lo cambia no llega al índice: la tabla avisa con `update(vieja, nueva, dirección)` y
+`ColumnIndex` compara el valor de la columna antes de tocar nada (ver
+[`index/README.md`](../README.md)).
+
+### `doc_id` estables
+
+Un `doc_id` nunca cambia ni se reutiliza. La fusión quita los postings de los borrados pero
+**no renumera**: la lápida se queda en la tabla de documentos (18 bytes en disco y 20 en
+las columnas en memoria por documento borrado). A cambio, ni el mapa de direcciones ni la
+tabla de documentos se reescriben al fusionar, y el orden de los `doc_id` entre segmentos
+se conserva solo. El orden del resultado no depende de los `doc_id`: a igual puntaje
+decide la dirección de la fila (ver [Decisiones](#decisiones)).
+
+### `flush` y las fusiones
+
+`flush` escribe el bloque en memoria como un segmento nuevo y después mira dos umbrales
+(`EngineConfig`):
+
+| Cuándo | Qué hace | Coste |
+|---|---|---|
+| hay más de `inverted_max_segments` (7) segmentos pendientes | los **compacta** en uno, copiando las listas sin decodificarlas, como la mezcla de bloques | proporcional a lo pendiente |
+| los pendientes suman el 30 % (`inverted_pending_fraction`) de los postings del principal, o los borrados con postings son el 30 % (`inverted_deleted_fraction`) de los documentos indexados | **fusión completa**: todos los segmentos en uno, sin los postings de los borrados | lee y escribe todos los postings |
+
+Las dos son la mezcla k-vías de la construcción (`merge_sources`), con los segmentos como
+fuentes y por pasadas si son más que `merge_fan_in`. La fusión completa pone delante del
+segmento nuevo un `PurgingSink`: decodifica la lista de cada término, quita los `doc_id`
+borrados, recuenta su df y su frecuencia total, y deja fuera el término que se queda sin
+postings. La compactación no purga: así todos los borrados se limpian a la vez, y basta un
+contador (los purgados, en el manifiesto) para saber cuántos siguen en las listas.
+
+Dos niveles porque la fusión completa es cara (1,7 s con 100 000 documentos) y la
+compactación barata: con `COMMIT` de una fila, cada `flush` deja un segmento de un
+documento, y fusionarlo todo cada ocho confirmaciones costaría más que lo insertado. Con
+el umbral del 30 % —el mismo que reorganiza el archivo secuencial de la Parte 1— la
+fusión completa llega cuando el índice creció o se vació en casi un tercio, y su coste
+repartido entre esos cambios es constante por posting.
+
+**Tras una fusión completa, el índice es el de reconstruir de cero** con los documentos
+vivos: mismo df, mismo vocabulario, mismos postings y el mismo ranking, puntaje a puntaje
+y en el mismo orden (lo compara el test contra una reconstrucción y contra el oráculo).
+
+**Nunca a mitad de una sentencia.** Solo `flush` fusiona, y el motor solo vuelca al
+confirmar una transacción.
+
+### El manifiesto
+
+Los segmentos vivos los enumera `productos.inv.manifest` por su **generación**, un número
+que nunca se reutiliza. No es un archivo paginado sino un descriptor de unos bytes, con la
+misma cabecera de firma y versión (`FileHeader.encode` y `decode`). Se escribe aparte, se
+lleva al disco y reemplaza al anterior de una vez (`Path.replace`): es el momento en que
+un segmento nuevo o una fusión pasan a existir, como el `segments_N` de Lucene. Los
+segmentos que una fusión reemplazó se borran después. Leerlo no necesita la configuración
+del motor, y por eso `files_of(path)` puede enumerar los segmentos para `DROP INDEX`.
+
+`flush` y `close` dejan en disco el bloque en memoria, las lápidas, los contadores y el
+manifiesto. Sin ellos, como en el resto del motor, lo último puede perderse: el motor
+vuelca al confirmar cada transacción (política *force*).
+
+### De la dirección de la fila al `doc_id`
+
+Para borrar hace falta el `doc_id` de una dirección. Se evaluaron dos opciones, medidas con
+100 000 direcciones:
+
+| | Diccionario en memoria | Hash extendible de la Parte 1 (`DocumentMap`) |
+|---|---|---|
+| memoria | 7,7 MiB (`tracemalloc`) | ninguna fuera del buffer pool |
+| al abrir el índice | recorrer la tabla de documentos, `O(N)` | nada (abrir el índice entero: 1,2 ms) |
+| al construir | — | 1,1 s de 21,7 s |
+| buscar y quitar una dirección | `O(1)` | 0,1 ms, dos páginas |
+| disco | — | 1,9 MB |
+
+Se eligió el hash: ocupa en disco lo que el diccionario ocuparía en memoria en cada índice
+abierto, y abrir no cuesta nada. El mapa guarda solo los documentos vivos: un borrado quita
+la entrada, porque el heap reutiliza la ranura y la misma dirección puede ser después de
+otra fila. Insertar una dirección que ya tiene documento es un
+`DocumentAlreadyIndexedError`.
+
+### Transacciones
+
+El deshacer del motor vuelve a pasar por la tabla, y la tabla avisa a sus índices como
+siempre:
+
+| Cambio | Deshacerlo | En el índice |
+|---|---|---|
+| `INSERT` | se borra la fila | lápida del documento |
+| `DELETE` | se vuelve a insertar | documento nuevo, con otro `doc_id` |
+| `UPDATE` del texto | se restaura el valor anterior | lápida y documento nuevo |
+
+Tras un `ROLLBACK`, una búsqueda encuentra los mismos documentos que antes. Los puntajes
+difieren solo por el df, que cuenta las lápidas que dejó el deshacer; tras la fusión son
+idénticos, y el orden también, porque los empates no dependen del `doc_id`. Es el test de
+`test_text_search_index.py`, que pasa por el motor y las sesiones con el método `INVERTED`
+registrado como lo hará el SQL.
+
+### El índice como índice secundario
+
+`TextSearchIndex` (`secondary.py`) es un `ColumnIndex`: recibe de la tabla `build`,
+`insert`, `delete` y `update` con la fila y su dirección, deja fuera los NULL y declara sus
+archivos con `files_of` para `DROP INDEX`.
+
+- `build` construye con SPIMI de una vez, no fila a fila, y solo sobre un índice vacío.
+- El idioma del analizador (`language`, que en SQL será la opción `idioma`) se elige al
+  crearlo; al abrir uno guardado tiene que coincidir con el suyo
+  (`IndexLanguageMismatchError`).
+- `search(valor)` es una igualdad, y un índice invertido no la responde:
+  `TextSearchEqualityError`. Se consulta con un `Ranker` sobre `inverted_index`.
+- El valor de la columna tiene que ser texto (`NotTextValueError`). Lo recibe del mismo
+  `_value_of` que los demás índices, así que no depende de cómo guarde la tabla el texto.
+
+Todavía no está registrado en `query/index_methods.py`: registrarlo pide pasar las opciones
+del `WITH (...)` al abrir el índice, que hoy no llegan, y que el planificador sepa
+responder `MATCH`. Es la integración con SQL.
+
+### El mantenimiento medido con ESCI
+
+Medición manual, no un experimento versionado: un índice construido con las primeras
+99 000 fichas del subconjunto de 100 000, al que se insertan una a una las 1 000 restantes
+o se borran 1 000 al azar. Configuración por omisión (páginas de 4 KB), sin fusiones
+automáticas salvo donde se dice. Apple M4 Pro, Python 3.12.
+
+| Operación | Media | Mediana | p95 |
+|---|---:|---:|---:|
+| insertar un documento | 0,45 ms | 0,34 ms | 1,20 ms |
+| borrar un documento | 0,11 ms | 0,09 ms | 0,15 ms |
+
+| Operación | Tiempo |
+|---|---:|
+| `flush` tras insertar 1 000 (escribe un segmento) | 34 ms |
+| `flush` tras borrar 1 000 | 4 ms |
+| compactar 7 segmentos de unos 140 documentos | 0,11 s |
+| fusión completa de 8 segmentos, 100 000 documentos, sin borrados | 0,99 s |
+| fusión completa de 99 000 documentos con 1 000 borrados | 1,69 s |
+
+Insertar cuesta sobre todo analizar el texto, más la búsqueda del mapa que comprueba que la
+dirección no está repetida. La fusión con borrados es más lenta que la que solo copia
+porque decodifica cada lista para quitar los `doc_id` borrados.
+
+Las 150 consultas, `top_k` con `k = 10`, media de 5 repeticiones, con los mismos 100 000
+documentos repartidos entre el principal y los 1 000 insertados:
+
+| Los 1 000 nuevos están… | TF-IDF 1 / 3 / 5+ palabras | BM25 1 / 3 / 5+ palabras |
+|---|---:|---:|
+| fusionados (un segmento) | 0,32 / 1,62 / 3,78 ms | 0,31 / 1,54 / 3,71 ms |
+| en el bloque en memoria | 0,33 / 1,66 / 3,96 ms | 0,31 / 1,52 / 3,67 ms |
+| en 1 segmento pendiente | 0,35 / 1,72 / 3,98 ms | 0,34 / 1,65 / 4,12 ms |
+| en 3 | 0,36 / 1,72 / 4,00 ms | 0,34 / 1,65 / 3,90 ms |
+| en 5 | 0,37 / 1,77 / 4,02 ms | 0,37 / 1,69 / 4,01 ms |
+| en 7 | 0,40 / 1,88 / 4,26 ms | 0,38 / 1,75 / 4,02 ms |
+
+Cada segmento suma una búsqueda en su léxico por término de la consulta: con siete, una
+consulta de una palabra tarda un 25 % más y una de cinco o más, entre un 8 y un 13 %. Es lo
+que acota `inverted_max_segments`. Con un solo segmento, el ranking mide lo mismo que antes
+del mantenimiento: sobre el mismo índice, con el código anterior y el nuevo alternados, las
+diferencias quedan dentro de un 3 %.
+
+### Complejidad del mantenimiento
+
+Con `T` postings en el índice, `P` en los segmentos pendientes, `S` segmentos y abanico `k`:
+
+| | Coste |
+|---|---|
+| insertar | analizar el texto, `O(1)` páginas de la tabla de documentos y del mapa |
+| borrar | `O(1)` páginas |
+| `flush` sin fusión | escribir el bloque en memoria |
+| compactar | `O(P)`, `⌈log_k S⌉` pasadas |
+| fusión completa | `O(T)`, `⌈log_k S⌉` pasadas; con borrados, decodifica cada lista |
+| memoria | el bloque en memoria (`spimi_block_bytes`) y una página por flujo de cada segmento en la mezcla |
+
 ## Lo que todavía no hace
 
-El índice se construye de una vez y luego solo se lee: insertar, borrar y deshacer después
-de construir es el mantenimiento por segmentos, que se apoya en este mismo formato (la marca
-de borrado ya está reservada) y en la misma mezcla.
+- **SQL.** `CREATE INDEX … USING INVERTED`, `MATCH` y `SCORE()` son la integración con el
+  planificador, que registra `TextSearchIndex` en `query/index_methods.py`.
+- **Recuperar las lápidas.** La tabla de documentos y las columnas en memoria solo crecen:
+  un documento borrado conserva su `doc_id` (ver [`doc_id` estables](#doc_id-estables)).
 
 ## Tests
 
@@ -482,4 +734,29 @@ mismo con la regla de empates. Cubren además la consulta vacía o de solo stopw
 término inexistente, el término repetido, `k = 0`, `k < 0` y `k > N`, un solo documento,
 el término en todos los documentos, empates, documentos borrados, que el iterador
 perezoso da el mismo orden que el top-k completo, las estadísticas, el idioma del índice,
-los parámetros por omisión de la configuración y la validación de `k1` y `b`.
+los parámetros por omisión de la configuración y la validación de `k1` y `b`. El
+oráculo vive en `inverted_support.py`, indexado por la dirección de la fila, para que lo
+use también el mantenimiento.
+
+El mantenimiento (`test_maintenance.py`) cubre la inserción que aparece antes y después del
+`flush`, el borrado que deja de aparecer, borrar lo que no está, la dirección repetida, el
+`UPDATE`, los números de N, `avgdl`, df y vocabulario antes y después de fusionar, la cota
+`min(df, N)`, un índice sin vivos, la reapertura con segmentos pendientes y con un bloque
+que nunca se volcó, el bloque que se escribe a mitad de las inserciones, la compactación,
+los dos disparadores de la fusión completa, las pasadas con abanico 2, los segmentos que la
+fusión borra, `describe()` y el léxico mezclado. Lo central:
+
+- **la fusión es una reconstrucción**: tras fusionar, el índice da los mismos df, el mismo
+  vocabulario, los mismos postings y el mismo ranking, puntaje a puntaje y en el mismo
+  orden, que uno construido de cero con los documentos vivos en otro orden;
+- **contra un modelo**: 260 operaciones al azar (inserciones que reutilizan direcciones,
+  borrados, actualizaciones, `flush` y reaperturas) con tres semillas, bloques diminutos,
+  abanico 2 y umbrales bajos, para que haya compactaciones y fusiones. Antes de cada
+  fusión el ranking se compara con el oráculo que cuenta en el df los borrados cuyos
+  postings siguen ahí; al final, con una reconstrucción.
+
+`test_text_search_index.py` prueba el índice por la interfaz de `ColumnIndex` (NULL,
+igualdad, idioma, `files_of`, reapertura) y, con el método registrado en el test como lo
+hará el SQL, a través del motor: el `COMMIT` vuelca el bloque, un `UPDATE` de otra columna
+no lo toca y un `ROLLBACK` de inserciones, borrados y actualizaciones deja los mismos
+documentos, y tras la fusión los mismos puntajes.

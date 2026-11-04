@@ -95,6 +95,7 @@ src/                 raíz de importación: un paquete por módulo del motor
   storage/           tipos, registros, páginas y paginador
     heap/            heap file
     sequential/      archivo secuencial paginado
+    varlen/          valores de longitud variable en fragmentos encadenados
   index/             una carpeta por estructura
     bplustree/       árbol B+ agrupado y no agrupado
     hash/            hash extendible
@@ -127,6 +128,7 @@ proyecto:
 | [`src/storage/`](src/storage/) | tipos, registros, páginas, paginador | [README](src/storage/README.md) |
 | [`src/storage/heap/`](src/storage/heap/) | heap file | [README](src/storage/heap/README.md) |
 | [`src/storage/sequential/`](src/storage/sequential/) | archivo secuencial paginado | [README](src/storage/sequential/README.md) |
+| [`src/storage/varlen/`](src/storage/varlen/) | valores de longitud variable | [README](src/storage/varlen/README.md) |
 | [`src/index/bplustree/`](src/index/bplustree/) | árbol B+ agrupado y no agrupado | [README](src/index/bplustree/README.md) |
 | [`src/index/hash/`](src/index/hash/) | hash extendible | [README](src/index/hash/README.md) |
 | [`src/index/rtree/`](src/index/rtree/) | R-Tree: radio, k-NN, polígono, carga masiva | [README](src/index/rtree/README.md) |

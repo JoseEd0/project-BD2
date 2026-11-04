@@ -7,7 +7,7 @@ the planner and the executor without defensive copies.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum, unique
 from types import MappingProxyType
 
@@ -16,6 +16,16 @@ OptionValue = int | float | str | bool | None
 
 EMPTY_OPTIONS: Mapping[str, OptionValue] = MappingProxyType({})
 EMPTY_KEYWORD_ARGUMENTS: Mapping[str, Expression] = MappingProxyType({})
+
+
+# Un `MappingProxyType` no es hashable hasta Python 3.12, y `dataclass` rechaza como valor por
+# defecto todo lo que no lo sea. La fábrica devuelve siempre el mismo mapeo vacío e inmutable.
+def no_options() -> Mapping[str, OptionValue]:
+    return EMPTY_OPTIONS
+
+
+def no_keyword_arguments() -> Mapping[str, Expression]:
+    return EMPTY_KEYWORD_ARGUMENTS
 
 
 @unique
@@ -117,7 +127,7 @@ class Star(Expression):
 class FunctionCall(Expression):
     name: str
     arguments: tuple[Expression, ...] = ()
-    keyword_arguments: Mapping[str, Expression] = EMPTY_KEYWORD_ARGUMENTS
+    keyword_arguments: Mapping[str, Expression] = field(default_factory=no_keyword_arguments)
 
 
 @dataclass(frozen=True, slots=True)
@@ -273,7 +283,7 @@ class SelectStatement(Statement):
     group_by: tuple[Expression, ...] = ()
     having: Expression | None = None
     search_method: SearchMethod | None = None
-    options: Mapping[str, OptionValue] = EMPTY_OPTIONS
+    options: Mapping[str, OptionValue] = field(default_factory=no_options)
     order_by: tuple[OrderItem, ...] = ()
     limit: int | None = None
     offset: int | None = None
@@ -310,7 +320,7 @@ class CreateTableStatement(DefinitionStatement):
 class IndexSpec:
     method: IndexType
     columns: tuple[str, ...]
-    options: Mapping[str, OptionValue] = EMPTY_OPTIONS
+    options: Mapping[str, OptionValue] = field(default_factory=no_options)
 
 
 @dataclass(frozen=True, slots=True)

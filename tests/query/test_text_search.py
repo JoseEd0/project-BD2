@@ -270,7 +270,7 @@ def test_ordering_by_score_ascending_sorts(tienda: Engine, config: EngineConfig)
     )
     scores = [score for _, score in result.rows]
     assert scores == sorted(scores)
-    assert {identifier for identifier, _ in result.rows} == {identifier for identifier, _ in expected}
+    assert {row[0] for row in result.rows} == {identifier for identifier, _ in expected}
     assert "ExternalSort" in operations(result)
 
 
@@ -515,18 +515,30 @@ def found_ids(engine: Engine, query: str) -> list[int]:
     return sorted(row[0] for row in rows)
 
 
-def test_updating_the_indexed_text_searches_the_new_one(tienda: Engine):
-    """El texto viejo y el nuevo miden lo mismo, así que el nuevo ocupa el lugar del viejo en
-    el archivo de valores: el índice tiene que quitar el documento viejo antes, leyendo el
-    texto que todavía está ahí."""
-    old = PRODUCTS[3][TEXT_POSITION]
-    new = "Lámpara de mesa para escritorio, color blanco"[: len(old)].ljust(len(old), "x")
-    assert len(new) == len(old)
-    tienda.execute(f"UPDATE productos SET texto = '{new}' WHERE id = 4")
-    assert found_ids(tienda, "funda cuero") == []
-    assert found_ids(tienda, "lámpara escritorio") == [4, 9]
+@pytest.mark.parametrize(
+    "new",
+    [
+        "Lámpara de escritorio blanca para leer",
+        "Lámpara de escritorio con brazo articulado, base de metal y luz cálida " * 8,
+        "x",
+        None,
+    ],
+    ids=["mismo largo", "más largo", "más corto", "nulo"],
+)
+def test_updating_the_indexed_text_searches_the_new_one(tienda: Engine, new: str | None):
+    """El índice quita el documento viejo antes de que el texto nuevo ocupe su lugar en el
+    archivo de valores, o de que ese lugar se libere: lo encuentra por la dirección de la
+    fila, y la tabla le pregunta si la columna cambió con los valores lógicos de antes."""
+    tienda.execute(f"UPDATE productos SET texto = {literal(new)} WHERE id = 4")
     index = tienda.table("productos").text_search_index("idx_texto").inverted_index
-    assert (index.document_count, index.deleted_count) == (len(PRODUCTS) - 1, 1)
+    assert found_ids(tienda, "funda cuero") == []
+    assert found_ids(tienda, "lámpara escritorio") == ([9] if new in (None, "x") else [4, 9])
+    texts = [text for *_, text in PRODUCTS if text is not None]
+    assert index.document_count == len(texts) - (new is None)
+    assert index.deleted_count == 1
+    original = literal(PRODUCTS[3][TEXT_POSITION])
+    tienda.execute(f"UPDATE productos SET texto = {original} WHERE id = 4")
+    assert found_ids(tienda, "funda cuero") == [4]
 
 
 def test_a_rollback_leaves_the_same_matches(engine: Engine, config: EngineConfig):

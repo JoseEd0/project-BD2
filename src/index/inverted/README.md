@@ -204,7 +204,7 @@ y en orden, con una página en memoria.
 
 ### 4. La mezcla
 
-`merge_blocks` mezcla k bloques con el mismo montículo que el ordenamiento externo
+`merge_sources` mezcla k bloques con el mismo montículo que el ordenamiento externo
 (`merge_sorted_streams`, en `external/runs.py`): sale el término menor de entre las
 cabeceras pendientes y, a igual término, el del bloque que va primero. Los miembros de un
 mismo término se juntan: su df y su frecuencia total se suman, y sus listas se copian una
@@ -217,6 +217,11 @@ Si hay más bloques que `merge_fan_in`, se mezclan por pasadas, como en el orden
 externo: cada grupo de `k` bloques **consecutivos** pasa a ser un bloque, lo que conserva
 el orden de los `doc_id` entre bloques. La última pasada escribe el índice definitivo. Si
 todo cupo en un bloque, va directo de memoria al índice, sin pasar por disco.
+
+La mezcla recibe **fuentes** (`TermSource`): cualquier cosa que entregue términos en orden
+y, tras cada uno, su lista. Al construir son bloques; al mantener el índice, sus segmentos
+(ver [Mantenimiento](#mantenimiento-segmentos-y-lápidas)). Las pasadas las lleva
+`MergePasses`, que solo borra los bloques intermedios que escribió él.
 
 Los bloques viven en `productos.inv.spimi/`, que se borra siempre, también si la
 construcción falla; y si falla, tampoco quedan los archivos del índice.

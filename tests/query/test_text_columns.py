@@ -6,18 +6,14 @@ reescrituras cuando el texto no cambia.
 """
 
 from collections.abc import Iterator
-from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
-import query.index_methods as index_methods
 from config import EngineConfig
-from index.hash import HashSecondaryIndex
+from index.inverted import RankingMethod
 from query.catalog import CatalogError
 from query.engine import Engine
-from sql.nodes import IndexType
-from storage.record import FieldReader
 from storage.types import FieldType, StorageError
 from storage.varlen import VariableLengthFile
 
@@ -206,28 +202,16 @@ def test_structures_that_store_the_value_in_a_key_refuse_a_text_column(
         engine.execute(statement)
 
 
-def test_an_index_reads_the_text_of_a_row_not_its_address(
-    engine: Engine, monkeypatch: pytest.MonkeyPatch
-):
-    """Lo que necesitará el índice invertido: la tabla le da a cada índice un lector de
-    campos que resuelve los TEXT."""
-    readers: list[FieldReader] = []
-
-    def opener(
-        path: Path, reader: FieldReader, column: str, config: EngineConfig
-    ) -> HashSecondaryIndex:
-        readers.append(reader)
-        return HashSecondaryIndex(path, reader, column, config)
-
-    hash_method = replace(index_methods._METHODS[IndexType.HASH], opener=opener)
-    monkeypatch.setitem(index_methods._METHODS, IndexType.HASH, hash_method)
+def test_an_index_reads_the_text_of_a_row_not_its_address(engine: Engine):
+    """La tabla le da a cada índice un lector de campos que resuelve los TEXT: el índice
+    invertido analiza el texto de cada fila, no los bytes de su dirección."""
     engine.execute("CREATE TABLE notas (id INT, asunto VARCHAR(8), cuerpo TEXT)")
     insert(engine, "notas", ROWS)
-    engine.execute("CREATE INDEX ON notas USING HASH (asunto)")
-    records = [record for _, record in engine.table("notas").addressed_scan()]
-    assert [readers[-1].unpack_field(record, 2) for record in records] == [
-        body for _, _, body in ROWS
-    ]
+    engine.execute("CREATE INDEX i ON notas USING INVERTED (cuerpo)")
+    table = engine.table("notas")
+    found = table.text_search_index("i").ranker().ranked("textos cortos", RankingMethod.BM25)
+    rows = table.addressed_at(document.record_id for document in found)
+    assert [table.unpack(record)[0] for _, record in rows] == [2]
 
 
 @pytest.fixture

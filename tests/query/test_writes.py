@@ -173,7 +173,7 @@ def test_the_primary_key_gets_the_index_declared_on_it(engine: Engine):
         "CREATE TABLE mala (id INT PRIMARY KEY INDEX RTREE, v INT)",
         "CREATE TABLE mala (id INT PRIMARY KEY INDEX HNSW, v INT)",
         "CREATE TABLE mala (id INT PRIMARY KEY, v INT INDEX SEQ)",
-        "CREATE TABLE mala (id INT PRIMARY KEY, v VARCHAR(8) INDEX INVERTED)",
+        "CREATE TABLE mala (id INT PRIMARY KEY, v INT INDEX INVERTED)",
     ],
 )
 def test_an_index_method_that_does_not_fit_leaves_no_table_behind(engine: Engine, ddl: str):

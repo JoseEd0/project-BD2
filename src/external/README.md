@@ -14,7 +14,9 @@ demás vive en archivos temporales.
 
 Todos generan archivos intermedios. `RunWriter` y `RunReader` (`runs.py`) los escriben y
 leen **página a página**, así que la memoria que consume un archivo abierto es una página,
-sin importar lo que ocupe.
+sin importar lo que ocupe. La mezcla k-vías con montículo (`merge_sorted_streams`) también
+es una sola: la usan el ordenamiento externo y la mezcla de bloques de SPIMI del índice
+invertido.
 
 También comparten **el presupuesto de memoria**: `buffered_records` dice cuántos registros
 caben en `sort_buffer_pages` páginas, y esa cifra es a la vez el tamaño de un run del

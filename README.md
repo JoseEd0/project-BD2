@@ -110,6 +110,7 @@ src/                 raíz de importación: un paquete por módulo del motor
 frontend/            interfaz: React + TypeScript + Vite; Leaflet en el panel de mapa
 tests/               espejo de la estructura de src/, más benchmarks/ y demos/
 benchmarks/          experimentos reproducibles
+  esci/              corpus de texto ESCI en español: descarga y subconjuntos con juicios
   results/           medidas crudas en JSON
   figures/           gráficas generadas a partir de esos JSON
 demos/               generador del dataset, descarga de lugares reales y simulación de concurrencia

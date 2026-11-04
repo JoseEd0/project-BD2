@@ -21,12 +21,11 @@ from functools import partial
 from pathlib import Path
 
 from config import EngineConfig
-from external.runs import remove_if_empty
 from storage.page import slot_capacity
 from storage.record_id import RecordId
 from text import Analyzer
 
-from .blocks import Block, BlockWriter, TermSink, merge_blocks
+from .blocks import Block, MergePasses, TermSink, merge_sources
 from .documents import DocumentTableWriter
 from .format import (
     LEXICON_RECORD,
@@ -55,7 +54,6 @@ from .weights import lnc_norm
 # pasa del presupuesto.
 TERM_ENTRY_BYTES = 160
 POSTING_ENTRY_BYTES = 10
-BLOCK_PREFIX = "block"
 
 Document = tuple[RecordId, str]
 
@@ -170,9 +168,8 @@ class SpimiBuilder:
         self._config = config
         self._max_term_bytes = max_term_bytes(config)
         slot_capacity(config.page_size, LEXICON_RECORD.size)
-        self._directory = build_directory(path)
+        self._passes = MergePasses(build_directory(path), config)
         self._blocks: list[Block] = []
-        self._created = 0
         self.block_count = 0
         self.merge_passes = 0
 
@@ -195,9 +192,7 @@ class SpimiBuilder:
                 path.unlink(missing_ok=True)
             raise
         finally:
-            for block in self._blocks:
-                block.remove()
-            remove_if_empty(self._directory)
+            self._passes.remove_all()
 
     def _index_documents(self, documents: Iterable[Document]) -> SpimiBlock:
         """La pasada única: analiza, apunta el documento y llena bloques. Devuelve el último
@@ -226,40 +221,13 @@ class SpimiBuilder:
             return
         if last_block:
             self._spill(last_block)
-        blocks = list(self._blocks)
-        while len(blocks) > self._config.merge_fan_in:
-            blocks = self._merge_pass(blocks)
-            self.merge_passes += 1
-        self.merge_passes += 1
-        self._write_final(partial(merge_blocks, blocks, self._config))
+        sources = self._passes.reduce(self._blocks)
+        self.merge_passes = self._passes.passes + 1
+        self._write_final(partial(merge_sources, sources, self._config))
 
     def _spill(self, block: SpimiBlock) -> None:
-        self._write_block(block.drain_into)
+        self._blocks.append(self._passes.write_block(block.drain_into))
         self.block_count += 1
-
-    def _merge_pass(self, blocks: list[Block]) -> list[Block]:
-        """Una pasada: cada grupo de `merge_fan_in` bloques consecutivos pasa a ser uno, de
-        modo que el orden de los `doc_id` entre bloques se conserva."""
-        fan_in = self._config.merge_fan_in
-        merged: list[Block] = []
-        for start in range(0, len(blocks), fan_in):
-            group = blocks[start : start + fan_in]
-            merged.append(self._write_block(partial(merge_blocks, group, self._config)))
-            for block in group:
-                block.remove()
-                self._blocks.remove(block)
-        return merged
-
-    def _write_block(self, fill: Callable[[TermSink], None]) -> Block:
-        writer = BlockWriter(self._new_block_base(), self._config)
-        try:
-            fill(writer)
-        except BaseException:
-            writer.discard()
-            raise
-        block = writer.close()
-        self._blocks.append(block)
-        return block
 
     def _write_final(self, fill: Callable[[TermSink], None]) -> None:
         sink = IndexSink(self._path, self._config)
@@ -269,10 +237,3 @@ class SpimiBuilder:
             sink.discard()
             raise
         sink.close(self._language, self.block_count, self.merge_passes)
-
-    def _new_block_base(self) -> Path:
-        """Nombre nunca reutilizado: reciclarlo pisaría un bloque que aún se está leyendo."""
-        self._directory.mkdir(parents=True, exist_ok=True)
-        base = self._directory / f"{BLOCK_PREFIX}{self._created}"
-        self._created += 1
-        return base

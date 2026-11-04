@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from config import EngineConfig
-from index.inverted import InvertedIndex, RankingMethod, ScoredDocument, lnc_norm
+from index.inverted import InvertedIndex, RankingMethod, ScoredDocument
 from storage.record_id import RecordId
 from text import AnalyzedText, Analyzer
 
@@ -20,6 +20,11 @@ WORDS = [
     "teclado", "raton", "pantalla", "cable", "cargador", "bateria", "ñandu", "año", "ano",
     "usb", "4k", "128gb", "para", "rojo", "azul", "funda", "auriculares", "camara", "lente",
 ]
+
+
+def lnc_norm_by_definition(term_frequencies: Iterable[int]) -> float:
+    """`√Σ (1 + log₁₀ tf)²`, escrita aquí y no tomada de `weights.py`: el oráculo de la norma."""
+    return math.sqrt(math.fsum((1 + math.log10(tf)) ** 2 for tf in term_frequencies))
 
 
 def record_id_of(position: int) -> RecordId:
@@ -73,7 +78,7 @@ class ReferenceIndex:
         for doc_id, text in enumerate(texts):
             analyzed = analyzer.analyze(text)
             lengths.append(analyzed.length)
-            norms.append(lnc_norm(analyzed.frequencies.values()))
+            norms.append(lnc_norm_by_definition(analyzed.frequencies.values()))
             for term, frequency in analyzed.frequencies.items():
                 postings.setdefault(term, {})[doc_id] = frequency
         return cls(postings, lengths, norms)

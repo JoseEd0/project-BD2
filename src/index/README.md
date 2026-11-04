@@ -8,6 +8,7 @@ Cada estructura vive en su carpeta con su propia explicación:
 | [`bplustree/`](bplustree/README.md) | Árbol B+ (agrupado y no agrupado) | igualdad, rango y orden |
 | [`hash/`](hash/README.md) | Hash extendible | igualdad, nada más |
 | [`rtree/`](rtree/README.md) | R-Tree | puntos: radio, vecinos más cercanos y polígono |
+| [`inverted/`](inverted/README.md) | Índice invertido (SPIMI) | texto: las listas de documentos de cada término |
 
 ## Claves (`keys.py`)
 

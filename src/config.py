@@ -28,6 +28,10 @@ DEFAULT_TEXT_MIN_TOKEN_LENGTH = 1
 # Ninguna palabra de diccionario en español o inglés llega a 40 letras: lo que pasa de ahí
 # son cadenas pegadas sin espacios, que solo inflarían el léxico.
 DEFAULT_TEXT_MAX_TOKEN_LENGTH = 40
+# Un bloque de SPIMI de 16 MiB es el doble del buffer pool. Con las 100 000 fichas de ESCI
+# salen 9 bloques; entre 8 y 32 MiB el tiempo de construcción no cambia (lo domina el
+# análisis del texto) y la memoria sí, así que no hay razón para un bloque mayor.
+DEFAULT_SPIMI_BLOCK_BYTES = 16 * 1024 * 1024
 DEFAULT_LOCK_TIMEOUT_SECONDS = 5.0
 DEFAULT_CSV_DELIMITER = ","
 DEFAULT_CSV_ENCODING = "utf-8"
@@ -81,6 +85,8 @@ class EngineConfig:
         text_min_token_length: caracteres que necesita un token para indexarse. Con 1 se
             conservan las tallas y variantes de una letra («talla m», «usb-c»).
         text_max_token_length: caracteres a partir de los cuales un token se descarta.
+        spimi_block_bytes: memoria que el bloque de SPIMI puede ocupar, según la estimación
+            de `index/inverted/spimi.py`, antes de escribirse a disco como un bloque.
         lock_timeout_seconds: espera máxima de una transacción por un bloqueo.
         csv_delimiter: separador de los archivos que carga `CREATE TABLE ... FROM FILE`.
         csv_encoding: codificación de esos archivos.
@@ -110,6 +116,7 @@ class EngineConfig:
     blob_length: int = DEFAULT_BLOB_LENGTH
     text_min_token_length: int = DEFAULT_TEXT_MIN_TOKEN_LENGTH
     text_max_token_length: int = DEFAULT_TEXT_MAX_TOKEN_LENGTH
+    spimi_block_bytes: int = DEFAULT_SPIMI_BLOCK_BYTES
     lock_timeout_seconds: float = DEFAULT_LOCK_TIMEOUT_SECONDS
     csv_delimiter: str = DEFAULT_CSV_DELIMITER
     csv_encoding: str = DEFAULT_CSV_ENCODING
@@ -135,6 +142,7 @@ class EngineConfig:
             "text_length",
             "blob_length",
             "text_min_token_length",
+            "spimi_block_bytes",
             "max_upload_bytes",
             "map_points",
             "max_result_rows",

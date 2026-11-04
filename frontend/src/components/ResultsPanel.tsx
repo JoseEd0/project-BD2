@@ -5,6 +5,7 @@ import { displayCell } from "../lib/cells";
 import { isGeoPoint } from "../lib/points";
 import { downloadCsv, toClipboardTable, toCsv } from "../lib/exporting";
 import type { CellValue, QueryFailure, QueryResponse, TableInfo } from "../types";
+import FailureNotice from "./FailureNotice";
 import MapPanel from "./MapPanel";
 
 interface ResultsPanelProps {
@@ -24,22 +25,6 @@ const COPIED_FEEDBACK_MS = 1500;
 function cellClass(value: CellValue): string {
   if (value === null) return "is-null";
   return typeof value === "number" ? "is-number" : "";
-}
-
-function Failure({ failure }: { failure: QueryFailure }) {
-  const [headline, ...excerpt] = failure.error.split("\n");
-  return (
-    <div className="notice notice--error">
-      <div className="notice__title">{failure.kind}</div>
-      <div>{headline}</div>
-      {excerpt.length > 0 && <pre className="notice__excerpt">{excerpt.join("\n")}</pre>}
-      {excerpt.length === 0 && failure.line !== null && (
-        <div className="notice__where">
-          línea {failure.line}, columna {failure.column}
-        </div>
-      )}
-    </div>
-  );
 }
 
 function Messages({ result }: { result: QueryResponse }) {
@@ -160,7 +145,7 @@ export default function ResultsPanel({
         </div>
       </header>
       <div className={tab === "mapa" ? "panel__body panel__body--map" : "panel__body"}>
-        {failure !== null && <Failure failure={failure} />}
+        {failure !== null && <FailureNotice failure={failure} />}
         {result !== null && spatial !== null && tab === "mapa" && (
           <MapPanel
             result={result}

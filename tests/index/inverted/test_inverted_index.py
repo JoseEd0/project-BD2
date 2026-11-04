@@ -10,6 +10,8 @@ from inverted_support import (
     ReferenceIndex,
     assert_matches_reference,
     build,
+    mark_deleted,
+    random_texts,
     record_id_of,
 )
 
@@ -285,3 +287,23 @@ def test_a_terms_file_of_another_index_is_detected(path: Path, config: EngineCon
     patch_header(terms_path(path), FIRST_FIELD_OFFSET, (999).to_bytes(8, "little"))
     with pytest.raises(InvertedFormatError, match="bytes de términos"):
         InvertedIndex(path, config)
+
+
+def test_document_columns_hold_every_length_norm_and_deletion(path: Path, config: EngineConfig):
+    texts = random_texts(300, seed=5)
+    build(path, texts, config).close()
+    mark_deleted(path, config, [0, 117, 299])
+    with InvertedIndex(path, config) as index:
+        columns = index.document_columns()
+        documents = list(index.documents())
+        assert list(columns.lengths) == [document.length for document in documents]
+        assert list(columns.norms) == [document.norm for document in documents]
+        assert columns.deleted == {0, 117, 299}
+        assert index.document_columns() is columns
+
+
+def test_document_columns_of_an_empty_index(path: Path, config: EngineConfig):
+    with build(path, [], config) as index:
+        columns = index.document_columns()
+        assert len(columns.lengths) == len(columns.norms) == 0
+        assert columns.deleted == frozenset()

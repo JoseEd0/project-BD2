@@ -4,11 +4,18 @@ El `doc_id` es la posición del registro, así que llegar a un documento es una 
 página `1 + doc_id // capacidad`, ranura `doc_id % capacidad`. La marca de borrado es el
 estado de la ranura (`SlotState.DELETED`), el mismo que usa el archivo secuencial para
 sus lápidas: no cuesta un byte más.
+
+El ranking necesita la longitud o la norma de cada documento que puntúa, que pueden ser
+la mitad del corpus. Leerlas registro a registro costaría una página por documento; por
+eso la tabla las entrega también como columnas en memoria (`DocumentColumns`), que se
+cargan la primera vez que se piden, como las *norms* de Lucene.
 """
 
 from __future__ import annotations
 
+from array import array
 from collections.abc import Iterator
+from dataclasses import dataclass
 from pathlib import Path
 
 from config import EngineConfig
@@ -24,6 +31,19 @@ from .format import (
     DocumentEntry,
     DocumentNotFoundError,
 )
+
+LENGTH_TYPECODE = "I"
+NORM_TYPECODE = "d"
+
+
+@dataclass(frozen=True, slots=True)
+class DocumentColumns:
+    """La longitud y la norma lnc de cada documento, indexadas por `doc_id`, y los
+    `doc_id` borrados. Ocupan 12 bytes por documento más uno por cada borrado."""
+
+    lengths: array[int]
+    norms: array[float]
+    deleted: frozenset[int]
 
 
 class DocumentTableWriter:
@@ -69,6 +89,7 @@ class DocumentTable:
         document_count, total_length = DOCUMENTS_HEADER.read(self._pager)
         self.document_count: int = document_count
         self.total_length: int = total_length
+        self._columns: DocumentColumns | None = None
 
     @property
     def page_count(self) -> int:
@@ -96,11 +117,29 @@ class DocumentTable:
             for slot in range(page.used_slots):
                 yield _decode(page.record_at(slot), page.state_of(slot))
 
+    def columns(self) -> DocumentColumns:
+        """Longitudes, normas y borrados de todos los documentos. La primera llamada recorre
+        la tabla, `O(N)`; las siguientes devuelven lo ya cargado, `O(1)`."""
+        if self._columns is None:
+            self._columns = self._load_columns()
+        return self._columns
+
     def flush(self) -> None:
         self._pager.flush()
 
     def close(self) -> None:
         self._pager.close()
+
+    def _load_columns(self) -> DocumentColumns:
+        lengths: array[int] = array(LENGTH_TYPECODE)
+        norms: array[float] = array(NORM_TYPECODE)
+        deleted: set[int] = set()
+        for doc_id, entry in enumerate(self.entries()):
+            lengths.append(entry.length)
+            norms.append(entry.norm)
+            if entry.deleted:
+                deleted.add(doc_id)
+        return DocumentColumns(lengths, norms, frozenset(deleted))
 
     def _page(self, page_index: int) -> RecordPage:
         raw = self._pager.read(FIRST_DATA_PAGE + page_index)

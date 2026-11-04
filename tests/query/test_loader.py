@@ -123,11 +123,24 @@ def test_the_header_gives_the_column_names_without_surrounding_spaces(config: En
     ]
 
 
-def test_a_text_column_is_as_long_as_its_longest_value_up_to_the_limit(config: EngineConfig):
-    long_name = "x" * (config.text_length * 2)
-    schema = infer_schema(write_csv(config, f"id,corto,largo\n1,ana,{long_name}\n"), config)
-    assert schema.field_of("corto").length < schema.field_of("largo").length
-    assert schema.field_of("largo").length == config.text_length
+def test_a_text_column_is_as_long_as_its_longest_value_up_to_the_inline_limit(
+    config: EngineConfig,
+):
+    fitting = "x" * config.inline_string_limit
+    schema = infer_schema(write_csv(config, f"id,corto,justo\n1,ana,{fitting}\n"), config)
+    assert schema.field_of("corto").type is FieldType.STRING
+    assert schema.field_of("corto").length < schema.field_of("justo").length
+    assert schema.field_of("justo") == Field("justo", FieldType.STRING, config.inline_string_limit)
+
+
+def test_a_column_longer_than_the_inline_limit_is_text_and_keeps_every_byte(
+    config: EngineConfig,
+):
+    long_text = "ñ" * config.inline_string_limit
+    path = write_csv(config, f"id,cuerpo\n1,corto\n2,{long_text}\n")
+    schema = infer_schema(path, config)
+    assert schema.field_of("cuerpo") == Field("cuerpo", FieldType.TEXT)
+    assert list(read_values(path, schema, config)) == [(1, "corto"), (2, long_text)]
 
 
 @pytest.mark.parametrize(

@@ -5,7 +5,9 @@
 Un archivo que guarda **valores de bytes de cualquier longitud** —de cero bytes a varios
 megabytes— y devuelve por cada uno una dirección, un `RecordId(página, ranura)`. Es la base
 para sacar de la fila los valores largos, como el texto de un documento: la fila guarda la
-dirección (6 bytes) y el valor vive aquí.
+dirección (6 bytes) y el valor vive aquí. Es lo que hacen las columnas `TEXT`: cada tabla que
+tiene alguna guarda sus textos en `<tabla>.text` (ver
+[Columnas TEXT fuera de la fila](../README.md#7-columnas-text-fuera-de-la-fila-out_of_rowpy)).
 
 ```python
 from config import EngineConfig

@@ -8,7 +8,7 @@ from typing import Any
 from config import EngineConfig
 from index.keys import ScalarKeyCodec
 from index.secondary import ColumnIndex
-from storage.record import RecordSerializer
+from storage.record import FieldReader
 from storage.record_id import RECORD_ID_SIZE, RecordId
 from storage.types import Key
 
@@ -21,7 +21,7 @@ class HashSecondaryIndex(ColumnIndex):
     def __init__(
         self,
         path: Path,
-        serializer: RecordSerializer,
+        serializer: FieldReader,
         column: str,
         config: EngineConfig,
     ) -> None:

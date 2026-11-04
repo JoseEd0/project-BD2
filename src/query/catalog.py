@@ -34,7 +34,7 @@ SQL_TO_STORAGE_TYPE: dict[DataTypeKind, FieldType] = {
     DataTypeKind.BOOLEAN: FieldType.BOOL,
     DataTypeKind.CHAR: FieldType.STRING,
     DataTypeKind.VARCHAR: FieldType.STRING,
-    DataTypeKind.TEXT: FieldType.STRING,
+    DataTypeKind.TEXT: FieldType.TEXT,
     DataTypeKind.DATE: FieldType.DATE,
     DataTypeKind.POINT: FieldType.POINT,
     DataTypeKind.VECTOR: FieldType.VECTOR,
@@ -353,8 +353,6 @@ def field_from_column(column: ColumnDefinition, config: EngineConfig) -> Field:
 
 def _length_of(column: ColumnDefinition, config: EngineConfig) -> int | None:
     kind = column.data_type.kind
-    if kind is DataTypeKind.TEXT:
-        return config.text_length
     if kind is DataTypeKind.BLOB:
         return config.blob_length
     return column.data_type.size

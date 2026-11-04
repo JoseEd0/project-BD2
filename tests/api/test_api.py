@@ -417,6 +417,31 @@ def test_a_query_without_points_has_no_spatial_part(client: TestClient):
     assert run(client, "SELECT * FROM t")["spatial"] is None
 
 
+def test_a_text_search_tells_what_to_highlight(client: TestClient):
+    run(client, "CREATE TABLE fichas (id INT PRIMARY KEY, texto TEXT)")
+    run(client, "INSERT INTO fichas VALUES (1, 'Cable USB tipo C'), (2, 'Funda de cuero')")
+    run(client, "CREATE INDEX ON fichas USING INVERTED (texto)")
+    body = run(client, "SELECT id, SCORE() FROM fichas WHERE MATCH(texto, 'cables usb')")
+    assert [row[0] for row in body["rows"]] == [1]
+    assert body["text"] == {
+        "table": "fichas",
+        "column": "texto",
+        "query": "cables usb",
+        "method": "BM25",
+        "terms": ["cabl", "usb"],
+    }
+    assert run(client, "SELECT id FROM fichas")["text"] is None
+
+
+def test_a_text_search_without_its_index_is_a_bad_request(client: TestClient):
+    run(client, "CREATE TABLE fichas (id INT PRIMARY KEY, texto TEXT)")
+    response = client.post("/query", json={"sql": "SELECT id FROM fichas WHERE MATCH(texto, 'x')"})
+    assert response.status_code == 400
+    detail = response.json()["detail"]
+    assert detail["kind"] == "TextSearchError"
+    assert "USING INVERTED (texto)" in detail["error"]
+
+
 def test_table_points_feed_the_map(stores: TestClient):
     body = stores.get("/tables/tiendas/points").json()
     assert body["table"] == "tiendas"

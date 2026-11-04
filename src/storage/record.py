@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import struct
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, Protocol
 
 from .record_id import BITS_PER_BYTE
 from .schema import Schema
@@ -18,6 +18,20 @@ from .types import FieldCodec, InvalidValueError, Value, codec_for
 BYTE_ORDER = "<"
 
 Record = tuple[Value, ...]
+
+
+class FieldReader(Protocol):
+    """Lo que necesita quien saca campos sueltos de un registro guardado, como un índice.
+
+    `RecordSerializer` lee el campo tal como está en el registro. `OutOfRowSerializer`
+    además resuelve los TEXT: es el que una tabla entrega a sus índices, para que un índice
+    sobre una columna TEXT reciba el texto y no su dirección.
+    """
+
+    @property
+    def schema(self) -> Schema: ...
+
+    def unpack_field(self, raw: bytes, position: int) -> Value: ...
 
 
 class RecordSerializer:

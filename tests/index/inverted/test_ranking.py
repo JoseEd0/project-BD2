@@ -223,6 +223,13 @@ def test_stats_describe_the_work(path: Path, config: EngineConfig):
         assert stats.documents_scored == 3
 
 
+def test_analyzing_a_query_gives_its_terms_and_their_df(path: Path, config: EngineConfig):
+    texts = ["teclado rojo", "teclado azul", "cable rojo", "raton"]
+    with build(path, texts, config) as index:
+        analyzed = Ranker(index, config).analyzed("Teclados ROJOS para zzzzqx teclado")
+        assert list(analyzed.items()) == [("tecl", 2), ("roj", 2), ("zzzzqx", 0)]
+
+
 def test_the_query_is_analyzed_in_the_language_of_the_index(path: Path, config: EngineConfig):
     english = Analyzer(config, "en")
     texts = ["running shoes", "the database"]

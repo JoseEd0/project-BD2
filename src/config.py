@@ -37,6 +37,14 @@ DEFAULT_SPIMI_BLOCK_BYTES = 16 * 1024 * 1024
 # frecuencia, y b = 0,75 normaliza la longitud sin anularla.
 DEFAULT_BM25_K1 = 1.2
 DEFAULT_BM25_B = 0.75
+# Con 7, los 8 segmentos pendientes que se compactan caben en una sola pasada del abanico
+# por omisión (`merge_fan_in`).
+DEFAULT_INVERTED_MAX_SEGMENTS = 7
+# El mismo 30 % que dispara la reorganización del archivo secuencial: lo que crece o se
+# borra después de construir el índice puede llegar a casi un tercio del segmento
+# principal antes de pagar una fusión completa, que lee y escribe todos los postings.
+DEFAULT_INVERTED_PENDING_FRACTION = 0.30
+DEFAULT_INVERTED_DELETED_FRACTION = 0.30
 DEFAULT_LOCK_TIMEOUT_SECONDS = 5.0
 DEFAULT_CSV_DELIMITER = ","
 DEFAULT_CSV_ENCODING = "utf-8"
@@ -99,6 +107,13 @@ class EngineConfig:
             aparece. Una consulta puede cambiarlo.
         bm25_b: cuánto normaliza BM25 por la longitud del documento, de 0 (nada) a 1
             (del todo). Una consulta puede cambiarlo.
+        inverted_max_segments: segmentos que el índice invertido puede tener además del
+            principal; con uno más, el `flush` los compacta en uno.
+        inverted_pending_fraction: postings en segmentos pendientes, como fracción de los
+            del principal, a partir de la cual el `flush` lo fusiona todo en uno.
+        inverted_deleted_fraction: documentos borrados cuyos postings siguen en el índice,
+            como fracción de los indexados, a partir de la cual el `flush` lo fusiona todo
+            y quita sus postings.
         lock_timeout_seconds: espera máxima de una transacción por un bloqueo.
         csv_delimiter: separador de los archivos que carga `CREATE TABLE ... FROM FILE`.
         csv_encoding: codificación de esos archivos.
@@ -131,6 +146,9 @@ class EngineConfig:
     spimi_block_bytes: int = DEFAULT_SPIMI_BLOCK_BYTES
     bm25_k1: float = DEFAULT_BM25_K1
     bm25_b: float = DEFAULT_BM25_B
+    inverted_max_segments: int = DEFAULT_INVERTED_MAX_SEGMENTS
+    inverted_pending_fraction: float = DEFAULT_INVERTED_PENDING_FRACTION
+    inverted_deleted_fraction: float = DEFAULT_INVERTED_DELETED_FRACTION
     lock_timeout_seconds: float = DEFAULT_LOCK_TIMEOUT_SECONDS
     csv_delimiter: str = DEFAULT_CSV_DELIMITER
     csv_encoding: str = DEFAULT_CSV_ENCODING
@@ -157,6 +175,7 @@ class EngineConfig:
             "blob_length",
             "text_min_token_length",
             "spimi_block_bytes",
+            "inverted_max_segments",
             "max_upload_bytes",
             "map_points",
             "max_result_rows",
@@ -169,6 +188,8 @@ class EngineConfig:
             "sequential_fill_factor",
             "hash_merge_fill",
             "rtree_bulk_fill",
+            "inverted_pending_fraction",
+            "inverted_deleted_fraction",
         ):
             _require_fraction(name, getattr(self, name), 1.0)
         _require_fraction("rtree_min_fill", self.rtree_min_fill, MAX_RTREE_MIN_FILL)

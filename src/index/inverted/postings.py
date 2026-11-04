@@ -8,18 +8,19 @@ principio del flujo; el léxico la guarda junto al número de postings de la lis
 from __future__ import annotations
 
 from array import array
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
 from config import EngineConfig
 from storage.pager import Pager
-from storage.stream import ByteStreamReader, ByteStreamWriter
+from storage.stream import ByteStreamCursor, ByteStreamReader, ByteStreamWriter
 
 from .format import (
     FIRST_DATA_PAGE,
     POSTING_BYTES,
     POSTING_FIELDS,
+    POSTING_TYPECODE,
     POSTINGS_HEADER,
     InvertedFormatError,
     decode_postings,
@@ -37,7 +38,24 @@ class PostingList:
     @classmethod
     def decode(cls, raw: bytes) -> PostingList:
         values = decode_postings(raw)
+        return cls.interleaved(values)
+
+    @classmethod
+    def interleaved(cls, values: array[int]) -> PostingList:
+        """La lista de los postings intercalados `doc_id, tf, doc_id, tf, …`."""
         return cls(values[0::POSTING_FIELDS], values[1::POSTING_FIELDS])
+
+    @classmethod
+    def concatenate(cls, parts: Sequence[PostingList]) -> PostingList:
+        """Las listas una tras otra; queda ordenada si cada parte tiene `doc_id` mayores
+        que los de la anterior, como los segmentos del índice."""
+        if len(parts) == 1:
+            return parts[0]
+        doc_ids, frequencies = array(POSTING_TYPECODE), array(POSTING_TYPECODE)
+        for part in parts:
+            doc_ids.extend(part.doc_ids)
+            frequencies.extend(part.term_frequencies)
+        return cls(doc_ids, frequencies)
 
     def __len__(self) -> int:
         return len(self.doc_ids)
@@ -100,6 +118,10 @@ class PostingsFile:
     @property
     def page_count(self) -> int:
         return self._pager.page_count
+
+    def cursor(self) -> ByteStreamCursor:
+        """Un recorrido de todas las listas en orden, para la fusión de segmentos."""
+        return self._stream.cursor()
 
     def read(self, offset: int, count: int) -> PostingList:
         """La lista de `count` postings que empieza en `offset`: lee `⌈8·count / página⌉ + 1`

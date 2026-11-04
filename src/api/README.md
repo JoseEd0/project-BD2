@@ -45,7 +45,7 @@ Ninguna ruta ni puerto está escrito en el código.
 | `POST` | `/query` | ejecuta un script y devuelve filas, mensajes y plan |
 | `POST` | `/tables/upload` | crea una tabla a partir de un CSV subido |
 | `POST` | `/files/upload` | solo guarda el CSV; devuelve su ruta y su cabecera para usarla en `CREATE TABLE ... FROM FILE` |
-| `GET` | `/tables/{name}/structure` | estructura física: páginas del archivo, niveles del B+, profundidad global y cubetas del hash, MBR de cada nodo del R-Tree |
+| `GET` | `/tables/{name}/structure` | estructura física: páginas del archivo, niveles del B+, profundidad global y cubetas del hash, MBR de cada nodo del R-Tree, archivo de valores TEXT |
 | `GET` | `/tables/{name}/points` | panel de mapa: los puntos de una columna `POINT` |
 | `DELETE` | `/tables` | borra todas las tablas y sus archivos (dejar la BD vacía) |
 | `POST` | `/sessions/{id}/close` | cierra una sesión y aborta lo que tuviera abierto; es `POST` para que el navegador lo envíe con `sendBeacon` al cerrar la pestaña |

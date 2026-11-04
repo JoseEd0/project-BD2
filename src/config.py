@@ -22,7 +22,7 @@ DEFAULT_HASH_PARTITIONS = 16
 DEFAULT_HASH_MERGE_FILL = 0.50
 DEFAULT_RTREE_MIN_FILL = 0.40
 DEFAULT_RTREE_BULK_FILL = 0.90
-DEFAULT_TEXT_LENGTH = 256
+DEFAULT_INLINE_STRING_LIMIT = 256
 DEFAULT_BLOB_LENGTH = 256
 DEFAULT_TEXT_MIN_TOKEN_LENGTH = 1
 # Ninguna palabra de diccionario en español o inglés llega a 40 letras: lo que pasa de ahí
@@ -96,7 +96,9 @@ class EngineConfig:
             ella el nodo se disuelve y sus entradas se reinsertan.
         rtree_bulk_fill: fracción de cada nodo que llena la carga masiva del R-Tree,
             dejando hueco para inserciones futuras.
-        text_length: longitud fija que se asigna a las columnas TEXT.
+        inline_string_limit: bytes del texto más largo que la carga de un CSV guarda en la
+            fila, como `VARCHAR(n)`; una columna con un valor más largo se carga como TEXT,
+            fuera de la fila, y ningún valor se recorta.
         blob_length: longitud fija que se asigna a las columnas BLOB.
         text_min_token_length: caracteres que necesita un token para indexarse. Con 1 se
             conservan las tallas y variantes de una letra («talla m», «usb-c»).
@@ -139,7 +141,7 @@ class EngineConfig:
     hash_merge_fill: float = DEFAULT_HASH_MERGE_FILL
     rtree_min_fill: float = DEFAULT_RTREE_MIN_FILL
     rtree_bulk_fill: float = DEFAULT_RTREE_BULK_FILL
-    text_length: int = DEFAULT_TEXT_LENGTH
+    inline_string_limit: int = DEFAULT_INLINE_STRING_LIMIT
     blob_length: int = DEFAULT_BLOB_LENGTH
     text_min_token_length: int = DEFAULT_TEXT_MIN_TOKEN_LENGTH
     text_max_token_length: int = DEFAULT_TEXT_MAX_TOKEN_LENGTH
@@ -171,7 +173,7 @@ class EngineConfig:
             "buffer_pool_pages",
             "sequential_max_chain_pages",
             "sort_buffer_pages",
-            "text_length",
+            "inline_string_limit",
             "blob_length",
             "text_min_token_length",
             "spimi_block_bytes",

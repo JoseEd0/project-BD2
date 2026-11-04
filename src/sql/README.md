@@ -103,6 +103,11 @@ option       ::= name '=' (number | string | identifier | 'TRUE' | 'FALSE' | 'NU
 
 `CHAR` y `VARCHAR` admiten tamaño opcional, `VECTOR` lo exige, el resto lo rechaza.
 
+`TEXT` no tiene longitud máxima: el texto vive fuera de la fila y la fila guarda su
+dirección (ver [`query/README.md`](../query/README.md#columnas-text)). Se compara, se filtra
+con `LIKE`, se ordena y se agrupa igual que un `VARCHAR`, pero no admite un índice `BTREE` ni
+`HASH`, ni `UNIQUE`, ni ser clave primaria.
+
 No hay un literal propio para las fechas: se escriben como texto ISO, `'2026-03-15'`, y
 es el motor quien las convierte al guardarlas en una columna `DATE` o al compararlas con
 una.

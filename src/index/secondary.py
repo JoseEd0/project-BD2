@@ -13,7 +13,7 @@ from collections.abc import Iterable, Iterator
 from types import TracebackType
 from typing import Any, Protocol, Self, runtime_checkable
 
-from storage.record import RecordSerializer
+from storage.record import FieldReader, Record
 from storage.record_id import RecordId
 from storage.types import Key
 
@@ -27,7 +27,7 @@ class SecondaryIndex(Protocol):
 
     def delete(self, record: bytes, record_id: RecordId) -> bool: ...
 
-    def update(self, old: bytes, new: bytes, record_id: RecordId) -> None: ...
+    def changes(self, before: Record, after: Record) -> bool: ...
 
     def search(self, value: Key) -> list[RecordId]: ...
 
@@ -53,7 +53,7 @@ class ColumnIndex(ABC):
     por cercanía puede devolverlas, y un NULL no tiene sitio en ningún orden.
     """
 
-    def __init__(self, serializer: RecordSerializer, column: str) -> None:
+    def __init__(self, serializer: FieldReader, column: str) -> None:
         self._serializer = serializer
         self._position = serializer.schema.position_of(column)
 
@@ -72,14 +72,12 @@ class ColumnIndex(ABC):
         value = self._value_of(record)
         return value is not None and self._remove(value, record_id)
 
-    def update(self, old: bytes, new: bytes, record_id: RecordId) -> None:
-        """La fila de `record_id` pasó de `old` a `new` sin cambiar de dirección. Si el
-        valor de la columna es el mismo, el índice no se toca: un `UPDATE` de otra columna
-        no paga un borrado y una inserción en cada índice de la tabla."""
-        if self._value_of(old) == self._value_of(new):
-            return
-        self.delete(old, record_id)
-        self.insert(new, record_id)
+    def changes(self, before: Record, after: Record) -> bool:
+        """Si el valor de la columna cambia entre las dos filas lógicas. La tabla lo pregunta
+        antes de tocar el registro: un `UPDATE` de otra columna no paga un borrado y una
+        inserción en cada índice, y uno sobre un TEXT puede leer el texto viejo antes de que
+        se reemplace en su archivo de valores."""
+        return before[self._position] != after[self._position]
 
     def search(self, value: Key) -> list[RecordId]:
         """Direcciones de las filas cuyo valor es `value`; ninguna si es NULL."""

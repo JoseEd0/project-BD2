@@ -19,11 +19,11 @@ from index.hash import HashSecondaryIndex
 from index.rtree import SpatialIndex
 from index.secondary import SecondaryIndex
 from sql.nodes import IndexType, OptionValue
-from storage.record import RecordSerializer
+from storage.record import FieldReader
 from storage.schema import Field
-from storage.types import UNORDERED_FIELD_TYPES, FieldType
+from storage.types import OUT_OF_ROW_FIELD_TYPES, UNORDERED_FIELD_TYPES, FieldType
 
-IndexOpener = Callable[[Path, RecordSerializer, str, EngineConfig], SecondaryIndex]
+IndexOpener = Callable[[Path, FieldReader, str, EngineConfig], SecondaryIndex]
 ColumnRule = Callable[[Field], str | None]
 
 
@@ -75,9 +75,11 @@ def secondary_method_names() -> str:
 
 
 def _ordered_only(field: Field) -> str | None:
-    """Un B+ ordena: solo sirve para lo que tiene orden."""
+    """Un B+ ordena: solo sirve para lo que tiene orden y cabe en una clave."""
     if field.type is FieldType.POINT:
         return _point_refusal(field, IndexType.BTREE)
+    if field.type in OUT_OF_ROW_FIELD_TYPES:
+        return _out_of_row_refusal(field, IndexType.BTREE)
     if field.type in UNORDERED_FIELD_TYPES:
         return (
             f"la columna '{field.name}' es {field.type.value}, que no tiene orden: "
@@ -86,9 +88,13 @@ def _ordered_only(field: Field) -> str | None:
     return None
 
 
-def _not_a_point(field: Field) -> str | None:
+def _inline_non_point(field: Field) -> str | None:
     """Un hash sobre puntos solo encontraría filas en unas coordenadas exactas."""
-    return _point_refusal(field, IndexType.HASH) if field.type is FieldType.POINT else None
+    if field.type is FieldType.POINT:
+        return _point_refusal(field, IndexType.HASH)
+    if field.type in OUT_OF_ROW_FIELD_TYPES:
+        return _out_of_row_refusal(field, IndexType.HASH)
+    return None
 
 
 def _points_only(field: Field) -> str | None:
@@ -99,6 +105,15 @@ def _points_only(field: Field) -> str | None:
 
 def _point_refusal(field: Field, method: IndexType) -> str:
     return f"la columna '{field.name}' es POINT: solo admite un índice RTREE, no {method.value}"
+
+
+def _out_of_row_refusal(field: Field, method: IndexType) -> str:
+    """Un B+ y un hash guardan el valor entero en cada clave, de tamaño fijo: un texto sin
+    longitud máxima no cabe en ella."""
+    return (
+        f"la columna '{field.name}' es {field.type.value}, cuyo valor vive fuera de la fila "
+        f"y no tiene longitud máxima: no admite un índice {method.value}; usa VARCHAR(n)"
+    )
 
 
 def _single_file(path: Path) -> list[Path]:
@@ -117,7 +132,7 @@ _METHODS: dict[IndexType, IndexMethod] = {
         method=IndexType.HASH,
         capabilities=frozenset({Capability.EQUALITY}),
         opener=HashSecondaryIndex,
-        refusal_for=_not_a_point,
+        refusal_for=_inline_non_point,
         files_of=HashSecondaryIndex.files_of,
     ),
     IndexType.RTREE: IndexMethod(

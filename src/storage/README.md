@@ -133,7 +133,7 @@ la estructura que lo usa (cabeza de la lista de libres, raíz del árbol, profun
 
 ### Piezas de formato compartidas (`layout.py`)
 
-Las cinco estructuras de disco usan las mismas tres piezas, escritas una sola vez:
+Las estructuras de disco usan las mismas piezas, escritas una sola vez:
 
 - **`FileHeader`**: la cabecera de la página 0 empieza por una firma de cuatro bytes y una
   versión del formato. Abrir un archivo de otra estructura, o de una versión anterior del
@@ -148,6 +148,19 @@ Las cinco estructuras de disco usan las mismas tres piezas, escritas una sola ve
   secuencial y de las cubetas del hash, y la lista de libres). Una cadena no puede tener más
   páginas que el archivo: si las tiene, una página corrupta apunta hacia atrás, y en vez de
   girar para siempre se lanza `CorruptFileError`.
+- **`RecordAppender`**: registros de tamaño fijo añadidos uno tras otro en páginas nuevas
+  al final del archivo, con solo la página en curso en memoria. Así escriben los runs de
+  los algoritmos externos y las tablas que el índice invertido construye de una vez.
+
+### Flujos de bytes (`stream.py`)
+
+Lo que no es un registro de tamaño fijo —una lista de postings, un bloque de SPIMI— se
+guarda como un **flujo de bytes**: seguido, sin huecos ni cabecera por página, en páginas
+consecutivas. El byte `b` está en la página `primera + b // tamaño_de_página`, así que leer
+un tramo es leer las páginas que lo cubren (`ByteStreamReader.read`) y recorrerlo entero es
+leer cada página una vez (`ByteStreamCursor`, que además entrega tramos largos en trozos de
+una página para copiarlos sin tenerlos enteros en memoria). El flujo no guarda su longitud:
+la anota en su cabecera quien lo escribe.
 
 ## 5. Las dos organizaciones de archivo
 

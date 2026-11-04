@@ -237,9 +237,18 @@ La copia sin comparar es correcta porque **cada bloque tiene `doc_id` mayores qu
 anterior**: concatenar sus listas en el orden de los bloques da una lista ordenada.
 
 Si hay más bloques que `merge_fan_in`, se mezclan por pasadas, como en el ordenamiento
-externo: cada grupo de `k` bloques **consecutivos** pasa a ser un bloque, lo que conserva
-el orden de los `doc_id` entre bloques. La última pasada escribe el primer segmento del
-índice. Si todo cupo en un bloque, va directo de memoria al segmento, sin pasar por disco.
+externo: cada grupo de hasta `k` bloques **consecutivos** pasa a ser un bloque, lo que
+conserva el orden de los `doc_id` entre bloques. La última pasada escribe el primer
+segmento del índice. Si todo cupo en un bloque, va directo de memoria al segmento, sin
+pasar por disco.
+
+Una pasada intermedia junta **solo los bloques que sobran**, empezando por el final: con
+9 bloques y abanico 8 basta mezclar los dos últimos para que queden 8, en lugar de
+reescribir los nueve en dos bloques. Por el final, porque ahí están los más chicos: el
+último bloque de SPIMI es el que quedó a medias, y al mantener el índice los segmentos
+más nuevos son los menores. El índice que sale es el mismo byte a byte, y las pasadas son
+las mismas; con las 100 000 fichas de ESCI (9 bloques), la construcción baja de 14,4 a
+14,0 s (mediana de 3, alternando las dos versiones).
 
 La mezcla recibe **fuentes** (`TermSource`): cualquier cosa que entregue términos en orden
 y, tras cada uno, su lista. Al construir son bloques; al mantener el índice, sus segmentos

@@ -8,16 +8,19 @@ su manera; aquí vive una sola vez:
   que distingue un formato de otro, antes de interpretar ninguna página;
 * `FreePageList`: las páginas liberadas, enlazadas a través de ellas mismas;
 * `chained_pages`: el recorrido de una cadena de páginas, que una página corrupta no puede
-  convertir en un bucle sin fin.
+  convertir en un bucle sin fin;
+* `RecordAppender`: registros de tamaño fijo añadidos uno tras otro en páginas nuevas al
+  final del archivo, que es como se escriben los runs y las tablas que se construyen de una
+  vez.
 """
 
 from __future__ import annotations
 
 import struct
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from typing import Any, TypeVar
 
-from .page import NO_PAGE
+from .page import NO_PAGE, RecordPage
 from .pager import HEADER_PAGE_ID, Pager
 from .types import StorageError
 
@@ -147,3 +150,41 @@ def chained_pages(
         following, page = load(page_id)
         yield page_id, page
         page_id = following
+
+
+class RecordAppender:
+    """Añade registros de tamaño fijo en páginas nuevas al final del archivo, llenando cada
+    página antes de empezar la siguiente.
+
+    Solo la página en curso vive en memoria; `finish` escribe la última aunque no esté
+    llena. Mientras se añade, nadie más puede reservar páginas en ese archivo: las de los
+    registros tienen que quedar consecutivas.
+    """
+
+    def __init__(self, pager: Pager, record_size: int) -> None:
+        self._pager = pager
+        self._record_size = record_size
+        self._page = RecordPage.create(pager.page_size, record_size)
+        self.record_count = 0
+
+    @property
+    def page_capacity(self) -> int:
+        return self._page.capacity
+
+    def append(self, record: bytes) -> None:
+        if self._page.used_slots == self._page.capacity:
+            self._write_page()
+        self._page.insert_at(self._page.used_slots, record)
+        self.record_count += 1
+
+    def extend(self, records: Iterable[bytes]) -> None:
+        for record in records:
+            self.append(record)
+
+    def finish(self) -> None:
+        if self._page.used_slots > 0:
+            self._write_page()
+
+    def _write_page(self) -> None:
+        self._pager.write(self._pager.allocate(), self._page.to_bytes())
+        self._page = RecordPage.create(self._pager.page_size, self._record_size)

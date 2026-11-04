@@ -12,13 +12,15 @@ import heapq
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from pathlib import Path
 from types import TracebackType
+from typing import TypeVar
 
 from config import EngineConfig
+from storage.layout import RecordAppender
 from storage.page import RecordPage, slot_capacity
 from storage.pager import Pager
 from storage.types import Key
 
-Pending = tuple[Key, int, bytes]
+Item = TypeVar("Item")
 
 
 class RunWriter:
@@ -27,26 +29,20 @@ class RunWriter:
     def __init__(self, path: Path, record_size: int, config: EngineConfig) -> None:
         path.unlink(missing_ok=True)
         self._pager = Pager(path, config)
-        self._record_size = record_size
-        self._capacity = slot_capacity(config.page_size, record_size)
-        self._page = RecordPage.create(config.page_size, record_size)
-        self._page_id: int | None = None
-        self.record_count = 0
+        self._appender = RecordAppender(self._pager, record_size)
+
+    @property
+    def record_count(self) -> int:
+        return self._appender.record_count
 
     def append(self, record: bytes) -> None:
-        if self._page.used_slots >= self._capacity:
-            self._flush_page()
-        if self._page_id is None:
-            self._page_id = self._pager.allocate()
-        self._page.insert_at(self._page.used_slots, record)
-        self.record_count += 1
+        self._appender.append(record)
 
     def extend(self, records: Iterable[bytes]) -> None:
-        for record in records:
-            self.append(record)
+        self._appender.extend(records)
 
     def close(self) -> None:
-        self._flush_page()
+        self._appender.finish()
         self._pager.close()
 
     def __enter__(self) -> RunWriter:
@@ -59,13 +55,6 @@ class RunWriter:
         traceback: TracebackType | None,
     ) -> None:
         self.close()
-
-    def _flush_page(self) -> None:
-        if self._page_id is None or self._page.used_slots == 0:
-            return
-        self._pager.write(self._page_id, self._page.to_bytes())
-        self._page = RecordPage.create(self._pager.page_size, self._record_size)
-        self._page_id = None
 
 
 class RunReader:
@@ -103,32 +92,49 @@ def merge_sorted_runs(
 ) -> Iterator[bytes]:
     """Mezcla k-vías de archivos ya ordenados por `key_of`, en un solo recorrido ordenado.
 
-    Un montículo guarda el registro pendiente más pequeño de cada archivo, así que la
-    mezcla lee una página de cada uno a la vez y hace `O(log k)` comparaciones por
-    registro. A igual clave sale antes el del archivo que va primero en `paths`: la mezcla
-    es estable si los archivos lo son.
+    Lee una página de cada archivo a la vez; el orden y el desempate son los de
+    `merge_sorted_streams`.
     """
     readers = [RunReader(path, record_size, config) for path in paths]
-    streams = [iter(reader) for reader in readers]
-    pending: list[Pending] = []
     try:
-        for position, stream in enumerate(streams):
-            _push_next(pending, stream, position, key_of)
-        while pending:
-            _, position, record = heapq.heappop(pending)
+        streams = [iter(reader) for reader in readers]
+        for _, record in merge_sorted_streams(streams, key_of):
             yield record
-            _push_next(pending, streams[position], position, key_of)
     finally:
         for reader in readers:
             reader.close()
 
 
+def merge_sorted_streams(
+    streams: Sequence[Iterator[Item]], key_of: Callable[[Item], Key]
+) -> Iterator[tuple[int, Item]]:
+    """Mezcla k-vías de secuencias ya ordenadas por `key_of`: cada elemento sale con la
+    posición en `streams` de la secuencia de la que viene.
+
+    Un montículo guarda el elemento pendiente más pequeño de cada secuencia, así que hay
+    a lo sumo `k` elementos en memoria y cada uno cuesta `O(log k)` comparaciones. A igual
+    clave sale antes el de la secuencia que va primero: la mezcla es estable si las
+    secuencias lo son. El siguiente elemento de una secuencia se pide recién cuando quien
+    consume pide el siguiente de la mezcla.
+    """
+    pending: list[tuple[Key, int, Item]] = []
+    for position, stream in enumerate(streams):
+        _push_next(pending, stream, position, key_of)
+    while pending:
+        _, position, item = heapq.heappop(pending)
+        yield position, item
+        _push_next(pending, streams[position], position, key_of)
+
+
 def _push_next(
-    pending: list[Pending], stream: Iterator[bytes], position: int, key_of: Callable[[bytes], Key]
+    pending: list[tuple[Key, int, Item]],
+    stream: Iterator[Item],
+    position: int,
+    key_of: Callable[[Item], Key],
 ) -> None:
-    record = next(stream, None)
-    if record is not None:
-        heapq.heappush(pending, (key_of(record), position, record))
+    for item in stream:
+        heapq.heappush(pending, (key_of(item), position, item))
+        return
 
 
 def buffered_records(config: EngineConfig, record_size: int) -> int:

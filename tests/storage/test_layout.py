@@ -3,8 +3,14 @@
 import pytest
 
 from config import EngineConfig
-from storage.layout import CorruptFileError, FileHeader, FreePageList, chained_pages
-from storage.page import NO_PAGE
+from storage.layout import (
+    CorruptFileError,
+    FileHeader,
+    FreePageList,
+    RecordAppender,
+    chained_pages,
+)
+from storage.page import NO_PAGE, RecordPage
 from storage.pager import Pager
 from storage.types import StorageError
 
@@ -76,3 +82,27 @@ def test_a_header_that_does_not_fit_in_a_page_is_a_format_error(config: EngineCo
         pager.allocate()
         with pytest.raises(ToyFormatError, match="mide"):
             wide.write(pager)
+
+
+def test_appended_records_fill_consecutive_pages_after_the_existing_ones(config: EngineConfig):
+    record_size = 8
+    with Pager(config.data_directory / "registros.bin", config) as pager:
+        pager.allocate()
+        appender = RecordAppender(pager, record_size)
+        records = [number.to_bytes(record_size, "little") for number in range(appender.page_capacity * 2 + 1)]
+        appender.extend(records)
+        appender.finish()
+        assert appender.record_count == len(records)
+        assert pager.page_count == 4
+        read_back = [
+            record
+            for page_id in range(1, pager.page_count)
+            for _, record in RecordPage.from_bytes(pager.read(page_id), record_size).live_records()
+        ]
+        assert read_back == records
+
+
+def test_finishing_without_records_adds_no_page(config: EngineConfig):
+    with Pager(config.data_directory / "nada.bin", config) as pager:
+        RecordAppender(pager, 8).finish()
+        assert pager.page_count == 0

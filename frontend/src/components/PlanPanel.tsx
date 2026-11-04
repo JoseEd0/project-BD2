@@ -14,6 +14,7 @@ const ACCESS_OPERATIONS = new Set([
   "SpatialRangeScan",
   "SpatialNearestScan",
   "SpatialPolygonScan",
+  "TextSearchScan",
 ]);
 
 const EXTERNAL_OPERATIONS = new Set([
@@ -75,8 +76,10 @@ export default function PlanPanel({ plan }: PlanPanelProps) {
               </p>
               <p>
                 <span className="legend-dot legend-dot--access" /> camino de acceso —
-                recorrido completo, índice hash, índice B+, R-Tree o el orden propio de la
-                tabla. Un acceso por R-Tree dice además cuántos nodos del árbol abrió.
+                recorrido completo, índice hash, índice B+, R-Tree, índice invertido o el
+                orden propio de la tabla. Un acceso por R-Tree dice además cuántos nodos del
+                árbol abrió, y uno por índice invertido, sus términos con su df y cuántos
+                postings leyó.
               </p>
               <p>
                 <span className="legend-dot legend-dot--external" /> algoritmo externo —

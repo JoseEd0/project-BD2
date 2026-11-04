@@ -13,6 +13,10 @@ acotada por `EngineConfig.spimi_block_bytes`, sin importar cuántos documentos h
 El índice no sabe de tablas ni de SQL. Un documento es un par `(RecordId, texto)`: la
 dirección de su fila y lo que hay que indexar.
 
+Sobre el mismo índice, `Ranker` ordena los documentos que contienen algún término de la
+consulta con las dos técnicas que pide el enunciado: **TF-IDF + similitud del coseno** y
+**BM25** (ver [Ranking](#ranking)).
+
 ## Uso
 
 ```python
@@ -30,6 +34,12 @@ with InvertedIndex.build(ruta, documentos, Analyzer(config), config) as indice:
     indice.document_count, indice.average_length
 
 InvertedIndex(ruta, config)                     # abrir uno ya construido
+
+ranker = Ranker(indice, config)                 # analiza la consulta en el idioma del índice
+ranker.top_k("cable usb", RankingMethod.BM25, 10)          # list[ScoredDocument]
+ranker.top_k("cable usb", RankingMethod.BM25, 10, Bm25Parameters(k1=2.0, b=0.5))
+for documento in ranker.ranked("cable usb", RankingMethod.TF_IDF):   # perezoso, en orden
+    documento.doc_id, documento.record_id, documento.score
 ```
 
 | API | Qué da |
@@ -44,6 +54,7 @@ InvertedIndex(ruta, config)                     # abrir uno ya construido
 | `documents()`, `terms()` | recorridos completos en orden de `doc_id` y de término |
 | `document_count`, `total_length`, `average_length` | N, suma de longitudes y la `avgdl` de BM25 |
 | `vocabulary_size`, `posting_count`, `block_count`, `merge_passes`, `language` | forma del índice |
+| `document_columns() -> DocumentColumns` | longitudes y normas por `doc_id` en memoria, y los borrados; se carga la primera vez |
 | `describe(top_terms=10)` | todo lo anterior, tamaños y los términos con más df |
 | `flush()`, `close()`, `with` | como el resto de estructuras de disco |
 
@@ -268,6 +279,170 @@ Con 100 000 documentos el tamaño del bloque no cambia el tiempo, solo la memori
 
 La comparación con GIN de PostgreSQL, las consultas y la relevancia son ese experimento.
 
+## Ranking
+
+`ranking.py` puntúa los documentos que contienen **algún** término de la consulta, con
+TF-IDF + coseno o con BM25. Los dos leen las mismas listas, el mismo df y la misma tabla
+de documentos, así que la comparación entre ellos solo mide la fórmula.
+
+| API | Qué da |
+|---|---|
+| `Ranker(index, config)` | el ranking de un índice; su analizador es el del idioma del índice |
+| `top_k(query, method, k, parameters=None, stats=None)` | los `k` mejores, `list[ScoredDocument]` |
+| `ranked(query, method, parameters=None, stats=None)` | todos los que coinciden, perezoso y en el mismo orden |
+| `ScoredDocument` | `doc_id`, `record_id` de la fila y `score` |
+| `RankingMethod` | `TF_IDF` o `BM25` |
+| `Bm25Parameters(k1, b)` | parámetros de una consulta; sin ellos, `EngineConfig.bm25_k1` y `bm25_b` |
+| `RankingStats` | para `EXPLAIN`: cada término analizado con su df, postings leídos y documentos puntuados |
+| `RankingParameterError` | `k` negativo, `k1` o `b` fuera de rango, o parámetros de BM25 para TF-IDF |
+
+`RankingMethod` es un enum propio del índice y no el de `sql.nodes`: ningún módulo de
+`index` depende del front-end SQL, y el planificador traduce uno al otro.
+
+### La consulta se analiza como los documentos
+
+La consulta pasa por el mismo `Analyzer`, construido con el idioma que guarda la cabecera
+del léxico. Un término de la consulta que no está en el índice no aporta nada: no tiene
+lista y su idf sería infinito, así que se deja fuera también de la norma de la consulta.
+Una consulta vacía o de solo stopwords no tiene términos y no devuelve ningún documento.
+
+### TF-IDF + coseno: SMART lnc.ltc
+
+Es el esquema del capítulo 6 de Manning, Raghavan y Schütze (*Introduction to Information
+Retrieval*). Con `N` documentos y `df_t` los que contienen el término `t`:
+
+```
+documento (lnc):  w(t, d) = (1 + log₁₀ tf(t, d)) / ‖d‖     ‖d‖ = √Σ_t (1 + log₁₀ tf(t, d))²
+consulta  (ltc):  w(t, q) = (1 + log₁₀ tf(t, q)) · log₁₀(N / df_t) / ‖q‖
+puntaje:          cos(q, d) = Σ_t w(t, q) · w(t, d)
+```
+
+**Por qué lnc.ltc.** El idf va en un solo lado del producto, el de la consulta. Así la
+norma del documento no depende del corpus: se calcula al indexar (`weights.py`), se guarda
+en la tabla de documentos y nunca hay que recalcularla cuando llegan documentos o cambia
+el df. Con ltc.ltc, cada documento nuevo cambiaría el idf de sus términos y con él la
+norma de todos los documentos que los contienen. Es también el esquema que el libro usa
+de ejemplo para la búsqueda ad hoc.
+
+Las dos normas cumplen funciones distintas: `‖d‖` es la que ordena (un documento largo no
+gana por repetir palabras); `‖q‖` es la misma para todos los documentos y solo lleva el
+puntaje a [0, 1], que es lo que hace del resultado un coseno.
+
+### BM25
+
+```
+idf_t       = ln(1 + (N - df_t + 0,5) / (df_t + 0,5))
+puntaje(d)  = Σ_t idf_t · tf · (k1 + 1) / (tf + k1 · (1 - b + b · dl / avgdl))
+```
+
+con `dl` la longitud del documento en términos y `avgdl` la media del índice. Es el idf de
+Lucene: el de Robertson y Spärck Jones sin el `1 +` se vuelve negativo para un término
+que está en más de la mitad de los documentos, y un documento perdería puntaje por
+contenerlo. Con el `1 +` es positivo siempre.
+
+`k1 = 1,2` y `b = 0,75` por omisión (`EngineConfig`), los valores de Robertson y
+Zaragoza y los de Lucene. Una consulta puede cambiarlos con `Bm25Parameters`; `k1` tiene
+que ser finito y no negativo (con 0 solo cuenta si el término aparece) y `b` estar entre
+0 (sin normalizar por longitud) y 1 (normalización completa). La misma regla valida la
+configuración (`bm25_parameters_error`, en `config.py`).
+
+### Decisiones
+
+| Caso | Qué pasa | Por qué |
+|---|---|---|
+| término repetido en la consulta | TF-IDF lo pondera con `1 + log₁₀ tf(t, q)`; BM25 lo cuenta **una vez** | es la «l» de ltc; en BM25 es la fórmula sin el factor de la consulta (`k3 = 0` de Robertson), la de consultas cortas. Tras el stemming, una repetición suele ser la misma palabra en singular y plural («funda fundas»), que no debería pesar el doble |
+| empate de puntaje | primero el de menor `doc_id` | el resultado es determinista y coincide con el orden de carga |
+| término en todos los documentos | TF-IDF le da idf 0: los documentos que solo tienen ese término **entran con puntaje 0** | el conjunto de resultados es el mismo con los dos rankings (los documentos con algún término), que es lo que comparan el experimento y `MATCH` sin `LIMIT` |
+| todos los términos en todos los documentos | la consulta es el vector nulo: coseno 0 para todos | el coseno con un vector nulo no está definido; 0 es el valor que no ordena nada |
+| `k = 0` | lista vacía | es `LIMIT 0` |
+| `k < 0` | `RankingParameterError` | no hay `LIMIT` negativo |
+| `k > N` | todos los que coinciden | |
+| documento borrado | no sale ni cuenta en `documents_scored` | se filtra al final, sobre los acumuladores; N, `avgdl` y df son los que da el índice, y el mantenimiento decide cuándo dejan de contarlo |
+
+### Evaluación término a término
+
+```
+para cada término t de la consulta que está en el índice:
+    peso de t en la consulta (TF-IDF) o su idf (BM25)
+    para cada (doc_id, tf) de su lista:
+        acumulador[doc_id] += contribución(tf, doc_id)
+TF-IDF: acumulador[doc_id] /= ‖d‖          (la norma es común a todos sus términos)
+quitar los borrados
+```
+
+- Las listas son `array('I')` y se recorren con `zip(doc_ids, tfs)`, sin un objeto por
+  posting y con los métodos y constantes sacados a variables locales.
+- En TF-IDF, `w(t, q) · (1 + log₁₀ tf)` se calcula una vez por **tf distinto** de la lista
+  (casi todos son 1, 2 o 3) y el bucle solo suma.
+- En BM25, `k1 · (1 - b + b · dl / avgdl)` se escribe como `a + c · dl`, con `a` y `c`
+  calculados una vez por consulta.
+- La división por `‖d‖` se hace una vez por documento y no una vez por posting.
+
+**Las longitudes y normas en memoria.** BM25 necesita el `dl` de cada posting y el coseno
+la norma de cada documento puntuado, que con una consulta de cinco palabras pueden ser
+18 000 de 100 000. Leerlas de la tabla de documentos costaría una página por documento.
+`document_columns()` las carga una vez por índice abierto en dos `array` (`I` y `d`), 12
+bytes por documento, más el conjunto de los borrados: son las *norms* que Lucene tiene en
+memoria por la misma razón. Con 100 000 documentos ocupan 1,2 MB y se cargan en 93 ms. El
+mantenimiento, que marcará borrados y añadirá documentos, las actualiza en la misma tabla.
+
+**Top-k.** `heapq.nsmallest(k, (-puntaje, doc_id))`, un montículo de tamaño `k`:
+`O(C log k)` para `C` candidatos. La dirección de la fila solo se lee para los `k` que se
+devuelven.
+
+**El iterador perezoso** (`ranked`) es para una consulta con filtros (`AND precio < 100`)
+que no sabe cuántos documentos va a consumir. Forma un montículo con todos los candidatos,
+`O(C)`, y saca uno por cada documento que se pide, `O(log C)`. Ordenar todo de una vez
+cuesta `O(C log C)` aunque solo se consuman diez. Medido con 20 000 candidatos: sacar 10
+cuesta 0,56 ms con el montículo y 2,7 ms ordenando; sacar 1 000, 0,81 ms frente a 2,7 ms;
+solo al consumirlos **todos** gana ordenar (2,8 ms frente a 5,4 ms), y ese caso ya paga
+una página por documento devuelto.
+
+### Complejidad del ranking
+
+Con `P` postings en las listas de la consulta, `C` documentos que las contienen y `q`
+términos en la consulta:
+
+| | Coste |
+|---|---|
+| analizar y buscar los términos | `O(q log V)` y una página del léxico por término |
+| leer las listas | `⌈8·df / página⌉ + 1` páginas por término |
+| puntuar | `O(P)` sumas en los acumuladores, más `O(C)` para normas y borrados |
+| `top_k` | `O(C log k)` y una página por documento devuelto |
+| `ranked` | `O(C)` al llamarse, y `O(log C)` más una página por documento que se pide |
+| memoria | los `C` acumuladores, más las columnas de 12 bytes por documento |
+
+### El ranking medido con ESCI
+
+Medición manual sobre los índices de la sección anterior y las 150 consultas del
+subconjunto (50 por cubeta de longitud): `top_k` con `k = 10`, media de 5 repeticiones por
+consulta, con las columnas ya cargadas. Relevante = etiqueta E (exacto). Apple M4 Pro,
+Python 3.12. El experimento completo, contra GIN y con Recall@10, es el de `benchmarks/`.
+
+| Documentos | Cubeta | Postings leídos | Documentos puntuados | TF-IDF | BM25 |
+|---:|---|---:|---:|---:|---:|
+| 10 000 | 1 palabra | 176 | 157 | 0,08 ms | 0,06 ms |
+| 10 000 | 3 palabras | 915 | 832 | 0,23 ms | 0,19 ms |
+| 10 000 | 5+ palabras | 2 252 | 1 836 | 0,49 ms | 0,40 ms |
+| 100 000 | 1 palabra | 1 620 | 1 464 | 0,35 ms | 0,32 ms |
+| 100 000 | 3 palabras | 8 781 | 8 203 | 1,62 ms | 1,49 ms |
+| 100 000 | 5+ palabras | 21 911 | 18 296 | 3,76 ms | 3,38 ms |
+
+El tiempo crece con los postings leídos: unos 170 ns por posting con 100 000 documentos.
+
+Precision@10, como comprobación de que el ranking ordena (no es el experimento):
+
+| Documentos | Cubeta | TF-IDF | BM25 | Al azar |
+|---:|---|---:|---:|---:|
+| 10 000 | 1 / 3 / 5+ | 0,54 / 0,48 / 0,39 | 0,53 / 0,57 / 0,44 | |
+| 10 000 | todas | **0,47** | **0,52** | 0,0013 |
+| 100 000 | 1 / 3 / 5+ | 0,33 / 0,29 / 0,22 | 0,33 / 0,43 / 0,29 | |
+| 100 000 | todas | **0,28** | **0,35** | 0,00013 |
+
+«Al azar» es la precisión esperada de diez documentos cualesquiera: la fracción de
+relevantes en el corpus. Con una palabra los dos rankings casi empatan; con tres o más,
+BM25 gana por 5 a 14 puntos.
+
 ## Lo que todavía no hace
 
 El índice se construye de una vez y luego solo se lee: insertar, borrar y deshacer después
@@ -293,3 +468,13 @@ fallida no deja archivos ni bloques, y:
   comparados con un índice `término → {doc: tf}` construido directamente en memoria;
 - **memoria acotada**: con `tracemalloc`, cuadruplicar los documentos no sube el pico de la
   construcción más de un 25 % (sin bloques acotados, lo triplica).
+
+El ranking (`test_ranking.py`) se compara con un **oráculo de fuerza bruta**: las fórmulas
+de este README aplicadas directo a los textos analizados, sin índice. En corpus al azar con
+semillas fijas, consultas al azar (con términos repetidos, stopwords y palabras que no
+están) y varios `k1` y `b`, los puntajes coinciden con tolerancia 1e-9 y el orden es el
+mismo con la regla de empates. Cubren además la consulta vacía o de solo stopwords, el
+término inexistente, el término repetido, `k = 0`, `k < 0` y `k > N`, un solo documento,
+el término en todos los documentos, empates, documentos borrados, que el iterador
+perezoso da el mismo orden que el top-k completo, las estadísticas, el idioma del índice,
+los parámetros por omisión de la configuración y la validación de `k1` y `b`.

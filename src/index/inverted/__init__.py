@@ -24,6 +24,12 @@ from .ranking import (
     RankingStats,
     ScoredDocument,
 )
+from .secondary import (
+    IndexLanguageMismatchError,
+    NotTextValueError,
+    TextSearchEqualityError,
+    TextSearchIndex,
+)
 from .weights import lnc_norm, log_frequency_weight
 
 __all__ = [
@@ -32,12 +38,14 @@ __all__ = [
     "DocumentColumns",
     "DocumentEntry",
     "DocumentNotFoundError",
+    "IndexLanguageMismatchError",
     "InvertedFormatError",
     "InvertedIndex",
     "InvertedIndexError",
     "InvertedIndexExistsError",
     "InvertedIndexNotFoundError",
     "LexiconEntry",
+    "NotTextValueError",
     "PostingList",
     "Ranker",
     "RankingMethod",
@@ -46,6 +54,8 @@ __all__ = [
     "ScoredDocument",
     "TermEntry",
     "TermTooLongError",
+    "TextSearchEqualityError",
+    "TextSearchIndex",
     "lnc_norm",
     "log_frequency_weight",
     "max_term_bytes",

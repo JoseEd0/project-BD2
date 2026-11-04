@@ -320,11 +320,13 @@ de documentos, así que la comparación entre ellos solo mide la fórmula.
 | `Ranker(index, config)` | el ranking de un índice; su analizador es el del idioma del índice |
 | `top_k(query, method, k, parameters=None, stats=None)` | los `k` mejores, `list[ScoredDocument]` |
 | `ranked(query, method, parameters=None, stats=None)` | todos los que coinciden, perezoso y en el mismo orden |
+| `analyzed(query)` | los términos de la consulta ya analizados, con su df, sin leer postings: lo que muestran `EXPLAIN` y el resaltado de la interfaz |
 | `ScoredDocument` | `doc_id`, `record_id` de la fila y `score` |
 | `RankingMethod` | `TF_IDF` o `BM25` |
 | `Bm25Parameters(k1, b)` | parámetros de una consulta; sin ellos, `EngineConfig.bm25_k1` y `bm25_b` |
 | `RankingStats` | para `EXPLAIN`: cada término analizado con su df, postings leídos y documentos puntuados |
 | `RankingParameterError` | `k` negativo, `k1` o `b` fuera de rango, o parámetros de BM25 para TF-IDF |
+| `require_fitting_parameters(method, parameters)` | la regla de los parámetros de BM25 pedidos a TF-IDF, que el planificador aplica antes de leer filas |
 
 `RankingMethod` es un enum propio del índice y no el de `sql.nodes`: ningún módulo de
 `index` depende del front-end SQL, y el planificador traduce uno al otro.

@@ -23,6 +23,7 @@ from .ranking import (
     RankingParameterError,
     RankingStats,
     ScoredDocument,
+    require_fitting_parameters,
 )
 from .secondary import (
     IndexLanguageMismatchError,
@@ -59,4 +60,5 @@ __all__ = [
     "lnc_norm",
     "log_frequency_weight",
     "max_term_bytes",
+    "require_fitting_parameters",
 ]

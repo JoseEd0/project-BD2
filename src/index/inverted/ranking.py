@@ -168,6 +168,14 @@ class Ranker:
         heapq.heapify(keys)
         return self._pop_in_order(keys)
 
+    def analyzed(self, query: str) -> dict[str, int]:
+        """Los términos de la consulta tal como se buscan —plegados, sin stopwords y
+        reducidos a su raíz—, en el orden en que aparecen, con su df; 0 si no están en el
+        índice. No lee ninguna lista de postings."""
+        stats = RankingStats()
+        self._query_terms(query, stats)
+        return stats.document_frequencies
+
     def _scores(
         self,
         query: str,
@@ -176,8 +184,7 @@ class Ranker:
         stats: RankingStats | None,
     ) -> Accumulators:
         stats = RankingStats() if stats is None else stats
-        if method is RankingMethod.TF_IDF and parameters is not None:
-            raise RankingParameterError("TF-IDF no tiene parámetros: k1 y b son de BM25")
+        require_fitting_parameters(method, parameters)
         query_terms = self._query_terms(query, stats)
         if self._index.total_length == 0:
             # Ningún documento vivo tiene términos: lo que haya en las listas es de
@@ -277,6 +284,18 @@ class Ranker:
                 tied.append(heapq.heappop(keys))
             for key in self._in_row_order(tied):
                 yield self._scored(key)
+
+
+def require_fitting_parameters(
+    method: RankingMethod, parameters: Bm25Parameters | None
+) -> None:
+    """Los parámetros son de BM25: pedírselos a TF-IDF es un error, no algo que se ignora.
+
+    Raises:
+        RankingParameterError: si se dan parámetros para TF-IDF.
+    """
+    if method is RankingMethod.TF_IDF and parameters is not None:
+        raise RankingParameterError("TF-IDF no tiene parámetros: k1 y b son de BM25")
 
 
 def _bm25_idf(document_count: int, document_frequency: int) -> float:

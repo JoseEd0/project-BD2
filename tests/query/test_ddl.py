@@ -21,7 +21,7 @@ from query.engine import Engine, EngineError
 from query.operators import UnsupportedQueryError
 from query.table import DuplicatePrimaryKeyError, DuplicateValueError
 from sql.nodes import IndexType
-from storage.types import InvalidValueError, StorageError
+from storage.types import FieldType, InvalidValueError, StorageError
 
 
 @pytest.fixture
@@ -83,21 +83,18 @@ def test_every_statement_rejects_an_unknown_table(tabla: Engine, statement: str)
         tabla.execute(statement)
 
 
-def test_text_and_blob_columns_take_the_configured_length(config: EngineConfig):
+def test_blob_columns_take_the_configured_length_and_text_columns_have_none(
+    config: EngineConfig,
+):
     short = EngineConfig(
-        page_size=config.page_size,
-        text_length=40,
-        blob_length=24,
-        data_directory=config.data_directory,
+        page_size=config.page_size, blob_length=24, data_directory=config.data_directory
     )
     with Engine(short) as engine:
         engine.execute("CREATE TABLE notas (id INT PRIMARY KEY, cuerpo TEXT, adjunto BLOB)")
         schema = engine.table("notas").schema
-        assert schema.field_of("cuerpo").length == short.text_length
+        assert schema.field_of("cuerpo").type is FieldType.TEXT
+        assert schema.field_of("cuerpo").length is None
         assert schema.field_of("adjunto").length == short.blob_length
-        long_text = "x" * short.text_length
-        engine.execute(f"INSERT INTO notas VALUES (1, '{long_text}', NULL)")
-        assert engine.execute("SELECT cuerpo FROM notas").rows == ((long_text,),)
 
 
 @pytest.mark.parametrize(
@@ -113,6 +110,10 @@ def test_text_and_blob_columns_take_the_configured_length(config: EngineConfig):
         ),
         (
             "CREATE TABLE ancha (clave VARCHAR(120) PRIMARY KEY INDEX BTREE, n INT)",
+            "solo caben",
+        ),
+        (
+            "CREATE TABLE ancha (id INT PRIMARY KEY, cuerpo TEXT, clave VARCHAR(120) INDEX BTREE)",
             "solo caben",
         ),
     ],

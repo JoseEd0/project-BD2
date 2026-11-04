@@ -22,7 +22,7 @@ from config import EngineConfig
 from errors import DomainError
 from spatial.geometry import GeometryError, Point, geographic_point
 from storage.schema import Field, Schema
-from storage.types import MAX_INT, MIN_INT, FieldType, Value
+from storage.types import MAX_INT, MIN_INT, TEXT_ENCODING, FieldType, Value
 
 DATE_FORMAT_LENGTH = 10
 STRING_LENGTH_MARGIN = 8
@@ -50,24 +50,29 @@ def infer_schema(path: Path, config: EngineConfig) -> Schema:
     """
     names = read_header(path, config)
     seen: list[FieldType | None] = [None] * len(names)
-    lengths = [MINIMUM_STRING_LENGTH] * len(names)
+    longest = [0] * len(names)
     for row in _read_rows(path, config, len(names)):
         for position, raw in enumerate(row):
             seen[position] = _widen(seen[position], raw)
-            lengths[position] = max(lengths[position], len(raw.encode()) + STRING_LENGTH_MARGIN)
+            longest[position] = max(longest[position], len(raw.encode(TEXT_ENCODING)))
     kinds = [EMPTY_COLUMN_TYPE if kind is None else kind for kind in seen]
     return Schema(
         [
-            Field(
-                name=name,
-                type=kind,
-                length=min(lengths[position], config.text_length)
-                if kind is FieldType.STRING
-                else None,
-            )
+            _field(name, kind, longest[position], config)
             for position, (name, kind) in enumerate(zip(names, kinds, strict=True))
         ]
     )
+
+
+def _field(name: str, kind: FieldType, longest: int, config: EngineConfig) -> Field:
+    """Un texto que cabe en `inline_string_limit` va en la fila, con algo de margen para
+    que una actualización algo más larga quepa; uno más largo va fuera, como TEXT."""
+    if kind is not FieldType.STRING:
+        return Field(name, kind)
+    if longest > config.inline_string_limit:
+        return Field(name, FieldType.TEXT)
+    length = max(MINIMUM_STRING_LENGTH, longest + STRING_LENGTH_MARGIN)
+    return Field(name, kind, min(length, config.inline_string_limit))
 
 
 def read_values(path: Path, schema: Schema, config: EngineConfig) -> Iterator[tuple[Value, ...]]:

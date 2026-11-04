@@ -15,7 +15,14 @@ from enum import Enum, unique
 from errors import DomainError
 from spatial.geometry import Point, Polygon
 from storage.schema import Field
-from storage.types import FieldType, InvalidValueError, Value, codec_for, date_from
+from storage.types import (
+    OUT_OF_ROW_FIELD_TYPES,
+    FieldType,
+    InvalidValueError,
+    Value,
+    codec_for,
+    date_from,
+)
 
 
 class ComparisonError(DomainError):
@@ -44,6 +51,7 @@ _FAMILY_OF_TYPE = {
     FieldType.FLOAT: Family.NUMBER,
     FieldType.BOOL: Family.BOOLEAN,
     FieldType.STRING: Family.TEXT,
+    FieldType.TEXT: Family.TEXT,
     FieldType.DATE: Family.DATE,
     FieldType.BYTES: Family.BYTES,
     FieldType.POINT: Family.POINT,
@@ -99,7 +107,7 @@ def literal_for(field: Field, value: Value) -> Value:
     Raises:
         ComparisonError: si un valor así no se puede comparar con esa columna.
     """
-    sample = codec_for(field.type, field.length).neutral_value()
+    sample = _sample_of(field)
     try:
         comparable(sample, value)
     except ComparisonError:
@@ -112,6 +120,14 @@ def literal_for(field: Field, value: Value) -> Value:
     if field.type is FieldType.INT and isinstance(value, float) and value.is_integer():
         return int(value)
     return value
+
+
+def _sample_of(field: Field) -> Value:
+    """Un valor cualquiera de los que guarda la columna. El de un TEXT es un texto, aunque
+    en el registro esté la dirección donde vive."""
+    if field.type in OUT_OF_ROW_FIELD_TYPES:
+        return ""
+    return codec_for(field.type, field.length).neutral_value()
 
 
 def family_of(value: object) -> Family:

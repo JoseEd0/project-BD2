@@ -15,7 +15,7 @@ from config import EngineConfig
 from index.secondary import ColumnIndex
 from spatial.geometry import Point, Polygon, Rectangle
 from spatial.metrics import Metric
-from storage.record import RecordSerializer
+from storage.record import FieldReader
 from storage.record_id import RecordId
 from storage.types import FieldType, Key, StorageError
 
@@ -36,7 +36,7 @@ class SpatialIndex(ColumnIndex):
     def __init__(
         self,
         path: Path,
-        serializer: RecordSerializer,
+        serializer: FieldReader,
         column: str,
         config: EngineConfig,
     ) -> None:

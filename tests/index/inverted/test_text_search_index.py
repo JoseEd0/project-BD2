@@ -85,11 +85,8 @@ def test_insert_delete_and_update_through_the_column_interface(
         assert index.delete(serializer.pack((2, "Cable USB tipo C")), record_id_of(2))
         assert not index.delete(serializer.pack((3, None)), record_id_of(3))
         assert found(index, config, "cable") == []
-        index.update(
-            serializer.pack((5, "Cargador rápido USB")),
-            serializer.pack((5, "Cargador solar")),
-            record_id_of(5),
-        )
+        index.delete(serializer.pack((5, "Cargador rápido USB")), record_id_of(5))
+        index.insert(serializer.pack((5, "Cargador solar")), record_id_of(5))
         assert found(index, config, "solar") == [record_id_of(5)]
         assert found(index, config, "usb") == []
         assert index.inverted_index.document_count == 4
@@ -100,8 +97,9 @@ def test_an_update_that_keeps_the_text_does_not_reindex(
 ):
     with TextSearchIndex(path, serializer, "texto", config) as index:
         index.build(rows_of(serializer))
-        row = serializer.pack((1, "Teclado mecánico inalámbrico"))
-        index.update(row, row, record_id_of(1))
+        row = (1, "Teclado mecánico inalámbrico")
+        assert not index.changes(row, row)
+        assert index.changes(row, (1, "Teclado mecánico"))
         assert index.inverted_index.deleted_count == 0
 
 

@@ -19,7 +19,7 @@ from typing import Any
 from config import EngineConfig
 from index.keys import CompositeKeyCodec, RecordIdKeyCodec, ScalarKeyCodec
 from index.secondary import ColumnIndex
-from storage.record import RecordSerializer
+from storage.record import FieldReader
 from storage.record_id import HIGHEST_RECORD_ID, LOWEST_RECORD_ID, RecordId
 from storage.types import Key
 
@@ -34,7 +34,7 @@ class UnclusteredBPlusIndex(ColumnIndex):
     def __init__(
         self,
         path: Path,
-        serializer: RecordSerializer,
+        serializer: FieldReader,
         key_field: str,
         config: EngineConfig,
     ) -> None:

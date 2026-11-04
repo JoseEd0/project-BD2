@@ -40,9 +40,11 @@ from query.expressions import (
 from query.functions import AggregateKind
 from query.plan import MILLISECONDS_PER_SECOND, PlanNode
 from query.row_store import AddressedRecord
+from query.spill import SpilledValues, spill_serializer
 from query.table import Table
 from sql.nodes import ColumnRef, Expression, JoinKind, SortDirection
-from storage.record import Record, RecordSerializer
+from storage.out_of_row import OutOfRowSerializer
+from storage.record import Record
 from storage.schema import Field, Schema
 from storage.types import UNORDERED_FIELD_TYPES, FieldType, Key, Value
 
@@ -325,7 +327,8 @@ class Sort(Operator):
         self._keys = tuple(keys)
         self._directory = directory
         self._config = config
-        self._serializer = RecordSerializer(child.schema)
+        self._values = SpilledValues(directory, config)
+        self._serializer = spill_serializer(child.schema, self._values)
         self._evaluator = ExpressionEvaluator(child.layout)
         for expression, _ in self._keys:
             self._evaluator.validate(expression)
@@ -345,7 +348,7 @@ class Sort(Operator):
         sorter = ExternalSorter(
             self._directory, self._serializer.size, self._sort_key, self._config
         )
-        with sorter:
+        with self._values, sorter:
             packed = (self._serializer.pack(row) for row in self._child.rows())
             merged = sorter.sort(packed)
             self._runs = sorter.run_count
@@ -398,7 +401,8 @@ class HashAggregate(Operator):
         self._aggregates = tuple(aggregates)
         self._directory = directory
         self._config = config
-        self._input_serializer = RecordSerializer(child.schema)
+        self._values = SpilledValues(directory, config)
+        self._input_serializer = spill_serializer(child.schema, self._values)
         self._evaluator = ExpressionEvaluator(child.layout)
         for expression in (*self._group_by, *(item.argument for item in self._aggregates)):
             self._evaluator.validate(expression)
@@ -422,7 +426,7 @@ class HashAggregate(Operator):
             self._directory, self._input_serializer.size, self._group_key, self._config
         )
         self._grouper = grouper
-        with grouper:
+        with self._values, grouper:
             packed = (self._input_serializer.pack(row) for row in self._child.rows())
             groups = grouper.reduce(packed, self._accumulators, self._absorb_record)
             for key, accumulators in groups:
@@ -508,14 +512,23 @@ class JoinOperator(Operator):
     """
 
     def __init__(
-        self, left: Operator, right: Operator, kind: JoinKind, condition: Expression | None
+        self,
+        left: Operator,
+        right: Operator,
+        kind: JoinKind,
+        condition: Expression | None,
+        directory: Path,
+        config: EngineConfig,
     ) -> None:
         self._left = left
         self._right = right
         self._kind = kind
         self._condition = condition
-        self._left_serializer = RecordSerializer(left.schema)
-        self._right_serializer = RecordSerializer(right.schema)
+        self._directory = directory
+        self._config = config
+        self._values = SpilledValues(directory, config)
+        self._left_serializer = spill_serializer(left.schema, self._values)
+        self._right_serializer = spill_serializer(right.schema, self._values)
         self._layout = left.layout.concat(right.layout)
         self._schema = internal_schema([*left.schema.fields, *right.schema.fields])
         self._evaluator = ExpressionEvaluator(self._layout)
@@ -572,11 +585,9 @@ class HashJoin(JoinOperator):
         directory: Path,
         config: EngineConfig,
     ) -> None:
-        super().__init__(left, right, kind, residual)
+        super().__init__(left, right, kind, residual, directory, config)
         self._left_keys = tuple(left_keys)
         self._right_keys = tuple(right_keys)
-        self._directory = directory
-        self._config = config
         self._left_evaluator = ExpressionEvaluator(left.layout)
         self._right_evaluator = ExpressionEvaluator(right.layout)
         self._joiner: ExternalHashJoin | None = None
@@ -593,7 +604,7 @@ class HashJoin(JoinOperator):
             UNMATCHED_BY_KIND[self._kind],
         )
         self._joiner = joiner
-        with joiner:
+        with self._values, joiner:
             yield from self._rows_of(joiner.join(*self._inputs()))
 
     def _plan_node(self) -> PlanNode:
@@ -610,7 +621,7 @@ class HashJoin(JoinOperator):
 
     @staticmethod
     def _key_of(
-        serializer: RecordSerializer,
+        serializer: OutOfRowSerializer,
         evaluator: ExpressionEvaluator,
         expressions: Sequence[Expression],
     ) -> Callable[[bytes], Key]:
@@ -638,9 +649,7 @@ class NestedLoopJoin(JoinOperator):
         directory: Path,
         config: EngineConfig,
     ) -> None:
-        super().__init__(left, right, kind, condition)
-        self._directory = directory
-        self._config = config
+        super().__init__(left, right, kind, condition, directory, config)
 
     def _produce(self) -> Iterator[Record]:
         joiner = BlockNestedLoopJoin(
@@ -651,7 +660,7 @@ class NestedLoopJoin(JoinOperator):
             self._config,
             UNMATCHED_BY_KIND[self._kind],
         )
-        with joiner:
+        with self._values, joiner:
             yield from self._rows_of(joiner.join(*self._inputs()))
 
     def _plan_node(self) -> PlanNode:
@@ -719,8 +728,10 @@ class Distinct(Operator):
         self._evaluator = ExpressionEvaluator(child.layout)
         for expression in self._expressions:
             self._evaluator.validate(expression)
-        self._numbered = RecordSerializer(
-            internal_schema([*child.schema.fields, Field(ARRIVAL_COLUMN, FieldType.INT)])
+        self._values = SpilledValues(directory, config)
+        self._numbered = spill_serializer(
+            internal_schema([*child.schema.fields, Field(ARRIVAL_COLUMN, FieldType.INT)]),
+            self._values,
         )
         self._memory_rows = buffered_records(config, self._numbered.size)
         self._used_disk = False
@@ -766,7 +777,7 @@ class Distinct(Operator):
         sorter = ExternalSorter(
             self._directory, self._numbered.size, self._arrival_of, self._config
         )
-        with grouper, sorter:
+        with self._values, grouper, sorter:
             firsts = (first for _, first in grouper.reduce(pending, bytes, _first_record))
             for record in sorter.sort(firsts):
                 yield self._numbered.unpack(record)[:-1]

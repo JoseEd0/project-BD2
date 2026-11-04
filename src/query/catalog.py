@@ -17,7 +17,7 @@ from typing import Any
 
 from config import EngineConfig
 from errors import DomainError
-from sql.nodes import EMPTY_OPTIONS, ColumnDefinition, DataTypeKind, IndexType, OptionValue
+from sql.nodes import ColumnDefinition, DataTypeKind, IndexType, OptionValue, no_options
 from storage.schema import Field, Schema
 from storage.types import FieldType
 
@@ -104,7 +104,7 @@ class IndexDefinition:
     column: str
     method: IndexType
     unique: bool = False
-    options: Mapping[str, OptionValue] = EMPTY_OPTIONS
+    options: Mapping[str, OptionValue] = field(default_factory=no_options)
 
     def to_json(self) -> dict[str, Any]:
         return {

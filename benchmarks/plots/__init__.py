@@ -5,6 +5,10 @@ un experimento nuevo solo añade su módulo y lo suma aquí.
 """
 
 from benchmarks.plots import indexes, spatial, storage
-from benchmarks.plots.model import Figure
+from benchmarks.plots.model import BarFigure, Figure
 
-FIGURES: tuple[Figure, ...] = (*storage.FIGURES, *indexes.FIGURES, *spatial.FIGURES)
+FIGURES: tuple[Figure | BarFigure, ...] = (
+    *storage.FIGURES,
+    *indexes.FIGURES,
+    *spatial.FIGURES,
+)

@@ -9,9 +9,14 @@ from math import ceil, floor, log10
 from pathlib import Path
 from typing import Any, TypeVar
 
-from benchmarks.plots.model import Figure, Line, Panel
+from benchmarks.plots.model import BarFigure, BarPanel, Figure, Line, Panel
 from benchmarks.plots.style import (
     AXIS,
+    BAR_GROUP_SHARE,
+    BAR_LABEL_GAP,
+    BAR_LABEL_SIZE,
+    BAR_PANEL_HEIGHT,
+    BAR_PANEL_WIDTH,
     BASELINE_CLEARANCE,
     DASHES,
     DECADES_NEEDING_SUBTICKS,
@@ -22,6 +27,8 @@ from benchmarks.plots.style import (
     END_LABEL_PADDING,
     EXPECTED_LABEL_SHARE,
     FONT_FAMILY,
+    FRACTION_AXIS_TOP,
+    FRACTION_TICKS,
     GRID,
     GUTTER_PADDING,
     HEADER_BOTTOM,
@@ -55,6 +62,7 @@ from benchmarks.plots.style import (
     TITLE_PAD,
     TITLE_SIZE,
     VERTICAL_MARGIN,
+    format_fraction,
     format_tick,
 )
 
@@ -172,24 +180,41 @@ def _top(group: tuple[float, int], gap: float) -> float:
     return total / count + (count - 1) * gap / 2
 
 
-def compose(figure: Figure, report: dict[str, Any]) -> Any:
+def compose(figure: Figure | BarFigure, report: dict[str, Any]) -> Any:
     """Monta la figura de una comparación y la devuelve sin guardarla."""
+    if isinstance(figure, BarFigure):
+        return _compose_bars(figure, report)
+    return _compose_lines(figure, report)
+
+
+def _start_drawing() -> Any:
+    """matplotlib, sin ventana y con la letra de las figuras; es un extra opcional y solo
+    se importa al dibujar."""
     import matplotlib
 
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     plt.rcParams.update({"font.family": FONT_FAMILY, "font.size": LABEL_SIZE})
-    rows = -(-len(figure.panels) // figure.columns)
-    legend_columns = LEGEND_ENTRIES_PER_COLUMN * figure.columns
-    legend_rows = -(-len(_legend_labels(figure)) // legend_columns)
-    header = (
+    return plt
+
+
+def _header_height(subtitle: str, legend_rows: int) -> float:
+    return (
         HEADER_TOP
         + TITLE_HEIGHT
-        + SUBTITLE_LINE_HEIGHT * (figure.subtitle.count("\n") + 1)
+        + SUBTITLE_LINE_HEIGHT * (subtitle.count("\n") + 1)
         + LEGEND_ROW_HEIGHT * legend_rows
         + HEADER_BOTTOM
     )
+
+
+def _compose_lines(figure: Figure, report: dict[str, Any]) -> Any:
+    plt = _start_drawing()
+    rows = -(-len(figure.panels) // figure.columns)
+    legend_columns = LEGEND_ENTRIES_PER_COLUMN * figure.columns
+    legend_rows = -(-len(_legend_labels(figure)) // legend_columns)
+    header = _header_height(figure.subtitle, legend_rows)
     width = PANEL_WIDTH * figure.columns
     height = PANEL_HEIGHT * rows + header
     canvas, grid = plt.subplots(
@@ -227,7 +252,107 @@ def compose(figure: Figure, report: dict[str, Any]) -> Any:
     return canvas
 
 
-def draw(figure: Figure, report: dict[str, Any], output: Path) -> Path:
+def bar_value(
+    report: dict[str, Any], technique: str, operation: str, size: int, field: str
+) -> float | None:
+    """El valor de una barra, o `None` si esa técnica no se midió en ese tamaño."""
+    for item in report["measurements"]:
+        if (item["technique"], item["operation"], item["dataset_size"]) == (
+            technique,
+            operation,
+            size,
+        ):
+            value = item["extra"].get(field)
+            return float(value) if isinstance(value, int | float) else None
+    return None
+
+
+def bar_sizes(report: dict[str, Any], figure: BarFigure) -> list[int]:
+    """Los tamaños en los que alguna barra de la figura tiene valor: uno por fila."""
+    techniques = {technique.name for panel in figure.panels for technique in panel.techniques}
+    fields = {panel.field for panel in figure.panels}
+    return sorted(
+        {
+            int(item["dataset_size"])
+            for item in report["measurements"]
+            if item["technique"] in techniques and fields & item["extra"].keys()
+        }
+    )
+
+
+def _compose_bars(figure: BarFigure, report: dict[str, Any]) -> Any:
+    plt = _start_drawing()
+    sizes = bar_sizes(report, figure)
+    columns = len(figure.panels)
+    techniques = list(
+        dict.fromkeys(technique for panel in figure.panels for technique in panel.techniques)
+    )
+    legend_columns = LEGEND_ENTRIES_PER_COLUMN * columns
+    header = _header_height(figure.subtitle, -(-len(techniques) // legend_columns))
+    width = BAR_PANEL_WIDTH * columns
+    height = BAR_PANEL_HEIGHT * len(sizes) + header
+    canvas, grid = plt.subplots(
+        len(sizes), columns, figsize=(width, height), dpi=DPI, squeeze=False
+    )
+    canvas.set_facecolor(SURFACE)
+    for row, size in zip(grid, sizes, strict=True):
+        for axis, panel in zip(row, figure.panels, strict=True):
+            title = f"{panel.title.format_map(report['parameters'])} · "
+            title += f"{format_tick(size)} {figure.sizes_label}"
+            _draw_bar_panel(axis, panel, report, size, title)
+    _draw_header(canvas, figure, height, legend_columns)
+    canvas.tight_layout(rect=(0.0, 0.0, 1.0, 1.0 - header / height), w_pad=PANEL_GAP, h_pad=ROW_GAP)
+    return canvas
+
+
+def _draw_bar_panel(
+    axis: Any, panel: BarPanel, report: dict[str, Any], size: int, title: str
+) -> None:
+    from matplotlib.ticker import FixedLocator, FuncFormatter
+
+    axis.set_facecolor(SURFACE)
+    width = BAR_GROUP_SHARE / len(panel.techniques)
+    for position, technique in enumerate(panel.techniques):
+        offset = (position - (len(panel.techniques) - 1) / 2) * width
+        bars = [
+            (group_position + offset, value)
+            for group_position, group in enumerate(panel.groups)
+            if (value := bar_value(report, technique.name, group.operation, size, panel.field))
+            is not None
+        ]
+        if not bars:
+            continue
+        drawn = axis.bar(
+            [place for place, _ in bars],
+            [value for _, value in bars],
+            width=width,
+            color=technique.style.color,
+            label=technique.label or technique.name,
+            zorder=3,
+        )
+        axis.bar_label(
+            drawn,
+            labels=[format_fraction(value) for _, value in bars],
+            padding=BAR_LABEL_GAP,
+            color=SECONDARY_INK,
+            fontsize=BAR_LABEL_SIZE,
+        )
+    axis.set_ylim(0.0, FRACTION_AXIS_TOP)
+    axis.set_xlim(-0.5, len(panel.groups) - 0.5)
+    axis.yaxis.set_major_locator(FixedLocator(FRACTION_TICKS))
+    axis.yaxis.set_major_formatter(FuncFormatter(lambda value, _: format_tick(value)))
+    axis.set_xticks(range(len(panel.groups)), [group.label for group in panel.groups])
+    axis.grid(visible=True, axis="y", color=GRID, linewidth=0.8, linestyle="solid", zorder=0)
+    axis.set_axisbelow(True)
+    for side in ("top", "right", "left"):
+        axis.spines[side].set_visible(False)
+    axis.spines["bottom"].set_color(AXIS)
+    axis.tick_params(axis="both", colors=MUTED_INK, length=0, labelsize=LABEL_SIZE)
+    axis.set_ylabel(panel.axis, color=SECONDARY_INK, fontsize=LABEL_SIZE)
+    axis.set_title(title, color=INK, fontsize=PANEL_TITLE_SIZE, loc="left", pad=TITLE_PAD)
+
+
+def draw(figure: Figure | BarFigure, report: dict[str, Any], output: Path) -> Path:
     """Escribe la imagen de una comparación y devuelve su ruta."""
     import matplotlib.pyplot as plt
 
@@ -259,7 +384,9 @@ def _legend_labels(figure: Figure) -> list[str]:
     return list(dict.fromkeys(labels))
 
 
-def _draw_header(canvas: Any, figure: Figure, height: float, legend_columns: int) -> None:
+def _draw_header(
+    canvas: Any, figure: Figure | BarFigure, height: float, legend_columns: int
+) -> None:
     """Título, subtítulo y leyenda, alineados a la izquierda sobre los paneles."""
     left = 0.14 / canvas.get_figwidth()
     top = 1.0 - HEADER_TOP / height

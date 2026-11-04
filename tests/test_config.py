@@ -21,6 +21,7 @@ INVALID = [
     {"text_length": 0},
     {"text_min_token_length": 0},
     {"text_min_token_length": 5, "text_max_token_length": 4},
+    {"spimi_block_bytes": 0},
     {"lock_timeout_seconds": 0.0},
     {"session_idle_seconds": -5.0},
     {"max_result_rows": 0},

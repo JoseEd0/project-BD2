@@ -1,0 +1,149 @@
+"""SPIMI: bloques con memoria acotada y su mezcla k-vías."""
+
+import dataclasses
+import random
+import tracemalloc
+from collections.abc import Iterator
+from pathlib import Path
+
+import pytest
+from inverted_support import (
+    ReferenceIndex,
+    assert_matches_reference,
+    build,
+    documents_of,
+    random_texts,
+    vocabulary,
+)
+
+from config import EngineConfig
+from index.inverted import InvertedIndex
+from index.inverted.format import build_directory, lexicon_path
+from index.inverted.spimi import POSTING_ENTRY_BYTES, TERM_ENTRY_BYTES, SpimiBlock
+from storage.record_id import RecordId
+from text import Analyzer
+
+SEEDS = [11, 23, 47]
+# Cabe un puñado de documentos por bloque: con 200 textos salen decenas de bloques.
+TINY_BLOCK_BYTES = 4 * TERM_ENTRY_BYTES
+SMALLEST_FAN_IN = 2
+MEMORY_BLOCK_BYTES = 256 * 1024
+FEW_DOCUMENTS = 1_000
+MANY_DOCUMENTS = 4 * FEW_DOCUMENTS
+MEMORY_VOCABULARY = 300
+WORDS_PER_DOCUMENT = 30
+# Si la memoria creciera con N, cuadruplicar los documentos la multiplicaría casi por
+# cuatro; el margen solo absorbe el ruido del intérprete.
+MEMORY_GROWTH_TOLERANCE = 1.25
+
+
+def with_blocks(config: EngineConfig, block_bytes: int, fan_in: int) -> EngineConfig:
+    return dataclasses.replace(config, spimi_block_bytes=block_bytes, merge_fan_in=fan_in)
+
+
+def file_bytes(path: Path) -> list[bytes]:
+    return [file.read_bytes() for file in InvertedIndex.files_of(path)]
+
+
+def lexicon_without_header(path: Path, config: EngineConfig) -> bytes:
+    """El léxico sin la página 0, que además anota cuántos bloques y pasadas hubo."""
+    return lexicon_path(path).read_bytes()[config.page_size :]
+
+
+def test_the_block_estimate_counts_terms_and_postings():
+    block = SpimiBlock(max_term_bytes=40)
+    block.add(0, {"cas": 2, "ñu": 1})
+    assert block.estimated_bytes == 2 * TERM_ENTRY_BYTES + len("cas") + len("ñu") + 2 * POSTING_ENTRY_BYTES
+    block.add(1, {"cas": 1})
+    assert block.estimated_bytes == 2 * TERM_ENTRY_BYTES + 5 + 3 * POSTING_ENTRY_BYTES
+
+
+def test_many_blocks_and_passes_give_the_same_index_as_one_block(config: EngineConfig):
+    texts = random_texts(200, seed=SEEDS[0])
+    single_path = config.data_directory / "uno.inv"
+    blocks_path = config.data_directory / "muchos.inv"
+    single_config = with_blocks(config, 1 << 30, config.merge_fan_in)
+    blocks_config = with_blocks(config, TINY_BLOCK_BYTES, SMALLEST_FAN_IN)
+    with (
+        build(single_path, texts, single_config) as single,
+        build(blocks_path, texts, blocks_config) as blocks,
+    ):
+        assert single.block_count == 1
+        assert single.merge_passes == 0
+        assert blocks.block_count >= 3
+        assert blocks.merge_passes >= 2
+        assert list(blocks.terms()) == list(single.terms())
+        assert list(blocks.documents()) == list(single.documents())
+        for entry in single.terms():
+            assert blocks.postings(entry.term) == single.postings(entry.term)
+        for statistic in ("document_count", "total_length", "vocabulary_size", "posting_count"):
+            assert getattr(blocks, statistic) == getattr(single, statistic)
+    assert file_bytes(blocks_path)[1:] == file_bytes(single_path)[1:]
+    assert lexicon_without_header(blocks_path, config) == lexicon_without_header(
+        single_path, config
+    )
+
+
+@pytest.mark.parametrize("seed", SEEDS)
+def test_random_corpora_match_a_reference_index(config: EngineConfig, seed: int):
+    generator = random.Random(seed)
+    texts = random_texts(generator.randrange(50, 300), seed)
+    block_bytes = generator.choice([TINY_BLOCK_BYTES, 8 * TINY_BLOCK_BYTES, 1 << 30])
+    fan_in = generator.choice([SMALLEST_FAN_IN, 3, 8])
+    blocks_config = with_blocks(config, block_bytes, fan_in)
+    path = config.data_directory / f"azar{seed}.inv"
+    with build(path, texts, blocks_config) as index:
+        assert_matches_reference(index, ReferenceIndex.of(texts, Analyzer(config)))
+
+
+def test_the_temporary_blocks_are_removed(config: EngineConfig):
+    path = config.data_directory / "temporal.inv"
+    build(path, random_texts(100, seed=SEEDS[1]), with_blocks(config, TINY_BLOCK_BYTES, 2)).close()
+    assert not build_directory(path).exists()
+
+
+class InterruptedCorpusError(Exception):
+    pass
+
+
+def failing_documents(texts: list[str], fail_at: int) -> Iterator[tuple[RecordId, str]]:
+    for position, document in enumerate(documents_of(texts)):
+        if position == fail_at:
+            raise InterruptedCorpusError
+        yield document
+
+
+def test_a_failed_build_leaves_no_files(config: EngineConfig):
+    path = config.data_directory / "fallido.inv"
+    texts = random_texts(100, seed=SEEDS[2])
+    tiny = with_blocks(config, TINY_BLOCK_BYTES, SMALLEST_FAN_IN)
+    with pytest.raises(InterruptedCorpusError):
+        InvertedIndex.build(path, failing_documents(texts, 80), Analyzer(tiny), tiny)
+    assert list(config.data_directory.iterdir()) == []
+    build(path, texts, tiny).close()
+
+
+def peak_memory_of_build(path: Path, count: int, config: EngineConfig) -> int:
+    analyzer = Analyzer(config)
+    words = vocabulary(MEMORY_VOCABULARY, seed=SEEDS[0])
+
+    def documents() -> Iterator[tuple[RecordId, str]]:
+        generator = random.Random(SEEDS[0])
+        for position in range(count):
+            yield RecordId(position, 0), " ".join(generator.choices(words, k=WORDS_PER_DOCUMENT))
+
+    tracemalloc.start()
+    try:
+        InvertedIndex.build(path, documents(), analyzer, config).close()
+        return tracemalloc.get_traced_memory()[1]
+    finally:
+        tracemalloc.stop()
+
+
+def test_build_memory_does_not_grow_with_the_number_of_documents(config: EngineConfig):
+    bounded = with_blocks(config, MEMORY_BLOCK_BYTES, config.merge_fan_in)
+    few = peak_memory_of_build(config.data_directory / "pocos.inv", FEW_DOCUMENTS, bounded)
+    many = peak_memory_of_build(config.data_directory / "muchos.inv", MANY_DOCUMENTS, bounded)
+    with InvertedIndex(config.data_directory / "muchos.inv", bounded) as index:
+        assert index.block_count > 4
+    assert many <= few * MEMORY_GROWTH_TOLERANCE

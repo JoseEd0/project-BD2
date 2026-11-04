@@ -10,7 +10,6 @@ from inverted_support import (
     ReferenceIndex,
     assert_matches_reference,
     build,
-    mark_deleted,
     random_texts,
     record_id_of,
 )
@@ -26,12 +25,15 @@ from index.inverted import (
     max_term_bytes,
 )
 from index.inverted.format import (
+    FIRST_GENERATION,
     POSTING_BYTES,
     POSTING_FIELDS,
     POSTING_TYPECODE,
     documents_path,
     lexicon_path,
+    manifest_path,
     postings_path,
+    segment_base,
     terms_path,
 )
 from text import Analyzer
@@ -46,6 +48,11 @@ FIRST_FIELD_OFFSET = 6
 @pytest.fixture
 def path(config: EngineConfig) -> Path:
     return config.data_directory / "productos.inv"
+
+
+def in_first_segment(file_of: Callable[[Path], Path]) -> Callable[[Path], Path]:
+    """El archivo del segmento que escribió la construcción."""
+    return lambda path: file_of(segment_base(path, FIRST_GENERATION))
 
 
 def test_a_posting_is_two_four_byte_integers():
@@ -220,14 +227,19 @@ def test_documents_are_reached_by_doc_id(path: Path, config: EngineConfig):
 def test_files_of_names_every_file_and_the_build_leaves_nothing_else(
     path: Path, config: EngineConfig
 ):
-    files = InvertedIndex.files_of(path)
-    assert [file.name for file in files] == [
-        "productos.inv.lexicon",
-        "productos.inv.terms",
-        "productos.inv.postings",
+    assert [file.name for file in InvertedIndex.files_of(path)] == [
         "productos.inv.documents",
+        "productos.inv.manifest",
+        "productos.inv.docmap",
+        "productos.inv.docmap.dir",
     ]
     build(path, [f"cable {number}" for number in range(30)], config).close()
+    files = InvertedIndex.files_of(path)
+    assert [file.name for file in files][4:] == [
+        "productos.inv.seg0.lexicon",
+        "productos.inv.seg0.terms",
+        "productos.inv.seg0.postings",
+    ]
     assert sorted(path.parent.iterdir()) == sorted(files)
 
 
@@ -254,11 +266,13 @@ def patch_header(file: Path, offset: int, replacement: bytes) -> None:
 @pytest.mark.parametrize(
     ("file_of", "offset", "replacement", "message"),
     [
-        (lexicon_path, MAGIC_OFFSET, b"XXXX", "no es un léxico"),
-        (lexicon_path, VERSION_OFFSET, (99).to_bytes(2, "little"), "versión 99"),
-        (terms_path, MAGIC_OFFSET, b"IVLX", "no es un archivo de términos"),
-        (postings_path, MAGIC_OFFSET, b"IVDC", "no es un archivo de postings"),
+        (in_first_segment(lexicon_path), MAGIC_OFFSET, b"XXXX", "no es un léxico"),
+        (in_first_segment(lexicon_path), VERSION_OFFSET, (99).to_bytes(2, "little"), "versión 99"),
+        (in_first_segment(terms_path), MAGIC_OFFSET, b"IVLX", "no es un archivo de términos"),
+        (in_first_segment(postings_path), MAGIC_OFFSET, b"IVDC", "no es un archivo de postings"),
         (documents_path, MAGIC_OFFSET, b"IVPS", "no es una tabla de documentos"),
+        (manifest_path, MAGIC_OFFSET, b"IVDC", "no es un manifiesto"),
+        (manifest_path, VERSION_OFFSET, (99).to_bytes(2, "little"), "versión 99"),
     ],
 )
 def test_opening_a_file_of_another_format_is_an_error(
@@ -277,27 +291,33 @@ def test_opening_a_file_of_another_format_is_an_error(
 
 def test_files_of_different_indexes_are_not_mixed(path: Path, config: EngineConfig):
     build(path, ["cable funda"], config).close()
-    patch_header(postings_path(path), FIRST_FIELD_OFFSET, (7).to_bytes(8, "little"))
+    patch_header(in_first_segment(postings_path)(path), FIRST_FIELD_OFFSET, (7).to_bytes(8, "little"))
     with pytest.raises(InvertedFormatError, match="postings"):
         InvertedIndex(path, config)
 
 
 def test_a_terms_file_of_another_index_is_detected(path: Path, config: EngineConfig):
     build(path, ["cable funda"], config).close()
-    patch_header(terms_path(path), FIRST_FIELD_OFFSET, (999).to_bytes(8, "little"))
+    patch_header(
+        in_first_segment(terms_path)(path), FIRST_FIELD_OFFSET, (999).to_bytes(8, "little")
+    )
     with pytest.raises(InvertedFormatError, match="bytes de términos"):
         InvertedIndex(path, config)
 
 
 def test_document_columns_hold_every_length_norm_and_deletion(path: Path, config: EngineConfig):
     texts = random_texts(300, seed=5)
-    build(path, texts, config).close()
-    mark_deleted(path, config, [0, 117, 299])
+    with build(path, texts, config) as index:
+        for position in [0, 117, 299]:
+            index.delete(record_id_of(position))
     with InvertedIndex(path, config) as index:
         columns = index.document_columns()
         documents = list(index.documents())
         assert list(columns.lengths) == [document.length for document in documents]
         assert list(columns.norms) == [document.norm for document in documents]
+        assert [columns.record_id(doc_id) for doc_id in range(len(texts))] == [
+            document.record_id for document in documents
+        ]
         assert columns.deleted == {0, 117, 299}
         assert index.document_columns() is columns
 
@@ -305,5 +325,5 @@ def test_document_columns_hold_every_length_norm_and_deletion(path: Path, config
 def test_document_columns_of_an_empty_index(path: Path, config: EngineConfig):
     with build(path, [], config) as index:
         columns = index.document_columns()
-        assert len(columns.lengths) == len(columns.norms) == 0
-        assert columns.deleted == frozenset()
+        assert len(columns.lengths) == len(columns.norms) == len(columns.record_keys) == 0
+        assert columns.deleted == set()

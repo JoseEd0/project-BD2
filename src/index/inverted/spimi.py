@@ -7,8 +7,11 @@ una colección que no cabe en memoria, en una pasada sobre los documentos.
    llega a `spimi_block_bytes`, se ordenan sus términos, se escribe como un bloque y se
    vacía.
 2. **Mezcla.** Los bloques se mezclan de a `merge_fan_in` (k-vías); si hay más, por
-   pasadas, como el ordenamiento externo. La última pasada escribe el léxico y las listas
-   definitivas.
+   pasadas, como el ordenamiento externo. La última pasada escribe el primer segmento
+   del índice: el léxico y las listas definitivas.
+
+El mismo bloque en memoria recibe después los documentos que llegan al índice ya
+construido, hasta que un `flush` lo escribe como un segmento más (ver `index.py`).
 
 Ver `README.md` para el formato de cada archivo y la estimación de memoria del bloque.
 """
@@ -16,7 +19,7 @@ Ver `README.md` para el formato de cada archivo y la estimación de memoria del 
 from __future__ import annotations
 
 from array import array
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from functools import partial
 from pathlib import Path
 
@@ -28,23 +31,23 @@ from text import Analyzer
 from .blocks import Block, MergePasses, TermSink, merge_sources
 from .documents import DocumentTableWriter
 from .format import (
+    FIRST_GENERATION,
     LEXICON_RECORD,
     POSTING_FIELDS,
     POSTING_TYPECODE,
     InvertedIndexExistsError,
+    LexiconEntry,
     TermTooLongError,
     build_directory,
+    built_files,
     documents_path,
     encode_language,
     encode_postings,
-    files_of,
-    lexicon_path,
     max_term_bytes,
-    postings_path,
-    terms_path,
+    segment_base,
 )
-from .lexicon import LexiconWriter
-from .postings import PostingsWriter
+from .postings import PostingList
+from .segments import write_segment
 from .weights import lnc_norm
 
 # Estimación del bloque en memoria, medida con `tracemalloc` sobre las fichas de ESCI:
@@ -54,6 +57,8 @@ from .weights import lnc_norm
 # pasa del presupuesto.
 TERM_ENTRY_BYTES = 160
 POSTING_ENTRY_BYTES = 10
+# Una lista que todavía está en memoria no tiene posición en ningún archivo de postings.
+IN_MEMORY_OFFSET = 0
 
 Document = tuple[RecordId, str]
 
@@ -65,15 +70,24 @@ class SpimiBlock:
     `estimated_bytes` es una cuenta determinista —`TERM_ENTRY_BYTES` más los caracteres de
     cada término, y `POSTING_ENTRY_BYTES` por posting—, la misma en cualquier máquina, para
     que los tests puedan forzar un número exacto de bloques.
+
+    También se lee como un segmento (`find`, `read`, `entries`): es el bloque de los
+    documentos que llegaron al índice después de construirlo y aún no se escribieron.
     """
 
     def __init__(self, max_term_bytes: int) -> None:
         self._postings: dict[str, array[int]] = {}
         self._max_term_bytes = max_term_bytes
         self.estimated_bytes = 0
+        self.document_count = 0
+        self.posting_count = 0
 
     def __bool__(self) -> bool:
         return bool(self._postings)
+
+    @property
+    def term_count(self) -> int:
+        return len(self._postings)
 
     def add(self, doc_id: int, frequencies: Mapping[str, int]) -> None:
         """Añade los postings de un documento, en `O(términos del documento)`.
@@ -90,6 +104,31 @@ class SpimiBlock:
             postings.append(doc_id)
             postings.append(frequency)
         self.estimated_bytes += len(frequencies) * POSTING_ENTRY_BYTES
+        self.posting_count += len(frequencies)
+        self.document_count += 1
+
+    def find(self, term: str) -> LexiconEntry | None:
+        """El término con su df y su frecuencia total, `O(df)`; `None` si no está."""
+        postings = self._postings.get(term)
+        if postings is None:
+            return None
+        return LexiconEntry(
+            term,
+            len(postings) // POSTING_FIELDS,
+            sum(postings[1::POSTING_FIELDS]),
+            IN_MEMORY_OFFSET,
+        )
+
+    def read(self, entry: LexiconEntry) -> PostingList:
+        """Una copia de la lista del término, que el bloque puede seguir haciendo crecer."""
+        return PostingList.interleaved(self._postings[entry.term])
+
+    def entries(self) -> Iterator[LexiconEntry]:
+        """Los términos en orden, como un léxico."""
+        for term in sorted(self._postings):
+            entry = self.find(term)
+            if entry is not None:
+                yield entry
 
     def drain_into(self, sink: TermSink) -> None:
         """Entrega los términos en orden a `sink` y suelta cada lista según la entrega: el
@@ -114,34 +153,9 @@ class SpimiBlock:
         self.estimated_bytes += TERM_ENTRY_BYTES + len(term)
 
 
-class IndexSink:
-    """El destino de la última mezcla: el léxico y el archivo de postings definitivos."""
-
-    def __init__(self, path: Path, config: EngineConfig) -> None:
-        self._lexicon = LexiconWriter(lexicon_path(path), terms_path(path), config)
-        self._postings = PostingsWriter(postings_path(path), config)
-
-    def add_term(
-        self,
-        term: bytes,
-        document_frequency: int,
-        total_frequency: int,
-        postings: Iterable[bytes],
-    ) -> None:
-        offset = self._postings.append(postings, document_frequency)
-        self._lexicon.append(term, document_frequency, total_frequency, offset)
-
-    def close(self, language: bytes, block_count: int, merge_passes: int) -> None:
-        self._lexicon.close(language, self._postings.posting_count, block_count, merge_passes)
-        self._postings.close()
-
-    def discard(self) -> None:
-        self._lexicon.discard()
-        self._postings.discard()
-
-
 class SpimiBuilder:
-    """Construye un índice invertido en `path` con memoria acotada.
+    """Construye en `path` la tabla de documentos y el primer segmento de un índice
+    invertido, con memoria acotada.
 
     Complejidad, con `T` postings, `V` términos, `B` bloques y abanico `k`:
 
@@ -152,7 +166,7 @@ class SpimiBuilder:
     * memoria: el bloque (`spimi_block_bytes`) en la primera fase, y una página por flujo
       de cada bloque abierto en la mezcla, dentro del buffer pool.
 
-    Si todo cabe en un bloque, se escribe directamente como índice y no hay mezcla.
+    Si todo cabe en un bloque, se escribe directamente como segmento y no hay mezcla.
     Los bloques viven en un directorio temporal junto al índice, que se borra siempre,
     también si la construcción falla; en ese caso tampoco quedan los archivos del índice.
 
@@ -181,14 +195,14 @@ class SpimiBuilder:
             InvertedIndexExistsError: si ya hay un índice en la ruta.
             TermTooLongError: si el analizador produce un término más largo de lo admitido.
         """
-        existing = [path for path in files_of(self._path) if path.exists()]
+        existing = [path for path in built_files(self._path) if path.exists()]
         if existing:
             raise InvertedIndexExistsError(f"ya hay un índice invertido en {existing[0]}")
         try:
             last_block = self._index_documents(documents)
             self._write_index(last_block)
         except BaseException:
-            for path in files_of(self._path):
+            for path in built_files(self._path):
                 path.unlink(missing_ok=True)
             raise
         finally:
@@ -217,23 +231,24 @@ class SpimiBuilder:
         if not self._blocks:
             if last_block:
                 self.block_count = 1
-            self._write_final(last_block.drain_into)
+            self._write_segment(last_block.drain_into)
             return
         if last_block:
             self._spill(last_block)
         sources = self._passes.reduce(self._blocks)
         self.merge_passes = self._passes.passes + 1
-        self._write_final(partial(merge_sources, sources, self._config))
+        self._write_segment(partial(merge_sources, sources, self._config))
 
     def _spill(self, block: SpimiBlock) -> None:
         self._blocks.append(self._passes.write_block(block.drain_into))
         self.block_count += 1
 
-    def _write_final(self, fill: Callable[[TermSink], None]) -> None:
-        sink = IndexSink(self._path, self._config)
-        try:
-            fill(sink)
-        except BaseException:
-            sink.discard()
-            raise
-        sink.close(self._language, self.block_count, self.merge_passes)
+    def _write_segment(self, fill: Callable[[TermSink], None]) -> None:
+        write_segment(
+            segment_base(self._path, FIRST_GENERATION),
+            fill,
+            self._language,
+            self.block_count,
+            self.merge_passes,
+            self._config,
+        )

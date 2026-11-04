@@ -2,8 +2,10 @@
 similitud del coseno (SMART lnc.ltc) y BM25, sobre el mismo índice.
 
 Los dos se evalúan término a término: cada lista de postings se recorre una vez y suma la
-contribución de su término al acumulador de cada documento. Ver `README.md` para las
-fórmulas y las decisiones (términos repetidos, empates, puntajes nulos).
+contribución de su término al acumulador de cada documento. La lista de un término es la
+de todos los segmentos del índice, una tras otra, así que el ranking no sabe cuántos hay.
+Ver `README.md` para las fórmulas y las decisiones (términos repetidos, empates, puntajes
+nulos, borrados).
 """
 
 from __future__ import annotations
@@ -20,8 +22,8 @@ from config import EngineConfig, bm25_parameters_error
 from storage.record_id import RecordId
 from text import Analyzer
 
-from .format import InvertedIndexError, LexiconEntry
-from .index import InvertedIndex
+from .format import InvertedIndexError
+from .index import InvertedIndex, TermEntry
 from .postings import PostingList
 from .weights import log_frequency_weight
 
@@ -30,8 +32,9 @@ from .weights import log_frequency_weight
 BM25_DOCUMENT_FREQUENCY_SMOOTHING = 0.5
 
 Accumulators = dict[int, float]
-# El orden de salida como una tupla que crece: puntaje descendente y, a igual puntaje,
-# `doc_id` ascendente.
+# Puntaje negado y `doc_id`: lo que ordena el montículo. A igual puntaje, el orden de
+# salida es el de la dirección de la fila, que se resuelve solo entre los empatados
+# (`_in_row_order`): buscarla para cada candidato costaba un 8 % de la consulta.
 RankingKey = tuple[float, int]
 
 
@@ -92,7 +95,7 @@ class RankingStats:
 
 
 class _QueryTerm(NamedTuple):
-    entry: LexiconEntry
+    entry: TermEntry
     query_frequency: int
 
 
@@ -101,7 +104,9 @@ class Ranker:
 
     La consulta pasa por el mismo analizador que los documentos, en el idioma con el que
     se construyó el índice. Un documento entra al resultado si contiene algún término de
-    la consulta y no está borrado; con TF-IDF puede hacerlo con puntaje 0.
+    la consulta y no está borrado; con TF-IDF puede hacerlo con puntaje 0. A igual
+    puntaje, primero la fila de menor dirección: el orden depende solo de las filas
+    vivas, no de en qué orden llegaron al índice.
 
     Con `P` postings en las listas de la consulta y `C` documentos que las contienen,
     evaluar cuesta `O(P)`; la longitud y la norma de cada documento salen de
@@ -122,10 +127,10 @@ class Ranker:
         stats: RankingStats | None = None,
     ) -> list[ScoredDocument]:
         """Los `k` documentos de mayor puntaje, de mayor a menor; a igual puntaje, el de
-        menor `doc_id` primero. Con `k = 0` no hay ninguno, como `LIMIT 0`.
+        menor dirección de fila primero. Con `k = 0` no hay ninguno, como `LIMIT 0`.
 
         `parameters` es solo para BM25; sin él se usan los de la configuración.
-        Complejidad: `O(P + C log k)` y una página por documento devuelto.
+        Complejidad: `O(P + C log k)`.
 
         Raises:
             RankingParameterError: si `k` es negativo o se dan parámetros para TF-IDF.
@@ -133,7 +138,15 @@ class Ranker:
         if k < 0:
             raise RankingParameterError(f"k tiene que ser al menos 0, no {k}")
         keys = _ranking_keys(self._scores(query, method, parameters, stats))
-        return [self._scored(key) for key in heapq.nsmallest(k, keys)]
+        if k == 0:
+            return []
+        # Uno de más para saber si el último puntaje que entra empata con alguno que queda
+        # fuera: entonces decide la dirección de la fila entre todos los empatados.
+        best = heapq.nsmallest(k + 1, keys)
+        if len(best) > k and best[k][0] == best[k - 1][0]:
+            boundary = best[k - 1][0]
+            best = [key for key in keys if key[0] <= boundary]
+        return [self._scored(key) for key in self._in_row_order(best)[:k]]
 
     def ranked(
         self,
@@ -146,7 +159,7 @@ class Ranker:
         una consulta con filtros que no se sabe cuántos documentos va a consumir.
 
         Puntúa al llamarse, `O(P + C)`, y forma un montículo con los `C` documentos; cada
-        documento que se pide después cuesta `O(log C)` y una página.
+        documento que se pide después cuesta `O(log C)`.
 
         Raises:
             RankingParameterError: si se dan parámetros para TF-IDF.
@@ -163,13 +176,18 @@ class Ranker:
         stats: RankingStats | None,
     ) -> Accumulators:
         stats = RankingStats() if stats is None else stats
+        if method is RankingMethod.TF_IDF and parameters is not None:
+            raise RankingParameterError("TF-IDF no tiene parámetros: k1 y b son de BM25")
+        query_terms = self._query_terms(query, stats)
+        if self._index.total_length == 0:
+            # Ningún documento vivo tiene términos: lo que haya en las listas es de
+            # documentos borrados, y N o avgdl serían 0 en las fórmulas.
+            return {}
         if method is RankingMethod.TF_IDF:
-            if parameters is not None:
-                raise RankingParameterError("TF-IDF no tiene parámetros: k1 y b son de BM25")
-            accumulators = self._tf_idf(self._query_terms(query, stats), stats)
+            accumulators = self._tf_idf(query_terms, stats)
         else:
             bm25 = self._default_bm25 if parameters is None else parameters
-            accumulators = self._bm25(self._query_terms(query, stats), bm25, stats)
+            accumulators = self._bm25(query_terms, bm25, stats)
         deleted = self._index.document_columns().deleted
         if deleted:
             accumulators = {doc: score for doc, score in accumulators.items() if doc not in deleted}
@@ -194,7 +212,7 @@ class Ranker:
         document_count = self._index.document_count
         weights = [
             log_frequency_weight(term.query_frequency)
-            * math.log10(document_count / term.entry.document_frequency)
+            * math.log10(document_count / self._document_frequency(term.entry))
             for term in query_terms
         ]
         query_norm = math.sqrt(math.fsum(weight * weight for weight in weights))
@@ -217,30 +235,48 @@ class Ranker:
             return {}
         document_count = self._index.document_count
         k1, b = parameters.k1, parameters.b
-        # k1 · (1 - b + b · dl / avgdl) = intercept + slope · dl. Que haya algún término
-        # en el índice asegura algún documento no vacío, así que avgdl > 0.
+        # k1 · (1 - b + b · dl / avgdl) = intercept + slope · dl; `_scores` ya descartó
+        # avgdl = 0.
         intercept = k1 * (1 - b)
         slope = k1 * b / self._index.average_length
         lengths = self._index.document_columns().lengths
         accumulators: Accumulators = {}
         for term in query_terms:
-            idf = _bm25_idf(document_count, term.entry.document_frequency)
+            idf = _bm25_idf(document_count, self._document_frequency(term.entry))
             postings = self._read(term.entry, stats)
             _add_bm25(accumulators, postings, idf * (k1 + 1), intercept, slope, lengths)
         return accumulators
 
-    def _read(self, entry: LexiconEntry, stats: RankingStats) -> PostingList:
+    def _document_frequency(self, entry: TermEntry) -> int:
+        """El df con que pesa el término. Hasta la próxima fusión cuenta documentos
+        borrados, y N no: se acota a N para que el idf de TF-IDF no se vuelva negativo.
+        Tras una fusión el df nunca pasa de N y la cota no cambia nada."""
+        return min(entry.document_frequency, self._index.document_count)
+
+    def _read(self, entry: TermEntry, stats: RankingStats) -> PostingList:
         postings = self._index.postings_of(entry)
         stats.postings_read += len(postings)
         return postings
 
+    def _in_row_order(self, keys: list[RankingKey]) -> list[RankingKey]:
+        """Por puntaje y, a igual puntaje, por dirección de la fila."""
+        record_keys = self._index.document_columns().record_keys
+        return sorted(keys, key=lambda key: (key[0], record_keys[key[1]]))
+
     def _scored(self, key: RankingKey) -> ScoredDocument:
         negated_score, doc_id = key
-        return ScoredDocument(doc_id, self._index.document(doc_id).record_id, -negated_score)
+        record_id = self._index.document_columns().record_id(doc_id)
+        return ScoredDocument(doc_id, record_id, -negated_score)
 
     def _pop_in_order(self, keys: list[RankingKey]) -> Iterator[ScoredDocument]:
+        """Saca del montículo cada grupo de puntajes iguales y lo entrega en el orden de
+        sus filas."""
         while keys:
-            yield self._scored(heapq.heappop(keys))
+            tied = [heapq.heappop(keys)]
+            while keys and keys[0][0] == tied[0][0]:
+                tied.append(heapq.heappop(keys))
+            for key in self._in_row_order(tied):
+                yield self._scored(key)
 
 
 def _bm25_idf(document_count: int, document_frequency: int) -> float:

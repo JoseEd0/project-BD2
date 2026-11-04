@@ -1,4 +1,4 @@
-"""El formato en disco del índice invertido: sus cuatro archivos, sus cabeceras y sus registros.
+"""El formato en disco del índice invertido: sus archivos, sus cabeceras y sus registros.
 
 Ver `README.md` para el dibujo de cada archivo y las invariantes que lo sostienen.
 """
@@ -20,20 +20,32 @@ LEXICON_SUFFIX = ".lexicon"
 TERMS_SUFFIX = ".terms"
 POSTINGS_SUFFIX = ".postings"
 DOCUMENTS_SUFFIX = ".documents"
+MANIFEST_SUFFIX = ".manifest"
+DOCUMENT_MAP_SUFFIX = ".docmap"
+SEGMENT_INFIX = ".seg"
 BUILD_DIRECTORY_SUFFIX = ".spimi"
-INVERTED_VERSION = 1
+REPLACEMENT_SUFFIX = ".tmp"
+# La 2 lleva en la tabla de documentos los borrados y la longitud de los vivos, y guarda
+# las listas en segmentos que enumera el manifiesto.
+INVERTED_VERSION = 2
 LEXICON_MAGIC = b"IVLX"
 TERMS_MAGIC = b"IVTM"
 POSTINGS_MAGIC = b"IVPS"
 DOCUMENTS_MAGIC = b"IVDC"
+MANIFEST_MAGIC = b"IVMF"
+FIRST_GENERATION = 0
 LANGUAGE_CODE_BYTES = 8
 # Idioma, términos, bytes de los términos, postings, bytes de las fronteras, bloques y
 # pasadas de mezcla.
 LEXICON_HEADER_FIELDS = f"{LANGUAGE_CODE_BYTES}sQQQQII"
 TERMS_HEADER_FIELDS = "Q"
 POSTINGS_HEADER_FIELDS = "Q"
-# Documentos y suma de sus longitudes.
-DOCUMENTS_HEADER_FIELDS = "QQ"
+# `doc_id` repartidos, cuántos de ellos están borrados y suma de las longitudes de los vivos.
+DOCUMENTS_HEADER_FIELDS = "QQQ"
+# Siguiente generación de segmento, borrados cuyos postings ya quitó una fusión, fusiones
+# hechas y número de segmentos; detrás, la generación de cada segmento.
+MANIFEST_HEADER_FIELDS = "QQQI"
+GENERATION = struct.Struct("<Q")
 FIRST_DATA_PAGE = 1
 
 # Un posting son dos enteros sin signo de 32 bits, `doc_id` y `tf`, guardados en
@@ -79,6 +91,10 @@ class DocumentNotFoundError(InvertedIndexError):
     """El `doc_id` no corresponde a ningún documento del índice."""
 
 
+class DocumentAlreadyIndexedError(InvertedIndexError):
+    """Ya hay un documento vivo con la dirección de esa fila."""
+
+
 LEXICON_HEADER = FileHeader(
     LEXICON_MAGIC, INVERTED_VERSION, LEXICON_HEADER_FIELDS, InvertedFormatError, "un léxico"
 )
@@ -102,6 +118,13 @@ DOCUMENTS_HEADER = FileHeader(
     DOCUMENTS_HEADER_FIELDS,
     InvertedFormatError,
     "una tabla de documentos",
+)
+MANIFEST_HEADER = FileHeader(
+    MANIFEST_MAGIC,
+    INVERTED_VERSION,
+    MANIFEST_HEADER_FIELDS,
+    InvertedFormatError,
+    "un manifiesto de segmentos",
 )
 
 
@@ -141,14 +164,38 @@ def documents_path(path: Path) -> Path:
     return path.with_name(path.name + DOCUMENTS_SUFFIX)
 
 
+def manifest_path(path: Path) -> Path:
+    return path.with_name(path.name + MANIFEST_SUFFIX)
+
+
+def document_map_path(path: Path) -> Path:
+    return path.with_name(path.name + DOCUMENT_MAP_SUFFIX)
+
+
+def replacement_path(path: Path) -> Path:
+    """Donde se escribe un archivo que después reemplaza a `path` de una vez."""
+    return path.with_name(path.name + REPLACEMENT_SUFFIX)
+
+
+def segment_base(path: Path, generation: int) -> Path:
+    """La ruta base de un segmento: `productos.inv.seg3` da `productos.inv.seg3.lexicon`…"""
+    return path.with_name(f"{path.name}{SEGMENT_INFIX}{generation}")
+
+
+def segment_files(base: Path) -> list[Path]:
+    """Los tres archivos de un segmento: léxico, términos y postings."""
+    return [lexicon_path(base), terms_path(base), postings_path(base)]
+
+
 def build_directory(path: Path) -> Path:
-    """El directorio de los bloques temporales de SPIMI, que no sobrevive a la construcción."""
+    """El directorio de los bloques temporales de SPIMI y de las fusiones, que no sobrevive
+    a ninguna de las dos."""
     return path.with_name(path.name + BUILD_DIRECTORY_SUFFIX)
 
 
-def files_of(path: Path) -> list[Path]:
-    """Los archivos que ocupa un índice invertido guardado en `path`."""
-    return [lexicon_path(path), terms_path(path), postings_path(path), documents_path(path)]
+def built_files(path: Path) -> list[Path]:
+    """Lo que escribe SPIMI: el primer segmento y la tabla de documentos."""
+    return [*segment_files(segment_base(path, FIRST_GENERATION)), documents_path(path)]
 
 
 def max_term_bytes(config: EngineConfig) -> int:

@@ -18,7 +18,7 @@ from inverted_support import (
 
 from config import EngineConfig
 from index.inverted import InvertedIndex
-from index.inverted.format import build_directory, lexicon_path
+from index.inverted.format import FIRST_GENERATION, build_directory, lexicon_path, segment_base
 from index.inverted.spimi import POSTING_ENTRY_BYTES, TERM_ENTRY_BYTES, SpimiBlock
 from storage.record_id import RecordId
 from text import Analyzer
@@ -41,13 +41,18 @@ def with_blocks(config: EngineConfig, block_bytes: int, fan_in: int) -> EngineCo
     return dataclasses.replace(config, spimi_block_bytes=block_bytes, merge_fan_in=fan_in)
 
 
-def file_bytes(path: Path) -> list[bytes]:
-    return [file.read_bytes() for file in InvertedIndex.files_of(path)]
+def main_lexicon(path: Path) -> Path:
+    return lexicon_path(segment_base(path, FIRST_GENERATION))
+
+
+def file_bytes_but_the_lexicon(path: Path) -> list[bytes]:
+    files = InvertedIndex.files_of(path)
+    return [file.read_bytes() for file in files if file != main_lexicon(path)]
 
 
 def lexicon_without_header(path: Path, config: EngineConfig) -> bytes:
     """El léxico sin la página 0, que además anota cuántos bloques y pasadas hubo."""
-    return lexicon_path(path).read_bytes()[config.page_size :]
+    return main_lexicon(path).read_bytes()[config.page_size :]
 
 
 def test_the_block_estimate_counts_terms_and_postings():
@@ -78,7 +83,7 @@ def test_many_blocks_and_passes_give_the_same_index_as_one_block(config: EngineC
             assert blocks.postings(entry.term) == single.postings(entry.term)
         for statistic in ("document_count", "total_length", "vocabulary_size", "posting_count"):
             assert getattr(blocks, statistic) == getattr(single, statistic)
-    assert file_bytes(blocks_path)[1:] == file_bytes(single_path)[1:]
+    assert file_bytes_but_the_lexicon(blocks_path) == file_bytes_but_the_lexicon(single_path)
     assert lexicon_without_header(blocks_path, config) == lexicon_without_header(
         single_path, config
     )

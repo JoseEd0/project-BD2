@@ -1,5 +1,5 @@
-"""El índice invertido como índice secundario: por la interfaz de `ColumnIndex` y, con el
-método registrado como lo hará el SQL, a través de las transacciones del motor."""
+"""El índice invertido como índice secundario: por la interfaz de `ColumnIndex` y, creado
+con `CREATE INDEX … USING INVERTED`, a través de las transacciones del motor."""
 
 from pathlib import Path
 
@@ -17,10 +17,7 @@ from index.inverted import (
     TextSearchEqualityError,
     TextSearchIndex,
 )
-from query import index_methods
 from query.engine import Engine
-from query.index_methods import IndexMethod
-from sql.nodes import IndexType
 from storage.record import RecordSerializer
 from storage.record_id import RecordId
 from storage.schema import Field, Schema
@@ -36,6 +33,7 @@ PRODUCTS = [
     (5, "Cargador rápido USB"),
 ]
 QUERIES = ["teclado", "usb cable", "funda cuero", "cargador teclado usb"]
+INDEX_NAME = "idx_texto"
 
 
 @pytest.fixture
@@ -169,31 +167,7 @@ def test_files_of_lists_what_drop_index_has_to_remove(
 
 
 @pytest.fixture
-def text_indexes(monkeypatch: pytest.MonkeyPatch) -> list[TextSearchIndex]:
-    """Registra el método INVERTED como lo hará la integración con SQL, y anota cada índice
-    que la tabla abre: el último es el que está en uso."""
-    opened: list[TextSearchIndex] = []
-
-    def opener(
-        path: Path, serializer: RecordSerializer, column: str, config: EngineConfig
-    ) -> TextSearchIndex:
-        index = TextSearchIndex(path, serializer, column, config)
-        opened.append(index)
-        return index
-
-    method = IndexMethod(
-        method=IndexType.INVERTED,
-        capabilities=frozenset(),
-        opener=opener,
-        refusal_for=lambda field: None,
-        files_of=TextSearchIndex.files_of,
-    )
-    monkeypatch.setitem(index_methods._METHODS, IndexType.INVERTED, method)
-    return opened
-
-
-@pytest.fixture
-def engine(config: EngineConfig, text_indexes: list[TextSearchIndex]):
+def engine(config: EngineConfig):
     with Engine(config) as instance:
         yield instance
 
@@ -211,18 +185,20 @@ def session(engine: Engine, config: EngineConfig):
             )
         )
         instance.execute(f"INSERT INTO productos VALUES {values}")
-        instance.execute("CREATE INDEX ON productos USING INVERTED (texto)")
+        instance.execute(f"CREATE INDEX {INDEX_NAME} ON productos USING INVERTED (texto)")
         yield instance
 
 
-def searches(
-    engine: Engine, config: EngineConfig, text_indexes: list[TextSearchIndex]
-) -> dict[tuple[str, RankingMethod], list[tuple[float, int]]]:
+def text_index(engine: Engine) -> TextSearchIndex:
+    return engine.table("productos").text_search_index(INDEX_NAME)
+
+
+def searches(engine: Engine) -> dict[tuple[str, RankingMethod], list[tuple[float, int]]]:
     """Cada búsqueda como `(puntaje, id)` de mayor a menor, con el id de la fila en vez de
     su dirección: deshacer un borrado puede dejar la fila en otra ranura del heap."""
     table = engine.table("productos")
     ids = {address: table.unpack(record)[0] for address, record in table.addressed_scan()}
-    ranker = Ranker(text_indexes[-1].inverted_index, config)
+    ranker = text_index(engine).ranker()
     return {
         (query, method): sorted(
             (-document.score, ids[document.record_id]) for document in ranker.ranked(query, method)
@@ -236,20 +212,18 @@ def matching_ids(results: dict[tuple[str, RankingMethod], list[tuple[float, int]
     return {key: sorted(identifier for _, identifier in found) for key, found in results.items()}
 
 
-def test_a_commit_writes_the_pending_block(
-    session: Session, text_indexes: list[TextSearchIndex]
-):
+def test_a_commit_writes_the_pending_block(session: Session, engine: Engine):
     session.execute("INSERT INTO productos VALUES (100, 'teclado nuevo', 1)")
-    index = text_indexes[-1].inverted_index
+    index = text_index(engine).inverted_index
     assert index.pending_document_count == 0
     assert index.document_count == 31
 
 
 def test_an_update_of_another_column_leaves_the_text_index_alone(
-    session: Session, text_indexes: list[TextSearchIndex]
+    session: Session, engine: Engine
 ):
     session.execute("UPDATE productos SET precio = precio * 2")
-    index = text_indexes[-1].inverted_index
+    index = text_index(engine).inverted_index
     assert index.deleted_count == 0
     assert index.document_count == 30
 
@@ -269,21 +243,15 @@ def test_an_update_of_another_column_leaves_the_text_index_alone(
         ],
     ],
 )
-def test_a_rollback_leaves_the_same_results(
-    changes: list[str],
-    engine: Engine,
-    session: Session,
-    config: EngineConfig,
-    text_indexes: list[TextSearchIndex],
-):
+def test_a_rollback_leaves_the_same_results(changes: list[str], engine: Engine, session: Session):
     """Antes de fusionar coinciden los documentos encontrados: los que dejó el deshacer como
     lápidas siguen en el df. Tras la fusión, también cada puntaje."""
-    before = searches(engine, config, text_indexes)
+    before = searches(engine)
     session.execute("BEGIN")
     for change in changes:
         session.execute(change)
-    assert searches(engine, config, text_indexes) != before
+    assert searches(engine) != before
     session.execute("ROLLBACK")
-    assert matching_ids(searches(engine, config, text_indexes)) == matching_ids(before)
-    text_indexes[-1].inverted_index.merge()
-    assert searches(engine, config, text_indexes) == before
+    assert matching_ids(searches(engine)) == matching_ids(before)
+    text_index(engine).inverted_index.merge()
+    assert searches(engine) == before

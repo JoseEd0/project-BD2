@@ -10,6 +10,8 @@ from storage.types import FieldType
 NUMBER = Field("n", FieldType.INT)
 PLACE = Field("lugar", FieldType.POINT)
 FEATURES = Field("rasgos", FieldType.VECTOR, 4)
+NAME = Field("nombre", FieldType.STRING, 20)
+DESCRIPTION = Field("descripcion", FieldType.TEXT)
 
 
 @pytest.mark.parametrize(
@@ -18,6 +20,7 @@ FEATURES = Field("rasgos", FieldType.VECTOR, 4)
         (IndexType.BTREE, {Capability.EQUALITY, Capability.RANGE}),
         (IndexType.HASH, {Capability.EQUALITY}),
         (IndexType.RTREE, {Capability.EQUALITY, Capability.SPATIAL}),
+        (IndexType.INVERTED, {Capability.TEXT_SEARCH}),
     ],
 )
 def test_each_method_declares_what_it_answers(method: IndexType, capabilities: set):
@@ -37,6 +40,10 @@ def test_each_method_declares_what_it_answers(method: IndexType, capabilities: s
         (IndexType.HASH, PLACE, True),
         (IndexType.RTREE, PLACE, False),
         (IndexType.RTREE, NUMBER, True),
+        (IndexType.INVERTED, NAME, False),
+        (IndexType.INVERTED, DESCRIPTION, False),
+        (IndexType.INVERTED, NUMBER, True),
+        (IndexType.INVERTED, PLACE, True),
     ],
 )
 def test_each_method_says_which_columns_it_serves(method: IndexType, field: Field, refused: bool):
@@ -50,7 +57,13 @@ def test_methods_that_are_not_secondary_indexes_are_not_registered():
     assert method_named(IndexType.HNSW) is None
 
 
-def test_no_method_accepts_options_yet():
+def test_a_method_without_options_refuses_every_one():
     known = method_named(IndexType.HASH)
     assert known is not None
     assert known.unknown_options({"m": 16, "Lists": 4}) == ["Lists", "m"]
+
+
+def test_the_inverted_index_takes_its_language():
+    known = method_named(IndexType.INVERTED)
+    assert known is not None
+    assert known.unknown_options({"IDIOMA": "en", "k1": 1.2}) == ["k1"]

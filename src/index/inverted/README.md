@@ -622,8 +622,8 @@ siempre:
 Tras un `ROLLBACK`, una búsqueda encuentra los mismos documentos que antes. Los puntajes
 difieren solo por el df, que cuenta las lápidas que dejó el deshacer; tras la fusión son
 idénticos, y el orden también, porque los empates no dependen del `doc_id`. Es el test de
-`test_text_search_index.py`, que pasa por el motor y las sesiones con el método `INVERTED`
-registrado como lo hará el SQL.
+`test_text_search_index.py`, que pasa por el motor y las sesiones con un índice creado con
+`CREATE INDEX … USING INVERTED`.
 
 ### El índice como índice secundario
 
@@ -640,9 +640,12 @@ archivos con `files_of` para `DROP INDEX`.
 - El valor de la columna tiene que ser texto (`NotTextValueError`). Lo recibe del mismo
   `_value_of` que los demás índices, así que no depende de cómo guarde la tabla el texto.
 
-Todavía no está registrado en `query/index_methods.py`: registrarlo pide pasar las opciones
-del `WITH (...)` al abrir el índice, que hoy no llegan, y que el planificador sepa
-responder `MATCH`. Es la integración con SQL.
+En SQL es el método `INVERTED` de [`query/index_methods.py`](../../query/index_methods.py):
+`CREATE INDEX ON productos USING INVERTED (texto) WITH (idioma='es')`, solo sobre columnas
+`VARCHAR` o `TEXT` de un heap file. El registro le pasa al abrirlo las opciones de su
+`WITH`, que el catálogo guarda, así que reabrir el motor lo abre en su idioma. `ranker()`
+da el `Ranker` del índice, que es lo que usa el acceso `TextSearchScan` de un `MATCH` (ver
+[`query/README.md`](../../query/README.md#búsqueda-de-texto)).
 
 ### El mantenimiento medido con ESCI
 

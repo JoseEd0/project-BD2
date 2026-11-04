@@ -48,17 +48,20 @@ primaria** es un heap file sin ningún índice: todo se resuelve recorriéndola.
 Una columna `UNIQUE` recibe también su índice, por el mismo motivo, y el motor rechaza un
 valor repetido al insertar y al actualizar. Varios NULL no chocan entre sí.
 
-Los **índices secundarios** (`CREATE INDEX … USING BTREE|HASH|RTREE`) solo existen sobre
-heap files, porque necesitan que cada fila tenga una dirección física estable. Un archivo
-secuencial mueve las filas al reorganizarse y un B+ agrupado al dividir nodos.
+Los **índices secundarios** (`CREATE INDEX … USING BTREE|HASH|RTREE|INVERTED`) solo
+existen sobre heap files, porque necesitan que cada fila tenga una dirección física
+estable. Un archivo secuencial mueve las filas al reorganizarse y un B+ agrupado al dividir
+nodos.
 
 Una columna puede tener **varios índices, uno por método**: un B+ para los rangos y un hash
 para las igualdades. Qué sabe hacer cada método vive en un solo lugar,
-[`index_methods.py`](index_methods.py): sus capacidades (igualdad, rango, espacial), las
-columnas que admite y las opciones de `WITH (...)` que acepta (hoy, ninguno acepta
-opciones, así que un `WITH` se rechaza en vez de ignorarse). El planificador le pide a ese
-registro el índice de una columna que sepa responder la condición; si hay varios, gana el
-más especializado —para una igualdad, el hash antes que el B+—.
+[`index_methods.py`](index_methods.py): sus capacidades (igualdad, rango, espacial,
+búsqueda de texto), las columnas que admite y las opciones de `WITH (...)` que acepta. Solo
+el índice invertido tiene una, `idioma`; a los demás un `WITH` se les rechaza en vez de
+ignorarse. El planificador le pide a ese registro el índice de una columna que sepa
+responder la condición; si hay varios, gana el más especializado —para una igualdad, el
+hash antes que el B+—. Una columna `UNIQUE` necesita un índice que busque por igualdad: con
+`INDEX INVERTED` se rechaza.
 
 El catálogo lleva **versión de formato** y se escribe **de forma atómica**: en un archivo
 aparte que después ocupa el lugar del anterior con un `rename`. Escribirlo encima y morir a

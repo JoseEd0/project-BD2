@@ -12,6 +12,8 @@ gráficas de [`figures/`](figures/) y todas las tablas de este documento.
     --points-file data/datasets/lugares_peru.csv
 .venv/bin/python -m benchmarks.text_analyzer_benchmark --repetitions 5 \
     --input Proyecto_Integrador_BD2.md docs/latex/informe/*.tex
+.venv/bin/python -m benchmarks.text_benchmark --corpus data/datasets/esci_es \
+    --sizes 1000 10000 100000 --repetitions 5
 .venv/bin/python -m benchmarks.plot              # redibuja todas las gráficas
 ```
 
@@ -23,8 +25,12 @@ gráficas de [`figures/`](figures/) y todas las tablas de este documento.
 | `--page-size` | tamaño de página del motor (almacenamiento e índices) |
 | `--radii-km`, `--neighbours` | radios y valores de `k` del experimento espacial |
 | `--points-file` | CSV con una columna `POINT` del que tomar puntos reales (experimento espacial) |
-| `--postgres-dsn` | conexión al PostgreSQL contra el que se mide GiST |
-| `--input`, `--repetitions`, `--language` | textos, pasadas calientes e idioma de la medida del analizador de texto ([resultado](../src/text/README.md#velocidad-medida)) |
+| `--postgres-dsn` | conexión al PostgreSQL contra el que se mide GiST o GIN |
+| `--corpus` | carpeta del corpus ESCI con sus subconjuntos (experimento de texto) |
+| `--k`, `--k1`, `--b` | el `k` del top-k, de Precision@k y de Recall@k, y los parámetros de BM25 |
+| `--postgres-configuration`, `--ts-rank-normalization` | diccionario de PostgreSQL y normalización de `ts_rank_cd` |
+| `--input`, `--repetitions`, `--language` | textos, pasadas calientes e idioma de la medida del analizador de texto ([resultado](../src/text/README.md#velocidad-medida)); `--repetitions` y `--language` también en el de texto |
+| `--queries` | en el experimento de texto, consultas por cubeta (por omisión, todas las del subconjunto) |
 | `--output` | dónde dejar el JSON |
 
 | Experimento | Qué compara | Gráficas |
@@ -32,13 +38,15 @@ gráficas de [`figures/`](figures/) y todas las tablas de este documento.
 | [1. Gestión de archivos](#1-gestión-de-archivos--heap-vs-secuencial) | heap file vs archivo secuencial | [almacenamiento](figures/almacenamiento.png) |
 | [2. Indexación](#2-indexación--b-agrupado-vs-b-no-agrupado-vs-hash-extendible) | B+ agrupado vs B+ no agrupado vs hash extendible | [índices](figures/indices.png) |
 | [3. Datos espaciales](#3-datos-espaciales--búsqueda-secuencial-vs-r-tree-vs-gist) | búsqueda secuencial vs R-Tree vs GiST de PostgreSQL | [radio](figures/espacial-radio.png), [k-NN](figures/espacial-knn.png), [índice](figures/espacial-indice.png), [nodos](figures/espacial-nodos.png) |
+| [4. Búsqueda de texto](#4-búsqueda-de-texto--tf-idf--coseno-vs-bm25-vs-gin) | TF-IDF + coseno vs BM25 vs GIN de PostgreSQL | [consultas](figures/texto-consultas.png), [relevancia](figures/texto-relevancia.png), [índice](figures/texto-indice.png) |
 
 **Cómo leer las gráficas.** Cada una es una fila de paneles, uno por operación, con el
 número de filas en horizontal y una línea por técnica. Los dos ejes son logarítmicos: los
 tamaños van de 1 000 a 100 000 y los tiempos cubren cuatro órdenes de magnitud, así que en
 escala lineal solo se vería la técnica más lenta. En un eje logarítmico **la pendiente dice
 cómo escala** la técnica: una línea plana no depende del tamaño y una a 45° crece en
-proporción a él. El número junto al último punto es el valor con 100 000 filas.
+proporción a él. El número junto al último punto es el valor con 100 000 filas. La
+precisión y el recall, que son fracciones de 0 a 1, van en barras sobre un eje lineal.
 
 ## 1. Gestión de archivos — heap vs secuencial
 
@@ -376,6 +384,240 @@ cifras de otra ejecución pueden diferir ligeramente de las publicadas.
 
 El tiempo de GiST se mide desde el cliente e incluye el viaje por el socket local, que el
 motor propio no paga porque corre en el mismo proceso. Aun así es el más rápido.
+
+## 4. Búsqueda de texto — TF-IDF + coseno vs BM25 vs GIN
+
+`text_benchmark.py` responde las mismas consultas, sobre los mismos productos, con tres
+técnicas:
+
+| Técnica | Qué es |
+|---|---|
+| **TF-IDF + coseno** | `Ranker.top_k` con SMART lnc.ltc sobre el índice invertido de [`src/index/inverted/`](../src/index/inverted/README.md) |
+| **BM25** | el **mismo** índice y el mismo `Ranker`, con `k1` = 1.2 y `b` = 0.75 |
+| **GIN (PostgreSQL)** | PostgreSQL 17.10: columna `tsvector` generada con `to_tsvector('spanish', texto)`, índice GIN sobre ella y orden con `ts_rank_cd` |
+
+**El corpus es real.** Fichas de producto de Amazon en español, del Shopping Queries
+Dataset (ESCI), con los subconjuntos de 1 000, 10 000 y 100 000 productos que describe
+[`esci/README.md`](esci/README.md). Las consultas son búsquedas reales de la tienda, en
+tres cubetas por su número de palabras (1, 3 y 5 o más): 8 por cubeta con 1 000 productos y
+50 con 10 000 y 100 000. Un producto es **relevante** si un anotador lo calificó como exacto
+(E); Precision@10 y Recall@10 se calculan contra esos juicios.
+
+**Cómo se pregunta a cada uno.**
+
+- El motor se mide a nivel del índice: `Ranker.top_k(consulta, método, 10)` sobre el índice
+  abierto, sin pasar por el SQL. Un mismo índice sirve a los dos rankings, así que entre
+  ellos solo cambia la fórmula.
+- A PostgreSQL se le pregunta por SQL desde el cliente, con el viaje por el socket local
+  incluido. La consulta es el **OR** de sus términos, como en el motor:
+  `plainto_tsquery` analiza el texto igual que `to_tsvector` y une los lexemas con `&`, y
+  el experimento cambia cada ` & ` por ` | ` (un lexema no contiene espacios, así que no
+  se toca nada más). Se ordena con `ts_rank_cd(vector, consulta)` con la normalización por
+  omisión (0), y a igual puntaje por el orden de carga, como el motor.
+- PostgreSQL planifica cada consulta con su texto (`plan_cache_mode = force_custom_plan`):
+  con un plan genérico la consulta deja de ser una constante y `ts_rank_cd` la vuelve a
+  calcular por cada fila. Con `enable_seqscan = off` se mide el índice, y `EXPLAIN` confirma
+  que se usa en las 324 consultas.
+- Los dos tienen la misma caché propia: el buffer pool del motor son 2 048 páginas de
+  4 KB (8 MiB) y la tabla temporal de PostgreSQL usa `temp_buffers` = 8 MB, el valor por
+  omisión. Lo que no cabe, los dos lo leen de la caché de archivos del sistema.
+- **Construir** empieza en los dos con los textos ya cargados: en el motor, una lista en
+  memoria; en PostgreSQL, la tabla. Cuenta el análisis del texto y el índice: en el motor,
+  `InvertedIndex.build`; en PostgreSQL, calcular la columna `tsvector` y `CREATE INDEX`.
+
+Cada consulta se repite 5 veces y cada índice se construye 3; cuenta la vez más
+rápida, porque el equipo era compartido y otro proceso solo puede sumar tiempo. Todas las
+repeticiones están en el JSON. Apple M4 Pro, macOS, Python 3.12.
+
+### Antes de medir: ¿qué candidatos ve cada uno?
+
+Un candidato es un producto que contiene algún término de la consulta. Los dos analizadores
+usan el stemmer Snowball del español, pero no cortan el texto igual, así que sus candidatos
+no tienen por qué coincidir. El experimento compara los dos conjuntos de cada consulta:
+
+| Productos | Candidatos idénticos | Términos idénticos | Jaccard medio | En los dos | Solo el motor | Solo GIN |
+|---:|---:|---:|---:|---:|---:|---:|
+| 1 000 | 15 / 24 | 24 / 24 | 0.98 | 1 914 | 148 | 35 |
+| 10 000 | 48 / 150 | 135 / 150 | 0.90 | 111 866 | 29 408 | 4 568 |
+| 100 000 | 37 / 150 | 135 / 150 | 0.89 | 1 103 340 | 294 767 | 45 072 |
+
+Las raíces coinciden en 135 de las 150 consultas: lo que cambia es **dónde se corta una
+palabra**. El motor corta entre letras y cifras y en los puntos; PostgreSQL deja «ps4»,
+«5ghz» o «m.zuiko» como una sola palabra. Y las listas de stopwords no son iguales: «si» lo
+es para el motor y no para PostgreSQL. Las consultas con más diferencia, con 100 000
+productos:
+
+| Consulta | Términos del motor | Términos de GIN | Solo el motor | Solo GIN |
+|---|---|---|---:|---:|
+| x10sdv | `10 sdv x` | `x10sdv` | 41 251 | 0 |
+| nintengo 2ds new xl lapiz | `2 ds lapiz new ninteng xl` | `2ds lapiz new ninteng xl` | 33 334 | 7 |
+| 200x50 rueda patinete sin cámara de aire | `200 50 air cam patinet rued x` | `200x50 air cam patinet rued` | 29 606 | 3 |
+| ps4 terror vr | `4 ps terror vr` | `ps4 terror vr` | 23 678 | 0 |
+| repetidor wifi 5ghz | `5 ghz repetidor wifi` | `5ghz repetidor wifi` | 20 126 | 0 |
+| si tienes un papa mago | `mag pap` | `mag pap si` | 42 | 18 812 |
+
+Cortar «ps4» en `ps` y `4` hace que la consulta encuentre todo producto con un 4. Por eso
+el motor tiene más candidatos: con 100 000 productos, el 96 % de los de GIN están
+también en el motor, y el 21 % de los del motor son solo suyos. La diferencia es del
+analizador, no del índice.
+
+### Tiempo de consulta
+
+![Tiempo por consulta de TF-IDF, BM25 y GIN según el número de palabras](figures/texto-consultas.png)
+
+Tiempo por consulta, en milisegundos:
+
+| Palabras | Técnica | 1 000 | 10 000 | 100 000 |
+|---|---|---:|---:|---:|
+| 1 palabra | TF-IDF + coseno | 0.030 | 0.069 | **0.35** |
+|  | BM25 | **0.029** | **0.065** | 0.42 |
+|  | GIN | 0.052 | 0.12 | 0.67 |
+| 3 palabras | TF-IDF + coseno | 0.083 | 0.22 | **1.98** |
+|  | BM25 | **0.081** | **0.21** | 2.48 |
+|  | GIN | 0.22 | 2.17 | 21.5 |
+| 5 o más | TF-IDF + coseno | 0.11 | **0.44** | 6.99 |
+|  | BM25 | **0.11** | 0.44 | **6.33** |
+|  | GIN | 0.38 | 5.78 | 56.1 |
+
+### Dónde se va el tiempo
+
+El motor recorre las listas de postings de los términos y suma en un acumulador por
+documento. PostgreSQL usa el GIN para saber qué filas coinciden, y luego lee el `tsvector`
+de cada una y calcula `ts_rank_cd`. El `EXPLAIN ANALYZE` separa las dos partes:
+
+| Palabras | Postings leídos (1 000) | (10 000) | (100 000) | Candidatos del motor (100 000) | Filas de GIN (100 000) | GIN: índice (ms) | GIN: ejecución completa (ms) |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| 1 palabra | 9 | 176 | 1 620 | 1 464 | 235 | 0.012 | 0.46 |
+| 3 palabras | 130 | 915 | 8 781 | 8 203 | 6 986 | 0.44 | 22.8 |
+| 5 o más | 206 | 2 252 | 21 911 | 18 296 | 15 747 | 1.41 | 60.2 |
+
+### Relevancia
+
+![Precision@10 y Recall@10 de TF-IDF, BM25 y GIN por número de palabras](figures/texto-relevancia.png)
+
+Precision@10, media por cubeta; en negrita, la mejor de cada tamaño:
+
+| Productos | Técnica | 1 palabra | 3 palabras | 5 o más | Todas |
+|---:|---|---:|---:|---:|---:|
+| 1 000 | TF-IDF + coseno | **0.60** | 0.71 | **0.34** | 0.55 |
+|  | BM25 | **0.60** | **0.76** | **0.34** | **0.57** |
+|  | GIN | **0.60** | 0.62 | 0.21 | 0.48 |
+| 10 000 | TF-IDF + coseno | **0.54** | 0.48 | 0.39 | 0.47 |
+|  | BM25 | 0.53 | **0.57** | **0.44** | **0.52** |
+|  | GIN | 0.49 | 0.30 | 0.15 | 0.32 |
+| 100 000 | TF-IDF + coseno | 0.33 | 0.29 | 0.22 | 0.28 |
+|  | BM25 | **0.33** | **0.43** | **0.29** | **0.35** |
+|  | GIN | 0.32 | 0.10 | 0.03 | 0.15 |
+
+Recall@10:
+
+| Productos | Técnica | 1 palabra | 3 palabras | 5 o más | Todas |
+|---:|---|---:|---:|---:|---:|
+| 1 000 | TF-IDF + coseno | **0.46** | 0.52 | **0.67** | 0.55 |
+|  | BM25 | **0.46** | **0.55** | 0.67 | **0.56** |
+|  | GIN | **0.46** | 0.39 | 0.25 | 0.37 |
+| 10 000 | TF-IDF + coseno | **0.42** | 0.39 | 0.45 | 0.42 |
+|  | BM25 | 0.41 | **0.43** | **0.46** | **0.43** |
+|  | GIN | 0.40 | 0.18 | 0.10 | 0.23 |
+| 100 000 | TF-IDF + coseno | 0.26 | 0.24 | 0.30 | 0.27 |
+|  | BM25 | **0.27** | **0.34** | **0.30** | **0.30** |
+|  | GIN | 0.27 | 0.06 | 0.01 | 0.11 |
+
+Con 100 000 productos cada consulta tiene en promedio 13.2 productos exactos, así que ni
+un top 10 perfecto llega siempre a un Recall@10 de 1.
+
+### Construcción, espacio y memoria
+
+![Construcción, espacio en disco y memoria del índice invertido y de GIN](figures/texto-indice.png)
+
+| Medida | Técnica | 1 000 | 10 000 | 100 000 |
+|---|---|---:|---:|---:|
+| Construcción (ms) | índice invertido (SPIMI) | 376 | 2 288 | 22 262 |
+|  | GIN, total | **110** | **1 161** | **12 073** |
+|  | GIN: columna `tsvector` | 85.7 | 871 | 9 229 |
+|  | GIN: `CREATE INDEX` | 23.9 | 290 | 2 844 |
+| Espacio del índice (KiB) | índice invertido (SPIMI) | **1 064** | 7 832 | 69 208 |
+|  | GIN | 1 080 | **6 360** | **37 840** |
+|  | GIN: columna `tsvector` | 1 136 | 11 641 | 117 420 |
+| Memoria pico al construir (KiB) | índice invertido (SPIMI) | 4 846 | 21 055 | 27 224 |
+| Memoria pico al consultar (KiB) | TF-IDF + coseno | 69.9 | 853 | 17 384 |
+|  | BM25 | **44.4** | **850** | **16 799** |
+
+El espacio del índice invertido son sus cuatro archivos: con 100 000 productos, léxico
+4 624 KiB, términos 1 020, postings 61 696 y documentos 1 868. El de GIN es
+`pg_relation_size` del índice; la columna `tsvector` va aparte porque está en la tabla,
+pero el ranking la necesita. La memoria es la de Python, medida con `tracemalloc` en una
+construcción aparte; la de PostgreSQL no se puede medir igual desde fuera y no se reporta.
+
+### Conclusiones
+
+**BM25 es el más relevante, en los tres tamaños.** Su Precision@10 media es 0.57, 0.52 y
+0.35, frente a 0.55, 0.47 y 0.28 de TF-IDF. Con una palabra las tres técnicas casi
+empatan (a lo sumo 0.04 de diferencia): con un solo término, ordenar es contar
+cuántas veces aparece y en cuánto texto. La ventaja de BM25 está en las consultas largas:
+con 100 000 productos gana por 0.14 con 3 palabras y por 0.07 con 5 o más. Satura la
+frecuencia de cada término (`k1`), así que un producto no gana por repetir una palabra, y
+pesa más el que contiene varios términos distintos.
+
+**GIN no ordena: encuentra.** El índice dice qué filas contienen algún término; el orden lo
+pone `ts_rank_cd`, que con la normalización por omisión no divide por la longitud del
+documento, y un texto largo que repite los términos suma más. Con 10 000 productos su
+Precision@10 con 3 palabras es 0.30 y con 100 000 baja a 0.10: 2.9 veces menos, cuando
+BM25 baja 1.3 veces. Con 5 o más palabras queda en 0.03. Es la parte del
+experimento que más depende de una opción: `--ts-rank-normalization` la cambia.
+
+**El motor responde antes que PostgreSQL con 3 palabras o más**, y la tabla de arriba dice
+por qué. Con 100 000 productos y 5 o más palabras, el GIN encuentra las
+15 747 filas en 1.41 ms, el 2.3 % de la ejecución; el resto es leer el `tsvector` de cada fila
+y puntuarla, unos 3.8 µs por fila. El motor tiene la frecuencia de cada término dentro
+del posting y la longitud de cada documento en memoria: puntuar le cuesta unos
+289 ns por posting con BM25 y 319 con TF-IDF. GIN es C y el motor Python, pero la
+diferencia no está en el lenguaje sino en lo que cada uno guarda en el índice: GIN está
+hecho para responder qué filas coinciden, no para ordenarlas. Con una palabra hay pocas filas
+que leer y la distancia se acorta (1.6 veces con 100 000 productos, frente a
+9 con 3 palabras).
+
+**El tiempo del motor sigue a los postings que lee.** De 10 000 a 100 000 productos, una
+consulta de 5 o más palabras lee 9.7 veces más postings y BM25 tarda 14.2 veces más. Que
+tarde algo más de lo que crecen los postings encaja con la caché, aunque no se midió aparte:
+con 10 000 productos el archivo de postings (6.0 MiB) cabe en el buffer pool de 8 MiB, y
+con 100 000 (60 MiB) no.
+
+**GIN construye más rápido y ocupa menos.** Con 100 000 productos, PostgreSQL calcula la
+columna y crea el índice en 12.1 s; el motor tarda 22.3 s, 1.8 veces más, la mayor parte
+analizando el texto en Python (lo mide el [README del índice](../src/index/inverted/README.md#medido-con-esci)). El índice GIN ocupa 37.0 MiB y el invertido 67.6 MiB
+(1.8 veces más): GIN comprime sus listas, y el motor guarda los postings sin
+comprimir, 8 bytes cada uno, para decodificarlos en C; son el 89 % de sus archivos.
+Pero el ranking de GIN necesita además la columna `tsvector`, que ocupa 115 MiB.
+
+**La memoria de SPIMI está acotada.** Con 100 000 productos la construcción escribe
+9 bloques y los mezcla en 2 pasadas; diez veces más documentos que con 10 000 cuestan
+1.3 veces la memoria (20.6 MiB y 26.6 MiB).
+
+### Resumen: ventajas y desventajas
+
+| | TF-IDF + coseno | BM25 | GIN (PostgreSQL) |
+|---|---|---|---|
+| **Ventajas** | Sin parámetros que ajustar · la norma del documento se calcula al indexar y no cambia · empata con BM25 en consultas de una palabra | El más relevante: Precision@10 de 0.35 con 100 000 productos · satura la frecuencia y normaliza por longitud · el mismo índice y las mismas listas que TF-IDF | Construye 1.8 veces más rápido · índice 1.8 veces más chico · maduro, transaccional y concurrente |
+| **Desventajas** | Pierde frente a BM25 en consultas largas: 0.22 contra 0.29 con 5 o más palabras · el idf solo pesa en la consulta | Dos parámetros (`k1`, `b`) que dependen del corpus · necesita la longitud de cada documento a mano en memoria | No ordena por sí mismo: `ts_rank_cd` relee el `tsvector` de cada fila, 9 veces más lento que BM25 con 5 o más palabras · con la normalización por omisión prefiere textos largos: Precision@10 de 0.15 · el ranking necesita además la columna `tsvector` (115 MiB) |
+| **Se elige cuando** | Consultas cortas o un corpus donde no hay con qué ajustar `k1` y `b` | Búsqueda por relevancia en general, sobre todo con consultas de varias palabras | Hace falta filtrar por palabras dentro de un PostgreSQL y el orden importa poco |
+
+### Reproducirlo
+
+```bash
+.venv/bin/pip install -e ".[postgres,plots,datasets]"
+.venv/bin/python -m benchmarks.esci.download --salida data/datasets/esci_es
+.venv/bin/python -m benchmarks.esci.subsets --corpus data/datasets/esci_es \
+    --sizes 1000 10000 100000 --queries-per-bucket 50 --max-judged-share 0.5 --seed 20261104
+export BENCH_POSTGRES_DSN="dbname=minigestor_bench"
+.venv/bin/python -m benchmarks.text_benchmark --corpus data/datasets/esci_es \
+    --sizes 1000 10000 100000 --repetitions 5 --build-repetitions 3
+```
+
+Tarda unos seis minutos, casi todo en construir el índice de 100 000 productos (tres veces,
+y una cuarta con `tracemalloc`). El experimento no escribe los subconjuntos: si falta uno,
+dice qué comando lo crea. En PostgreSQL solo usa tablas temporales. Sin
+`BENCH_POSTGRES_DSN` mide TF-IDF y BM25 y omite GIN.
 
 ## Gráficas
 

@@ -24,6 +24,10 @@ DEFAULT_RTREE_MIN_FILL = 0.40
 DEFAULT_RTREE_BULK_FILL = 0.90
 DEFAULT_TEXT_LENGTH = 256
 DEFAULT_BLOB_LENGTH = 256
+DEFAULT_TEXT_MIN_TOKEN_LENGTH = 1
+# Ninguna palabra de diccionario en español o inglés llega a 40 letras: lo que pasa de ahí
+# son cadenas pegadas sin espacios, que solo inflarían el léxico.
+DEFAULT_TEXT_MAX_TOKEN_LENGTH = 40
 DEFAULT_LOCK_TIMEOUT_SECONDS = 5.0
 DEFAULT_CSV_DELIMITER = ","
 DEFAULT_CSV_ENCODING = "utf-8"
@@ -74,6 +78,9 @@ class EngineConfig:
             dejando hueco para inserciones futuras.
         text_length: longitud fija que se asigna a las columnas TEXT.
         blob_length: longitud fija que se asigna a las columnas BLOB.
+        text_min_token_length: caracteres que necesita un token para indexarse. Con 1 se
+            conservan las tallas y variantes de una letra («talla m», «usb-c»).
+        text_max_token_length: caracteres a partir de los cuales un token se descarta.
         lock_timeout_seconds: espera máxima de una transacción por un bloqueo.
         csv_delimiter: separador de los archivos que carga `CREATE TABLE ... FROM FILE`.
         csv_encoding: codificación de esos archivos.
@@ -101,6 +108,8 @@ class EngineConfig:
     rtree_bulk_fill: float = DEFAULT_RTREE_BULK_FILL
     text_length: int = DEFAULT_TEXT_LENGTH
     blob_length: int = DEFAULT_BLOB_LENGTH
+    text_min_token_length: int = DEFAULT_TEXT_MIN_TOKEN_LENGTH
+    text_max_token_length: int = DEFAULT_TEXT_MAX_TOKEN_LENGTH
     lock_timeout_seconds: float = DEFAULT_LOCK_TIMEOUT_SECONDS
     csv_delimiter: str = DEFAULT_CSV_DELIMITER
     csv_encoding: str = DEFAULT_CSV_ENCODING
@@ -125,6 +134,7 @@ class EngineConfig:
             "sort_buffer_pages",
             "text_length",
             "blob_length",
+            "text_min_token_length",
             "max_upload_bytes",
             "map_points",
             "max_result_rows",
@@ -142,6 +152,9 @@ class EngineConfig:
         _require_fraction("rtree_min_fill", self.rtree_min_fill, MAX_RTREE_MIN_FILL)
         if self.rtree_bulk_fill < self.rtree_min_fill:
             raise ConfigurationError("rtree_bulk_fill no puede ser menor que rtree_min_fill")
+        _require_between(
+            "text_max_token_length", self.text_max_token_length, self.text_min_token_length, None
+        )
         _require_positive("lock_timeout_seconds", self.lock_timeout_seconds)
         _require_positive("session_idle_seconds", self.session_idle_seconds)
         if len(self.csv_delimiter) != 1:

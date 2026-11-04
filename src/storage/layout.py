@@ -49,6 +49,10 @@ class FileHeader:
         self._error = error
         self._kind = kind
 
+    @property
+    def size(self) -> int:
+        return self._layout.size
+
     def write(self, pager: Pager, *values: Any) -> None:
         """Raises:
             StorageError: el `error` del tipo, si la cabecera no cabe en una página."""
@@ -57,9 +61,7 @@ class FileHeader:
                 f"la cabecera de {self._kind} mide {self._layout.size} bytes y la página "
                 f"{pager.page_size}"
             )
-        raw = bytearray(pager.page_size)
-        self._layout.pack_into(raw, 0, self._magic, self._version, *values)
-        pager.write(HEADER_PAGE_ID, bytes(raw))
+        pager.write(HEADER_PAGE_ID, self.encode(*values).ljust(pager.page_size, b"\x00"))
 
     def read(self, pager: Pager) -> tuple[Any, ...]:
         """Los campos de la estructura, tras comprobar la firma y la versión.
@@ -67,12 +69,29 @@ class FileHeader:
         Raises:
             StorageError: el `error` del tipo, si el archivo es de otro tipo o de otra versión.
         """
-        magic, version, *values = self._layout.unpack_from(pager.read(HEADER_PAGE_ID), 0)
+        return self.decode(pager.read(HEADER_PAGE_ID), pager.path.name)
+
+    def encode(self, *values: Any) -> bytes:
+        """La firma, la versión y los campos, en los `size` bytes que ocupan: para un
+        archivo que no se lee por páginas."""
+        return self._layout.pack(self._magic, self._version, *values)
+
+    def decode(self, raw: bytes, file_name: str) -> tuple[Any, ...]:
+        """Los campos de una cabecera leída de `file_name`, tras comprobar la firma y la
+        versión.
+
+        Raises:
+            StorageError: el `error` del tipo, si los bytes no son una cabecera de este
+                tipo y de esta versión.
+        """
+        if len(raw) < self._layout.size:
+            raise self._error(f"{file_name} no es {self._kind}: mide {len(raw)} bytes")
+        magic, version, *values = self._layout.unpack_from(raw, 0)
         if magic != self._magic:
-            raise self._error(f"{pager.path.name} no es {self._kind}")
+            raise self._error(f"{file_name} no es {self._kind}")
         if version != self._version:
             raise self._error(
-                f"{pager.path.name} es {self._kind} de la versión {version} del formato, "
+                f"{file_name} es {self._kind} de la versión {version} del formato, "
                 f"y este motor lee la {self._version}"
             )
         return tuple(values)

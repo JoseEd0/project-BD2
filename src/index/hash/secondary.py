@@ -12,7 +12,7 @@ from storage.record import RecordSerializer
 from storage.record_id import RECORD_ID_SIZE, RecordId
 from storage.types import Key
 
-from .extendible_hash import DIRECTORY_SUFFIX, ExtendibleHashIndex
+from .extendible_hash import ExtendibleHashIndex
 
 
 class HashSecondaryIndex(ColumnIndex):
@@ -29,10 +29,7 @@ class HashSecondaryIndex(ColumnIndex):
         codec = ScalarKeyCodec(serializer.schema.fields[self._position])
         self._index = ExtendibleHashIndex(path, codec, RECORD_ID_SIZE, config)
 
-    @staticmethod
-    def files_of(path: Path) -> list[Path]:
-        """Los archivos que ocupa un índice guardado en `path`: las cubetas y el directorio."""
-        return [path, path.with_name(path.name + DIRECTORY_SUFFIX)]
+    files_of = staticmethod(ExtendibleHashIndex.files_of)
 
     def describe(self) -> dict[str, Any]:
         return self._index.describe()

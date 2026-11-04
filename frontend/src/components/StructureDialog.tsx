@@ -8,6 +8,7 @@ import type {
   HashStructure,
   HeapStorage,
   IndexStructure,
+  InvertedStructure,
   RTreeStructure,
   SequentialStorage,
   TableInfo,
@@ -215,9 +216,45 @@ function RTreeView({ tree }: { tree: RTreeStructure }) {
   );
 }
 
+function InvertedView({ inverted }: { inverted: InvertedStructure }) {
+  return (
+    <>
+      <div className="stats">
+        <Stat label="documentos" value={inverted.documents} />
+        <Stat label="borrados sin fusionar" value={inverted.deleted} />
+        <Stat label="vocabulario" value={inverted.vocabulary} />
+        <Stat label="postings" value={inverted.postings} />
+        <Stat label="segmentos" value={inverted.segments.length} />
+        <Stat label="documentos en memoria" value={inverted.pending.documents} />
+        <Stat label="términos por documento" value={inverted.average_length.toFixed(1)} />
+        <Stat label="idioma" value={inverted.language} />
+      </div>
+      <table className="grid grid--compact">
+        <thead>
+          <tr>
+            <th>Término</th>
+            <th>Documentos (df)</th>
+            <th>Apariciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          {inverted.top_terms.map((term) => (
+            <tr key={term.term}>
+              <td>{term.term}</td>
+              <td className="is-number">{term.document_frequency.toLocaleString("es")}</td>
+              <td className="is-number">{term.total_frequency.toLocaleString("es")}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </>
+  );
+}
+
 function IndexView({ structure }: { structure: IndexStructure }) {
   if (structure.kind === "bplustree") return <TreeView tree={structure} />;
   if (structure.kind === "rtree") return <RTreeView tree={structure} />;
+  if (structure.kind === "inverted") return <InvertedView inverted={structure} />;
   return <HashView hash={structure} />;
 }
 

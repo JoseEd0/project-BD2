@@ -16,8 +16,11 @@ from benchmarks.esci.subsets import (
     bucket_of,
     load_corpus,
     qualifying_queries,
+    queries_named,
     select_subset,
+    subset_with_queries,
     summary_table,
+    write_as_corpus,
     write_subset,
 )
 
@@ -238,3 +241,41 @@ def test_the_summary_has_one_row_per_size(corpus: Corpus):
     lines = summary_table(corpus, subsets).splitlines()
     assert len(lines) == 2 + 2
     assert lines[3].startswith("| 300 | 2 / 5 | 2 / 4 | 2 / 5 |")
+
+
+def test_chosen_queries_bring_all_their_judged_products_and_the_rest_is_filler(corpus: Corpus):
+    chosen = queries_named(corpus, ["palabra palabra", "palabra"])
+    subset = subset_with_queries(corpus, 60, chosen, SEED)
+    assert [query.identifier for query in subset.queries] == sorted(
+        query.identifier for query in chosen
+    )
+    assert judged_union(subset) <= set(subset.product_ids)
+    assert len(subset.product_ids) == 60
+    assert subset_with_queries(corpus, 60, chosen, SEED) == subset
+
+
+def test_queries_of_any_length_can_be_chosen_by_their_text(corpus: Corpus):
+    (two_words,) = queries_named(corpus, ["palabra palabra"])
+    assert two_words.words == 2
+    assert bucket_of(two_words.words) is None
+
+
+def test_an_unknown_query_text_is_rejected(corpus: Corpus):
+    with pytest.raises(SubsetError, match="no tiene las consultas"):
+        queries_named(corpus, ["palabra", "no existe"])
+
+
+def test_chosen_queries_that_judge_more_than_fits_are_rejected(corpus: Corpus):
+    oversized = [query for query in corpus.queries if query.identifier == OVERSIZED]
+    with pytest.raises(SubsetError, match="juzgan"):
+        subset_with_queries(corpus, OVERSIZED_JUDGMENTS - 1, oversized, SEED)
+
+
+def test_a_subset_written_as_a_corpus_has_no_bucket_and_reads_back_the_same(
+    corpus: Corpus, corpus_directory: Path, tmp_path: Path
+):
+    subset = subset_with_queries(corpus, 60, queries_named(corpus, ["palabra palabra"]), SEED)
+    write_as_corpus(subset, corpus_directory, tmp_path / "muestra")
+    assert load_corpus(tmp_path / "muestra") == subset
+    with (tmp_path / "muestra" / "consultas.csv").open(newline="", encoding="utf-8") as handle:
+        assert next(csv.reader(handle)) == ["query_id", "consulta", "palabras"]

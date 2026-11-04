@@ -31,7 +31,7 @@ from __future__ import annotations
 
 import argparse
 from collections import Counter
-from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -161,29 +161,56 @@ def select_subset(
     _validate(size, queries_per_bucket, max_judged_share)
     budget = int(size * max_judged_share)
     chosen = _choose_queries(corpus, budget, queries_per_bucket, seed)
+    return subset_with_queries(corpus, size, chosen, seed)
+
+
+def subset_with_queries(
+    corpus: Corpus, size: int, queries: Iterable[Query], seed: int
+) -> Corpus:
+    """Un subconjunto de `size` productos con todos los juzgados de `queries` y el resto
+    relleno al azar con la semilla, entre los productos que ninguna de ellas juzgó.
+
+    Los productos salen en el orden del corpus y las consultas ordenadas por id.
+
+    Raises:
+        SubsetError: si los productos juzgados no caben en `size` o el corpus no tiene
+            productos suficientes para rellenar.
+    """
+    chosen = sorted(queries, key=lambda query: query.identifier)
     judged = _judged_by(corpus, chosen)
+    if len(judged) > size:
+        raise SubsetError(
+            f"las consultas juzgan {len(judged)} productos y el subconjunto tiene {size}"
+        )
     filler = _filler(corpus, judged, size - len(judged), seed)
     members = judged | filler
     return Corpus(
         product_ids=tuple(product for product in corpus.product_ids if product in members),
-        queries=tuple(sorted(chosen, key=lambda query: query.identifier)),
+        queries=tuple(chosen),
         judgments={query.identifier: corpus.judgments[query.identifier] for query in chosen},
     )
 
 
+def queries_named(corpus: Corpus, texts: Sequence[str]) -> tuple[Query, ...]:
+    """Las consultas del corpus con exactamente esos textos, en el mismo orden.
+
+    Raises:
+        SubsetError: si alguno de los textos no es una consulta del corpus.
+    """
+    by_text = {query.text: query for query in corpus.queries}
+    missing = [text for text in texts if text not in by_text]
+    if missing:
+        raise SubsetError(f"el corpus no tiene las consultas {missing}")
+    return tuple(by_text[text] for text in texts)
+
+
 def write_subset(subset: Corpus, corpus_directory: Path, destination: Path) -> None:
-    """Escribe el subconjunto en `destination` con el formato del corpus.
+    """Escribe el subconjunto del experimento en `destination` con el formato del corpus.
 
     Las filas de producto se leen de `corpus_directory` en su orden; `consultas.csv` lleva
     además la columna `cubeta`.
     """
-    members = frozenset(subset.product_ids)
-    products = (
-        (product.identifier, product.title, product.brand, product.text)
-        for product in read_products(corpus_directory / PRODUCTS_CSV)
-        if product.identifier in members
-    )
-    write_rows(destination / PRODUCTS_CSV, PRODUCT_HEADER, products)
+    _write_products_and_judgments(subset, corpus_directory, destination)
     write_rows(
         destination / QUERIES_CSV,
         SUBSET_QUERY_HEADER,
@@ -192,6 +219,29 @@ def write_subset(subset: Corpus, corpus_directory: Path, destination: Path) -> N
             for query in subset.queries
         ),
     )
+
+
+def write_as_corpus(subset: Corpus, corpus_directory: Path, destination: Path) -> None:
+    """Escribe el subconjunto en `destination` con el formato exacto del corpus completo,
+    sin la columna `cubeta`: admite consultas de cualquier número de palabras."""
+    _write_products_and_judgments(subset, corpus_directory, destination)
+    write_rows(
+        destination / QUERIES_CSV,
+        QUERY_HEADER,
+        ((query.identifier, query.text, query.words) for query in subset.queries),
+    )
+
+
+def _write_products_and_judgments(
+    subset: Corpus, corpus_directory: Path, destination: Path
+) -> None:
+    members = frozenset(subset.product_ids)
+    products = (
+        (product.identifier, product.title, product.brand, product.text)
+        for product in read_products(corpus_directory / PRODUCTS_CSV)
+        if product.identifier in members
+    )
+    write_rows(destination / PRODUCTS_CSV, PRODUCT_HEADER, products)
     write_rows(
         destination / JUDGMENTS_CSV,
         JUDGMENT_HEADER,

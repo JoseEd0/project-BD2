@@ -30,12 +30,12 @@
       "technique": "índice invertido (SPIMI)",
       "operation": "construcción",
       "dataset_size": 1000,
-      "milliseconds": 360.83579098340124,
+      "milliseconds": 302.5043329689652,
       "extra": {
         "construcciones_ms": [
-          360.83579098340124,
-          367.2884999541566,
-          362.633915967308
+          314.3027499318123,
+          306.9243330974132,
+          302.5043329689652
         ]
       }
     },
@@ -45,7 +45,7 @@
       "dataset_size": 1000,
       "milliseconds": 0.0,
       "extra": {
-        "kib": 4846.8
+        "kib": 3975.8
       }
     },
     {
@@ -70,14 +70,14 @@
       "technique": "TF-IDF + coseno",
       "operation": "1 palabra",
       "dataset_size": 1000,
-      "milliseconds": 0.022697990061715245,
+      "milliseconds": 0.01881775096990168,
       "extra": {
         "pasadas_ms": [
-          0.20849995780736208,
-          0.19129191059619188,
-          0.4155829083174467,
-          0.18520792946219444,
-          0.18158392049372196
+          0.1669169869273901,
+          0.15700003132224083,
+          0.15491701196879148,
+          0.15054200775921345,
+          0.15079102013260126
         ],
         "consultas": 8,
         "precision_en_k": 0.6,
@@ -148,14 +148,14 @@
       "technique": "TF-IDF + coseno",
       "operation": "3 palabras",
       "dataset_size": 1000,
-      "milliseconds": 0.06826037133578211,
+      "milliseconds": 0.0618124904576689,
       "extra": {
         "pasadas_ms": [
-          0.5532499635592103,
-          0.5666249198839068,
-          0.5460829706862569,
-          0.5654579726979136,
-          0.5462500266730785
+          0.49941695760935545,
+          0.501957954838872,
+          0.49662496894598007,
+          0.4944999236613512,
+          0.499167013913393
         ],
         "consultas": 8,
         "precision_en_k": 0.7125,
@@ -226,14 +226,14 @@
       "technique": "TF-IDF + coseno",
       "operation": "5+ palabras",
       "dataset_size": 1000,
-      "milliseconds": 0.09741674875840545,
+      "milliseconds": 0.08705737127456814,
       "extra": {
         "pasadas_ms": [
-          0.8361669024452567,
-          0.9898749412968755,
-          0.7793339900672436,
-          0.7842499762773514,
-          0.8104160660877824
+          0.7045840611681342,
+          0.7058329647406936,
+          0.6964589701965451,
+          0.7202500710263848,
+          0.7312500383704901
         ],
         "consultas": 8,
         "precision_en_k": 0.3375,
@@ -304,7 +304,7 @@
       "technique": "TF-IDF + coseno",
       "operation": "todas las consultas",
       "dataset_size": 1000,
-      "milliseconds": 0.06279170338530093,
+      "milliseconds": 0.05589587090071291,
       "extra": {
         "consultas": 24,
         "precision_en_k": 0.5499999999999999,
@@ -316,14 +316,14 @@
       "technique": "BM25",
       "operation": "1 palabra",
       "dataset_size": 1000,
-      "milliseconds": 0.019531245925463736,
+      "milliseconds": 0.018802122212946415,
       "extra": {
         "pasadas_ms": [
-          0.17058406956493855,
-          0.17200002912431955,
-          0.1562499674037099,
-          0.16187503933906555,
-          0.16808300279080868
+          0.16791699454188347,
+          0.15049998182803392,
+          0.16645900905132294,
+          0.16416702419519424,
+          0.15041697770357132
         ],
         "consultas": 8,
         "precision_en_k": 0.6,
@@ -394,14 +394,14 @@
       "technique": "BM25",
       "operation": "3 palabras",
       "dataset_size": 1000,
-      "milliseconds": 0.06555725121870637,
+      "milliseconds": 0.0703593686921522,
       "extra": {
         "pasadas_ms": [
-          0.568541930988431,
-          0.5391669692471623,
-          0.5371249280869961,
-          0.5580830620601773,
-          0.524458009749651
+          0.5703750066459179,
+          0.5628749495372176,
+          0.5670420359820127,
+          0.5760410567745566,
+          0.5632080137729645
         ],
         "consultas": 8,
         "precision_en_k": 0.7625,
@@ -472,14 +472,14 @@
       "technique": "BM25",
       "operation": "5+ palabras",
       "dataset_size": 1000,
-      "milliseconds": 0.09785937436390668,
+      "milliseconds": 0.1019323681248352,
       "extra": {
         "pasadas_ms": [
-          0.8114170050248504,
-          0.7828749949112535,
-          0.8036249782890081,
-          0.7909160340204835,
-          0.7946669356897473
+          0.8483750279992819,
+          0.8191670058295131,
+          0.8315419545397162,
+          0.8154589449986815,
+          0.8465000428259373
         ],
         "consultas": 8,
         "precision_en_k": 0.3375,
@@ -550,7 +550,7 @@
       "technique": "BM25",
       "operation": "todas las consultas",
       "dataset_size": 1000,
-      "milliseconds": 0.060982623836025596,
+      "milliseconds": 0.06369795300997794,
       "extra": {
         "consultas": 24,
         "precision_en_k": 0.5666666666666667,
@@ -573,21 +573,21 @@
       "dataset_size": 1000,
       "milliseconds": 0.0,
       "extra": {
-        "kib": 44.7
+        "kib": 46.1
       }
     },
     {
       "technique": "GIN (PostgreSQL)",
       "operation": "construcción",
       "dataset_size": 1000,
-      "milliseconds": 99.85608304850757,
+      "milliseconds": 100.35191697534174,
       "extra": {
-        "vectores_ms": 78.58183304779232,
-        "indice_ms": 21.274250000715256,
+        "vectores_ms": 78.99204199202359,
+        "indice_ms": 21.35987498331815,
         "construcciones_ms": [
-          124.95516706258059,
-          103.10241708066314,
-          99.85608304850757
+          144.37841612379998,
+          102.24149993155152,
+          100.35191697534174
         ]
       }
     },
@@ -606,22 +606,22 @@
       "technique": "GIN (PostgreSQL)",
       "operation": "1 palabra",
       "dataset_size": 1000,
-      "milliseconds": 0.07435937004629523,
+      "milliseconds": 0.08207812788896263,
       "extra": {
         "pasadas_ms": [
-          1.1391659500077367,
-          1.1946670711040497,
-          0.6282919785007834,
-          0.5948749603703618,
-          0.634583062492311
+          0.7538750069215894,
+          0.6667079869657755,
+          0.6670000730082393,
+          0.669916975311935,
+          0.656625023111701
         ],
         "consultas": 8,
         "precision_en_k": 0.6,
         "recall_en_k": 0.4550595238095238,
         "candidatos_promedio": 9.0,
-        "planificacion_ms_promedio": 0.024625,
+        "planificacion_ms_promedio": 0.025125,
         "indice_ms_promedio": 0.001,
-        "ejecucion_ms_promedio": 0.01,
+        "ejecucion_ms_promedio": 0.010125,
         "por_consulta": [
           {
             "query_id": 27693,
@@ -678,22 +678,22 @@
       "technique": "GIN (PostgreSQL)",
       "operation": "3 palabras",
       "dataset_size": 1000,
-      "milliseconds": 0.2001249958993867,
+      "milliseconds": 0.2256302541354671,
       "extra": {
         "pasadas_ms": [
-          1.6771249938756227,
-          1.7270829994231462,
-          1.6049579717218876,
-          1.6009999671950936,
-          1.612124964594841
+          1.8797499360516667,
+          1.8380419351160526,
+          1.8282909877598286,
+          1.805042033083737,
+          1.810208079405129
         ],
         "consultas": 8,
         "precision_en_k": 0.625,
         "recall_en_k": 0.38726096207713856,
         "candidatos_promedio": 95.5,
-        "planificacion_ms_promedio": 0.032375,
-        "indice_ms_promedio": 0.005625,
-        "ejecucion_ms_promedio": 0.15875,
+        "planificacion_ms_promedio": 0.02525,
+        "indice_ms_promedio": 0.005125,
+        "ejecucion_ms_promedio": 0.15325,
         "por_consulta": [
           {
             "query_id": 2681,
@@ -750,22 +750,22 @@
       "technique": "GIN (PostgreSQL)",
       "operation": "5+ palabras",
       "dataset_size": 1000,
-      "milliseconds": 0.3817031247308478,
+      "milliseconds": 0.38563538691960275,
       "extra": {
         "pasadas_ms": [
-          3.162250039167702,
-          3.137625055387616,
-          3.0782920075580478,
-          3.094417043030262,
-          3.053624997846782
+          3.085083095356822,
+          3.2031669979915023,
+          3.150832955725491,
+          3.1321250135079026,
+          3.104249946773052
         ],
         "consultas": 8,
         "precision_en_k": 0.2125,
         "recall_en_k": 0.25449862637362636,
         "candidatos_promedio": 139.125,
-        "planificacion_ms_promedio": 0.02875,
-        "indice_ms_promedio": 0.009,
-        "ejecucion_ms_promedio": 0.297625,
+        "planificacion_ms_promedio": 0.027375,
+        "indice_ms_promedio": 0.008875000000000001,
+        "ejecucion_ms_promedio": 0.29825,
         "por_consulta": [
           {
             "query_id": 3326,
@@ -822,7 +822,7 @@
       "technique": "GIN (PostgreSQL)",
       "operation": "todas las consultas",
       "dataset_size": 1000,
-      "milliseconds": 0.21872916355884323,
+      "milliseconds": 0.23111458964801082,
       "extra": {
         "consultas": 24,
         "precision_en_k": 0.4791666666666667,
@@ -1000,12 +1000,12 @@
       "technique": "índice invertido (SPIMI)",
       "operation": "construcción",
       "dataset_size": 10000,
-      "milliseconds": 2194.3639590172097,
+      "milliseconds": 1577.817332930863,
       "extra": {
         "construcciones_ms": [
-          2212.2906249715015,
-          2194.3639590172097,
-          2239.245667005889
+          1579.6592920087278,
+          1577.817332930863,
+          1630.9454999864101
         ]
       }
     },
@@ -1015,7 +1015,7 @@
       "dataset_size": 10000,
       "milliseconds": 0.0,
       "extra": {
-        "kib": 21056.2
+        "kib": 17978.5
       }
     },
     {
@@ -1040,14 +1040,14 @@
       "technique": "TF-IDF + coseno",
       "operation": "1 palabra",
       "dataset_size": 10000,
-      "milliseconds": 0.054950821213424206,
+      "milliseconds": 0.046820840798318386,
       "extra": {
         "pasadas_ms": [
-          2.9149579349905252,
-          2.7775830822065473,
-          2.7619999600574374,
-          2.793833031319082,
-          2.7475410606712103
+          2.3758329916745424,
+          2.3459160001948476,
+          2.347083995118737,
+          2.3659169673919678,
+          2.3410420399159193
         ],
         "consultas": 50,
         "precision_en_k": 0.5379999999999999,
@@ -1412,14 +1412,14 @@
       "technique": "TF-IDF + coseno",
       "operation": "3 palabras",
       "dataset_size": 10000,
-      "milliseconds": 0.19749334082007408,
+      "milliseconds": 0.17112249974161386,
       "extra": {
         "pasadas_ms": [
-          10.231917025521398,
-          10.533957974985242,
-          9.895875002257526,
-          9.874667041003704,
-          9.918667026795447
+          8.644165936857462,
+          8.625708054751158,
+          8.56691598892212,
+          8.556124987080693,
+          8.863166091032326
         ],
         "consultas": 50,
         "precision_en_k": 0.478,
@@ -1784,14 +1784,14 @@
       "technique": "TF-IDF + coseno",
       "operation": "5+ palabras",
       "dataset_size": 10000,
-      "milliseconds": 0.41624250123277307,
+      "milliseconds": 0.3554041590541601,
       "extra": {
         "pasadas_ms": [
-          21.384458988904953,
-          20.918166963383555,
-          20.812125061638653,
-          20.9062920184806,
-          20.982417045161128
+          18.00041599199176,
+          17.770207952708006,
+          18.020958988927305,
+          18.30133399926126,
+          18.824458005838096
         ],
         "consultas": 50,
         "precision_en_k": 0.38799999999999996,
@@ -2156,7 +2156,7 @@
       "technique": "TF-IDF + coseno",
       "operation": "todas las consultas",
       "dataset_size": 10000,
-      "milliseconds": 0.22289555442209044,
+      "milliseconds": 0.1911158331980308,
       "extra": {
         "consultas": 150,
         "precision_en_k": 0.468,
@@ -2168,14 +2168,14 @@
       "technique": "BM25",
       "operation": "1 palabra",
       "dataset_size": 10000,
-      "milliseconds": 0.05277334013953805,
+      "milliseconds": 0.04917416023090482,
       "extra": {
         "pasadas_ms": [
-          2.7432090137153864,
-          2.719084033742547,
-          2.6441250229254365,
-          2.697832998819649,
-          2.6386670069769025
+          2.6187499752268195,
+          2.458708011545241,
+          2.526917029172182,
+          2.7027499163523316,
+          2.4724999675527215
         ],
         "consultas": 50,
         "precision_en_k": 0.534,
@@ -2540,14 +2540,14 @@
       "technique": "BM25",
       "operation": "3 palabras",
       "dataset_size": 10000,
-      "milliseconds": 0.1907108211889863,
+      "milliseconds": 0.16784084029495716,
       "extra": {
         "pasadas_ms": [
-          10.29791694600135,
-          10.117082973010838,
-          9.580541984178126,
-          9.56916599534452,
-          9.535541059449315
+          8.582792012020946,
+          8.45249998383224,
+          8.392042014747858,
+          8.432375034317374,
+          8.395916083827615
         ],
         "consultas": 50,
         "precision_en_k": 0.5720000000000001,
@@ -2912,14 +2912,14 @@
       "technique": "BM25",
       "operation": "5+ palabras",
       "dataset_size": 10000,
-      "milliseconds": 0.4078224999830127,
+      "milliseconds": 0.38466749945655465,
       "extra": {
         "pasadas_ms": [
-          21.370125003159046,
-          20.925084012560546,
-          20.782749983482063,
-          20.391124999150634,
-          20.40416607633233
+          19.658457953482866,
+          19.258292042650282,
+          19.233374972827733,
+          19.55237507354468,
+          19.380541052669287
         ],
         "consultas": 50,
         "precision_en_k": 0.442,
@@ -3284,7 +3284,7 @@
       "technique": "BM25",
       "operation": "todas las consultas",
       "dataset_size": 10000,
-      "milliseconds": 0.217102220437179,
+      "milliseconds": 0.2005608333274722,
       "extra": {
         "consultas": 150,
         "precision_en_k": 0.516,
@@ -3298,7 +3298,7 @@
       "dataset_size": 10000,
       "milliseconds": 0.0,
       "extra": {
-        "kib": 853.0
+        "kib": 718.4
       }
     },
     {
@@ -3307,21 +3307,21 @@
       "dataset_size": 10000,
       "milliseconds": 0.0,
       "extra": {
-        "kib": 850.0
+        "kib": 502.7
       }
     },
     {
       "technique": "GIN (PostgreSQL)",
       "operation": "construcción",
       "dataset_size": 10000,
-      "milliseconds": 1038.2853330811486,
+      "milliseconds": 1054.2132089613006,
       "extra": {
-        "vectores_ms": 815.9380410797894,
-        "indice_ms": 222.34729200135916,
+        "vectores_ms": 816.2306250305846,
+        "indice_ms": 237.98258393071592,
         "construcciones_ms": [
-          1062.5687920255587,
-          1040.6783749349415,
-          1038.2853330811486
+          1080.1307919900864,
+          1100.0763759948313,
+          1054.2132089613006
         ]
       }
     },
@@ -3340,22 +3340,22 @@
       "technique": "GIN (PostgreSQL)",
       "operation": "1 palabra",
       "dataset_size": 10000,
-      "milliseconds": 0.09740249952301383,
+      "milliseconds": 0.09623666061088443,
       "extra": {
         "pasadas_ms": [
-          5.798792000859976,
-          5.153417005203664,
-          5.041124997660518,
-          4.8701249761506915,
-          4.957875004038215
+          4.927625064738095,
+          4.954583011567593,
+          4.811833030544221,
+          4.847791977226734,
+          5.516791017726064
         ],
         "consultas": 50,
         "precision_en_k": 0.494,
         "recall_en_k": 0.40287103898631416,
         "candidatos_promedio": 34.26,
-        "planificacion_ms_promedio": 0.029220000000000003,
-        "indice_ms_promedio": 0.00256,
-        "ejecucion_ms_promedio": 0.045899999999999996,
+        "planificacion_ms_promedio": 0.0218,
+        "indice_ms_promedio": 0.0018,
+        "ejecucion_ms_promedio": 0.0375,
         "por_consulta": [
           {
             "query_id": 7982,
@@ -3664,22 +3664,22 @@
       "technique": "GIN (PostgreSQL)",
       "operation": "3 palabras",
       "dataset_size": 10000,
-      "milliseconds": 1.833993319887668,
+      "milliseconds": 1.8223408400081098,
       "extra": {
         "pasadas_ms": [
-          91.6996659943834,
-          92.71395904943347,
-          108.46754105295986,
-          93.26958400197327,
-          93.46700005698949
+          99.62270793039352,
+          91.11704200040549,
+          92.48562506400049,
+          115.48699997365475,
+          120.49162504263222
         ],
         "consultas": 50,
         "precision_en_k": 0.3,
         "recall_en_k": 0.1813458660968698,
         "candidatos_promedio": 710.4,
-        "planificacion_ms_promedio": 0.024,
-        "indice_ms_promedio": 0.03598,
-        "ejecucion_ms_promedio": 1.50866,
+        "planificacion_ms_promedio": 0.029740000000000003,
+        "indice_ms_promedio": 0.03692,
+        "ejecucion_ms_promedio": 1.6387800000000001,
         "por_consulta": [
           {
             "query_id": 2681,
@@ -3988,22 +3988,22 @@
       "technique": "GIN (PostgreSQL)",
       "operation": "5+ palabras",
       "dataset_size": 10000,
-      "milliseconds": 4.837282500229776,
+      "milliseconds": 4.8241858393885195,
       "extra": {
         "pasadas_ms": [
-          241.8641250114888,
-          249.14149998221546,
-          288.48987503442913,
-          267.60537503287196,
-          251.81241694372147
+          243.6871250392869,
+          247.79637495521456,
+          251.72095804009587,
+          273.9773750072345,
+          241.20929196942598
         ],
         "consultas": 50,
         "precision_en_k": 0.154,
         "recall_en_k": 0.10490428521515019,
         "candidatos_promedio": 1584.02,
-        "planificacion_ms_promedio": 0.032440000000000004,
-        "indice_ms_promedio": 0.10516,
-        "ejecucion_ms_promedio": 4.750179999999999,
+        "planificacion_ms_promedio": 0.03048,
+        "indice_ms_promedio": 0.10328,
+        "ejecucion_ms_promedio": 4.38776,
         "por_consulta": [
           {
             "query_id": 2195,
@@ -4312,7 +4312,7 @@
       "technique": "GIN (PostgreSQL)",
       "operation": "todas las consultas",
       "dataset_size": 10000,
-      "milliseconds": 2.256226106546819,
+      "milliseconds": 2.2475877800025046,
       "extra": {
         "consultas": 150,
         "precision_en_k": 0.316,
@@ -4514,12 +4514,12 @@
       "technique": "índice invertido (SPIMI)",
       "operation": "construcción",
       "dataset_size": 100000,
-      "milliseconds": 20421.714916010387,
+      "milliseconds": 13660.282875061966,
       "extra": {
         "construcciones_ms": [
-          20421.714916010387,
-          20555.611624964513,
-          20642.720957985148
+          13660.282875061966,
+          13866.182541009039,
+          13824.201875017025
         ]
       }
     },
@@ -4529,7 +4529,7 @@
       "dataset_size": 100000,
       "milliseconds": 0.0,
       "extra": {
-        "kib": 27224.7
+        "kib": 24934.2
       }
     },
     {
@@ -4554,14 +4554,14 @@
       "technique": "TF-IDF + coseno",
       "operation": "1 palabra",
       "dataset_size": 100000,
-      "milliseconds": 0.29764499980956316,
+      "milliseconds": 0.24324000114575028,
       "extra": {
         "pasadas_ms": [
-          16.85283298138529,
-          15.222082962282002,
-          14.991540927439928,
-          14.882249990478158,
-          15.142041025683284
+          12.818166986107826,
+          12.165875057689846,
+          13.141167000867426,
+          12.691959040239453,
+          12.162000057287514
         ],
         "consultas": 50,
         "precision_en_k": 0.32799999999999996,
@@ -4926,14 +4926,14 @@
       "technique": "TF-IDF + coseno",
       "operation": "3 palabras",
       "dataset_size": 100000,
-      "milliseconds": 1.5812433185055852,
+      "milliseconds": 1.2408650014549494,
       "extra": {
         "pasadas_ms": [
-          80.07037499919534,
-          79.06216592527926,
-          81.14929194562137,
-          79.17179097421467,
-          79.23650008160621
+          64.30500000715256,
+          62.04325007274747,
+          62.48399999458343,
+          64.26270806696266,
+          62.809042050503194
         ],
         "consultas": 50,
         "precision_en_k": 0.28800000000000003,
@@ -5298,14 +5298,14 @@
       "technique": "TF-IDF + coseno",
       "operation": "5+ palabras",
       "dataset_size": 100000,
-      "milliseconds": 3.6399874999187887,
+      "milliseconds": 2.9865825013257563,
       "extra": {
         "pasadas_ms": [
-          185.3004170116037,
-          187.31750000733882,
-          185.85487501695752,
-          181.99937499593943,
-          185.824166983366
+          160.00679100397974,
+          155.10116692166775,
+          150.55033401586115,
+          162.795125041157,
+          149.32912506628782
         ],
         "consultas": 50,
         "precision_en_k": 0.22,
@@ -5670,7 +5670,7 @@
       "technique": "TF-IDF + coseno",
       "operation": "todas las consultas",
       "dataset_size": 100000,
-      "milliseconds": 1.8396252727446456,
+      "milliseconds": 1.4902291679754853,
       "extra": {
         "consultas": 150,
         "precision_en_k": 0.2786666666666667,
@@ -5682,14 +5682,14 @@
       "technique": "BM25",
       "operation": "1 palabra",
       "dataset_size": 100000,
-      "milliseconds": 0.29564833967015147,
+      "milliseconds": 0.2264041593298316,
       "extra": {
         "pasadas_ms": [
-          16.864332952536643,
-          15.08291601203382,
-          14.863958000205457,
-          14.782416983507574,
-          15.779041917994618
+          12.344790971837938,
+          11.734583065845072,
+          11.617916054092348,
+          11.32020796649158,
+          11.542250053025782
         ],
         "consultas": 50,
         "precision_en_k": 0.33399999999999996,
@@ -6054,14 +6054,14 @@
       "technique": "BM25",
       "operation": "3 palabras",
       "dataset_size": 100000,
-      "milliseconds": 1.4830991602502763,
+      "milliseconds": 0.9495758404955268,
       "extra": {
         "pasadas_ms": [
-          75.24124998599291,
-          74.51508403755724,
-          74.42633295431733,
-          74.15495801251382,
-          74.68341605272144
+          47.47879202477634,
+          47.54608403891325,
+          47.84912499599159,
+          47.65566694550216,
+          47.51916602253914
         ],
         "consultas": 50,
         "precision_en_k": 0.428,
@@ -6426,14 +6426,14 @@
       "technique": "BM25",
       "operation": "5+ palabras",
       "dataset_size": 100000,
-      "milliseconds": 3.559396658092737,
+      "milliseconds": 2.692568318452686,
       "extra": {
         "pasadas_ms": [
-          183.7862500688061,
-          177.96983290463686,
-          181.14195798989385,
-          178.28062491025776,
-          179.01683400850743
+          139.28337499964982,
+          136.2034579506144,
+          135.95020794309676,
+          134.83633403666317,
+          134.6284159226343
         ],
         "consultas": 50,
         "precision_en_k": 0.29,
@@ -6798,7 +6798,7 @@
       "technique": "BM25",
       "operation": "todas las consultas",
       "dataset_size": 100000,
-      "milliseconds": 1.7793813860043883,
+      "milliseconds": 1.2895161060926814,
       "extra": {
         "consultas": 150,
         "precision_en_k": 0.3506666666666667,
@@ -6812,7 +6812,7 @@
       "dataset_size": 100000,
       "milliseconds": 0.0,
       "extra": {
-        "kib": 17086.7
+        "kib": 16957.1
       }
     },
     {
@@ -6821,21 +6821,21 @@
       "dataset_size": 100000,
       "milliseconds": 0.0,
       "extra": {
-        "kib": 16278.7
+        "kib": 10753.9
       }
     },
     {
       "technique": "GIN (PostgreSQL)",
       "operation": "construcción",
       "dataset_size": 100000,
-      "milliseconds": 10719.960874994285,
+      "milliseconds": 10984.29875005968,
       "extra": {
-        "vectores_ms": 8303.462667041458,
-        "indice_ms": 2416.498207952827,
+        "vectores_ms": 8401.858250028454,
+        "indice_ms": 2582.4405000312254,
         "construcciones_ms": [
-          10939.219459076412,
-          10759.772749966942,
-          10719.960874994285
+          11192.99375009723,
+          10984.29875005968,
+          10986.800875049084
         ]
       }
     },
@@ -6854,22 +6854,22 @@
       "technique": "GIN (PostgreSQL)",
       "operation": "1 palabra",
       "dataset_size": 100000,
-      "milliseconds": 0.5979216797277331,
+      "milliseconds": 0.6358850002288818,
       "extra": {
         "pasadas_ms": [
-          33.61404198221862,
-          29.896083986386657,
-          30.03666701260954,
-          31.135709024965763,
-          31.865500030107796
+          32.51162497326732,
+          31.988958013243973,
+          34.19470798689872,
+          31.794250011444092,
+          33.07550004683435
         ],
         "consultas": 50,
         "precision_en_k": 0.322,
         "recall_en_k": 0.26587103898631415,
         "candidatos_promedio": 235.24,
-        "planificacion_ms_promedio": 0.0215,
-        "indice_ms_promedio": 0.00892,
-        "ejecucion_ms_promedio": 0.38974,
+        "planificacion_ms_promedio": 0.020579999999999998,
+        "indice_ms_promedio": 0.00852,
+        "ejecucion_ms_promedio": 0.38734,
         "por_consulta": [
           {
             "query_id": 7982,
@@ -7178,22 +7178,22 @@
       "technique": "GIN (PostgreSQL)",
       "operation": "3 palabras",
       "dataset_size": 100000,
-      "milliseconds": 18.974902499467134,
+      "milliseconds": 19.260779998730868,
       "extra": {
         "pasadas_ms": [
-          962.9561660112813,
-          948.7451249733567,
-          1015.3341249097139,
-          974.62816699408,
-          1051.6151250340044
+          1003.9770420407876,
+          1001.944583025761,
+          987.9996669478714,
+          1045.5485419370234,
+          963.0389999365434
         ],
         "consultas": 50,
         "precision_en_k": 0.102,
         "recall_en_k": 0.056556927718537625,
         "candidatos_promedio": 6986.4,
-        "planificacion_ms_promedio": 0.043120000000000006,
-        "indice_ms_promedio": 0.36857999999999996,
-        "ejecucion_ms_promedio": 18.50994,
+        "planificacion_ms_promedio": 0.05606,
+        "indice_ms_promedio": 0.39490000000000003,
+        "ejecucion_ms_promedio": 19.68434,
         "por_consulta": [
           {
             "query_id": 2681,
@@ -7502,22 +7502,22 @@
       "technique": "GIN (PostgreSQL)",
       "operation": "5+ palabras",
       "dataset_size": 100000,
-      "milliseconds": 50.03908582031727,
+      "milliseconds": 51.67715332005173,
       "extra": {
         "pasadas_ms": [
-          2547.0982920378447,
-          2657.7951660146937,
-          2501.9542910158634,
-          2502.3778330069035,
-          2563.515958026983
+          2814.757207990624,
+          2753.3296659821644,
+          2587.362709105946,
+          2583.8576660025865,
+          2730.017584050074
         ],
         "consultas": 50,
         "precision_en_k": 0.032,
         "recall_en_k": 0.013248325140785826,
         "candidatos_promedio": 15746.6,
-        "planificacion_ms_promedio": 0.06692000000000001,
-        "indice_ms_promedio": 1.0774599999999999,
-        "ejecucion_ms_promedio": 49.78018,
+        "planificacion_ms_promedio": 0.0709,
+        "indice_ms_promedio": 1.11504,
+        "ejecucion_ms_promedio": 51.72112,
         "por_consulta": [
           {
             "query_id": 2195,
@@ -7826,7 +7826,7 @@
       "technique": "GIN (PostgreSQL)",
       "operation": "todas las consultas",
       "dataset_size": 100000,
-      "milliseconds": 23.20396999983738,
+      "milliseconds": 23.857939439670492,
       "extra": {
         "consultas": 150,
         "precision_en_k": 0.152,

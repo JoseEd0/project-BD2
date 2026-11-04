@@ -297,27 +297,29 @@ Python 3.12. La memoria pico de Python se midió con `tracemalloc` en una ejecuc
 | vocabulario | 40 936 | 150 896 |
 | postings | 782 838 | 7 896 118 |
 | bloques / pasadas de mezcla | 1 / 0 | 9 / 2 |
-| tiempo de construcción | 2,6 s | 24,2 s |
-| pico de `tracemalloc` | 20,6 MiB | 26,7 MiB |
-| memoria residente máxima | 56 MiB | 69 MiB |
+| tiempo de construcción | 1,8 s | 15,1 s |
+| pico de `tracemalloc` | 17,6 MiB | 24,4 MiB |
+| memoria residente máxima | 59 MiB | 79 MiB |
 | léxico + términos | 1,3 + 0,3 MB | 4,7 + 1,0 MB |
 | postings | 6,3 MB | 63,2 MB |
 | documentos | 0,2 MB | 1,9 MB |
 
-Diez veces más documentos cuestan un **30 % más de memoria**, no diez veces más: es el
-bloque acotado. Del tiempo, unos 17 s de los 24 son el análisis del texto (plegado, tokens
-y raíces), medido aparte sobre los mismos 100 000 documentos; los bloques y la mezcla
-suman los 7 s restantes. Estas cifras son de SPIMI solo: la construcción escribe además el
+Diez veces más documentos cuestan un **35 % más de memoria**, no diez veces más: es el
+bloque acotado. Del tiempo, 9,4 s de los 15 son el análisis del texto (plegado, tokens
+y raíces), medido aparte sobre los mismos 100 000 documentos; leer el CSV, los bloques y
+la mezcla suman el resto. La memoria residente incluye la caché de términos del
+analizador, que tiene tope (dos generaciones de 65 536 entradas). Estas cifras son de SPIMI solo: la construcción escribe además el
 mapa de direcciones del mantenimiento, que con 99 000 documentos suma 1,1 s y 1,9 MB (ver
 [De la dirección de la fila al `doc_id`](#de-la-dirección-de-la-fila-al-doc_id)).
 
-Con 100 000 documentos el tamaño del bloque no cambia el tiempo, solo la memoria:
+Con 100 000 documentos el tamaño del bloque mueve poco el tiempo (16,2 s con 8 MiB y 14,8 s
+con 32 MiB: menos bloques que mezclar) y bastante más la memoria:
 
 | `spimi_block_bytes` | bloques | pasadas | tiempo | memoria residente |
 |---:|---:|---:|---:|---:|
-| 8 MiB | 20 | 2 | 24,1 s | 56 MiB |
-| 16 MiB | 9 | 2 | 24,2 s | 69 MiB |
-| 32 MiB | 4 | 1 | 25,7 s | 82 MiB |
+| 8 MiB | 20 | 2 | 16,2 s | 66 MiB |
+| 16 MiB | 9 | 2 | 15,1 s | 79 MiB |
+| 32 MiB | 4 | 1 | 14,8 s | 89 MiB |
 
 La comparación con GIN de PostgreSQL, las consultas y la relevancia son ese experimento.
 

@@ -148,15 +148,51 @@ def distinct_words(count: int) -> list[str]:
     ]
 
 
-def test_concurrent_threads_get_the_same_terms_as_one_thread():
-    text = " ".join(distinct_words(DISTINCT_WORDS))
-    expected = Analyzer(EngineConfig()).terms(text)
-    shared = Analyzer(EngineConfig())
+def terms_from_threads(shared: Analyzer, text: str) -> list[list[str]]:
+    """Los términos del texto, pedidos a la vez por `THREADS` hilos al mismo analizador."""
     previous_interval = sys.getswitchinterval()
     sys.setswitchinterval(TIGHT_SWITCH_INTERVAL)
     try:
         with ThreadPoolExecutor(THREADS) as pool:
-            results = list(pool.map(lambda _: shared.terms(text), range(THREADS)))
+            return list(pool.map(lambda _: shared.terms(text), range(THREADS)))
     finally:
         sys.setswitchinterval(previous_interval)
+
+
+def test_concurrent_threads_get_the_same_terms_as_one_thread():
+    text = " ".join(distinct_words(DISTINCT_WORDS))
+    expected = Analyzer(EngineConfig()).terms(text)
+    results = terms_from_threads(Analyzer(EngineConfig()), text)
+    assert all(result == expected for result in results)
+
+
+TINY_GENERATION = 5
+REPEATED_TEXT = (
+    "Zapatillas de running para mujer, talla 38 y 3,5 cm: zapatillas ligeras de running, "
+    "talla 38, color negro; las zapatillas de mujer más vendidas"
+)
+
+
+def test_a_tiny_cache_that_rotates_gives_the_same_terms(monkeypatch: pytest.MonkeyPatch):
+    words = " ".join(distinct_words(DISTINCT_WORDS))
+    expected = Analyzer(EngineConfig()).terms(REPEATED_TEXT + " " + words)
+    monkeypatch.setattr("text.analyzer.TERM_CACHE_GENERATION_ENTRIES", TINY_GENERATION)
+    rotating = Analyzer(EngineConfig())
+    assert rotating.terms(REPEATED_TEXT + " " + words) == expected
+    assert rotating.terms(REPEATED_TEXT + " " + words) == expected
+
+
+def test_the_cache_keeps_at_most_two_generations(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr("text.analyzer.TERM_CACHE_GENERATION_ENTRIES", TINY_GENERATION)
+    analyzer = Analyzer(EngineConfig())
+    analyzer.terms(" ".join(distinct_words(DISTINCT_WORDS)))
+    cached = len(analyzer._recent_terms) + len(analyzer._previous_terms)
+    assert cached <= 2 * TINY_GENERATION
+
+
+def test_concurrent_threads_agree_while_the_cache_rotates(monkeypatch: pytest.MonkeyPatch):
+    text = " ".join(distinct_words(DISTINCT_WORDS))
+    expected = Analyzer(EngineConfig()).terms(text)
+    monkeypatch.setattr("text.analyzer.TERM_CACHE_GENERATION_ENTRIES", TINY_GENERATION)
+    results = terms_from_threads(Analyzer(EngineConfig()), text)
     assert all(result == expected for result in results)

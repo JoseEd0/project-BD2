@@ -30,7 +30,7 @@ def test_every_stopword_is_already_folded(code: str):
 def test_every_stopword_is_one_token(code: str):
     """Una entrada que el tokenizador cortara en dos no coincidiría nunca con un token."""
     for word in language_named(code).stopwords:
-        assert ["".join(pair) for pair in TOKEN_PATTERN.findall(word)] == [word]
+        assert TOKEN_PATTERN.findall(word) == [word]
 
 
 def test_the_spanish_list_is_matched_without_accents():

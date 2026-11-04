@@ -4,13 +4,13 @@ Un solo analizador para documentos y consultas, de modo que una consulta corta e
 exactamente igual que el índice que la responde.
 """
 
-from .analyzer import STEM_CACHE_ENTRIES, TOKEN_PATTERN, AnalyzedText, Analyzer
+from .analyzer import TERM_CACHE_GENERATION_ENTRIES, TOKEN_PATTERN, AnalyzedText, Analyzer
 from .languages import DEFAULT_LANGUAGE, Language, UnknownLanguageError, language_named
 from .normalization import fold
 
 __all__ = [
     "DEFAULT_LANGUAGE",
-    "STEM_CACHE_ENTRIES",
+    "TERM_CACHE_GENERATION_ENTRIES",
     "TOKEN_PATTERN",
     "AnalyzedText",
     "Analyzer",

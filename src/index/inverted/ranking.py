@@ -146,16 +146,16 @@ class Ranker:
         """
         if k < 0:
             raise RankingParameterError(f"k tiene que ser al menos 0, no {k}")
-        keys = _ranking_keys(self._scores(query, method, parameters, stats, k))
+        scores = self._scores(query, method, parameters, stats, k)
         if k == 0:
             return []
-        # Uno de más para saber si el último puntaje que entra empata con alguno que queda
-        # fuera: entonces decide la dirección de la fila entre todos los empatados.
-        best = heapq.nsmallest(k + 1, keys)
-        if len(best) > k and best[k][0] == best[k - 1][0]:
-            boundary = best[k - 1][0]
-            best = [key for key in keys if key[0] <= boundary]
-        return [self._scored(key) for key in self._in_row_order(best)[:k]]
+        # El k-ésimo mejor puntaje: entran los que lo alcanzan, y si varios empatan con él,
+        # decide la dirección de la fila entre todos ellos. Buscarlo entre los puntajes
+        # sueltos y armar la clave solo de los que entran evita una tupla por candidato.
+        best = heapq.nlargest(k, scores.values())
+        boundary = best[-1] if len(best) == k else -math.inf
+        chosen = [(-score, doc_id) for doc_id, score in scores.items() if score >= boundary]
+        return [self._scored(key) for key in self._in_row_order(chosen)[:k]]
 
     def ranked(
         self,

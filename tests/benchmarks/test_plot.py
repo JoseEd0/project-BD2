@@ -11,6 +11,8 @@ import pytest
 from benchmarks.common import RESULTS_DIRECTORY
 from benchmarks.plots import FIGURES
 from benchmarks.plots.drawing import (
+    bar_sizes,
+    bar_value,
     by_rows,
     compose,
     draw,
@@ -25,6 +27,9 @@ from benchmarks.plots.model import (
     DISK_SPACE,
     NODES,
     TOTAL_TIME,
+    BarFigure,
+    BarGroup,
+    BarPanel,
     Figure,
     Line,
     Style,
@@ -160,18 +165,27 @@ def test_spreading_keeps_the_order_and_the_minimum_gap():
     assert spread[3] == 80.0
 
 
+LINE_FIGURES = [figure for figure in FIGURES if isinstance(figure, Figure)]
+BAR_FIGURES = [figure for figure in FIGURES if isinstance(figure, BarFigure)]
+
+
 def test_every_figure_has_a_distinct_file_and_fits_its_grid():
     names = [figure.filename for figure in FIGURES]
     assert len(names) == len(set(names))
-    for figure in FIGURES:
+    for figure in LINE_FIGURES:
         assert figure.panels
         assert all(panel.lines for panel in figure.panels)
+    for bars in BAR_FIGURES:
+        assert bars.panels
+        assert all(panel.groups and panel.techniques for panel in bars.panels)
 
 
 def test_every_panel_says_what_it_measures_and_in_which_unit():
     """Un panel se lee solo: el eje vertical nombra la magnitud y, si tiene unidad, es la
     misma que acompaña a cada valor rotulado."""
-    for figure in FIGURES:
+    for bars in BAR_FIGURES:
+        assert bars.sizes_label and all(panel.axis for panel in bars.panels)
+    for figure in LINE_FIGURES:
         assert figure.rows_label
         for panel in figure.panels:
             assert panel.title and panel.measure.axis and panel.measure.unit
@@ -181,6 +195,59 @@ def test_every_panel_says_what_it_measures_and_in_which_unit():
 def test_a_technique_can_be_named_differently_in_the_legend():
     panel = compare("leer", "Leer", TOTAL_TIME, (Technique("a", STYLE, "la técnica a"),))
     assert panel.lines == (Line("la técnica a", STYLE, "a", "leer"),)
+
+
+BAR_REPORT = {
+    "name": "barras",
+    "parameters": {"k": 10},
+    "measurements": [
+        {"technique": "a", "operation": "corta", "dataset_size": 100, "milliseconds": 1.0, "extra": {"precision": 0.5}},
+        {"technique": "a", "operation": "larga", "dataset_size": 100, "milliseconds": 1.0, "extra": {"precision": 0.25}},
+        {"technique": "b", "operation": "corta", "dataset_size": 100, "milliseconds": 1.0, "extra": {"precision": 1.0}},
+        {"technique": "a", "operation": "corta", "dataset_size": 1_000, "milliseconds": 1.0, "extra": {"precision": 0.0}},
+        {"technique": "a", "operation": "construcción", "dataset_size": 5_000, "milliseconds": 9.0, "extra": {}},
+    ],
+}
+BARS = BarFigure(
+    filename="barras",
+    report="barras",
+    title="Barras",
+    subtitle="Subtítulo",
+    sizes_label="documentos",
+    panels=(
+        BarPanel(
+            "Precision@{k}",
+            "Precision@k",
+            "precision",
+            (BarGroup("corta", "corta"), BarGroup("larga", "larga")),
+            (Technique("a", STYLE), Technique("b", Style(BLUE, "s"))),
+        ),
+    ),
+)
+
+
+def test_a_bar_takes_its_value_from_the_field_and_a_missing_one_is_none():
+    assert bar_value(BAR_REPORT, "a", "larga", 100, "precision") == 0.25
+    assert bar_value(BAR_REPORT, "a", "corta", 1_000, "precision") == 0.0
+    assert bar_value(BAR_REPORT, "b", "larga", 100, "precision") is None
+    assert bar_value(BAR_REPORT, "a", "construcción", 5_000, "precision") is None
+
+
+def test_a_bar_figure_has_one_row_per_size_that_has_the_field():
+    assert bar_sizes(BAR_REPORT, BARS) == [100, 1_000]
+
+
+def test_a_bar_figure_is_written_to_disk_with_a_label_per_bar(tmp_path: Path):
+    pytest.importorskip("matplotlib")
+    from matplotlib import pyplot
+
+    canvas = compose(BARS, BAR_REPORT)
+    labels = [text.get_text() for axis in canvas.axes for text in axis.texts]
+    assert sorted(labels) == ["0.00", "0.25", "0.50", "1.00"]
+    assert canvas.axes[0].get_title(loc="left") == "Precision@10 · 100 documentos"
+    pyplot.close(canvas)
+    path = draw(BARS, BAR_REPORT, tmp_path)
+    assert path.stat().st_size > 10_000
 
 
 def test_a_figure_is_written_to_disk(tmp_path: Path):
@@ -228,7 +295,7 @@ def test_no_text_is_cut_off_or_runs_into_the_next_panel(figure: Figure):
     pyplot.close(canvas)
 
 
-@pytest.mark.parametrize("figure", FIGURES, ids=lambda figure: figure.filename)
+@pytest.mark.parametrize("figure", LINE_FIGURES, ids=lambda figure: figure.filename)
 def test_a_note_stays_clear_of_the_grid(figure: Figure):
     """La nota de un panel va en una franja sin marcas: queda por encima de la rejilla."""
     pytest.importorskip("matplotlib")

@@ -74,6 +74,18 @@ DENSE_TICKS = (1.0, 2.0, 5.0)
 NOTE_LINE_HEADROOM = 0.22
 NOTE_INSET = (2.0, -3.0)
 DASHES = (4.0, 2.2)
+# Barras: paneles más anchos, porque cada uno lleva un rótulo por barra, y un eje lineal de
+# 0 a 1 igual en todos los paneles, para que la altura se compare de un vistazo. Sobre el
+# 1 queda aire para el rótulo de una barra que llegue arriba.
+BAR_PANEL_WIDTH = 5.4
+BAR_PANEL_HEIGHT = 2.9
+FRACTION_TICKS = (0.0, 0.2, 0.4, 0.6, 0.8, 1.0)
+FRACTION_AXIS_TOP = 1.12
+# Parte del hueco de cada grupo que ocupan sus barras; el resto separa un grupo del otro.
+BAR_GROUP_SHARE = 0.84
+BAR_LABEL_SIZE = 8.5
+BAR_LABEL_GAP = 2.0
+FRACTION_DECIMALS = 2
 THOUSANDS = "\N{NARROW NO-BREAK SPACE}"
 # Decimales según el tamaño del número, los mismos que usan las tablas del informe: tres
 # cifras a partir de 1 y dos decimales por debajo.
@@ -103,3 +115,8 @@ def format_average(value: float) -> str:
     if value >= WHOLE_FROM:
         return format_number(value)
     return f"{value:.1f}"
+
+
+def format_fraction(value: float) -> str:
+    """Una fracción de 0 a 1 con dos decimales: `0.52`."""
+    return f"{value:.{FRACTION_DECIMALS}f}"

@@ -113,6 +113,8 @@ class TextView:
         method: el ranking con que se ordenó.
         terms: los términos de la consulta ya analizados —plegados, sin stopwords y
             reducidos a su raíz—, en el orden en que aparecen.
+        parameters: los `k1` y `b` con que puntuó BM25, los de la consulta o los de la
+            configuración; `None` con TF-IDF.
     """
 
     table: str
@@ -120,6 +122,7 @@ class TextView:
     query: str
     method: RankingMethod
     terms: tuple[str, ...]
+    parameters: Bm25Parameters | None
 
 
 def text_search(
@@ -225,6 +228,7 @@ def text_view(
         query=search.query,
         method=search.method,
         terms=tuple(ranker.analyzed(search.query)),
+        parameters=search.parameters,
     )
 
 

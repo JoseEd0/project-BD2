@@ -462,8 +462,8 @@ Limit: limit=5, offset=0  (filas=0, 0.88 ms)
 ```
 
 **Lo que la interfaz recibe.** `QueryResult.text` (`TextView`) lleva la tabla, la columna,
-la consulta, el ranking y sus términos analizados, para resaltarlos en el resultado; el API
-los devuelve en `text`.
+la consulta, el ranking, sus términos analizados, para resaltarlos en el resultado, y los
+`k1` y `b` con que puntuó BM25; el API los devuelve en `text`.
 
 **Escrituras y transacciones.** El índice es un índice secundario más
 ([`TextSearchIndex`](../index/inverted/secondary.py)): `INSERT`, `DELETE`, `UPDATE` del

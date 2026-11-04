@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 import api.routes.uploads as uploads_route
 from api.main import create_app
 from api.service import Service
-from config import EngineConfig
+from config import DEFAULT_BM25_B, DEFAULT_BM25_K1, EngineConfig
 from query.engine import Engine
 
 SESSION = "demo"
@@ -429,6 +429,8 @@ def test_a_text_search_tells_what_to_highlight(client: TestClient):
         "query": "cables usb",
         "method": "BM25",
         "terms": ["cabl", "usb"],
+        "k1": DEFAULT_BM25_K1,
+        "b": DEFAULT_BM25_B,
     }
     assert run(client, "SELECT id FROM fichas")["text"] is None
 

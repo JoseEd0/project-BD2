@@ -135,6 +135,29 @@ para pintarlos de fondo. Con más filas que `limit` entrega una muestra tomada a
 regulares —no las primeras—, para que no se concentre en una zona. El máximo es
 `EngineConfig.map_points`.
 
+### Búsqueda de texto
+
+Cuando el `WHERE` tiene un `MATCH`, la respuesta de `/query` añade `text`: dónde se buscó,
+con qué ranking y con qué **términos ya analizados** —plegados, sin stopwords y reducidos a
+su raíz—, que la página «Texto» del frontend resalta en los resultados. `k1` y `b` son los
+que usó BM25, los del `WITH` o los de la configuración; con TF-IDF van en `null`.
+
+```jsonc
+// SELECT *, SCORE() FROM catalogo WHERE MATCH(texto, 'auriculares inalámbricos')
+"text": {
+  "table": "catalogo",
+  "column": "texto",
+  "query": "auriculares inalámbricos",
+  "method": "BM25",
+  "terms": ["auricular", "inalambr"],
+  "k1": 1.2,
+  "b": 0.75
+}
+```
+
+La búsqueda va entera por `/query`: no hay una ruta aparte que repita lo que el motor ya
+hace con SQL.
+
 ### Carga de CSV
 
 `POST /tables/upload` recibe un formulario *multipart*:

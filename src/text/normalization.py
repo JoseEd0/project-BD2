@@ -7,6 +7,7 @@ conserva, porque en español distingue palabras: «año» y «ano» no son la mi
 
 from __future__ import annotations
 
+import re
 import unicodedata
 from typing import Final
 
@@ -24,15 +25,25 @@ LAST_BMP_CODE_POINT = 0xFFFF
 def fold(text: str) -> str:
     """Texto en NFKC, en minúsculas de `casefold()`, sin tildes (salvo la ñ) ni apóstrofos.
 
-    Es idempotente: `fold(fold(texto)) == fold(texto)`. Coste lineal en el texto; el
-    borrado de tildes es un solo `str.translate`, sin bucles de Python por carácter.
+    Es idempotente: `fold(fold(texto)) == fold(texto)`. Coste lineal en el texto: una
+    expresión regular recorre el texto en C y solo los caracteres que cambian pasan por
+    Python.
     """
-    return unicodedata.normalize(UNICODE_FORM, text).casefold().translate(_FOLDING_TABLE)
+    composed = unicodedata.normalize(UNICODE_FORM, text).casefold()
+    # Con un diccionario, `str.translate` busca cada carácter en él en cuanto el texto no
+    # es ASCII puro, y una ficha de producto en español casi nunca lo es: con las 100 000
+    # fichas de ESCI eran 5,3 s de los 15 s del análisis. Sustituir solo los caracteres
+    # que cambian (las tildes son unos pocos por ficha) baja el plegado a 1,0 s.
+    return _FOLDABLE_CHARACTER.sub(_folded_character, composed)
+
+
+def _folded_character(match: re.Match[str]) -> str:
+    return _FOLDING_TABLE[ord(match.group())] or ""
 
 
 def _folding_table() -> dict[int, str | None]:
-    """Tabla de `str.translate`: cada letra con diacrítico va a su letra base y cada marca
-    diacrítica suelta se borra.
+    """Lo que cambia el plegado, por código de carácter: cada letra con diacrítico va a su
+    letra base, y cada marca diacrítica suelta y cada apóstrofo se borran (`None`).
 
     Se recorre todo el plano básico una sola vez, al importar el módulo (unos 30 ms), en
     lugar de descomponer cada texto: así el plegado de un documento no paga ninguna
@@ -59,3 +70,4 @@ def _without_marks(character: str) -> str | None:
 
 
 _FOLDING_TABLE = _folding_table()
+_FOLDABLE_CHARACTER = re.compile(f"[{re.escape(''.join(map(chr, _FOLDING_TABLE)))}]")

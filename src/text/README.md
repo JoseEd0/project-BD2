@@ -53,10 +53,28 @@ texto ──► plegado ──► tokens ──► longitud ──► stopwords 
 4. **Sin apóstrofos**: `L'Oréal` → `loreal`, `Kellogg’s` → `kelloggs`. Se borran en vez de
    separar porque así se buscan las marcas.
 
-Los pasos 3 y 4 son un único `str.translate` con una tabla que se construye una vez al
-importar el módulo, recorriendo el plano básico de Unicode: cada letra con diacrítico va a
-su letra base y cada marca diacrítica suelta se borra. Ningún texto paga una llamada a
-`unicodedata` por carácter.
+Los pasos 3 y 4 salen de una tabla que se construye una vez al importar el módulo,
+recorriendo el plano básico de Unicode: cada letra con diacrítico va a su letra base y cada
+marca diacrítica suelta se borra. Ningún texto paga una llamada a `unicodedata` por
+carácter.
+
+La tabla se aplica con una expresión regular que encuentra **solo los caracteres que
+cambian**, y no con `str.translate`. Con un diccionario por tabla, `translate` busca cada
+carácter del texto en él en cuanto el texto no es ASCII puro, y el 90 % de las fichas de
+ESCI no lo es (una tilde basta). La expresión regular recorre el texto en C y solo las
+tildes, unas pocas por ficha, pasan por Python. Medido con las 100 000 fichas de ESCI
+(120 millones de caracteres), el resultado es idéntico carácter a carácter:
+
+| Plegado de las 100 000 fichas | Tiempo |
+|---|---:|
+| `str.translate` | 5,3 s |
+| expresión regular | **1,05 s** |
+
+El compromiso es un texto hecho casi solo de letras con tilde, que pasa cada carácter por
+Python: 5 000 vocales con tilde tardan 410 µs, frente a 60 µs con `translate`. Un texto
+real en español tiene una tilde cada decenas de caracteres, y ahí la expresión regular
+gana: 8 000 caracteres de `canción ` se pliegan en 139 µs, frente a 294 µs. Un test
+compara el plegado de cada carácter del plano básico con su definición.
 
 Quitar las tildes hace que la búsqueda no dependa de que el usuario las escriba, que en las
 fichas de producto y en las consultas faltan a menudo. Tiene un coste conocido: las

@@ -46,6 +46,7 @@ from benchmarks.common import (
     peak_memory_kib,
     relation_kib,
     results_directory,
+    synthetic_record_id,
     time_it,
 )
 from config import EngineConfig
@@ -54,7 +55,6 @@ from query.engine import Engine
 from query.loader import infer_schema, read_values
 from spatial.geometry import Point, Rectangle
 from spatial.metrics import HAVERSINE
-from storage.record_id import RecordId
 from storage.types import FieldType
 
 BENCHMARK_NAME = "espacial"
@@ -87,7 +87,6 @@ CLUSTERED_SHARE = 0.8
 CLUSTER_SPREAD_DEGREES = 0.012
 QUERY_JITTER_DEGREES = 0.002
 MEMORY_SAMPLE_QUERIES = 5
-FAKE_SLOTS_PER_PAGE = 100
 
 Answers = dict[str, list[list[int]]]
 WorkloadSource = Callable[[int, int, int], "Workload"]
@@ -419,10 +418,7 @@ def _measure_insertion_build(report: Report, workload: Workload, config: EngineC
 
         def insert_all() -> None:
             for number, point in workload.points:
-                address = RecordId(
-                    1 + number // FAKE_SLOTS_PER_PAGE, number % FAKE_SLOTS_PER_PAGE
-                )
-                tree.insert(point, address)
+                tree.insert(point, synthetic_record_id(number))
 
         elapsed = time_it(insert_all)
         nodes = tree.node_count

@@ -19,6 +19,7 @@ from typing import Any
 
 from query.plan import MILLISECONDS_PER_SECOND
 from storage.record import RecordSerializer
+from storage.record_id import RecordId
 from storage.schema import Field, Schema
 from storage.types import FieldType, Value
 
@@ -30,6 +31,9 @@ POSTGRES_DSN_VARIABLE = "BENCH_POSTGRES_DSN"
 ROWS_STREAM = "filas"
 QUERIES_STREAM = "consultas"
 DELETIONS_STREAM = "borrados"
+# Ranuras por página de las direcciones inventadas: cualquier número que quepa en el campo
+# de la ranura sirve, porque nadie va a leer esas páginas.
+SYNTHETIC_SLOTS_PER_PAGE = 100
 
 
 @dataclass
@@ -195,6 +199,13 @@ def sample_keys(count: int, queries: int, seed: int) -> list[int]:
 def deletion_order(count: int, seed: int) -> list[int]:
     """Todas las claves, en un orden al azar independiente del de inserción."""
     return random_stream(seed, DELETIONS_STREAM).sample(range(count), count)
+
+
+def synthetic_record_id(position: int) -> RecordId:
+    """Una dirección de fila válida para la fila número `position`, para medir un índice
+    sin la tabla detrás. La página 0 es la cabecera de un archivo paginado: se empieza en 1.
+    """
+    return RecordId(1 + position // SYNTHETIC_SLOTS_PER_PAGE, position % SYNTHETIC_SLOTS_PER_PAGE)
 
 
 def results_directory(root: Path) -> Path:

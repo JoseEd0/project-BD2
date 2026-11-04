@@ -187,6 +187,7 @@ vacía. Al construir cada operador se valida:
 | tipo de las columnas que recibe una función | `distancia(nombre, POINT(…))` | la columna es STRING |
 | argumentos constantes y opciones | `intersecta(p, 5)`, `metrica='manhattan'` | no es un polígono; métrica desconocida |
 | tipo de lo que se agrega | `SUM(nombre)`, `MIN(ubicacion)` | no es numérico; un punto no tiene orden |
+| una búsqueda de texto que no se puede responder | `MATCH(precio, 'x')`, `MATCH(texto, 'x') OR …`, `SCORE()` sin `MATCH` | ver [Búsqueda de texto](#búsqueda-de-texto) |
 
 **Una expresión constante vale lo mismo que un literal.** `-5`, `2 + 8` o
 `POINT(-12.0, -77.0)` no dependen de ninguna fila: se calculan una vez (`constant_value`)
@@ -212,6 +213,7 @@ condiciones aprovechables:
 | `intersecta(col, POLYGON(…))` | `SpatialPolygonScan` (R-Tree) | `SequentialScan` |
 | `ORDER BY distancia(col, POINT(…))` | `SpatialNearestScan` (R-Tree), sin ordenar | `SequentialScan` + `ExternalSort` |
 | `ORDER BY clave_primaria` | `OrderedScan`, sin ordenar (secuencial o B+ agrupado) | `SequentialScan` + `ExternalSort` |
+| `MATCH(col, 'consulta')` | `TextSearchScan` (índice invertido), en orden de puntaje | error: el `MATCH` necesita el índice |
 
 El valor puede ser cualquier expresión constante (`id = -5`, `id BETWEEN 10 * 10 AND 120`,
 `ubicacion = POINT(-12.05, -77.04)`) y la comparación puede escribirse en cualquiera de los
@@ -258,7 +260,9 @@ dos tablas antes de ejecutar, así que una columna ambigua o inexistente falla a
 tablas estén vacías.
 
 El `Filter` se conserva aunque el índice ya haya acotado: cuesta poco y garantiza que el
-resultado es correcto aunque el camino de acceso devuelva de más.
+resultado es correcto aunque el camino de acceso devuelva de más. La excepción es el
+`MATCH`, que el acceso de texto resuelve exactamente y que sale del `WHERE` (ver
+[Búsqueda de texto](#búsqueda-de-texto)). El plan muestra la condición de cada `Filter`.
 
 ## Operadores (`operators.py`)
 
@@ -369,6 +373,106 @@ Entrega **exactamente** lo que entregaría recorrer y ordenar, también en los c
 Tras ejecutarse, cada uno añade al plan **cuántos nodos del árbol abrió**:
 `… (índice idx_tiendas_ubicacion, RTREE) · 5 de 610 nodos visitados`.
 
+## Búsqueda de texto
+
+`MATCH`, `SCORE()`, `USING TF_IDF | BM25` y `WITH (k1, b)` (gramática en
+[`sql/README.md`](../sql/README.md#búsqueda-de-texto)), sobre el índice invertido y el
+`Ranker` de [`index/inverted/`](../index/inverted/README.md). Dos archivos, como en la
+Parte 2:
+
+| Archivo | Qué hace |
+|---|---|
+| `text_search.py` | reconoce el `MATCH` del `WHERE`, lo resuelve contra el catálogo y rechaza lo que no se puede responder |
+| `text_operators.py` | `TextSearchScan`, el camino de acceso que entrega cada fila con su puntaje |
+
+```sql
+SELECT id, SCORE() AS relevancia FROM productos
+    WHERE MATCH(texto, 'auriculares inalámbricos') AND precio < 100
+    USING BM25 ORDER BY relevancia DESC LIMIT 10;
+```
+
+**`MATCH` no se evalúa fila a fila.** Es la condición que resuelve el índice: las filas que
+tienen algún término de la consulta, que son las que puntúa el `Ranker`, con TF-IDF o con
+BM25 (el mismo conjunto con los dos). Por eso tiene que ir en el `WHERE` unida al resto con
+`AND`, sobre una columna con índice `INVERTED`, con una consulta constante. La tabla del
+`MATCH` va siempre por ese índice, aunque el `WHERE` tenga también una igualdad sobre otra
+columna indexada: es el único acceso que sabe puntuar. Sin `USING` el ranking es **BM25**,
+el más relevante en el experimento de la Parte 3.
+
+**El predicado consumido.** El planificador saca el `MATCH` del `WHERE` antes de construir
+el plan (`served`): el acceso solo entrega filas que lo cumplen, así que el `Filter` no lo
+vuelve a evaluar. Lo que queda del `WHERE` es el filtro residual, que el plan muestra tal
+cual (`Filter: precio < 100`); sin él, no hay `Filter`.
+
+**El puntaje es una columna virtual.** `TextSearchScan` entrega cada fila con su puntaje
+al final, en una columna que `*` no despliega, y cada `SCORE()` de la consulta pasa a leer
+esa columna. Así el puntaje se calcula una vez y vale en el `SELECT`, el `WHERE`
+(`AND SCORE() > 2`), el `ORDER BY`, dentro de una expresión o de una agregación
+(`MAX(SCORE())`), y atraviesa un `JOIN` o un ordenamiento externo como cualquier columna
+real. Un `SCORE()` sin alias se llama `score`.
+
+**El orden y el `LIMIT`.** El acceso entrega las filas de mayor a menor puntaje (a igual
+puntaje, por la dirección de la fila), así que:
+
+| Consulta | Plan | Qué pide al ranking |
+|---|---|---|
+| `MATCH … LIMIT 10`, con o sin `ORDER BY SCORE() DESC` | `TextSearchScan`, sin ordenar | `top_k(10)`: un montículo de 10 |
+| `… LIMIT 10 OFFSET 20` | igual | `top_k(30)`, y el `Limit` salta 20 |
+| `… AND precio < 100 LIMIT 10` | `Filter` sobre `TextSearchScan` | el orden perezoso (`ranked`): filas hasta que el filtro deje pasar 10 |
+| `… ORDER BY relevancia DESC` (alias) | sin `ExternalSort` | el orden completo |
+| `… ORDER BY SCORE()` (ascendente) u otra columna | `ExternalSort` | el orden completo |
+| sin `LIMIT` | `TextSearchScan` | todas las filas que coinciden, en orden de puntaje |
+| `MATCH` en un lado de un `JOIN`, con `GROUP BY` o `DISTINCT` | el acceso alimenta ese lado | el orden perezoso; un `JOIN` o una agrupación pierden el orden |
+
+El `LIMIT + OFFSET` llega al top-k solo si entre el acceso y el `Limit` nada puede
+descartar ni reordenar filas: un filtro residual, un `JOIN`, una agrupación, un `DISTINCT`
+o un `ORDER BY` por otra cosa lo impiden. Entonces el `Limit` corta igual, pidiéndole filas
+al orden perezoso hasta completar las suyas.
+
+**Errores, antes de leer ninguna fila:**
+
+| Consulta | Error |
+|---|---|
+| `MATCH` sobre una columna sin índice invertido | dice el `CREATE INDEX … USING INVERTED (col)` que falta |
+| `MATCH(precio, 'x')` | busca en una columna de texto (VARCHAR o TEXT) |
+| `MATCH(texto, marca)`, `MATCH(texto, 5)` | la consulta tiene que ser un texto constante |
+| `MATCH(…) OR …`, `NOT MATCH(…)` | no se puede negar ni combinar con OR |
+| dos `MATCH` en la consulta | una consulta admite un solo `MATCH` |
+| `MATCH` en el `SELECT`, el `ORDER BY`, un `UPDATE` o un `DELETE` | va en el `WHERE` de un `SELECT` |
+| `SCORE()` sin `MATCH`, o `SCORE(x)` | es el puntaje de un `MATCH`; no recibe argumentos |
+| `USING HNSW`, `WITH (metric=…)` | `MATCH` se ordena con `TF_IDF` o `BM25`; el `WITH` lleva `k1` y `b` |
+| `USING TF_IDF WITH (k1=…)`, `WITH (b=2)` | TF-IDF no tiene parámetros; `b` va de 0 a 1 |
+
+Dos decisiones de alcance: **un solo `MATCH` por consulta**, porque el puntaje es uno
+(para dos columnas, juntar las palabras en una consulta o indexar una columna que las
+reúna); y **`MATCH` no va en un `UPDATE` ni en un `DELETE`**, que no tienen `USING` ni
+puntaje: para cambiar las filas que encuentra se seleccionan sus claves y se filtra por
+ellas.
+
+**`EXPLAIN`** dice qué se busca, con qué ranking y con cuántas filas, y los términos ya
+analizados con su df, que salen del léxico sin leer ninguna lista; **`EXPLAIN ANALYZE`**
+añade los postings leídos y los documentos puntuados (`RankingStats`). Con los 1 000
+productos de ESCI:
+
+```
+Limit: limit=5, offset=0  (filas=0, 0.88 ms)
+└─ Projection: id, titulo, score  (filas=0, 0.88 ms)
+   └─ Filter: marca = 'Adidas'  (filas=0, 0.88 ms)
+      └─ TextSearchScan: productos.texto MATCH 'zapatillas running mujer' · BM25 k1=1.2 b=0.75 · en orden de puntaje, a demanda (índice idx_productos_texto, INVERTED) · términos: zapatill (df 22), running (df 14), muj (df 66) · 102 postings leídos, 84 documentos puntuados  (filas=84, 0.81 ms)
+```
+
+**Lo que la interfaz recibe.** `QueryResult.text` (`TextView`) lleva la tabla, la columna,
+la consulta, el ranking y sus términos analizados, para resaltarlos en el resultado; el API
+los devuelve en `text`.
+
+**Escrituras y transacciones.** El índice es un índice secundario más
+([`TextSearchIndex`](../index/inverted/secondary.py)): `INSERT`, `DELETE`, `UPDATE` del
+texto y `ROLLBACK` le llegan por la tabla, y `COMMIT` lo baja a disco con el resto
+(política *force*). Un `UPDATE` que cambia el texto quita el documento viejo **antes** de
+que el texto nuevo ocupe su lugar en el archivo de valores o de que ese lugar se libere, y
+uno que cambia otra columna no toca el índice. `DROP INDEX` y `DROP TABLE` borran todos
+sus archivos, segmentos incluidos, y el catálogo guarda su `idioma` para reabrirlo igual.
+
 ## Motor (`engine.py`)
 
 Ejecuta `CREATE`/`DROP TABLE`, `CREATE`/`DROP INDEX`, `INSERT`, `UPDATE`, `DELETE`,
@@ -448,6 +552,15 @@ literal y que la que no se puede calcular se rechaza sobre una tabla vacía.
 función. `test_ddl.py` cubre lo que cambia el catálogo: índices repetidos, tablas e índices
 que no se pueden crear —y que no dejan rastro— y una tabla a la que se le quita el índice
 de su clave.
+
+`test_text_search.py` ejecuta los dos ejemplos del enunciado tal cual y compara cada
+búsqueda con el **oráculo del ranking**, que aplica las fórmulas directo a los textos de
+la tabla: con TF-IDF y BM25, con varios `k1` y `b`, con `LIMIT`, `OFFSET`, filtros,
+`JOIN`, agrupación y `DISTINCT`. Comprueba también que el `LIMIT` llega al top-k y que un
+filtro lee del orden perezoso solo lo que necesita, cada error, el `EXPLAIN`, un `UPDATE`
+del texto que lo mueve o lo libera en el archivo de valores, el `ROLLBACK` y la
+reapertura. `test_text_index_ddl.py` cubre el `CREATE INDEX … USING INVERTED`: opciones,
+columnas que admite y archivos que deja o se lleva.
 
 `test_joins.py` cruza los cuatro tipos de reunión con claves simples, compuestas, NULL y
 condiciones sin igualdad, y los compara con el cálculo directo. `test_grouping.py` y

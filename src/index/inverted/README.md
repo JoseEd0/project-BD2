@@ -533,9 +533,8 @@ del test):
 | vocabulario / postings | 5 / 6 | 3 / 3 |
 
 Un `UPDATE` que cambia el texto es un borrado y una inserción, con `doc_id` nuevo. Uno que
-no lo cambia no llega al índice: la tabla avisa con `update(vieja, nueva, dirección)` y
-`ColumnIndex` compara el valor de la columna antes de tocar nada (ver
-[`index/README.md`](../README.md)).
+no lo cambia no llega al índice: la tabla le pregunta antes con `changes(vieja, nueva)`,
+que compara el valor lógico de la columna (ver [`index/README.md`](../README.md)).
 
 ### `doc_id` estables
 
@@ -630,8 +629,8 @@ idénticos, y el orden también, porque los empates no dependen del `doc_id`. Es
 ### El índice como índice secundario
 
 `TextSearchIndex` (`secondary.py`) es un `ColumnIndex`: recibe de la tabla `build`,
-`insert`, `delete` y `update` con la fila y su dirección, deja fuera los NULL y declara sus
-archivos con `files_of` para `DROP INDEX`.
+`insert` y `delete` con la fila y su dirección y `changes` con las dos filas de un
+`UPDATE`, deja fuera los NULL y declara sus archivos con `files_of` para `DROP INDEX`.
 
 - `build` construye con SPIMI de una vez, no fila a fila, y solo sobre un índice vacío.
 - El idioma del analizador (`language`, que en SQL será la opción `idioma`) se elige al

@@ -35,7 +35,7 @@ from query.expressions import (
     UnknownColumnError,
 )
 from query.files import DirectoryLock, resolve_user_file
-from query.index_methods import method_named, secondary_method_names
+from query.index_methods import Capability, method_named, secondary_method_names
 from query.journal import DiscardingJournal, Journal
 from query.loader import infer_schema, read_values
 from query.operators import UnsupportedQueryError
@@ -516,6 +516,8 @@ class Engine:
             method = column.index or _default_method_for(field)
             _require_heap_for_secondary_index(organization, column.name)
             _require_method_for_column(field, method)
+            if column.unique:
+                _require_equality_for_unique(column.name, method)
             indexes.append(
                 IndexDefinition(
                     name=default_index_name(statement.name, column.name),
@@ -656,6 +658,22 @@ def _require_method_for_column(field: Field, method: IndexType) -> None:
     refusal = known.refusal_for(field)
     if refusal is not None:
         raise CatalogError(refusal)
+
+
+def _require_equality_for_unique(column: str, method: IndexType) -> None:
+    """Una columna `UNIQUE` comprueba con su índice que un valor no esté ya en otra fila: es
+    una búsqueda por igualdad, y un índice invertido solo responde búsquedas rankeadas.
+
+    Raises:
+        CatalogError: si el método no busca por igualdad.
+    """
+    known = method_named(method)
+    if known is not None and known.supports(Capability.EQUALITY):
+        return
+    raise CatalogError(
+        f"la columna '{column}' es UNIQUE y un índice {method.value} no busca por igualdad: "
+        "usa HASH o BTREE"
+    )
 
 
 def _require_known_options(spec: IndexSpec) -> None:

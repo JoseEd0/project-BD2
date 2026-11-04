@@ -15,6 +15,7 @@ from typing import Any, Protocol
 
 from config import EngineConfig
 from index.bplustree import ClusteredBPlusIndex
+from index.inverted import TextSearchIndex
 from index.rtree import SearchStats, SpatialIndex
 from index.secondary import RangeIndex, SecondaryIndex
 from query.catalog import IndexDefinition, Organization, TableDefinition
@@ -244,7 +245,7 @@ class Table:
     ) -> Iterator[AddressedRecord]:
         """Filas que el índice indicado asocia a alguno de esos valores."""
         index = self._indexes[index_name]
-        return self._addressed_at(
+        return self.addressed_at(
             address for value in dict.fromkeys(values) for address in index.search(value)
         )
 
@@ -259,7 +260,7 @@ class Table:
         index = self._indexes[index_name]
         if not isinstance(index, RangeIndex):
             raise UnsupportedIndexError(f"el índice '{index_name}' no admite consultas por rango")
-        return self._addressed_at(address for _, address in index.range_search(low, high))
+        return self.addressed_at(address for _, address in index.range_search(low, high))
 
     def spatial_index(self, index_name: str) -> SpatialIndex:
         """Índice R-Tree con ese nombre.
@@ -270,6 +271,17 @@ class Table:
         index = self._indexes[index_name]
         if not isinstance(index, SpatialIndex):
             raise UnsupportedIndexError(f"el índice '{index_name}' no es un índice espacial")
+        return index
+
+    def text_search_index(self, index_name: str) -> TextSearchIndex:
+        """Índice invertido con ese nombre.
+
+        Raises:
+            UnsupportedIndexError: si el índice no es de texto.
+        """
+        index = self._indexes[index_name]
+        if not isinstance(index, TextSearchIndex):
+            raise UnsupportedIndexError(f"el índice '{index_name}' no es un índice de texto")
         return index
 
     def addressed_within_radius(
@@ -301,7 +313,7 @@ class Table:
         column = self._definition.index_on_name(index_name).column
         yield from self._with_null(column, self.row_count - index.entry_count)
         found = index.nearest(center, metric, stats)
-        yield from self._addressed_at(neighbor.record_id for neighbor in found)
+        yield from self.addressed_at(neighbor.record_id for neighbor in found)
 
     def addressed_within_polygon(
         self, index_name: str, polygon: Polygon, stats: SearchStats | None = None
@@ -487,11 +499,16 @@ class Table:
         for _, record in rows:
             yield self._rows.unpack(record)
 
-    def _addressed_at(self, addresses: Iterable[RecordId]) -> Iterator[AddressedRecord]:
-        """El salto al heap: la fila que vive en cada dirección que devolvió un índice.
+    def addressed_at(self, addresses: Iterable[RecordId]) -> Iterator[AddressedRecord]:
+        """El salto al heap: la fila que vive en cada dirección que devolvió un índice, en
+        el orden en que llegan.
 
         Pide las direcciones de una en una: quien deja de pedir filas —un `LIMIT` sobre un
-        k-NN o sobre un rango— deja también de recorrer el índice.
+        k-NN, sobre un rango o sobre una búsqueda de texto— deja también de recorrer el
+        índice.
+
+        Raises:
+            UnorderedStoreError: si la tabla no es un heap file.
         """
         requested, located = tee(addresses)
         return zip(requested, self._storage.at(located), strict=True)
@@ -525,7 +542,7 @@ class Table:
         página se lee una sola vez. Es la idea del *bitmap heap scan* de PostgreSQL, y
         solo vale cuando el orden del resultado no importa; el k-NN no puede usarla.
         """
-        return self._addressed_at(sorted(addresses))
+        return self.addressed_at(sorted(addresses))
 
     def _addressed_like(self, target: Record) -> Iterator[AddressedRecord]:
         """Dónde buscar una fila igual a `target`: por su clave primaria si la tiene, que es
@@ -692,7 +709,9 @@ class Table:
                 f"el método {definition.method.value} no sirve como índice secundario"
             )
         path = self._index_path(definition.name)
-        return method.opener(path, self._rows, definition.column, self._config)
+        return method.opener(
+            path, self._rows, definition.column, self._config, definition.options
+        )
 
     def _open_text_values(self) -> VariableLengthFile | None:
         """El archivo donde viven los valores de las columnas TEXT, si la tabla tiene alguna."""

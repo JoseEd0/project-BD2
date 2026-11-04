@@ -4,7 +4,7 @@ La tabla le avisa de cada fila que entra, sale o cambia con su dirección, igual
 B+ o a un hash, y deshacer una transacción vuelve a pasar por ahí: deshacer una
 inserción borra el documento y deshacer un borrado lo vuelve a insertar, con un `doc_id`
 nuevo. Lo que este índice responde no es una igualdad sino una búsqueda rankeada: se
-consulta con un `Ranker` sobre `inverted_index`.
+consulta con su `ranker()`.
 """
 
 from __future__ import annotations
@@ -15,13 +15,14 @@ from typing import Any
 
 from config import EngineConfig
 from index.secondary import ColumnIndex
-from storage.record import RecordSerializer
+from storage.record import FieldReader
 from storage.record_id import RecordId
 from storage.types import Key
 from text import DEFAULT_LANGUAGE, Analyzer, language_named
 
 from .format import InvertedIndexError
 from .index import InvertedIndex
+from .ranking import Ranker
 
 
 class TextSearchEqualityError(InvertedIndexError):
@@ -53,7 +54,7 @@ class TextSearchIndex(ColumnIndex):
     def __init__(
         self,
         path: Path,
-        serializer: RecordSerializer,
+        serializer: FieldReader,
         column: str,
         config: EngineConfig,
         language: str = DEFAULT_LANGUAGE,
@@ -70,6 +71,10 @@ class TextSearchIndex(ColumnIndex):
     def inverted_index(self) -> InvertedIndex:
         """El índice que consultan el ranking y el planificador."""
         return self._index
+
+    def ranker(self) -> Ranker:
+        """El ranking de las búsquedas sobre este índice, en su idioma."""
+        return Ranker(self._index, self._config)
 
     def build(self, rows: Iterable[tuple[bytes, RecordId]]) -> None:
         """Indexa de una vez las filas de la tabla con SPIMI, en vez de una a una.

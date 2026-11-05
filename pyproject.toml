@@ -53,12 +53,14 @@ strict = true
 warn_unreachable = true
 
 # Las gráficas, la conexión a PostgreSQL y la lectura de parquet son extras opcionales. Los
-# stubs de los dos primeros usan sintaxis de Python 3.12, que mypy no acepta con
-# `python_version = "3.11"`, y `pyarrow` no trae tipos: se tratan como `Any`.
+# tipos de numpy, matplotlib y psycopg, y el código de librosa 1.0 (que se instala con
+# Python 3.12), usan sintaxis de Python 3.12, que mypy no acepta con
+# `python_version = "3.11"`; `pyarrow` y `faiss` no traen tipos. Se tratan como `Any`, y
+# los módulos del motor que los usan los envuelven en funciones tipadas.
 [[tool.mypy.overrides]]
 module = [
     "numpy", "numpy.*", "matplotlib", "matplotlib.*", "psycopg", "psycopg.*",
-    "pyarrow", "pyarrow.*", "faiss", "faiss.*",
+    "pyarrow", "pyarrow.*", "faiss", "faiss.*", "librosa", "librosa.*",
 ]
 follow_imports = "skip"
 follow_imports_for_stubs = true

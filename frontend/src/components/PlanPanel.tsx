@@ -53,6 +53,46 @@ function PlanNode({ node, root }: { node: PlanInfo; root: boolean }) {
   );
 }
 
+/** El árbol del plan con su leyenda, o la invitación a ejecutar un `SELECT`. */
+export function PlanView({ plan }: PlanPanelProps) {
+  if (plan === null) {
+    return (
+      <p className="panel__empty">
+        El plan aparece al ejecutar un <code>SELECT</code>.
+      </p>
+    );
+  }
+  return (
+    <>
+      <div className="plan">
+        <PlanNode node={plan} root />
+      </div>
+      <div className="plan__legend">
+        <p>
+          Se lee <strong>de abajo hacia arriba</strong>: cada operador consume las filas del
+          que tiene debajo.
+        </p>
+        <p>
+          <span className="legend-dot legend-dot--access" /> camino de acceso — recorrido
+          completo, índice hash, índice B+, R-Tree, índice invertido o el orden propio de la
+          tabla. Un acceso por R-Tree dice además cuántos nodos del árbol abrió, y uno por
+          índice invertido, sus términos con su df y cuántos postings leyó.
+        </p>
+        <p>
+          <span className="legend-dot legend-dot--external" /> algoritmo externo — se apoya
+          en disco para no cargarlo todo en memoria.
+        </p>
+        <p>
+          Tras ejecutar, cada paso muestra las <strong>filas reales</strong> que produjo y su{" "}
+          <strong>tiempo</strong>, que incluye el de sus hijos: es lo que da{" "}
+          <code>EXPLAIN ANALYZE</code>. <code>EXPLAIN</code> solo muestra el camino elegido,
+          sin ejecutar.
+        </p>
+      </div>
+    </>
+  );
+}
+
 export default function PlanPanel({ plan }: PlanPanelProps) {
   return (
     <section className="panel panel--plan">
@@ -60,40 +100,7 @@ export default function PlanPanel({ plan }: PlanPanelProps) {
         <h2 className="panel__title">Plan de ejecución</h2>
       </header>
       <div className="panel__body">
-        {plan === null ? (
-          <p className="panel__empty">
-            El plan aparece al ejecutar un <code>SELECT</code>.
-          </p>
-        ) : (
-          <>
-            <div className="plan">
-              <PlanNode node={plan} root />
-            </div>
-            <div className="plan__legend">
-              <p>
-                Se lee <strong>de abajo hacia arriba</strong>: cada operador consume las filas
-                del que tiene debajo.
-              </p>
-              <p>
-                <span className="legend-dot legend-dot--access" /> camino de acceso —
-                recorrido completo, índice hash, índice B+, R-Tree, índice invertido o el
-                orden propio de la tabla. Un acceso por R-Tree dice además cuántos nodos del
-                árbol abrió, y uno por índice invertido, sus términos con su df y cuántos
-                postings leyó.
-              </p>
-              <p>
-                <span className="legend-dot legend-dot--external" /> algoritmo externo —
-                se apoya en disco para no cargarlo todo en memoria.
-              </p>
-              <p>
-                Tras ejecutar, cada paso muestra las <strong>filas reales</strong> que
-                produjo y su <strong>tiempo</strong>, que incluye el de sus hijos: es lo que
-                da <code>EXPLAIN ANALYZE</code>. <code>EXPLAIN</code> solo muestra el camino
-                elegido, sin ejecutar.
-              </p>
-            </div>
-          </>
-        )}
+        <PlanView plan={plan} />
       </div>
     </section>
   );

@@ -83,6 +83,10 @@ jobs:
           docker compose --profile bench run --rm bench python -m benchmarks.spatial_benchmark \
             --sizes 1000 --queries 5 --output /tmp/espacial \
             | grep "GiST (PostgreSQL) | radio 1 km" | grep -q "coinciden_con_el_motor=5/5"
+      - name: pgvector en el PostgreSQL de referencia
+        run: |
+          docker compose --profile bench exec -T postgres psql --username postgres \
+            --dbname minigestor_bench --command "CREATE EXTENSION IF NOT EXISTS vector"
       - name: Registro de los servicios
         if: failure()
         run: docker compose --profile bench logs

@@ -215,6 +215,7 @@ en local, como sigue.
 | la interfaz | Node.js 18 o posterior; 22.18 para `npm test` |
 | redibujar las gráficas (opcional) | `matplotlib`, que se instala con el extra `plots` |
 | medir contra GiST y GIN (opcional) | PostgreSQL con la extensión PostGIS y el extra `postgres`, o Docker (perfil `bench`) |
+| medir contra pgvector y USearch (opcional) | PostgreSQL con la extensión pgvector y los extras `postgres` y `usearch`, o Docker (perfil `bench`) |
 
 ### 3.3 Instalar
 
@@ -374,7 +375,7 @@ BENCH_POSTGRES_DSN="dbname=minigestor_bench" .venv/bin/python -m benchmarks.spat
 ```
 
 Con Docker no hace falta instalar nada de esto: el perfil `bench` de `compose.yaml` trae
-PostgreSQL con PostGIS y un contenedor con los extras, y corre los mismos comandos
+PostgreSQL con PostGIS y pgvector y un contenedor con los extras, y corre los mismos comandos
 (`docker compose --profile bench run --rm bench python -m benchmarks.spatial_benchmark ...`).
 Los detalles están en [`benchmarks/README.md`](benchmarks/README.md#con-docker).
 

@@ -34,7 +34,7 @@ RUN python -c "import numpy, librosa; librosa.feature.mfcc(y=numpy.zeros(22050, 
 
 FROM base AS bench
 
-RUN pip install ".[postgres,plots,datasets]"
+RUN pip install ".[postgres,plots,datasets,usearch]"
 USER minigestor
 ENV MPLCONFIGDIR=/tmp/matplotlib
 

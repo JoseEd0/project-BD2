@@ -688,4 +688,88 @@ LIMIT 10;`,
       },
     ],
   },
+  {
+    name: "Multimedia",
+    snippets: [
+      {
+        label: "Enunciado: imágenes",
+        description:
+          "El primer ejemplo del enunciado: las 10 fotos más parecidas por SIFT con HNSW y coseno",
+        sql: `SELECT * FROM imagenes
+WHERE SIMILAR_TO('data/datasets/abo/imagenes/c8/c8fa4944.jpg', k=10)
+USING HNSW WITH METRIC=cosine;`,
+      },
+      {
+        label: "Enunciado: canciones",
+        description:
+          "El segundo ejemplo del enunciado: MFCC con IVF y distancia euclidiana, ORDER BY sin ordenar",
+        sql: `SELECT titulo, artista, genero, SIMILARITY_SCORE() AS score
+FROM canciones
+WHERE SIMILAR_TO('data/datasets/fma_small/pistas/132/132454.mp3', k=5)
+USING IVF WITH METRIC=euclidean
+ORDER BY score DESC;`,
+      },
+      {
+        label: "Similitud + filtro",
+        description:
+          "El resto del WHERE filtra antes de buscar: las 10 más parecidas que no son fundas de celular",
+        sql: `SELECT titulo, categoria, SIMILARITY_SCORE() AS score
+FROM imagenes
+WHERE SIMILAR_TO('data/datasets/abo/imagenes/c8/c8fa4944.jpg', k=10)
+  AND categoria <> 'CELLULAR_PHONE_CASE'
+USING HNSW;`,
+      },
+      {
+        label: "HNSW con ef_search",
+        description: "WITH ef_search cambia los candidatos que explora HNSW solo para esta consulta",
+        sql: `SELECT titulo, SIMILARITY_SCORE() AS score
+FROM imagenes
+WHERE SIMILAR_TO('data/datasets/abo/imagenes/c8/c8fa4944.jpg', k=10)
+USING HNSW WITH ef_search = 200;`,
+      },
+      {
+        label: "Otra métrica",
+        description:
+          "El índice ordena con coseno; con euclidiana el plan compara contra todas las fotos y lo dice",
+        sql: `EXPLAIN ANALYZE
+SELECT titulo, SIMILARITY_SCORE() AS score
+FROM imagenes
+WHERE SIMILAR_TO('data/datasets/abo/imagenes/c8/c8fa4944.jpg', k=10)
+USING HNSW WITH METRIC=euclidean;`,
+      },
+      {
+        label: "IVF sobre imágenes",
+        description:
+          "Un segundo índice en la misma columna: IVF con √N listas; WITH probes elige cuántas recorre",
+        sql: `CREATE INDEX IF NOT EXISTS idx_imagenes_ivf
+  ON imagenes USING IVF (ruta) WITH (METRIC = cosine);
+
+SELECT titulo, SIMILARITY_SCORE() AS score
+FROM imagenes
+WHERE SIMILAR_TO('data/datasets/abo/imagenes/c8/c8fa4944.jpg', k=10)
+USING IVF WITH probes = 8;`,
+      },
+      {
+        label: "Géneros parecidos",
+        description: "SIMILARITY_SCORE() con GROUP BY: de qué géneros son las 50 pistas más parecidas",
+        sql: `SELECT genero, COUNT(*) AS pistas, MAX(SIMILARITY_SCORE()) AS mejor
+FROM canciones
+WHERE SIMILAR_TO('data/datasets/fma_small/pistas/132/132454.mp3', k=50)
+GROUP BY genero
+USING IVF
+ORDER BY pistas DESC;`,
+      },
+      {
+        label: "EXPLAIN de SIMILAR_TO",
+        description:
+          "VectorSearchScan: extracción de la consulta, distancias calculadas y el filtro como hijo",
+        sql: `EXPLAIN ANALYZE
+SELECT titulo, categoria
+FROM imagenes
+WHERE SIMILAR_TO('data/datasets/abo/imagenes/c8/c8fa4944.jpg', k=10)
+  AND id > 500
+USING HNSW;`,
+      },
+    ],
+  },
 ];

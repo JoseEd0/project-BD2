@@ -9,6 +9,9 @@ Cada estructura vive en su carpeta con su propia explicación:
 | [`hash/`](hash/README.md) | Hash extendible | igualdad, nada más |
 | [`rtree/`](rtree/README.md) | R-Tree | puntos: radio, vecinos más cercanos y polígono |
 | [`inverted/`](inverted/README.md) | Índice invertido (SPIMI) | texto: las listas de documentos de cada término |
+| [`vector/`](vector/README.md) | Métricas, búsqueda exacta y lo común a los de vectores | vectores: los k más parecidos |
+| [`ivf/`](ivf/README.md) | IVF sobre FAISS | vectores: solo las listas más cercanas |
+| [`hnsw/`](hnsw/README.md) | HNSW sobre FAISS | vectores: grafo por niveles |
 
 ## Claves (`keys.py`)
 

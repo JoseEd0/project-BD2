@@ -2,7 +2,7 @@
 
 ARG PYTHON_VERSION=3.12
 
-FROM python:${PYTHON_VERSION}-slim
+FROM python:${PYTHON_VERSION}-slim AS base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -21,12 +21,20 @@ ARG APP_UID=10001
 RUN useradd --system --uid "${APP_UID}" --home-dir /app --shell /usr/sbin/nologin minigestor \
     && mkdir /data \
     && chown minigestor /data
-USER minigestor
 
 ENV MINIGESTOR_DATA_DIR=/data \
-    MINIGESTOR_IMPORT_DIRS=/app/demos/samples \
-    API_PORT=8000
+    MINIGESTOR_IMPORT_DIRS=/app/demos/samples
 
+FROM base AS bench
+
+RUN pip install ".[postgres,plots,datasets]"
+USER minigestor
+ENV MPLCONFIGDIR=/tmp/matplotlib
+
+FROM base AS engine
+
+USER minigestor
+ENV API_PORT=8000
 VOLUME /data
 EXPOSE ${API_PORT}
 

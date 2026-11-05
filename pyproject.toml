@@ -16,6 +16,7 @@ dependencies = [
     "faiss-cpu>=1.9",
     "opencv-python-headless>=4.10",
     "librosa>=0.10",
+    "soundfile>=0.12",
 ]
 
 [project.optional-dependencies]
@@ -63,8 +64,9 @@ follow_imports = "skip"
 follow_imports_for_stubs = true
 ignore_missing_imports = true
 
-# El stemmer de Snowball no publica tipos. El analizador de texto lo envuelve en una función
-# tipada, así que el resto del motor no ve el `Any`.
+# Ni el stemmer de Snowball ni libsndfile (`soundfile`) publican tipos. El analizador de
+# texto y el lector de audio los envuelven en funciones tipadas, así que el resto del motor
+# no ve el `Any`.
 [[tool.mypy.overrides]]
-module = ["snowballstemmer"]
+module = ["snowballstemmer", "soundfile"]
 ignore_missing_imports = true

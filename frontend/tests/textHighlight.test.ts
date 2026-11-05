@@ -85,3 +85,9 @@ test("el título repetido al principio del texto se quita", () => {
   assert.equal(withoutLeadingTitle("Otra cosa", "Funda iPhone"), "Otra cosa");
   assert.equal(withoutLeadingTitle("Texto", null), "Texto");
 });
+
+test("de una consulta booleana solo se marcan los términos positivos que trae el API", () => {
+  // 'funda AND iphone AND NOT silicona' llega como fund, iphon: ni silicona ni los operadores.
+  const text = "Funda de silicona para iPhone and more";
+  assert.deepEqual(marked(text, ["fund", "iphon"]), ["Funda", "iPhone"]);
+});

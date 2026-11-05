@@ -88,7 +88,7 @@ evento `hashchange`), sin dependencias: no hace falta configurar el servidor, y 
 - **Consultas** — editor con **numeración de líneas y resaltado de sintaxis**, `⌘↵` /
   `Ctrl↵` para ejecutar, `Tab` para indentar e historial de las últimas 25 consultas.
   Admite **varias sentencias separadas por `;`**: se ejecutan en orden y el panel muestra
-  las filas de la última consulta. Debajo, **62 atajos** agrupados por bloque de la
+  las filas de la última consulta. Debajo, **63 atajos** agrupados por bloque de la
   exposición —*Carga*, *Índices*, *Plan*, *Externos*, *SQL*, *Borrar*, *Transacciones*,
   *Espacial* y *Texto*—; un clic escribe la consulta en el editor. Todos se pueden lanzar varias veces sin error: los que
   crean o borran tablas usan `IF [NOT] EXISTS`, y los de *Borrar* trabajan sobre filas de
@@ -148,7 +148,8 @@ API propias de esta página.
   (`CREATE TABLE catalogo FROM FILE 'demos/samples/esci/productos.csv' USING INDEX
   INVERTED("texto")`, que necesita `demos/samples` en `MINIGESTOR_IMPORT_DIRS`).
 - **Búsqueda.** Una caja de texto, ejemplos de un clic sobre la muestra ESCI y el número de
-  resultados. Cada búsqueda lanza **dos consultas**, una con `USING TF_IDF` y otra con
+  resultados. La consulta admite `AND`, `OR`, `NOT` y paréntesis (`funda AND iphone AND NOT
+  silicona`, ver la [gramática](../src/sql/README.md#búsqueda-de-texto)). Cada búsqueda lanza **dos consultas**, una con `USING TF_IDF` y otra con
   `USING BM25`, y pone los rankings **lado a lado**: puesto, puntaje, título y marca, un
   fragmento del texto alrededor de la primera coincidencia y, en cada documento, en qué
   puesto quedó en el otro ranking (en naranja si cambió).
@@ -172,7 +173,9 @@ raíz: «auriculares inalámbricos» llega como `auricular`, `inalambr`—, y en
 texto original. [`lib/textHighlight.ts`](src/lib/textHighlight.ts) corta el texto en
 palabras y cifras con la misma regla que el analizador del motor, pliega cada palabra igual
 que él (NFKC, minúsculas, sin tildes ni diéresis salvo la ñ, sin apóstrofos) y marca las que
-**empiezan por** una raíz; una cifra, solo si es igual a un término numérico.
+**empiezan por** una raíz; una cifra, solo si es igual a un término numérico. De una
+consulta booleana el API manda solo los términos positivos: en `funda AND NOT silicona` se
+marca «funda», no «silicona», y los operadores nunca, porque no son términos.
 
 Es una aproximación, porque el stemmer de Snowball no se repite en el navegador:
 

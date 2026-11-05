@@ -115,9 +115,12 @@ frontend/            interfaz: React + TypeScript + Vite; Leaflet en el panel de
 tests/               espejo de la estructura de src/, más benchmarks/ y demos/
 benchmarks/          experimentos reproducibles
   esci/              corpus de texto ESCI en español: descarga y subconjuntos con juicios
+  multimedia/        imágenes (ABO) y voz (Speech Commands): descarga y subconjuntos anidados
+  remote.py          descargas que se reanudan y lectura de archivos remotos por rangos HTTP
   results/           medidas crudas en JSON
   figures/           gráficas generadas a partir de esos JSON
-demos/               generador del dataset, descarga de lugares reales y simulación de concurrencia
+demos/               generador del dataset, descarga de lugares reales y de música (FMA)
+                     y simulación de concurrencia
   samples/           los CSV del dataset de demostración; en esci/, la muestra real de Amazon
 docs/                informe.pdf y su fuente LaTeX
 Dockerfile           imagen del motor con su API
@@ -368,6 +371,10 @@ Los tests siguen la estructura de `src/`, así que se pueden ejecutar por módul
 .venv/bin/python -m demos.descargar_lugares --salida data/datasets/lugares_peru.csv
 BENCH_POSTGRES_DSN="dbname=minigestor_bench" .venv/bin/python -m benchmarks.spatial_benchmark \
     --sizes 1000 10000 100000 --points-file data/datasets/lugares_peru.csv
+
+# imágenes y audio de la Parte 4: 1 000, 10 000 y 100 000 más las consultas
+.venv/bin/python -m benchmarks.multimedia.abo --salida data/datasets/abo
+.venv/bin/python -m benchmarks.multimedia.speech_commands --salida data/datasets/speech_commands
 
 # velocidad del analizador de texto, sobre texto real en español
 .venv/bin/python -m benchmarks.text_analyzer_benchmark --repetitions 5 \

@@ -399,6 +399,14 @@ BM25 (el mismo conjunto con los dos). Por eso tiene que ir en el `WHERE` unida a
 columna indexada: es el único acceso que sabe puntuar. Sin `USING` el ranking es **BM25**,
 el más relevante en el experimento de la Parte 3.
 
+**Consultas booleanas.** Si el texto del `MATCH` tiene `AND`, `OR`, `NOT` o paréntesis
+(`'funda AND iphone AND NOT silicona'`), las filas son las que cumplen la expresión, y se
+ordenan por sus términos positivos ([gramática](../sql/README.md#búsqueda-de-texto),
+[algoritmo](../index/inverted/README.md#consultas-booleanas)). Para el planificador no
+cambia nada: es el mismo `TextSearchScan`, con el mismo top-k, orden perezoso y filtros.
+`text_search` analiza la expresión al resolver el `MATCH`, así que una mal formada falla
+antes de leer ninguna fila.
+
 **El predicado consumido.** El planificador saca el `MATCH` del `WHERE` antes de construir
 el plan (`served`): el acceso solo entrega filas que lo cumplen, así que el `Filter` no lo
 vuelve a evaluar. Lo que queda del `WHERE` es el filtro residual, que el plan muestra tal
@@ -442,6 +450,7 @@ al orden perezoso hasta completar las suyas.
 | `SCORE()` sin `MATCH`, o `SCORE(x)` | es el puntaje de un `MATCH`; no recibe argumentos |
 | `USING HNSW`, `WITH (metric=…)` | `MATCH` se ordena con `TF_IDF` o `BM25`; el `WITH` lleva `k1` y `b` |
 | `USING TF_IDF WITH (k1=…)`, `WITH (b=2)` | TF-IDF no tiene parámetros; `b` va de 0 a 1 |
+| `MATCH(texto, '(usb AND cable')`, `'usb AND'`, `'NOT usb'` | `BooleanQueryError`: paréntesis sin cerrar, operador sin operando, consulta que solo excluye |
 
 Dos decisiones de alcance: **un solo `MATCH` por consulta**, porque el puntaje es uno
 (para dos columnas, juntar las palabras en una consulta o indexar una columna que las
@@ -453,7 +462,9 @@ ellas.
 analizados con su df, que salen del léxico sin leer ninguna lista; **`EXPLAIN ANALYZE`**
 añade los postings leídos y los documentos puntuados (`RankingStats`) y, si el top-k de
 BM25 podó, desde qué término («poda MaxScore desde usb»; ver el
-[ranking](../index/inverted/README.md#poda-maxscore-en-el-top-k-de-bm25)). Con los 1 000
+[ranking](../index/inverted/README.md#poda-maxscore-en-el-top-k-de-bm25)). De una consulta
+booleana muestra además la expresión que se evalúa, con los términos analizados
+(«booleana: fund AND iphon AND NOT silicon»), y solo los términos positivos. Con los 1 000
 productos de ESCI:
 
 ```
@@ -464,8 +475,9 @@ Limit: limit=5, offset=0  (filas=0, 0.88 ms)
 ```
 
 **Lo que la interfaz recibe.** `QueryResult.text` (`TextView`) lleva la tabla, la columna,
-la consulta, el ranking, sus términos analizados, para resaltarlos en el resultado, y los
-`k1` y `b` con que puntuó BM25; el API los devuelve en `text`.
+la consulta, el ranking, sus términos analizados —de una consulta booleana, solo los
+positivos—, para resaltarlos en el resultado, y los `k1` y `b` con que puntuó BM25; el API
+los devuelve en `text`.
 
 **Escrituras y transacciones.** El índice es un índice secundario más
 ([`TextSearchIndex`](../index/inverted/secondary.py)): `INSERT`, `DELETE`, `UPDATE` del

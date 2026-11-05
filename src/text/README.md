@@ -189,6 +189,35 @@ que el API muestra como error del usuario y que lista los idiomas disponibles.
 | `es` | 301 (Snowball, plegadas) | `spanish` |
 | `en` | 124 (Snowball, sin contracciones) | `english` |
 
+## Consultas booleanas (`boolean_query.py`)
+
+El texto de un `MATCH` puede ser una expresión con `AND`, `OR`, `NOT` (en mayúsculas) y
+paréntesis. El parser es un descenso recursivo, una función por nivel de precedencia
+(`NOT` > `AND` > `OR`, con el `OR` implícito entre operandos seguidos); la gramática
+completa está en [`sql/README.md`](../sql/README.md#búsqueda-de-texto). Vive aquí, y no en
+el índice, porque cada operando es texto que pasa por este mismo analizador.
+
+```python
+from text import is_boolean_query, parse_boolean_query
+
+is_boolean_query("funda iphone")                # False: texto libre, otro camino
+consulta = parse_boolean_query("Funda AND iPhone-12 AND NOT (silicona OR el)", analyzer)
+consulta.describe()          # 'fund AND iphon AND 12 AND NOT silicon'
+consulta.positive_terms      # {'fund': 1, 'iphon': 1, '12': 1}
+```
+
+- Un operando que da varios términos (`iPhone-12`) es el `AND` de todos; uno que no da
+  ninguno (`el`) se quita con su operador.
+- El resultado (`BooleanQuery.expression`) usa tres nodos —`Term`, `Disjunction` y
+  `Conjunction(incluidos, excluidos)`— con cada `NOT` como parte excluida de un `AND`, que
+  es como lo evalúa el índice con sus mezclas lineales
+  ([`index/inverted`](../index/inverted/README.md#consultas-booleanas)).
+- `positive_terms` son los que puntúan: los que no están bajo un `NOT`, o bajo un número
+  par de ellos, con las veces que aparecen.
+- Un error es un `BooleanQueryError`, un `DomainError` con la posición del problema:
+  paréntesis sin cerrar o sin abrir, un operador sin operando o una consulta que solo
+  excluye documentos.
+
 ## Velocidad medida
 
 ```bash
@@ -231,4 +260,6 @@ Cubren tildes, ñ, mayúsculas, puntuación, cifras y decimales, guiones, códig
 stopwords con y sin tilde, raíces en español e inglés, texto vacío, texto de solo
 stopwords, longitudes configurables, idioma desconocido, determinismo, que documento y
 consulta se analizan igual, que las listas versionadas están plegadas y son un token por
-entrada, y el acceso concurrente.
+entrada, y el acceso concurrente. Los del parser booleano, la precedencia, los paréntesis,
+el `OR` implícito, los operandos de varios términos o de ninguno, los términos positivos y
+cada error.

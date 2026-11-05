@@ -74,9 +74,14 @@ jobs:
             | python3 -c "import json, sys; assert len(json.load(sys.stdin)['rows']) == 3"
       - name: Con el API en marcha, la demo no se vuelve a cargar
         run: docker compose run --rm demo | grep -q "la demo no se vuelve a cargar"
+      - name: El perfil bench mide GiST contra su PostgreSQL
+        run: |
+          docker compose --profile bench run --rm bench python -m benchmarks.spatial_benchmark \
+            --sizes 1000 --queries 5 --output /tmp/espacial \
+            | grep "GiST (PostgreSQL) | radio 1 km" | grep -q "coinciden_con_el_motor=5/5"
       - name: Registro de los servicios
         if: failure()
-        run: docker compose logs
+        run: docker compose --profile bench logs
       - name: Apagar
         if: always()
-        run: docker compose down --volumes
+        run: docker compose --profile bench down --volumes

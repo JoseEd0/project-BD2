@@ -13,7 +13,7 @@ Con `--points-file` los puntos son reales: se toman de un CSV con una columna PO
 el que deja `demos/descargar_lugares.py` con los puntos de interés de OpenStreetMap. Sin
 ese argumento se generan puntos sintéticos sobre Lima, que no necesitan descargar nada.
 
-    .venv/bin/python demos/descargar_lugares.py --salida data/datasets/lugares_peru.csv
+    .venv/bin/python -m demos.descargar_lugares --salida data/datasets/lugares_peru.csv
     .venv/bin/python -m benchmarks.spatial_benchmark --sizes 1000 10000 100000 \\
         --points-file data/datasets/lugares_peru.csv
 

@@ -29,7 +29,7 @@ Los mismos comandos corren sin instalar Python ni PostgreSQL, en el perfil `benc
   el repositorio, así que los JSON, las gráficas y los datos descargados quedan en su sitio.
 
 ```bash
-docker compose --profile bench run --rm bench python demos/descargar_lugares.py \
+docker compose --profile bench run --rm bench python -m demos.descargar_lugares \
     --salida data/datasets/lugares_peru.csv
 docker compose --profile bench run --rm bench python -m benchmarks.esci.download \
     --salida data/datasets/esci_es
@@ -409,7 +409,7 @@ página una sola vez.
 
 ```bash
 .venv/bin/pip install -e ".[postgres,plots]"
-.venv/bin/python demos/descargar_lugares.py --salida data/datasets/lugares_peru.csv
+.venv/bin/python -m demos.descargar_lugares --salida data/datasets/lugares_peru.csv
 createdb minigestor_bench                       # el experimento crea ahí la extensión PostGIS
 export BENCH_POSTGRES_DSN="dbname=minigestor_bench"
 .venv/bin/python -m benchmarks.spatial_benchmark --sizes 1000 10000 100000 --queries 100 \

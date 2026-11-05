@@ -293,14 +293,14 @@ puntos de interés del Perú, de OpenStreetMap— hay un guion que los descarga 
 que carga el gestor:
 
 ```bash
-.venv/bin/python demos/descargar_lugares.py --salida data/datasets/lugares_peru.csv
+.venv/bin/python -m demos.descargar_lugares --salida data/datasets/lugares_peru.csv
 ```
 
 Es el archivo que usa el experimento espacial. Con `--recuadro` se queda solo con los que
 caen en un rectángulo; para Lima, unos 26 600:
 
 ```bash
-.venv/bin/python demos/descargar_lugares.py --salida data/datasets/lugares_lima.csv \
+.venv/bin/python -m demos.descargar_lugares --salida data/datasets/lugares_lima.csv \
     --recuadro -12.52 -77.20 -11.57 -76.62
 ```
 
@@ -365,7 +365,7 @@ Los tests siguen la estructura de `src/`, así que se pueden ejecutar por módul
 .venv/bin/python -m benchmarks.index_benchmark   --sizes 1000 10000 100000
 
 # el espacial, sobre los lugares reales y contra PostGIS
-.venv/bin/python demos/descargar_lugares.py --salida data/datasets/lugares_peru.csv
+.venv/bin/python -m demos.descargar_lugares --salida data/datasets/lugares_peru.csv
 BENCH_POSTGRES_DSN="dbname=minigestor_bench" .venv/bin/python -m benchmarks.spatial_benchmark \
     --sizes 1000 10000 100000 --points-file data/datasets/lugares_peru.csv
 

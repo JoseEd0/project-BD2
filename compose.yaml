@@ -16,7 +16,9 @@ services:
 
   api:
     <<: *engine
-    build: .
+    build:
+      context: .
+      target: engine
     environment:
       MINIGESTOR_CORS_ORIGINS: http://localhost:${MINIGESTOR_WEB_PORT:-8080}
     ports:
@@ -35,6 +37,36 @@ services:
       api:
         condition: service_healthy
     restart: unless-stopped
+
+  postgres:
+    profiles: [bench]
+    build: ./docker/postgres
+    image: minigestor-postgres
+    environment:
+      POSTGRES_DB: minigestor_bench
+      # No publica ningún puerto: solo los contenedores del compose llegan a él, así que no
+      # hace falta una contraseña que guardar.
+      POSTGRES_HOST_AUTH_METHOD: trust
+    healthcheck:
+      test: ["CMD", "pg_isready", "--username", "postgres", "--dbname", "minigestor_bench"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  bench:
+    profiles: [bench]
+    build:
+      context: .
+      target: bench
+    image: minigestor-bench
+    environment:
+      BENCH_POSTGRES_DSN: host=postgres dbname=minigestor_bench user=postgres
+    volumes:
+      - ./benchmarks:/app/benchmarks
+      - ${MINIGESTOR_DATASETS_DIR:-./data/datasets}:/app/data/datasets
+    depends_on:
+      postgres:
+        condition: service_healthy
 
 volumes:
   minigestor-data:

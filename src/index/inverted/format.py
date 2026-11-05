@@ -24,7 +24,6 @@ MANIFEST_SUFFIX = ".manifest"
 DOCUMENT_MAP_SUFFIX = ".docmap"
 SEGMENT_INFIX = ".seg"
 BUILD_DIRECTORY_SUFFIX = ".spimi"
-REPLACEMENT_SUFFIX = ".tmp"
 # La 2 lleva en la tabla de documentos los borrados y la longitud de los vivos, y guarda
 # las listas en segmentos que enumera el manifiesto.
 INVERTED_VERSION = 2
@@ -170,11 +169,6 @@ def manifest_path(path: Path) -> Path:
 
 def document_map_path(path: Path) -> Path:
     return path.with_name(path.name + DOCUMENT_MAP_SUFFIX)
-
-
-def replacement_path(path: Path) -> Path:
-    """Donde se escribe un archivo que después reemplaza a `path` de una vez."""
-    return path.with_name(path.name + REPLACEMENT_SUFFIX)
 
 
 def segment_base(path: Path, generation: int) -> Path:

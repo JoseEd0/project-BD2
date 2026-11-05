@@ -15,7 +15,6 @@ FAISS. Esta base pone lo que tiene que ser igual en todos:
 from __future__ import annotations
 
 import json
-import os
 from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from dataclasses import dataclass, field
@@ -27,6 +26,7 @@ import numpy as np
 import numpy.typing as npt
 
 from config import DEFAULT_VECTOR_EXACT_FILTER_ROWS
+from storage.atomic import write_atomically
 from storage.types import StorageError
 
 from .metrics import Scores, VectorMetric, Vectors
@@ -36,7 +36,6 @@ ID_DTYPE = np.int64
 MISSING_ID = -1
 FORMAT_VERSION = 1
 SEARCH_EFFORT_GROWTH = 2
-TEMPORARY_SUFFIX = ".tmp"
 METADATA_ARRAY = "metadata"
 FAISS_ARRAY = "faiss"
 
@@ -187,12 +186,7 @@ class VectorIndex(ABC):
             FAISS_ARRAY: faiss.serialize_index(self._faiss_index()),
             **self._extra_arrays(),
         }
-        temporary = path.with_name(path.name + TEMPORARY_SUFFIX)
-        with temporary.open("wb") as file:
-            np.savez(file, **arrays)
-            file.flush()
-            os.fsync(file.fileno())
-        temporary.replace(path)
+        write_atomically(path, lambda file: np.savez(file, **arrays))
 
     @classmethod
     def load(cls, path: Path, exact_filter_rows: int = DEFAULT_VECTOR_EXACT_FILTER_ROWS) -> Self:

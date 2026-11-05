@@ -16,13 +16,13 @@ con un `rename`: es el punto en que un `flush` o una fusión pasan a existir, co
 
 from __future__ import annotations
 
-import os
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Protocol
 
 from config import EngineConfig
+from storage.atomic import write_atomically
 from storage.stream import ByteStreamCursor
 
 from .blocks import BlockTerm, TermSink, TermStream
@@ -35,7 +35,6 @@ from .format import (
     LexiconEntry,
     lexicon_path,
     postings_path,
-    replacement_path,
     segment_base,
     segment_files,
     terms_path,
@@ -267,12 +266,7 @@ def write_manifest(path: Path, manifest: Manifest) -> None:
         manifest.merge_count,
         len(manifest.generations),
     ) + b"".join(GENERATION.pack(generation) for generation in manifest.generations)
-    staged = replacement_path(path)
-    with staged.open("wb") as file:
-        file.write(raw)
-        file.flush()
-        os.fsync(file.fileno())
-    staged.replace(path)
+    write_atomically(path, lambda file: file.write(raw))
 
 
 def remove_segment(path: Path, generation: int) -> None:

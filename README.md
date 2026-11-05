@@ -82,6 +82,7 @@ operador lleva las filas que entregó y el tiempo que tardó.
 | Euclidiana y Haversine | una sola implementación compartida | [`spatial`](src/spatial/README.md) |
 | Índice invertido con SPIMI | bloques con memoria acotada y mezcla k-vías; léxico ordenado, listas contiguas | [`index/inverted`](src/index/inverted/README.md) |
 | TF-IDF + coseno y BM25 | SMART lnc.ltc e idf de Lucene, término a término sobre el mismo índice; top-k con montículo | [`index/inverted`](src/index/inverted/README.md#ranking) |
+| Consultas booleanas | `AND`, `OR` y `NOT` dentro de `MATCH`, con mezclas lineales de las listas ordenadas por `doc_id` y ranking por los términos positivos | [`index/inverted`](src/index/inverted/README.md#consultas-booleanas) |
 | Interfaz, panel de mapa y página de texto | cuatro paneles visibles a la vez; mapa con Leaflet; TF-IDF y BM25 lado a lado con los términos resaltados | [`frontend`](frontend/README.md) |
 | Comparación experimental | tres experimentos medidos, con resultados crudos y gráficas | [`benchmarks`](benchmarks/README.md) |
 

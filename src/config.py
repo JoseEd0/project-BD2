@@ -58,6 +58,20 @@ DEFAULT_VECTOR_REBUILD_FRACTION = 0.30
 # de 32 dimensiones: 981 por consulta). Si el filtro deja menos filas que eso, compararlas
 # todas cuesta menos que recorrer el grafo y es exacto.
 DEFAULT_VECTOR_EXACT_FILTER_ROWS = 1_000
+# Palabras del vocabulario visual o auditivo: la dimensión de los vectores que indexan IVF y
+# HNSW. Unos cientos alcanzan para que objetos parecidos compartan palabras sin que el
+# histograma de una foto de catálogo, con unos cientos de descriptores, quede casi vacío; el
+# experimento de la Parte 4 mide otros tamaños.
+DEFAULT_VOCABULARY_SIZE = 256
+# Los valores por omisión de `faiss.Kmeans`: 25 iteraciones, semilla 1234 y una muestra de
+# hasta 256 descriptores por palabra, que FAISS no supera aunque reciba más.
+DEFAULT_KMEANS_ITERATIONS = 25
+DEFAULT_KMEANS_SEED = 1234
+DEFAULT_KMEANS_SAMPLES_PER_WORD = 256
+# Objetos de los que se sacan los descriptores para entrenar el vocabulario. Con cientos de
+# descriptores por objeto, 2 000 dan de sobra los 256 por palabra que usa k-means, sin
+# extraer dos veces toda la colección.
+DEFAULT_VOCABULARY_TRAINING_OBJECTS = 2_000
 DEFAULT_LOCK_TIMEOUT_SECONDS = 5.0
 DEFAULT_CSV_DELIMITER = ","
 DEFAULT_CSV_ENCODING = "utf-8"
@@ -137,6 +151,13 @@ class EngineConfig:
             desde su entrenamiento, como fracción, a partir de la cual se reconstruye.
         vector_exact_filter_rows: filas que puede dejar un filtro para que la búsqueda de
             vectores las compare todas en vez de recorrer el índice.
+        vocabulary_size: palabras del vocabulario visual o auditivo; la dimensión de los
+            vectores TF-IDF.
+        kmeans_iterations: iteraciones de k-means al entrenar el vocabulario.
+        kmeans_seed: semilla de k-means y del muestreo de descriptores.
+        kmeans_samples_per_word: descriptores por palabra con los que se entrena, como mucho.
+        vocabulary_training_objects: objetos de cuyos descriptores sale la muestra de
+            entrenamiento.
         lock_timeout_seconds: espera máxima de una transacción por un bloqueo.
         csv_delimiter: separador de los archivos que carga `CREATE TABLE ... FROM FILE`.
         csv_encoding: codificación de esos archivos.
@@ -177,6 +198,11 @@ class EngineConfig:
     hnsw_ef_search: int = DEFAULT_HNSW_EF_SEARCH
     vector_rebuild_fraction: float = DEFAULT_VECTOR_REBUILD_FRACTION
     vector_exact_filter_rows: int = DEFAULT_VECTOR_EXACT_FILTER_ROWS
+    vocabulary_size: int = DEFAULT_VOCABULARY_SIZE
+    kmeans_iterations: int = DEFAULT_KMEANS_ITERATIONS
+    kmeans_seed: int = DEFAULT_KMEANS_SEED
+    kmeans_samples_per_word: int = DEFAULT_KMEANS_SAMPLES_PER_WORD
+    vocabulary_training_objects: int = DEFAULT_VOCABULARY_TRAINING_OBJECTS
     lock_timeout_seconds: float = DEFAULT_LOCK_TIMEOUT_SECONDS
     csv_delimiter: str = DEFAULT_CSV_DELIMITER
     csv_encoding: str = DEFAULT_CSV_ENCODING
@@ -210,6 +236,10 @@ class EngineConfig:
             "hnsw_m",
             "hnsw_ef_construction",
             "hnsw_ef_search",
+            "vocabulary_size",
+            "kmeans_iterations",
+            "kmeans_samples_per_word",
+            "vocabulary_training_objects",
         ):
             _require_between(name, getattr(self, name), 1, None)
         _require_between("merge_fan_in", self.merge_fan_in, MIN_MERGE_FAN_IN, None)

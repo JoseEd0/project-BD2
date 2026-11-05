@@ -1,0 +1,40 @@
+name: minigestor
+
+x-engine: &engine
+  image: minigestor-api
+  volumes:
+    - minigestor-data:/data
+
+services:
+  demo:
+    <<: *engine
+    # Usa la imagen que construye `api`: si la construyeran los dos a la vez, chocarían
+    # al etiquetarla.
+    pull_policy: never
+    command: ["python", "/app/demos/poblar_ecommerce.py", "--data-dir", "/data", "--solo-si-vacia"]
+    restart: "no"
+
+  api:
+    <<: *engine
+    build: .
+    environment:
+      MINIGESTOR_CORS_ORIGINS: http://localhost:${MINIGESTOR_WEB_PORT:-8080}
+    ports:
+      - ${MINIGESTOR_API_PORT:-8000}:8000
+    depends_on:
+      demo:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  web:
+    build: ./frontend
+    image: minigestor-web
+    ports:
+      - ${MINIGESTOR_WEB_PORT:-8080}:8080
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  minigestor-data:

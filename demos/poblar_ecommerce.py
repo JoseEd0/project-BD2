@@ -50,6 +50,9 @@ from spatial.geometry import Point, Polygon
 MILLISECONDS = 1000.0
 CSV_DIRECTORY = "csv"
 ESCI_SAMPLE_DIRECTORY = Path(__file__).resolve().parent / "samples" / "esci"
+# Donde los dejan `benchmarks.multimedia.abo` y `demos.descargar_fma`; las rutas de sus CSV
+# son relativas a la raíz del repositorio, así que la demo se carga desde ahí.
+DATASETS_DIRECTORY = Path("data/datasets")
 DEFAULT_SEED = 20260828
 DEFAULT_SCALE = 1.0
 
@@ -308,6 +311,51 @@ ESCI_TABLES: tuple[SampleTable, ...] = (
 )
 
 
+# Las tablas multimedia solo se cargan si su dataset está descargado: son fotos y pistas
+# reales que no viven en el repositorio (ver `benchmarks/multimedia/README.md`).
+MEDIA_TABLES: tuple[SampleTable, ...] = (
+    SampleTable(
+        TableSpec(
+            name="imagenes",
+            ddl=(
+                "CREATE TABLE imagenes ("
+                " id INT PRIMARY KEY,"
+                " ruta VARCHAR(200),"
+                " titulo TEXT,"
+                " categoria VARCHAR(60) )"
+            ),
+            header=("id", "ruta", "titulo", "categoria"),
+            description="heap file + HNSW coseno en 'ruta': fotos de catálogo de ABO (SIFT)",
+            after_load=(
+                "CREATE INDEX idx_imagenes_hnsw ON imagenes USING HNSW (ruta) "
+                "WITH (METRIC = cosine)",
+            ),
+        ),
+        "abo/subconjuntos/1000/imagenes.csv",
+    ),
+    SampleTable(
+        TableSpec(
+            name="canciones",
+            ddl=(
+                "CREATE TABLE canciones ("
+                " id INT PRIMARY KEY,"
+                " ruta VARCHAR(200),"
+                " titulo TEXT,"
+                " genero VARCHAR(40),"
+                " artista TEXT )"
+            ),
+            header=("id", "ruta", "titulo", "genero", "artista"),
+            description="heap file + IVF euclidiana en 'ruta': pistas de FMA (MFCC)",
+            after_load=(
+                "CREATE INDEX idx_canciones_ivf ON canciones USING IVF (ruta) "
+                "WITH (METRIC = euclidean)",
+            ),
+        ),
+        "fma_small/canciones.csv",
+    ),
+)
+
+
 class Generator:
     """Produce filas verosímiles y coherentes entre tablas."""
 
@@ -478,6 +526,10 @@ def suggest_queries() -> None:
         ("índice invertido: los 10 productos más relevantes con BM25",
          "SELECT titulo, marca, SCORE() AS relevancia FROM catalogo "
          "WHERE MATCH(texto, 'auriculares inalámbricos') USING BM25 LIMIT 10;"),
+        ("HNSW: las 10 fotos más parecidas a la primera (si se cargó ABO)",
+         "SELECT titulo, categoria, SIMILARITY_SCORE() AS score FROM imagenes "
+         "WHERE SIMILAR_TO('data/datasets/abo/imagenes/c8/c8fa4944.jpg', k=10) "
+         "USING HNSW WITH METRIC=cosine;"),
     ):
         print(f"  -- {description}\n  {query}\n")
 
@@ -500,6 +552,12 @@ def main(argv: Sequence[str] | None = None) -> None:
         help=f"dónde dejar los CSV (por defecto <data-dir>/{CSV_DIRECTORY})",
     )
     parser.add_argument(
+        "--datasets",
+        type=Path,
+        default=DATASETS_DIRECTORY,
+        help="carpeta de los datasets descargados; sin ABO ni FMA, no hay tablas multimedia",
+    )
+    parser.add_argument(
         "--muestra-esci",
         type=Path,
         default=ESCI_SAMPLE_DIRECTORY,
@@ -520,7 +578,9 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     if arguments.reiniciar and arguments.data_dir.exists():
         shutil.rmtree(arguments.data_dir)
-    config = EngineConfig(data_directory=arguments.data_dir)
+    config = EngineConfig(
+        data_directory=arguments.data_dir, import_directories=(arguments.datasets.resolve(),)
+    )
     if arguments.solo_si_vacia and has_database(config):
         print(f"{arguments.data_dir} ya tiene una base: la demo no se vuelve a cargar")
         return
@@ -538,6 +598,14 @@ def main(argv: Sequence[str] | None = None) -> None:
         for sample in ESCI_TABLES:
             inserted, elapsed = load(engine, sample.spec, arguments.muestra_esci / sample.file_name)
             print(f"  {sample.spec.name:<18} {inserted:>8,} filas de la muestra ESCI")
+            measured.append((sample.spec, inserted, elapsed))
+        for sample in MEDIA_TABLES:
+            path = arguments.datasets / sample.file_name
+            if not path.exists():
+                print(f"  {sample.spec.name:<18} sin cargar: falta {path}")
+                continue
+            inserted, elapsed = load(engine, sample.spec, path)
+            print(f"  {sample.spec.name:<18} {inserted:>8,} filas, con su índice de similitud")
             measured.append((sample.spec, inserted, elapsed))
     report(measured)
     suggest_queries()

@@ -45,6 +45,19 @@ DEFAULT_INVERTED_MAX_SEGMENTS = 7
 # principal antes de pagar una fusión completa, que lee y escribe todos los postings.
 DEFAULT_INVERTED_PENDING_FRACTION = 0.30
 DEFAULT_INVERTED_DELETED_FRACTION = 0.30
+# Los valores por omisión de pgvector (`m`, `ef_construction` y `hnsw.ef_search`): M = 16
+# vecinos por nodo, y un `ef` de construcción de cuatro veces M que da un grafo con recall
+# alto sin el costo de 200 o más.
+DEFAULT_HNSW_M = 16
+DEFAULT_HNSW_EF_CONSTRUCTION = 64
+DEFAULT_HNSW_EF_SEARCH = 40
+# El mismo 30 % que el resto del motor: las lápidas de HNSW o lo que IVF crece o encoge
+# desde que entrenó sus listas, antes de reconstruirlo.
+DEFAULT_VECTOR_REBUILD_FRACTION = 0.30
+# Una búsqueda en HNSW con ef = 40 calcula unas 1 000 distancias (medido con 5 000 vectores
+# de 32 dimensiones: 981 por consulta). Si el filtro deja menos filas que eso, compararlas
+# todas cuesta menos que recorrer el grafo y es exacto.
+DEFAULT_VECTOR_EXACT_FILTER_ROWS = 1_000
 DEFAULT_LOCK_TIMEOUT_SECONDS = 5.0
 DEFAULT_CSV_DELIMITER = ","
 DEFAULT_CSV_ENCODING = "utf-8"
@@ -116,6 +129,14 @@ class EngineConfig:
         inverted_deleted_fraction: documentos borrados cuyos postings siguen en el índice,
             como fracción de los indexados, a partir de la cual el `flush` lo fusiona todo
             y quita sus postings.
+        hnsw_m: vecinos por nodo de un índice HNSW (el doble en el nivel 0).
+        hnsw_ef_construction: candidatos que HNSW considera al insertar cada vector.
+        hnsw_ef_search: candidatos que HNSW considera al buscar; una consulta puede
+            cambiarlo.
+        vector_rebuild_fraction: lápidas de HNSW, o cambio en el número de vectores de IVF
+            desde su entrenamiento, como fracción, a partir de la cual se reconstruye.
+        vector_exact_filter_rows: filas que puede dejar un filtro para que la búsqueda de
+            vectores las compare todas en vez de recorrer el índice.
         lock_timeout_seconds: espera máxima de una transacción por un bloqueo.
         csv_delimiter: separador de los archivos que carga `CREATE TABLE ... FROM FILE`.
         csv_encoding: codificación de esos archivos.
@@ -151,6 +172,11 @@ class EngineConfig:
     inverted_max_segments: int = DEFAULT_INVERTED_MAX_SEGMENTS
     inverted_pending_fraction: float = DEFAULT_INVERTED_PENDING_FRACTION
     inverted_deleted_fraction: float = DEFAULT_INVERTED_DELETED_FRACTION
+    hnsw_m: int = DEFAULT_HNSW_M
+    hnsw_ef_construction: int = DEFAULT_HNSW_EF_CONSTRUCTION
+    hnsw_ef_search: int = DEFAULT_HNSW_EF_SEARCH
+    vector_rebuild_fraction: float = DEFAULT_VECTOR_REBUILD_FRACTION
+    vector_exact_filter_rows: int = DEFAULT_VECTOR_EXACT_FILTER_ROWS
     lock_timeout_seconds: float = DEFAULT_LOCK_TIMEOUT_SECONDS
     csv_delimiter: str = DEFAULT_CSV_DELIMITER
     csv_encoding: str = DEFAULT_CSV_ENCODING
@@ -181,6 +207,9 @@ class EngineConfig:
             "max_upload_bytes",
             "map_points",
             "max_result_rows",
+            "hnsw_m",
+            "hnsw_ef_construction",
+            "hnsw_ef_search",
         ):
             _require_between(name, getattr(self, name), 1, None)
         _require_between("merge_fan_in", self.merge_fan_in, MIN_MERGE_FAN_IN, None)
@@ -192,6 +221,7 @@ class EngineConfig:
             "rtree_bulk_fill",
             "inverted_pending_fraction",
             "inverted_deleted_fraction",
+            "vector_rebuild_fraction",
         ):
             _require_fraction(name, getattr(self, name), 1.0)
         _require_fraction("rtree_min_fill", self.rtree_min_fill, MAX_RTREE_MIN_FILL)
@@ -203,6 +233,7 @@ class EngineConfig:
         bm25_error = bm25_parameters_error(self.bm25_k1, self.bm25_b)
         if bm25_error is not None:
             raise ConfigurationError(bm25_error)
+        _require_between("vector_exact_filter_rows", self.vector_exact_filter_rows, 0, None)
         _require_positive("lock_timeout_seconds", self.lock_timeout_seconds)
         _require_positive("session_idle_seconds", self.session_idle_seconds)
         if len(self.csv_delimiter) != 1:

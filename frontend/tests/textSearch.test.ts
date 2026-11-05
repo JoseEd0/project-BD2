@@ -17,6 +17,7 @@ import {
   searchSql,
   searchTargets,
   sharedFailure,
+  steppedFromDefault,
 } from "../src/lib/textSearch.ts";
 import type { RankingOutcome } from "../src/lib/textSearch.ts";
 import type { ColumnInfo, TableInfo } from "../src/types.ts";
@@ -233,4 +234,13 @@ test("un error se muestra una sola vez solo si todos los rankings fallaron por l
   assert.equal(sharedFailure([outcomeFailing(null), outcomeFailing("k1 negativo")]), null);
   assert.equal(sharedFailure([outcomeFailing("a"), outcomeFailing("b")]), null);
   assert.equal(sharedFailure([]), null);
+});
+
+test("las flechas sobre un parámetro vacío parten del valor del motor", () => {
+  assert.equal(steppedFromDefault("", 1.2, 0.1, 1), "1.3");
+  assert.equal(steppedFromDefault("", 0.75, 0.05, -1), "0.7");
+  assert.equal(steppedFromDefault("", 0.02, 0.05, -1), "0");
+  assert.equal(steppedFromDefault("1.5", 1.2, 0.1, 1), null);
+  assert.equal(steppedFromDefault("", null, 0.1, 1), null);
+  assert.equal(steppedFromDefault("", 1.2, 0.1, 0), null);
 });

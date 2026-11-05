@@ -52,7 +52,7 @@ evento `hashchange`), sin dependencias: no hace falta configurar el servidor, y 
 | JS inicial (`index-*.js`) | 363,0 kB (112,2 kB gzip) | 151,1 kB (49,2 kB gzip) |
 | CSS inicial (`index-*.css`) | 41,0 kB (12,0 kB gzip) | 31,0 kB (6,6 kB gzip) |
 | consola (`ConsolePage-*`), perezosa | — | 212,5 kB JS + 15,6 kB CSS (Leaflet) |
-| texto (`TextSearchPage-*`), perezosa | — | 17,4 kB JS |
+| texto (`TextSearchPage-*`), perezosa | — | 22,2 kB JS |
 | compartido por las dos (`InvertedIndexView-*`) | — | 9,0 kB JS |
 
 ## Las dos vistas de la consola
@@ -138,32 +138,63 @@ imponga. Al pie se listan todas.
 
 ## Texto
 
-La página de la Parte 3. **Todo va por `POST /query` con SQL**: la página arma la misma
-consulta que se escribiría en la consola y la muestra en «Cómo se ejecutó». No hay rutas del
-API propias de esta página.
+La página de la Parte 3. **Lo que se escribe es el texto de un `MATCH`, y cada búsqueda son
+dos consultas SQL** que se ven lado a lado: la misma con `USING TF_IDF` y con `USING BM25`.
+Todo va por `POST /query`; la página no tiene rutas del API propias, solo escribe el SQL que
+se escribiría a mano en la consola, y ese SQL está siempre a la vista.
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│ catalogo.texto ▾ │ 🔍 zapatillas running mujer                          │
+│ Términos tras el análisis  zapatill  running  muj                      │
+│ [AND marca = 'PUMA' ×] [AND condición] [USING BM25 WITH k1 = b =] [LIMIT 10]│
+├───────────────────────────────────┬────────────────────────────────────┤
+│ TF-IDF + coseno  10 filas en 1.3 ms│ BM25  10 filas en 1.4 ms            │
+│ SELECT *, SCORE() AS puntaje …    │ SELECT *, SCORE() AS puntaje …      │
+│ #  Documento     Puntaje  Con BM25│ #  Documento    Puntaje  Con TF-IDF │
+├───────────────────────────────────┴────────────────────────────────────┤
+│ [Plan con TF-IDF + coseno] [Plan con BM25] [Índice idx_catalogo_texto] │
+└────────────────────────────────────────────────────────────────────────┘
+```
 
 - **Dónde buscar.** Las columnas con índice `INVERTED`, leídas del catálogo (`/tables`). Si
   no hay ninguna, la página lo explica y ofrece crear el índice sobre una columna de texto
   (con el `CREATE INDEX` a la vista) o cargar el catálogo de demostración
   (`CREATE TABLE catalogo FROM FILE 'demos/samples/esci/productos.csv' USING INDEX
   INVERTED("texto")`, que necesita `demos/samples` en `MINIGESTOR_IMPORT_DIRS`).
-- **Búsqueda.** Una caja de texto, ejemplos de un clic sobre la muestra ESCI y el número de
-  resultados. La consulta admite `AND`, `OR`, `NOT` y paréntesis (`funda AND iphone AND NOT
-  silicona`, ver la [gramática](../src/sql/README.md#búsqueda-de-texto)). Cada búsqueda lanza **dos consultas**, una con `USING TF_IDF` y otra con
-  `USING BM25`, y pone los rankings **lado a lado**: puesto, puntaje, título y marca, un
-  fragmento del texto alrededor de la primera coincidencia y, en cada documento, en qué
-  puesto quedó en el otro ranking (en naranja si cambió).
-- **Filtro relacional.** `columna = valor` junto al `MATCH` (por omisión, la marca; vacío,
-  sin filtro): el plan muestra el `Filter` sobre el `TextSearchScan`.
-- **`k1` y `b` de BM25.** Vacíos, la consulta no lleva `WITH` y el motor usa los suyos, que
-  la respuesta trae (`text.k1`, `text.b`) y la página muestra como sugerencia. Con valores,
-  la consulta lleva `WITH (k1 = …, b = …)`; un valor fuera de rango lo rechaza el motor y el
-  error sale en la columna de BM25.
-- **Cómo se ejecutó.** El SQL de cada ranking y su plan, con el mismo `PlanPanel` de la
-  consola: el `TextSearchScan` con sus términos, su df, los postings leídos y los documentos
-  puntuados.
-- **El índice invertido.** Documentos, vocabulario, postings, segmentos de SPIMI y el bloque
-  en memoria, borrados, los términos con más df (con su fracción de documentos) y el tamaño
+- **Busca mientras se escribe** ([`useLiveSearch`](src/hooks/useLiveSearch.ts)): consulta
+  200 ms después de la última tecla, o al pulsar `↵`. Las consultas van de una en una; si lo
+  escrito cambió mientras una corría, al terminar se consulta lo último, y el resultado viejo
+  queda atenuado hasta que llega el nuevo. Admite `AND`, `OR`, `NOT` y paréntesis (`funda AND
+  iphone AND NOT silicona`, ver la [gramática](../src/sql/README.md#búsqueda-de-texto)).
+- **Términos tras el análisis.** Los que devolvió el motor, plegados y reducidos a su raíz,
+  con el mismo color que el resaltado de los resultados.
+- **Las opciones son cláusulas del SQL**, escritas como SQL y con sus colores:
+  - `AND columna = valor`, tantas como hagan falta (la primera empieza por la marca); el
+    plan muestra el `Filter` sobre el `TextSearchScan`.
+  - `USING BM25 WITH (k1, b)`: vacíos, la consulta no lleva `WITH` y el motor usa los suyos,
+    que la respuesta trae (`text.k1`, `text.b`) y se ven como sugerencia. Un valor fuera de
+    rango lo rechaza el motor y el error sale en la columna de BM25.
+  - `LIMIT`, las filas de cada ranking.
+
+  Una condición o un parámetro a medio escribir no dejan una consulta inválida: el SQL a la
+  vista sigue siendo el último que se pudo ejecutar, y debajo se dice qué falta.
+- **Cada ranking es su consulta y su resultado.** Arriba, el SQL exacto que se envió, con
+  «Copiar» y «Abrir en la consola», que lo deja en el editor de la consola sin ejecutarlo
+  (`openInConsole` de `useWorkspace`). Debajo, una tabla con cabeceras:
+  - `#`, el puesto;
+  - `Documento`, el título y un fragmento alrededor de la primera coincidencia, resaltados;
+  - `Puntaje`, con los decimales de su ranking (el coseno vive entre 0 y 1; el de BM25
+    crece con el idf) y una barra relativa al primero;
+  - `Con BM25` o `Con TF-IDF`, el puesto del mismo documento en el otro ranking, o `—` si
+    allí no salió.
+
+  Si los dos rankings fallan por lo mismo (una consulta booleana mal escrita, por ejemplo),
+  el error se ve una vez, encima de los dos.
+- **Detrás de los rankings**, en pestañas: el plan de cada consulta con el `PlanView` de la
+  consola (el `TextSearchScan` con sus términos, su df, los postings leídos y los
+  documentos puntuados) y el índice invertido: documentos, vocabulario, postings,
+  segmentos de SPIMI y el bloque en memoria, borrados, los términos con más df y el tamaño
   de cada archivo en disco. Es la misma vista que abre `⌬` en la consola.
 
 ### El resaltado
@@ -263,6 +294,7 @@ src/
     useWorkspace.ts      sesión, transacción, tablas, tema y una petición a la vez
     useHashRoute.ts      la página que pide la dirección
     useInvertedIndex.ts  forma del índice invertido de una columna
+    useLiveSearch.ts     búsqueda mientras se escribe, de una consulta a la vez
     useSplitter.ts       divisores arrastrables
     useTheme.ts          tema claro u oscuro, recordado entre visitas
     useLeafletMap.ts     ciclo de vida del mapa de Leaflet
@@ -287,12 +319,12 @@ src/
     FilesPanel.tsx       panel de archivos con filtro
     ResultsPanel.tsx     pestañas de filas, mensajes y mapa; exportación y errores
     MapPanel.tsx         mapa con el resultado, las figuras y los MBR
-    PlanPanel.tsx        árbol del plan con leyenda
+    PlanPanel.tsx        árbol del plan con leyenda (PlanView, también en la página de texto)
     StructureDialog.tsx  estructura física: B+, hash, R-Tree, invertido y valores TEXT
     UploadDialog.tsx     carga de CSV
     SchemaView.tsx       diagrama de esquema y relaciones
     StatusBar.tsx        barra de estado
-    text/                la página de texto: formulario, rankings, resultados, plan
+    text/                la página de texto: búsqueda, cláusulas, rankings y detalle
   styles.css             los dos temas, por variables CSS
 tests/                   tests de lib/ (node --test)
 ```

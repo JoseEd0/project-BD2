@@ -12,6 +12,7 @@ Cada estructura vive en su carpeta con su propia explicación:
 | [`vector/`](vector/README.md) | Métricas, búsqueda exacta y lo común a los de vectores | vectores: los k más parecidos |
 | [`ivf/`](ivf/README.md) | IVF sobre FAISS | vectores: solo las listas más cercanas |
 | [`hnsw/`](hnsw/README.md) | HNSW sobre FAISS | vectores: grafo por niveles |
+| [`similarity/`](similarity/README.md) | HNSW o IVF sobre la columna de las rutas | imágenes y audios: `SIMILAR_TO` |
 
 ## Claves (`keys.py`)
 

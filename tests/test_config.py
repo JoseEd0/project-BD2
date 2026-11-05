@@ -34,6 +34,7 @@ INVALID = [
     {"kmeans_iterations": 0},
     {"kmeans_samples_per_word": 0},
     {"vocabulary_training_objects": 0},
+    {"feature_workers": 0},
     {"bm25_k1": -0.1},
     {"bm25_k1": float("inf")},
     {"bm25_k1": float("nan")},

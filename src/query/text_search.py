@@ -22,34 +22,30 @@ con ese índice y con una consulta constante.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 
 from config import EngineConfig
 from errors import DomainError
 from index.inverted import Bm25Parameters, RankingMethod, require_fitting_parameters
-from query.expressions import (
-    RowLayout,
-    all_of,
-    conjuncts,
-    constant_value,
-    describe_expression,
-    order_key,
-    rewritten,
-    subexpressions,
-)
-from query.functions import MATCH, SCORE, is_call_to
+from query.expressions import constant_value, describe_expression
+from query.functions import MATCH, SCORE
 from query.index_methods import TEXT_FIELD_TYPES, Capability
+from query.scored_search import (
+    ScoreFunction,
+    calls_anywhere,
+    calls_to,
+    is_conjunct,
+    ordered_by,
+    searched_source,
+)
+from query.scored_search import served as served_search
 from query.table import Table, index_with_capability
 from sql.nodes import (
-    EMPTY_OPTIONS,
     ColumnRef,
-    Expression,
     FunctionCall,
     OptionValue,
-    Projection,
     SearchMethod,
     SelectStatement,
-    SortDirection,
     TableRef,
 )
 from sql.nodes import RankingMethod as SqlRankingMethod
@@ -75,6 +71,9 @@ MATCH_ARGUMENTS = 2
 
 class TextSearchError(DomainError):
     """La búsqueda de texto de la consulta no se puede responder tal como está escrita."""
+
+
+SCORE_FUNCTION = ScoreFunction(SCORE, SCORE_COLUMN, SCORE_LABEL, TextSearchError)
 
 
 @dataclass(frozen=True, slots=True)
@@ -143,16 +142,19 @@ def text_search(
         BooleanQueryError: si la consulta es booleana y está mal formada.
         ExpressionError: si la columna no existe o es ambigua.
     """
-    found = _calls_to(MATCH, statement.where)
+    found = calls_to(MATCH, statement.where)
     if not found:
-        _require_no_score(statement)
+        if calls_anywhere(statement, SCORE):
+            raise TextSearchError(
+                "SCORE() es el puntaje de un MATCH y esta consulta no tiene ninguno en su WHERE"
+            )
         return None
     if len(found) > 1:
         raise TextSearchError(
             "una consulta admite un solo MATCH: junta las palabras en una sola consulta"
         )
     condition = found[0]
-    if not any(part is condition for part in conjuncts(statement.where)):
+    if not is_conjunct(statement, condition):
         raise TextSearchError(
             "MATCH no se puede negar ni combinar con OR: va en el WHERE, unido al resto de "
             "las condiciones con AND"
@@ -190,35 +192,13 @@ def served(statement: SelectStatement, search: TextSearch) -> SelectStatement:
     Raises:
         TextSearchError: si un `SCORE()` lleva argumentos.
     """
-    residual = [part for part in conjuncts(statement.where) if part is not search.condition]
-    having = statement.having
-    return replace(
-        statement,
-        projections=tuple(map(_scored_projection, statement.projections)),
-        joins=tuple(
-            replace(join, condition=_reading_score(join.condition)) for join in statement.joins
-        ),
-        where=all_of([_reading_score(part) for part in residual]),
-        group_by=tuple(map(_reading_score, statement.group_by)),
-        having=None if having is None else _reading_score(having),
-        order_by=tuple(
-            replace(item, expression=_reading_score(item.expression))
-            for item in statement.order_by
-        ),
-        search_method=None,
-        options=EMPTY_OPTIONS,
-    )
+    return served_search(statement, search.condition, SCORE_FUNCTION)
 
 
 def ordered_by_score(statement: SelectStatement) -> bool:
     """Si la consulta ordena solo por el puntaje, de mayor a menor —el orden en que el
     acceso de texto entrega las filas—, también a través de un alias del SELECT."""
-    if len(statement.order_by) != 1:
-        return False
-    item = statement.order_by[0]
-    if item.direction is not SortDirection.DESCENDING:
-        return False
-    return order_key(item.expression, statement.projections) == SCORE_REFERENCE
+    return ordered_by(statement, SCORE_REFERENCE)
 
 
 def text_view(
@@ -237,30 +217,6 @@ def text_view(
         terms=tuple(ranker.analyzed(search.query)),
         parameters=search.parameters,
     )
-
-
-def _calls_to(name: str, expression: Expression | None) -> list[FunctionCall]:
-    """Todas las llamadas a esa función dentro de la expresión."""
-    if expression is None:
-        return []
-    if isinstance(expression, FunctionCall) and is_call_to(expression.name, name):
-        return [expression]
-    return [call for child in subexpressions(expression) for call in _calls_to(name, child)]
-
-
-def _require_no_score(statement: SelectStatement) -> None:
-    expressions = [
-        *(projection.expression for projection in statement.projections),
-        *(join.condition for join in statement.joins),
-        statement.where,
-        *statement.group_by,
-        statement.having,
-        *(item.expression for item in statement.order_by),
-    ]
-    if any(_calls_to(SCORE, expression) for expression in expressions):
-        raise TextSearchError(
-            "SCORE() es el puntaje de un MATCH y esta consulta no tiene ninguno en su WHERE"
-        )
 
 
 def _match_arguments(condition: FunctionCall) -> tuple[ColumnRef, str]:
@@ -292,14 +248,7 @@ def _searched_column(
         AmbiguousColumnError: si la tienen varias y no está cualificada.
         TextSearchError: si no es una columna de texto.
     """
-    sources = [statement.source, *(join.table for join in statement.joins)]
-    owned = [
-        (source, slot)
-        for source in sources
-        for slot in RowLayout.of_table(tables[source.name.lower()].schema, source.reference).slots
-    ]
-    combined = RowLayout([slot for _, slot in owned])
-    source, slot = owned[combined.position_of(column.name, column.qualifier)]
+    source, slot = searched_source(statement, tables, column)
     if slot.field is None or slot.field.type not in TEXT_FIELD_TYPES:
         kind = "?" if slot.field is None else slot.field.type.value
         raise TextSearchError(
@@ -345,29 +294,3 @@ def _number(options: Mapping[str, OptionValue], name: str, default: float) -> fl
     if not is_number(value):
         raise TextSearchError(f"{name} es un número y llegó {value!r}")
     return float(value)
-
-
-def _scored_projection(projection: Projection) -> Projection:
-    """La columna del SELECT leyendo el puntaje; un `SCORE()` sin alias se llama `score`."""
-    expression = projection.expression
-    if _is_score(expression) and projection.alias is None:
-        return Projection(_reading_score(expression), SCORE_LABEL)
-    return Projection(_reading_score(expression), projection.alias)
-
-
-def _reading_score(expression: Expression) -> Expression:
-    return rewritten(expression, _score_reference)
-
-
-def _score_reference(expression: Expression) -> Expression | None:
-    if not _is_score(expression):
-        return None
-    if isinstance(expression, FunctionCall) and (
-        expression.arguments or expression.keyword_arguments
-    ):
-        raise TextSearchError("SCORE() no recibe argumentos: es el puntaje del MATCH")
-    return SCORE_REFERENCE
-
-
-def _is_score(expression: Expression) -> bool:
-    return isinstance(expression, FunctionCall) and is_call_to(expression.name, SCORE)

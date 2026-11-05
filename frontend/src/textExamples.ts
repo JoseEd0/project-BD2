@@ -4,7 +4,8 @@
  */
 
 /** Búsquedas de ejemplo de la página «Texto»: temas de la muestra ESCI con candidatos de
- * sobra, donde los dos rankings no coinciden. */
+ * sobra, donde los dos rankings no coinciden, y una booleana, que resalta solo sus términos
+ * positivos. */
 export const TEXT_SEARCH_EXAMPLES = [
   "auriculares inalámbricos bluetooth",
   "zapatillas running mujer",
@@ -12,6 +13,7 @@ export const TEXT_SEARCH_EXAMPLES = [
   "mochila portátil impermeable",
   "funda iphone libro",
   "aceite de oliva virgen extra",
+  "funda AND iphone AND NOT silicona",
 ];
 
 /** Carga el catálogo de la muestra ESCI con su índice invertido, desde la página «Texto»

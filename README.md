@@ -278,7 +278,9 @@ npm --prefix frontend test                    # resaltado y SQL de la página de
 
 Lo mismo corre en GitHub Actions ([`.github/workflows/ci.yml`](.github/workflows/ci.yml))
 en cada pull request y en cada cambio de `main`, con Python 3.11 y 3.12. Los tests que
-necesitan PostgreSQL o los extras de gráficas se saltan solos cuando no están.
+necesitan PostgreSQL o los extras de gráficas se saltan solos cuando no están. La CI
+construye además las dos imágenes de Docker: la del motor con su API ([`Dockerfile`](Dockerfile))
+y la de la interfaz ([`frontend/Dockerfile`](frontend/Dockerfile)), servida por nginx.
 
 Los tests siguen la estructura de `src/`, así que se pueden ejecutar por módulo:
 

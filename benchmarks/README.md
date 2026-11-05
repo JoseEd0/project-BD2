@@ -22,9 +22,9 @@ gráficas de [`figures/`](figures/) y todas las tablas de este documento.
 Los mismos comandos corren sin instalar Python ni PostgreSQL, en el perfil `bench` de
 [`compose.yaml`](../compose.yaml):
 
-- **`postgres`** es PostgreSQL 17 con PostGIS ([`docker/postgres/Dockerfile`](../docker/postgres/Dockerfile)),
+- **`postgres`** es PostgreSQL 17 con PostGIS y pgvector ([`docker/postgres/Dockerfile`](../docker/postgres/Dockerfile)),
   para `linux/amd64` y `linux/arm64`. No publica ningún puerto.
-- **`bench`** es la imagen del motor con los extras `postgres`, `plots` y `datasets`, y con
+- **`bench`** es la imagen del motor con los extras `postgres`, `plots`, `datasets` y `usearch`, y con
   `BENCH_POSTGRES_DSN` apuntando a `postgres`. Monta `benchmarks/` y `data/datasets/` desde
   el repositorio, así que los JSON, las gráficas y los datos descargados quedan en su sitio.
 

@@ -39,7 +39,8 @@ from storage.record_id import RECORD_ID_SIZE, RecordId
 from storage.schema import Field, Schema
 from storage.types import FieldType, StorageError
 
-from .vocabulary import Descriptors, Vocabulary
+from .descriptors import Descriptors
+from .vocabulary import Vocabulary
 from .weighting import InverseFrequencies, Weights, inverse_document_frequencies, tf_idf
 
 WORDS_SUFFIX = ".words"

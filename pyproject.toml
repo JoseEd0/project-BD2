@@ -57,7 +57,7 @@ warn_unreachable = true
 [[tool.mypy.overrides]]
 module = [
     "numpy", "numpy.*", "matplotlib", "matplotlib.*", "psycopg", "psycopg.*",
-    "pyarrow", "pyarrow.*",
+    "pyarrow", "pyarrow.*", "faiss", "faiss.*",
 ]
 follow_imports = "skip"
 follow_imports_for_stubs = true

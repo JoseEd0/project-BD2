@@ -2,10 +2,10 @@
 
 Una función escalar devuelve un valor por fila y se puede usar en cualquier expresión
 (`WHERE`, `SELECT`, `ORDER BY`, `VALUES`). Las de agregación resumen un grupo de filas y
-solo las entiende el operador de agrupación, y las de búsqueda de texto (`MATCH`,
-`SCORE()`) las resuelve el planificador; de unas y otras aquí únicamente se declaran sus
-nombres, para que el evaluador pueda distinguir "esa función no va aquí" de "esa función
-no existe".
+solo las entiende el operador de agrupación, y las de búsqueda (`MATCH` y `SCORE()`,
+`SIMILAR_TO` y `SIMILARITY_SCORE()`) las resuelve el planificador; de unas y otras aquí
+únicamente se declaran sus nombres, para que el evaluador pueda distinguir "esa función no
+va aquí" de "esa función no existe".
 
 Las funciones espaciales son las de la Parte 2:
 
@@ -36,6 +36,8 @@ DISTANCE = "distancia"
 INTERSECTS = "intersecta"
 MATCH = "MATCH"
 SCORE = "SCORE"
+SIMILAR_TO = "SIMILAR_TO"
+SIMILARITY_SCORE = "SIMILARITY_SCORE"
 METRIC_KEYWORDS = ("metrica", "metric")
 COORDINATES_PER_POINT = 2
 BINARY_ARGUMENTS = 2
@@ -58,14 +60,19 @@ class AggregateKind(Enum):
 
 
 AGGREGATE_NAMES = {kind.value: kind for kind in AggregateKind}
-# Las de la búsqueda de texto no se calculan fila a fila: el planificador entrega `MATCH` al
-# índice invertido y convierte cada `SCORE()` en la columna del puntaje que ese acceso
-# produce. Si una llega al evaluador es que está donde no puede ir, y esto dice dónde va.
+# Las de búsqueda no se calculan fila a fila: el planificador entrega `MATCH` al índice
+# invertido y `SIMILAR_TO` al de similitud, y convierte cada `SCORE()` o
+# `SIMILARITY_SCORE()` en la columna del puntaje que ese acceso produce. Si una llega al
+# evaluador es que está donde no puede ir, y esto dice dónde va.
 SEARCH_FUNCTION_PLACES = {
     MATCH: "MATCH es una búsqueda con índice invertido: va en el WHERE de un SELECT, unida "
     "al resto de las condiciones con AND",
     SCORE: "SCORE() es el puntaje de un MATCH: solo existe en un SELECT con un MATCH en su "
     "WHERE",
+    SIMILAR_TO: "SIMILAR_TO es una búsqueda con índice HNSW o IVF: va en el WHERE de un "
+    "SELECT, unida al resto de las condiciones con AND",
+    SIMILARITY_SCORE: "SIMILARITY_SCORE() es el puntaje de un SIMILAR_TO: solo existe en un "
+    "SELECT con un SIMILAR_TO en su WHERE",
 }
 
 Implementation = Callable[[Sequence[Any], Mapping[str, Any]], Any]

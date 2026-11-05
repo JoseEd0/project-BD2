@@ -188,7 +188,7 @@ def test_a_column_can_have_one_index_of_each_method(tabla: Engine):
         ("CREATE INDEX i ON t USING BTREE (n, s)", UnsupportedQueryError, "varias columnas"),
         ("CREATE INDEX i ON t USING BTREE (nada)", CatalogError, "la columna 'nada' no existe"),
         ("CREATE INDEX i ON t USING RTREE (n)", CatalogError, "necesita una columna POINT"),
-        ("CREATE INDEX i ON t USING HNSW (p)", CatalogError, "no sirve como índice secundario"),
+        ("CREATE INDEX i ON t USING HNSW (p)", CatalogError, "la ruta de cada imagen o audio"),
     ],
 )
 def test_an_index_that_cannot_be_built_leaves_nothing_behind(

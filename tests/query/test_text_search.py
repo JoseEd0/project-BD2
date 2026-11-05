@@ -531,7 +531,7 @@ def test_a_ranking_that_does_not_fit_fails_before_reading_rows(
 
 
 def test_using_without_a_match_is_still_rejected(tienda: Engine):
-    with pytest.raises(UnsupportedQueryError, match="no tiene un MATCH en su WHERE"):
+    with pytest.raises(UnsupportedQueryError, match="no tiene ninguna de las dos en su WHERE"):
         tienda.execute("SELECT id FROM productos WHERE precio < 10 USING BM25")
 
 

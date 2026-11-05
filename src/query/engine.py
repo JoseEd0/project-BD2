@@ -42,6 +42,7 @@ from query.operators import UnsupportedQueryError
 from query.plan import MILLISECONDS_PER_SECOND, PlanNode
 from query.planner import Planner
 from query.row_store import AddressedRecord
+from query.similarity_search import SimilarityView, similarity_view
 from query.spatial import SpatialView, spatial_view
 from query.table import Table, discard_table_files, primary_key_index_name
 from query.text_search import TextView, text_view
@@ -108,6 +109,8 @@ class QueryResult:
         spatial: tabla, columna y figuras que el panel de mapa debe dibujar, si la consulta
             toca alguna columna POINT.
         text: tabla, columna y términos analizados de su `MATCH`, para resaltarlos.
+        similarity: tabla, columna, índice y métrica de su `SIMILAR_TO`, para mostrar los
+            archivos del resultado.
     """
 
     columns: tuple[str, ...] = ()
@@ -118,6 +121,7 @@ class QueryResult:
     elapsed_ms: float = 0.0
     spatial: SpatialView | None = None
     text: TextView | None = None
+    similarity: SimilarityView | None = None
 
 
 @dataclass
@@ -273,7 +277,8 @@ class Engine:
 
     def _select(self, statement: SelectStatement) -> QueryResult:
         tables = self._tables_of(statement)
-        operator = Planner(tables, self.config).plan(statement)
+        planner = Planner(tables, self.config)
+        operator = planner.plan(statement)
         rows = tuple(operator.rows())
         return QueryResult(
             columns=operator.layout.names,
@@ -282,6 +287,7 @@ class Engine:
             affected_rows=len(rows),
             spatial=spatial_view(statement, tables),
             text=text_view(statement, tables, self.config),
+            similarity=similarity_view(planner.similarity_search),
         )
 
     def _explain(self, statement: ExplainStatement) -> QueryResult:

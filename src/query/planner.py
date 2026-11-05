@@ -63,6 +63,14 @@ from query.operators import (
     UnsupportedQueryError,
     grouping_label,
 )
+from query.similarity_operators import VectorSearchScan
+from query.similarity_search import (
+    SimilaritySearch,
+    ordered_by_similarity,
+    reads_similarity,
+    similarity_search,
+)
+from query.similarity_search import served as served_by_similarity
 from query.spatial import nearest_search, polygon_search, radius_search
 from query.spatial_operators import SpatialNearestScan, SpatialPolygonScan, SpatialRangeScan
 from query.table import Table, index_with_capability
@@ -109,7 +117,13 @@ class Planner:
         self._config = config
         self._single_source = True
         self._text_search: TextSearch | None = None
+        self._similarity_search: SimilaritySearch | None = None
         self._ranked_limit: int | None = None
+
+    @property
+    def similarity_search(self) -> SimilaritySearch | None:
+        """El `SIMILAR_TO` de la última consulta planificada, ya resuelto."""
+        return self._similarity_search
 
     def plan(self, statement: SelectStatement) -> Operator:
         """Árbol de operadores listo para ejecutar.
@@ -117,7 +131,12 @@ class Planner:
         Raises:
             UnsupportedQueryError: si la consulta usa algo que el ejecutor no implementa.
             TextSearchError: si su búsqueda de texto no se puede responder (`text_search`).
+            SimilaritySearchError: si su búsqueda por similitud no se puede responder
+                (`similarity_search`).
         """
+        self._similarity_search = similarity_search(statement, self._tables, self._config)
+        if self._similarity_search is not None:
+            statement = served_by_similarity(statement, self._similarity_search)
         self._text_search = text_search(statement, self._tables, self._config)
         if self._text_search is not None:
             statement = served(statement, self._text_search)
@@ -184,12 +203,40 @@ class Planner:
         costos: no sabe cuántas filas deja pasar cada condición, y por eso el filtro del
         WHERE se aplica igual sobre lo que devuelva el camino elegido.
 
-        La tabla de un `MATCH` va siempre por su índice invertido: es el único acceso que
-        sabe puntuar, y el `MATCH` ya salió del WHERE (`served`).
+        La tabla de un `MATCH` va siempre por su índice invertido y la de un `SIMILAR_TO` por
+        su índice de similitud: son los únicos accesos que saben puntuar, y la búsqueda ya
+        salió del WHERE (`served`).
         """
         search = self._text_search
         if search is not None and search.reference.lower() == alias.lower():
             return TextSearchScan(table, alias, search, self._ranked_limit)
+        similar = self._similarity_search
+        if similar is not None and similar.reference.lower() == alias.lower():
+            return VectorSearchScan(table, alias, similar, self._prefilter(table, alias, where))
+        return self._plain_access_path(table, alias, where)
+
+    def _prefilter(
+        self, table: Table, alias: str, where: Expression | None
+    ) -> tuple[TableOperator, Expression] | None:
+        """El resto del WHERE que la búsqueda por similitud aplica antes de buscar, con su
+        propio camino de acceso.
+
+        Solo con una tabla: con un JOIN, las condiciones pueden nombrar columnas de las
+        otras y se aplican después. Las que leen el puntaje también van después, porque el
+        puntaje no existe hasta que se busca.
+        """
+        if not self._single_source:
+            return None
+        local = [part for part in conjuncts(where) if not reads_similarity(part)]
+        condition = all_of(local)
+        if condition is None:
+            return None
+        return self._plain_access_path(table, alias, condition), condition
+
+    def _plain_access_path(
+        self, table: Table, alias: str, where: Expression | None
+    ) -> TableOperator:
+        """El mejor camino de las condiciones del WHERE sin contar las búsquedas puntuadas."""
         candidates: list[tuple[int, TableOperator]] = []
         ranges: dict[str, tuple[str, Value | None, Value | None]] = {}
         for condition in conjuncts(where):
@@ -286,12 +333,16 @@ class Planner:
     def _score_ordered(
         self, statement: SelectStatement, source: Operator, grouped: bool
     ) -> Operator | None:
-        """El acceso de texto, si el ORDER BY pide el orden en que ya entrega las filas: de
-        mayor a menor puntaje. Un filtro o un `DISTINCT` lo conservan; un JOIN o una
+        """El acceso de texto o de similitud, si el ORDER BY pide el orden en que ya entrega
+        las filas: de mayor a menor puntaje. Un filtro o un `DISTINCT` lo conservan; un JOIN o una
         agrupación no."""
-        if not isinstance(source, TextSearchScan) or grouped or statement.joins:
+        if grouped or statement.joins:
             return None
-        return source if ordered_by_score(statement) else None
+        if isinstance(source, TextSearchScan):
+            return source if ordered_by_score(statement) else None
+        if isinstance(source, VectorSearchScan):
+            return source if ordered_by_similarity(statement) else None
+        return None
 
     def _spatial_index_on(
         self, table: Table, alias: str, column: ColumnRef
@@ -653,8 +704,8 @@ def _require_search(statement: SelectStatement) -> None:
         return
     asked = "WITH" if statement.search_method is None else f"USING {statement.search_method.value}"
     raise UnsupportedQueryError(
-        f"{asked} en un SELECT elige el ranking de una búsqueda MATCH o SIMILAR_TO, y esta "
-        "consulta no tiene un MATCH en su WHERE (SIMILAR_TO todavía no se ejecuta)"
+        f"{asked} en un SELECT elige cómo se resuelve una búsqueda MATCH o SIMILAR_TO, y esta "
+        "consulta no tiene ninguna de las dos en su WHERE"
     )
 
 

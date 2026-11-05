@@ -21,6 +21,8 @@ DESCRIPTION = Field("descripcion", FieldType.TEXT)
         (IndexType.HASH, {Capability.EQUALITY}),
         (IndexType.RTREE, {Capability.EQUALITY, Capability.SPATIAL}),
         (IndexType.INVERTED, {Capability.TEXT_SEARCH}),
+        (IndexType.HNSW, {Capability.SIMILARITY}),
+        (IndexType.IVF, {Capability.SIMILARITY}),
     ],
 )
 def test_each_method_declares_what_it_answers(method: IndexType, capabilities: set):
@@ -44,6 +46,11 @@ def test_each_method_declares_what_it_answers(method: IndexType, capabilities: s
         (IndexType.INVERTED, DESCRIPTION, False),
         (IndexType.INVERTED, NUMBER, True),
         (IndexType.INVERTED, PLACE, True),
+        (IndexType.HNSW, NAME, False),
+        (IndexType.HNSW, DESCRIPTION, False),
+        (IndexType.HNSW, NUMBER, True),
+        (IndexType.IVF, NAME, False),
+        (IndexType.IVF, PLACE, True),
     ],
 )
 def test_each_method_says_which_columns_it_serves(method: IndexType, field: Field, refused: bool):
@@ -54,7 +61,6 @@ def test_each_method_says_which_columns_it_serves(method: IndexType, field: Fiel
 
 def test_methods_that_are_not_secondary_indexes_are_not_registered():
     assert method_named(IndexType.SEQUENTIAL) is None
-    assert method_named(IndexType.HNSW) is None
 
 
 def test_a_method_without_options_refuses_every_one():

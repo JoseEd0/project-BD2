@@ -158,7 +158,7 @@ con excepciones del dominio, anotaciones de tipo en toda firma pública (`mypy` 
 | Para | Hace falta |
 |---|---|
 | el motor y el API | Python 3.11 o posterior |
-| la interfaz | Node.js 18 o posterior |
+| la interfaz | Node.js 18 o posterior; 22.18 para `npm test` |
 | redibujar las gráficas (opcional) | `matplotlib`, que se instala con el extra `plots` |
 | medir contra GiST (opcional) | PostgreSQL con la extensión PostGIS y el extra `postgres` |
 

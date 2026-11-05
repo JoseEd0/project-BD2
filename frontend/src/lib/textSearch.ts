@@ -361,6 +361,23 @@ export function checkDraft(
   };
 }
 
+/** El valor que deja ↑ (`direction` 1) o ↓ (-1) en un parámetro vacío: el del motor más o
+ * menos un paso, sin bajar de 0 y redondeado a los decimales del paso. `null` si el campo
+ * ya tiene un valor (lo ajusta el navegador), si la tecla no es una flecha o si todavía no
+ * se sabe el del motor. */
+export function steppedFromDefault(
+  value: string,
+  engine: number | null,
+  step: number,
+  direction: number,
+): string | null {
+  if (value.trim().length > 0 || engine === null || direction === 0) {
+    return null;
+  }
+  const decimals = (String(step).split(".")[1] ?? "").length;
+  return String(Number(Math.max(engine + direction * step, 0).toFixed(decimals)));
+}
+
 /** Decimales del puntaje de cada ranking: el coseno vive entre 0 y 1, y el de BM25 crece
  * con el idf, así que con dos le basta. */
 const SCORE_DIGITS: Record<RankingMethod, number> = { TF_IDF: 3, BM25: 2 };

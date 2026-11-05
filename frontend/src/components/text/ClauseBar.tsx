@@ -1,4 +1,7 @@
+import type { KeyboardEvent } from "react";
+
 import type { Bm25Parameters } from "../../hooks/useLiveSearch";
+import { steppedFromDefault } from "../../lib/textSearch";
 import type { FilterDraft } from "../../lib/textSearch";
 import type { ColumnInfo } from "../../types";
 
@@ -6,6 +9,7 @@ import type { ColumnInfo } from "../../types";
 const LIMIT_OPTIONS = [5, 10, 20, 50];
 const K1_STEP = 0.1;
 const B_STEP = 0.05;
+const B_MAX = 1;
 
 interface ClauseBarProps {
   filters: FilterDraft[];
@@ -25,6 +29,49 @@ interface ClauseBarProps {
 
 function engineValue(value: number | null): string {
   return value === null ? "" : String(value);
+}
+
+/** Un parámetro de BM25. Vacío deja el del motor; ↑ y ↓ sobre el campo vacío parten de ese
+ * valor y no de 0, que es lo que haría el navegador. */
+function Parameter({
+  name,
+  value,
+  engine,
+  step,
+  max,
+  onChange,
+}: {
+  name: string;
+  value: string;
+  engine: number | null;
+  step: number;
+  max?: number;
+  onChange: (value: string) => void;
+}) {
+  function stepFromEngine(event: KeyboardEvent<HTMLInputElement>) {
+    const direction = event.key === "ArrowUp" ? 1 : event.key === "ArrowDown" ? -1 : 0;
+    const stepped = steppedFromDefault(value, engine, step, direction);
+    if (stepped !== null) {
+      event.preventDefault();
+      onChange(stepped);
+    }
+  }
+  return (
+    <label className="clause__parameter">
+      {name} =
+      <input
+        className="clause__input clause__input--number"
+        max={max}
+        min={0}
+        onChange={(event) => onChange(event.target.value)}
+        onKeyDown={stepFromEngine}
+        placeholder={engineValue(engine)}
+        step={step}
+        type="number"
+        value={value}
+      />
+    </label>
+  );
 }
 
 function Condition({
@@ -106,35 +153,28 @@ export default function ClauseBar({
             <span className="clause__keyword">AND</span> condición
           </button>
         )}
-        <span className="clause" title="Solo cambia el ranking de BM25. Vacío, usa el valor del motor.">
+        <span
+          className="clause"
+          title="Solo cambia el ranking de BM25. Vacío, usa el valor del motor; ↑ y ↓ lo ajustan."
+        >
           <span className="clause__keyword">USING</span>
           <span className="clause__type">BM25</span>
           <span className="clause__keyword">WITH</span>
-          <label className="clause__parameter">
-            k1 =
-            <input
-              className="clause__input clause__input--number"
-              min={0}
-              onChange={(event) => onParameters({ k1: event.target.value })}
-              placeholder={engineValue(engine.k1)}
-              step={K1_STEP}
-              type="number"
-              value={k1}
-            />
-          </label>
-          <label className="clause__parameter">
-            b =
-            <input
-              className="clause__input clause__input--number"
-              max={1}
-              min={0}
-              onChange={(event) => onParameters({ b: event.target.value })}
-              placeholder={engineValue(engine.b)}
-              step={B_STEP}
-              type="number"
-              value={b}
-            />
-          </label>
+          <Parameter
+            engine={engine.k1}
+            name="k1"
+            onChange={(next) => onParameters({ k1: next })}
+            step={K1_STEP}
+            value={k1}
+          />
+          <Parameter
+            engine={engine.b}
+            max={B_MAX}
+            name="b"
+            onChange={(next) => onParameters({ b: next })}
+            step={B_STEP}
+            value={b}
+          />
           {customized && (
             <button
               aria-label="Volver a los k1 y b del motor"

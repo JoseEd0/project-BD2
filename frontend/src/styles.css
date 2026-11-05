@@ -2063,10 +2063,10 @@ select.field__input:disabled {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-height: 32px;
-  padding: 0 6px 0 10px;
+  min-height: 34px;
+  padding: 0 5px 0 10px;
   border-radius: 6px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   background: var(--surface-2);
   color: var(--text-muted);
   font-family: var(--mono);
@@ -2093,21 +2093,27 @@ select.field__input:disabled {
   gap: 4px;
 }
 
+/* Lo editable va en caja y el SQL fijo no: así se ve, en los dos temas, qué se puede
+   cambiar dentro de cada cláusula. */
 .clause__input {
   min-width: 0;
-  padding: 3px 4px;
-  border: 1px solid transparent;
+  height: 24px;
+  padding: 0 6px;
+  border: 1px solid var(--border-strong);
   border-radius: 4px;
-  background: none;
+  background: var(--surface-1);
   color: var(--text);
   font-family: var(--mono);
   font-size: 13px;
 }
 
-.clause__input:hover,
+.clause__input:hover {
+  border-color: var(--text-faint);
+}
+
 .clause__input:focus {
-  border-color: var(--border-strong);
-  background: var(--surface-1);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
   outline: none;
 }
 
@@ -2116,9 +2122,20 @@ select.field__input:disabled {
   color: var(--success);
 }
 
+/* Sin las flechas del navegador, que tapan el número en un campo tan angosto: el valor se
+   ajusta con ↑ y ↓, que siguen respetando el `step`. */
 .clause__input--number {
-  width: 7ch;
+  width: calc(5ch + 14px);
   color: var(--orange);
+  text-align: right;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.clause__input--number::-webkit-inner-spin-button,
+.clause__input--number::-webkit-outer-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
 }
 
 .clause__input::placeholder {
@@ -2145,12 +2162,15 @@ select.field__input:disabled {
 .clause--add {
   padding-right: 10px;
   border-style: dashed;
-  background: none;
+  background: var(--surface-1);
+  color: var(--text-muted);
   cursor: pointer;
 }
 
 .clause--add:hover {
+  border-style: solid;
   border-color: var(--accent);
+  background: var(--accent-soft);
   color: var(--text);
 }
 

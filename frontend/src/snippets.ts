@@ -634,6 +634,15 @@ ORDER BY relevancia DESC
 LIMIT 10;`,
       },
       {
+        label: "Booleana: AND y NOT",
+        description:
+          "Intersección y resta de listas ordenadas por doc_id; puntúan solo los términos positivos",
+        sql: `SELECT titulo, marca, SCORE() AS relevancia
+FROM catalogo
+WHERE MATCH(texto, 'funda AND iphone AND NOT silicona')
+LIMIT 10;`,
+      },
+      {
         label: "Puntaje por marca",
         description: "SCORE() dentro de un agregado: la mejor coincidencia de cada marca",
         sql: `SELECT marca, COUNT(*) AS productos, MAX(SCORE()) AS mejor

@@ -3,7 +3,9 @@
  *
  * El API devuelve los términos ya analizados —plegados, sin stopwords y reducidos a su raíz:
  * «auriculares inalámbricos» llega como `auricular`, `inalambr`—, pero en pantalla está el
- * texto original. El resaltado es una aproximación del lado del cliente:
+ * texto original. De una consulta booleana solo llegan los términos positivos, así que ni
+ * los negados ni los operadores se marcan. El resaltado es una aproximación del lado del
+ * cliente:
  *
  * 1. se corta el texto en palabras y cifras con la misma regla que el analizador del motor
  *    (`src/text/analyzer.py`): una cifra puede llevar separadores decimales o de miles y

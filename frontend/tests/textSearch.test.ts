@@ -5,15 +5,20 @@ import {
   checkDraft,
   chosenTarget,
   createIndexSql,
+  defaultFilterColumn,
   filterCondition,
+  formatScore,
   indexableColumns,
   optionalNumber,
   positionsByKey,
   resultCards,
   resultFields,
+  scoreShare,
   searchSql,
   searchTargets,
+  sharedFailure,
 } from "../src/lib/textSearch.ts";
+import type { RankingOutcome } from "../src/lib/textSearch.ts";
 import type { ColumnInfo, TableInfo } from "../src/types.ts";
 
 function column(name: string, type: string, indexedWith: string[] = []): ColumnInfo {
@@ -92,11 +97,11 @@ test("el filtro escribe el literal según el tipo y escapa las comillas", () => 
   assert.equal(filterCondition(marca, ""), null);
 });
 
-test("la consulta lleva MATCH, el filtro, el ranking y sus parámetros", () => {
+test("la consulta lleva MATCH, sus condiciones, el ranking y sus parámetros", () => {
   const request = {
     target: { table: "catalogo", column: "texto" },
     query: "zapatillas d'running",
-    filter: "marca = 'PUMA'",
+    conditions: ["marca = 'PUMA'", "precio = 59.9"],
     k1: 2,
     b: null,
     limit: 10,
@@ -108,12 +113,17 @@ test("la consulta lleva MATCH, el filtro, el ranking y sus parámetros", () => {
       "FROM catalogo",
       "WHERE MATCH(texto, 'zapatillas d''running')",
       "  AND marca = 'PUMA'",
+      "  AND precio = 59.9",
       "USING BM25 WITH (k1 = 2)",
       "ORDER BY puntaje DESC",
       "LIMIT 10;",
     ].join("\n"),
   );
-  assert.ok(searchSql({ ...request, method: "TF_IDF", filter: null }).includes("USING TF_IDF\n"));
+  assert.ok(
+    searchSql({ ...request, method: "TF_IDF", conditions: [] }).includes(
+      "WHERE MATCH(texto, 'zapatillas d''running')\nUSING TF_IDF\n",
+    ),
+  );
   assert.ok(searchSql({ ...request, method: "BM25", k1: null }).includes("USING BM25\nORDER BY"));
 });
 
@@ -160,14 +170,23 @@ test("el borrador dice qué le falta antes de consultar", () => {
   const draft = {
     target: "catalogo.texto",
     query: " funda ",
-    filterColumn: "precio",
-    filterValue: "",
+    filters: [
+      { id: 1, column: "precio", value: "" },
+      { id: 2, column: "marca", value: "PUMA" },
+    ],
     k1: "",
     b: "0.5",
     limit: 10,
   };
   assert.deepEqual(checkDraft(draft, target, CATALOGO), {
-    request: { target, query: "funda", filter: null, k1: null, b: 0.5, limit: 10 },
+    request: {
+      target,
+      query: "funda",
+      conditions: ["marca = 'PUMA'"],
+      k1: null,
+      b: 0.5,
+      limit: 10,
+    },
     problem: null,
   });
   assert.equal(
@@ -175,9 +194,43 @@ test("el borrador dice qué le falta antes de consultar", () => {
     "Escribe qué buscar.",
   );
   assert.match(checkDraft({ ...draft, k1: "uno" }, target, CATALOGO).problem ?? "", /k1 y b/);
-  assert.match(
-    checkDraft({ ...draft, filterValue: "barato" }, target, CATALOGO).problem ?? "",
-    /necesita un número/,
-  );
+  const priced = { ...draft, filters: [{ id: 1, column: "precio", value: "barato" }] };
+  assert.match(checkDraft(priced, target, CATALOGO).problem ?? "", /«precio» necesita un número/);
   assert.ok(checkDraft(draft, null, undefined).problem !== null);
+});
+
+test("una condición nueva empieza por la marca si la tabla tiene, y si no por la primera", () => {
+  const columns = CATALOGO.columns.slice(0, 4);
+  assert.equal(defaultFilterColumn(columns, "marca"), "marca");
+  assert.equal(defaultFilterColumn(columns, null), "id");
+  assert.equal(defaultFilterColumn(columns, "borrada"), "id");
+  assert.equal(defaultFilterColumn([], "marca"), null);
+});
+
+test("el puntaje se escribe con los decimales de su ranking y su barra va de 0 a 1", () => {
+  assert.equal(formatScore(0.52451, "TF_IDF"), "0.525");
+  assert.equal(formatScore(14.2329, "BM25"), "14.23");
+  assert.equal(formatScore(3, "BM25"), "3.00");
+  assert.equal(scoreShare(7, 14), 0.5);
+  assert.equal(scoreShare(14, 14), 1);
+  assert.equal(scoreShare(null, 14), 0);
+  assert.equal(scoreShare(5, null), 0);
+  assert.equal(scoreShare(-1, 14), 0);
+});
+
+function outcomeFailing(error: string | null): RankingOutcome {
+  const failure =
+    error === null
+      ? null
+      : { error, kind: "BooleanQueryError", line: null, column: null, in_transaction: false };
+  return { method: "BM25", sql: "", cards: [], elapsedMs: null, plan: null, text: null, failure };
+}
+
+test("un error se muestra una sola vez solo si todos los rankings fallaron por lo mismo", () => {
+  const both = [outcomeFailing("solo excluye"), outcomeFailing("solo excluye")];
+  assert.equal(sharedFailure(both)?.error, "solo excluye");
+  assert.equal(sharedFailure([outcomeFailing("solo excluye"), outcomeFailing(null)]), null);
+  assert.equal(sharedFailure([outcomeFailing(null), outcomeFailing("k1 negativo")]), null);
+  assert.equal(sharedFailure([outcomeFailing("a"), outcomeFailing("b")]), null);
+  assert.equal(sharedFailure([]), null);
 });

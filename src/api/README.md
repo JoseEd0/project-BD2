@@ -139,8 +139,11 @@ regulares —no las primeras—, para que no se concentre en una zona. El máxim
 
 Cuando el `WHERE` tiene un `MATCH`, la respuesta de `/query` añade `text`: dónde se buscó,
 con qué ranking y con qué **términos ya analizados** —plegados, sin stopwords y reducidos a
-su raíz—, que la página «Texto» del frontend resalta en los resultados. `k1` y `b` son los
-que usó BM25, los del `WITH` o los de la configuración; con TF-IDF van en `null`.
+su raíz—, que la página «Texto» del frontend resalta en los resultados. De una consulta
+booleana (`'funda AND iphone AND NOT silicona'`) solo van los términos positivos: ni los
+negados ni los operadores se resaltan. `k1` y `b` son los que usó BM25, los del `WITH` o
+los de la configuración; con TF-IDF van en `null`. Una consulta booleana mal formada es un
+`400` de tipo `BooleanQueryError`.
 
 ```jsonc
 // SELECT *, SCORE() FROM catalogo WHERE MATCH(texto, 'auriculares inalámbricos')

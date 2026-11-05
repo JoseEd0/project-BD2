@@ -444,6 +444,26 @@ def test_a_text_search_without_its_index_is_a_bad_request(client: TestClient):
     assert "USING INVERTED (texto)" in detail["error"]
 
 
+def test_a_boolean_text_search_highlights_only_its_positive_terms(client: TestClient):
+    run(client, "CREATE TABLE fichas (id INT PRIMARY KEY, texto TEXT)")
+    run(client, "INSERT INTO fichas VALUES (1, 'Cable USB tipo C'), (2, 'Hub USB con cable')")
+    run(client, "CREATE INDEX ON fichas USING INVERTED (texto)")
+    body = run(client, "SELECT id FROM fichas WHERE MATCH(texto, 'usb AND NOT hub')")
+    assert [row[0] for row in body["rows"]] == [1]
+    assert body["text"]["terms"] == ["usb"]
+
+
+def test_a_malformed_boolean_text_search_is_a_bad_request(client: TestClient):
+    run(client, "CREATE TABLE fichas (id INT PRIMARY KEY, texto TEXT)")
+    run(client, "CREATE INDEX ON fichas USING INVERTED (texto)")
+    sql = "SELECT id FROM fichas WHERE MATCH(texto, '(usb AND cable')"
+    response = client.post("/query", json={"sql": sql})
+    assert response.status_code == 400
+    detail = response.json()["detail"]
+    assert detail["kind"] == "BooleanQueryError"
+    assert "falta cerrar el paréntesis" in detail["error"]
+
+
 def test_table_points_feed_the_map(stores: TestClient):
     body = stores.get("/tables/tiendas/points").json()
     assert body["table"] == "tiendas"

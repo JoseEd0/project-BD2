@@ -29,6 +29,9 @@ from errors import DomainError
 Vectors: TypeAlias = npt.NDArray[np.float32]
 Scores: TypeAlias = npt.NDArray[np.float64]
 VECTOR_DTYPE = np.float32
+# El coseno de dos vectores normalizados en float32 puede pasar de 1 por el redondeo
+# (1.000000238 en una foto contra sí misma); se acota a su rango.
+COSINE_BOUND = 1.0
 
 
 class UnknownVectorMetricError(DomainError):
@@ -76,14 +79,19 @@ class VectorMetric(Enum):
         values = raw.astype(np.float64)
         if self is VectorMetric.EUCLIDEAN:
             return 1.0 / (1.0 + np.sqrt(np.maximum(values, 0.0)))
-        return values
+        return self._bounded(values)
 
     def scores_of_prepared(self, query: Vectors, vectors: Vectors) -> Scores:
         """Puntaje exacto de una consulta ya preparada contra vectores ya preparados."""
         if self is VectorMetric.EUCLIDEAN:
             distances = np.linalg.norm(vectors.astype(np.float64) - query[0], axis=1)
             return 1.0 / (1.0 + distances)
-        return vectors.astype(np.float64) @ query[0].astype(np.float64)
+        return self._bounded(vectors.astype(np.float64) @ query[0].astype(np.float64))
+
+    def _bounded(self, scores: Scores) -> Scores:
+        if self is VectorMetric.COSINE:
+            return np.clip(scores, -COSINE_BOUND, COSINE_BOUND)
+        return scores
 
     def similarity(self, query: npt.ArrayLike, vectors: npt.ArrayLike) -> Scores:
         """Puntaje exacto de `query` contra cada fila de `vectors`, calculado con numpy.

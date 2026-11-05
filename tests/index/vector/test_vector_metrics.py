@@ -82,3 +82,10 @@ def test_metrics_are_found_by_name(name, metric):
 def test_an_unknown_metric_names_the_accepted_ones():
     with pytest.raises(UnknownVectorMetricError, match="cosine"):
         vector_metric_named("manhattan")
+
+
+def test_cosine_never_goes_past_one():
+    raw = np.array([1.000000238, -1.0000003], dtype=np.float32)
+
+    assert VectorMetric.COSINE.scores_from_faiss(raw).tolist() == [1.0, -1.0]
+    assert VectorMetric.DOT.scores_from_faiss(raw)[0] > 1.0

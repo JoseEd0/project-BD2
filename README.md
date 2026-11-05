@@ -40,6 +40,7 @@ Contenido de este documento:
                             │          heap file · archivo secuencial
                        src/spatial/    puntos, rectángulos, polígonos y distancias
                        src/text/       analizador de texto: plegado, tokens, stopwords, raíces
+                       src/multimedia/ descriptores locales: SIFT de imágenes, MFCC de audio
 ```
 
 **Cada capa solo conoce a la de abajo**: el motor no sabe qué es una transacción, y ninguna
@@ -105,6 +106,7 @@ src/                 raíz de importación: un paquete por módulo del motor
   external/          algoritmos externos: sort/, hash/ y loop/
   spatial/           geometría y métricas de distancia; no depende de ningún otro paquete
   text/              analizador de texto de documentos y consultas; stopwords en stopwords/
+  multimedia/        extracción de descriptores SIFT y MFCC, en paralelo y en flujo
   query/             catálogo, tabla, planificador, operadores y motor
   txn/               gestor de bloqueos, transacciones y sesiones
   api/               API REST (FastAPI) sobre el motor
@@ -142,6 +144,7 @@ proyecto:
 | [`src/index/inverted/`](src/index/inverted/) | índice invertido: SPIMI, léxico, postings, documentos y ranking | [README](src/index/inverted/README.md) |
 | [`src/spatial/`](src/spatial/) | geometría y métricas euclidiana y Haversine | [README](src/spatial/README.md) |
 | [`src/text/`](src/text/) | analizador de texto: plegado, tokens, stopwords y raíces | [README](src/text/README.md) |
+| [`src/multimedia/`](src/multimedia/) | `ExtractFeatures`: SIFT para imágenes y MFCC para audio | [README](src/multimedia/README.md) |
 | [`src/external/`](src/external/) | ordenamiento, hashing y bucles anidados externos | [README](src/external/README.md) |
 | [`src/query/`](src/query/) | catálogo, planificador, ejecutor | [README](src/query/README.md) |
 | [`src/txn/`](src/txn/) | transacciones y concurrencia | [README](src/txn/README.md) |

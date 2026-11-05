@@ -23,10 +23,10 @@ multimedia de las Partes 2 a 4. **No valida nombres ni tipos contra el catálogo
 hace el motor al construir el plan, antes de leer ninguna fila.
 
 La sintaxis de texto de la Parte 3 (`MATCH`, `SCORE()`, `USING TF_IDF | BM25`, `WITH (k1,
-b)` y el índice `INVERTED`) ya se ejecuta: ver [Búsqueda de texto](#búsqueda-de-texto). La
-multimedia (`SIMILAR_TO`, `SIMILARITY_SCORE()`, `USING HNSW | IVF`, los índices `IVF` y
-`HNSW`) hoy **solo se analiza**: el motor la rechaza con un error que lo dice, antes de leer
-ninguna fila, hasta que la Parte 4 traiga sus estructuras.
+b)` y el índice `INVERTED`) y la multimedia de la Parte 4 (`SIMILAR_TO`,
+`SIMILARITY_SCORE()`, `USING HNSW | IVF`, `WITH METRIC=...` y los índices `HNSW` e `IVF`)
+se ejecutan: ver [Búsqueda de texto](#búsqueda-de-texto) y
+[Búsqueda por similitud](#búsqueda-por-similitud).
 
 ```bash
 .venv/bin/python -m pytest tests/sql -q
@@ -122,7 +122,7 @@ una.
 | `HASH`, `EHASH`, `EXTENDIBLE_HASH` | hash extensible |
 | `RTREE` | R-Tree espacial |
 | `INVERTED`, `SPIMI` | índice invertido |
-| `IVF`, `HNSW` | índices vectoriales |
+| `IVF`, `HNSW` | índices de similitud sobre la columna de las rutas (`SIMILAR_TO`) |
 | `TF_IDF`, `TFIDF`, `BM25` | funciones de ranking de texto (solo en `SELECT ... USING`) |
 
 ### Expresiones
@@ -262,6 +262,52 @@ Lo que el motor exige, con un error antes de leer ninguna fila:
 
 El planificador y sus decisiones están en
 [`query/README.md`](../query/README.md#búsqueda-de-texto).
+
+### Búsqueda por similitud
+
+Las de la Parte 4. Como `MATCH`, `SIMILAR_TO` y `SIMILARITY_SCORE()` se escriben como
+llamadas a función pero las resuelve un índice: el `HNSW` o el `IVF` de la columna que
+guarda la ruta de cada imagen o audio.
+
+| Forma | Qué es |
+|---|---|
+| `CREATE INDEX [nombre] ON t USING HNSW (ruta) [WITH (...)]` | extrae SIFT o MFCC de cada archivo, entrena el vocabulario y construye un HNSW sobre los vectores TF-IDF; opciones `metric`, `m`, `ef_construction`, `ef_search` y `vocabulary` |
+| `CREATE INDEX [nombre] ON t USING IVF (ruta) [WITH (...)]` | lo mismo con IVF; opciones `metric`, `lists`, `probes` y `vocabulary` |
+| `WHERE SIMILAR_TO('consulta.jpg', k = 10)` | las 10 filas cuyo archivo más se parece al de la consulta |
+| `WHERE SIMILAR_TO(ruta, 'consulta.jpg', k = 10)` | lo mismo nombrando la columna, si la tabla tiene varias con índice |
+| `USING HNSW` / `USING IVF` | el índice; sin `USING`, el único índice de similitud que tenga la tabla |
+| `WITH METRIC = cosine` | `euclidean`, `dot` o `cosine` (también `euclidiana`, `producto_punto`, `coseno`); sin ella, la del índice |
+| `WITH ef_search = 100` / `WITH probes = 20` | el esfuerzo de esta consulta en HNSW o en IVF |
+| `SIMILARITY_SCORE()` | el puntaje de cada fila, mayor es más parecido, en cualquier expresión del `SELECT` |
+
+```sql
+CREATE INDEX idx_img ON imagenes USING HNSW (ruta) WITH (METRIC = cosine, M = 16);
+
+SELECT titulo, categoria, SIMILARITY_SCORE() AS score FROM imagenes
+    WHERE SIMILAR_TO('data/datasets/abo/imagenes/c8/c8fa4944.jpg', k = 10)
+      AND categoria <> 'CELLULAR_PHONE_CASE'
+    USING HNSW WITH METRIC = cosine, ef_search = 100
+    ORDER BY score DESC;
+```
+
+- **El resto del `WHERE` filtra antes de buscar:** la consulta da las k filas más parecidas
+  que lo cumplen, no k menos las que un filtro descarta después.
+- **Métrica distinta a la del índice:** el índice se construyó para ordenar con la suya, así
+  que se compara contra todas las filas y el plan lo dice. Es lo que hace pgvector.
+- **El archivo de la consulta** se resuelve igual que el de `CREATE TABLE ... FROM FILE`:
+  dentro del directorio de datos o de `MINIGESTOR_IMPORT_DIRS`.
+
+Lo que el motor exige, con un error antes de leer ninguna fila:
+
+- `SIMILAR_TO('archivo', k = n)` o `SIMILAR_TO(columna, 'archivo', k = n)`: un archivo que
+  exista, sea una imagen o un audio (por su extensión) y sea del tipo de la columna, y un `k`
+  entero positivo;
+- va en el `WHERE` de un `SELECT`, unida al resto con `AND`, una sola por consulta y no junto
+  a un `MATCH`;
+- un índice de similitud que la responda: si no hay, el error dice el `CREATE INDEX` que
+  falta; si hay varios, pide `USING` o la columna;
+- `USING` es `HNSW` o `IVF`; `WITH` lleva `metric` y el esfuerzo del método (`ef_search` o
+  `probes`), enteros positivos.
 
 ### Ejemplos del enunciado
 

@@ -11,6 +11,8 @@ método es añadir una entrada aquí: ninguna otra pieza enumera los métodos qu
 | `HASH` | igualdad | las que caben en una clave, salvo POINT | — |
 | `RTREE` | espacial y un punto exacto | POINT | — |
 | `INVERTED` | búsqueda de texto (`MATCH`) | VARCHAR y TEXT | `idioma` |
+| `HNSW` | similitud (`SIMILAR_TO`) | rutas de archivos | `metric`, `m`, `ef_*`, `vocabulary` |
+| `IVF` | similitud (`SIMILAR_TO`) | rutas de archivos | `metric`, `lists`, `probes`, `vocabulary` |
 """
 
 from __future__ import annotations
@@ -27,10 +29,13 @@ from index.hash import HashSecondaryIndex
 from index.inverted import TextSearchIndex
 from index.rtree import SpatialIndex
 from index.secondary import SecondaryIndex
+from index.similarity import HNSW_KIND, IVF_KIND, SimilarityIndex, VectorIndexSettings
+from index.vector import VectorMetric, vector_metric_named
+from query.files import resolve_user_file
 from sql.nodes import IndexType, OptionValue
 from storage.record import FieldReader
 from storage.schema import Field
-from storage.types import OUT_OF_ROW_FIELD_TYPES, UNORDERED_FIELD_TYPES, FieldType
+from storage.types import OUT_OF_ROW_FIELD_TYPES, UNORDERED_FIELD_TYPES, FieldType, is_number
 from text import DEFAULT_LANGUAGE
 
 IndexOptions = Mapping[str, OptionValue]
@@ -38,6 +43,20 @@ IndexOpener = Callable[[Path, FieldReader, str, EngineConfig, IndexOptions], Sec
 OptionlessOpener = Callable[[Path, FieldReader, str, EngineConfig], SecondaryIndex]
 ColumnRule = Callable[[Field], str | None]
 LANGUAGE_OPTION = "idioma"
+METRIC_OPTION = "metric"
+M_OPTION = "m"
+EF_CONSTRUCTION_OPTION = "ef_construction"
+EF_SEARCH_OPTION = "ef_search"
+LISTS_OPTION = "lists"
+PROBES_OPTION = "probes"
+VOCABULARY_OPTION = "vocabulary"
+# El coseno es la métrica natural de los histogramas TF-IDF, como en la búsqueda de texto: no
+# depende de cuántos descriptores tenga cada objeto.
+DEFAULT_VECTOR_METRIC = VectorMetric.COSINE
+HNSW_OPTIONS = frozenset(
+    {METRIC_OPTION, M_OPTION, EF_CONSTRUCTION_OPTION, EF_SEARCH_OPTION, VOCABULARY_OPTION}
+)
+IVF_OPTIONS = frozenset({METRIC_OPTION, LISTS_OPTION, PROBES_OPTION, VOCABULARY_OPTION})
 TEXT_FIELD_TYPES = frozenset({FieldType.STRING, FieldType.TEXT})
 
 
@@ -53,6 +72,7 @@ class Capability(Enum):
     RANGE = "rango"
     SPATIAL = "espacial"
     TEXT_SEARCH = "texto"
+    SIMILARITY = "similitud"
 
 
 @dataclass(frozen=True, slots=True)
@@ -132,6 +152,18 @@ def _text_only(field: Field) -> str | None:
     )
 
 
+def _media_paths_only(method: IndexType) -> ColumnRule:
+    def refusal_for(field: Field) -> str | None:
+        if field.type in TEXT_FIELD_TYPES:
+            return None
+        return (
+            f"un índice {method.value} va sobre la columna con la ruta de cada imagen o audio "
+            f"(VARCHAR o TEXT) y '{field.name}' es {field.type.value}"
+        )
+
+    return refusal_for
+
+
 def _point_refusal(field: Field, method: IndexType) -> str:
     return f"la columna '{field.name}' es POINT: solo admite un índice RTREE, no {method.value}"
 
@@ -182,6 +214,61 @@ def _language_of(options: IndexOptions) -> str:
     return language
 
 
+def _similarity_opener(kind: str) -> IndexOpener:
+    def open_index(
+        path: Path, rows: FieldReader, column: str, config: EngineConfig, options: IndexOptions
+    ) -> SecondaryIndex:
+        named = {name.lower(): value for name, value in options.items()}
+        settings = VectorIndexSettings(
+            kind=kind,
+            metric=_metric_of(named),
+            m=_positive(named, M_OPTION, config.hnsw_m),
+            ef_construction=_positive(named, EF_CONSTRUCTION_OPTION, config.hnsw_ef_construction),
+            ef_search=_positive(named, EF_SEARCH_OPTION, config.hnsw_ef_search),
+            lists=_optional_positive(named, LISTS_OPTION),
+            probes=_optional_positive(named, PROBES_OPTION),
+            vocabulary_size=_optional_positive(named, VOCABULARY_OPTION),
+        )
+        return SimilarityIndex(
+            path, rows, column, config, settings, lambda text: resolve_user_file(text, config)
+        )
+
+    return open_index
+
+
+def _metric_of(options: IndexOptions) -> VectorMetric:
+    """La métrica de `metric = cosine`; sin ella, el coseno.
+
+    Raises:
+        IndexOptionError: si no es el nombre de una métrica escrito como texto.
+        UnknownVectorMetricError: si no es ninguna de las tres.
+    """
+    value = options.get(METRIC_OPTION)
+    if value is None:
+        return DEFAULT_VECTOR_METRIC
+    if not isinstance(value, str):
+        raise IndexOptionError(
+            f"la opción {METRIC_OPTION} es el nombre de una métrica, como cosine, y llegó {value!r}"
+        )
+    return vector_metric_named(value)
+
+
+def _positive(options: IndexOptions, name: str, default: int) -> int:
+    value = _optional_positive(options, name)
+    return default if value is None else value
+
+
+def _optional_positive(options: IndexOptions, name: str) -> int | None:
+    """Raises:
+    IndexOptionError: si la opción está y no es un entero positivo."""
+    value = options.get(name)
+    if value is None:
+        return None
+    if not is_number(value) or isinstance(value, bool) or value != int(value) or value < 1:
+        raise IndexOptionError(f"la opción {name} es un entero positivo y llegó {value!r}")
+    return int(value)
+
+
 _METHODS: dict[IndexType, IndexMethod] = {
     IndexType.BTREE: IndexMethod(
         method=IndexType.BTREE,
@@ -211,5 +298,21 @@ _METHODS: dict[IndexType, IndexMethod] = {
         refusal_for=_text_only,
         files_of=TextSearchIndex.files_of,
         options=frozenset({LANGUAGE_OPTION}),
+    ),
+    IndexType.HNSW: IndexMethod(
+        method=IndexType.HNSW,
+        capabilities=frozenset({Capability.SIMILARITY}),
+        opener=_similarity_opener(HNSW_KIND),
+        refusal_for=_media_paths_only(IndexType.HNSW),
+        files_of=SimilarityIndex.files_of,
+        options=HNSW_OPTIONS,
+    ),
+    IndexType.IVF: IndexMethod(
+        method=IndexType.IVF,
+        capabilities=frozenset({Capability.SIMILARITY}),
+        opener=_similarity_opener(IVF_KIND),
+        refusal_for=_media_paths_only(IndexType.IVF),
+        files_of=SimilarityIndex.files_of,
+        options=IVF_OPTIONS,
     ),
 }

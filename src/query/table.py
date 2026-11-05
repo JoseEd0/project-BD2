@@ -18,6 +18,7 @@ from index.bplustree import ClusteredBPlusIndex
 from index.inverted import TextSearchIndex
 from index.rtree import SearchStats, SpatialIndex
 from index.secondary import RangeIndex, SecondaryIndex
+from index.similarity import SimilarityIndex
 from query.catalog import IndexDefinition, Organization, TableDefinition
 from query.index_methods import Capability, method_named
 from query.row_store import AddressedRecord, HeapStore, KeyedStore, RowStore
@@ -282,6 +283,17 @@ class Table:
         index = self._indexes[index_name]
         if not isinstance(index, TextSearchIndex):
             raise UnsupportedIndexError(f"el índice '{index_name}' no es un índice de texto")
+        return index
+
+    def similarity_index(self, index_name: str) -> SimilarityIndex:
+        """Índice HNSW o IVF con ese nombre.
+
+        Raises:
+            UnsupportedIndexError: si el índice no es de similitud.
+        """
+        index = self._indexes[index_name]
+        if not isinstance(index, SimilarityIndex):
+            raise UnsupportedIndexError(f"el índice '{index_name}' no es un índice de similitud")
         return index
 
     def addressed_within_radius(

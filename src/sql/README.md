@@ -194,6 +194,7 @@ evalúan fila a fila: las resuelve el índice invertido de la columna.
 | `CREATE INDEX [nombre] ON t USING INVERTED (col) [WITH (idioma='es')]` | índice invertido sobre una columna `VARCHAR` o `TEXT`; `idioma` es `es` (por omisión) o `en` |
 | `CREATE TABLE t FROM FILE "ruta.csv" USING INDEX INVERTED(col)` | la tabla es un heap y el índice se construye al cargar, como con `RTREE` |
 | `WHERE MATCH(col, 'consulta')` | las filas que tienen algún término de la consulta |
+| `WHERE MATCH(col, 'a AND b AND NOT c')` | las filas que cumplen la expresión booleana (ver abajo) |
 | `USING TF_IDF` / `USING BM25` | el ranking; sin `USING`, **BM25** |
 | `WITH (k1 = 1.5, b = 0.6)` | los parámetros de BM25 de esta consulta; el que falte sale de la configuración |
 | `SCORE()` | el puntaje de cada fila, en cualquier expresión del mismo `SELECT` |
@@ -207,6 +208,42 @@ SELECT id, titulo, SCORE() AS relevancia FROM productos
     ORDER BY relevancia DESC LIMIT 10;
 ```
 
+**Consultas booleanas.** Dentro del texto de `MATCH`, las palabras `AND`, `OR` y `NOT` **en
+mayúsculas** y los paréntesis forman una expresión; en minúsculas («and») son palabras de
+la consulta. El SQL no las ve: para el parser la consulta sigue siendo un literal de texto,
+y la analiza el motor con el analizador del índice
+([`text/boolean_query.py`](../text/boolean_query.py)).
+
+```
+expresión   := conjunción { [OR] conjunción }
+conjunción  := negación { AND negación }
+negación    := NOT negación | primario
+primario    := palabra | ( expresión )
+palabra     := lo que hay entre espacios y paréntesis
+```
+
+- Precedencia `NOT` > `AND` > `OR`: `a OR b AND NOT c` es `a OR (b AND (NOT c))`.
+- Dos operandos seguidos sin operador se unen con `OR`, como el texto libre: `funda (iphone
+  OR samsung)` es `funda OR iphone OR samsung`, y `cable usb AND rojo` es
+  `cable OR (usb AND rojo)`.
+- Una consulta sin operadores ni paréntesis no es booleana: va por el camino del texto
+  libre, con los mismos puntajes.
+- Cada palabra pasa por el analizador. Si da varios términos (`iphone-12`), es el `AND` de
+  todos; si no da ninguno (una stopword, como `de`), se quita con su operador:
+  `cable AND de` es `cable`. Si no queda ninguno, la consulta no encuentra nada.
+- Un `NOT` resta: tiene que quedar unido con `AND` a algo positivo (`funda AND NOT
+  silicona`, también `NOT silicona AND funda`). Una consulta que solo excluye —`NOT cable`,
+  `cable OR NOT usb`— es un error, porque pediría casi todo el índice.
+- Las filas se ordenan con TF-IDF o BM25 sobre los **términos positivos**, los que no están
+  bajo un `NOT` (o bajo un número par de ellos); los negados no puntúan, y `SCORE()`,
+  `LIMIT` y los filtros funcionan igual.
+
+```sql
+SELECT titulo, SCORE() AS relevancia FROM catalogo
+    WHERE MATCH(texto, 'funda AND iphone AND NOT silicona') LIMIT 10;
+SELECT id FROM catalogo WHERE MATCH(texto, '(auriculares OR cascos) AND NOT bluetooth');
+```
+
 Lo que el motor exige, con un error antes de leer ninguna fila:
 
 - `MATCH(columna, 'consulta')`: dos argumentos, una columna `VARCHAR` o `TEXT` con índice
@@ -217,7 +254,11 @@ Lo que el motor exige, con un error antes de leer ninguna fila:
   consulta;
 - `SCORE()` no lleva argumentos y solo existe en un `SELECT` con un `MATCH`;
 - `USING` es `TF_IDF` o `BM25`; `WITH` lleva solo `k1` y `b`, números en rango, y solo con
-  BM25.
+  BM25;
+- una consulta booleana bien formada (`BooleanQueryError` si no): paréntesis que cierran
+  («falta cerrar el paréntesis de la posición 1»), operadores con sus dos operandos («AND
+  de la posición 7 no tiene operando a la derecha») y algún término positivo («la consulta
+  solo excluye documentos»).
 
 El planificador y sus decisiones están en
 [`query/README.md`](../query/README.md#búsqueda-de-texto).

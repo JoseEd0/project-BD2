@@ -21,6 +21,9 @@ Ejecutar (requiere `pip install -e .`):
     .venv/bin/python demos/poblar_ecommerce.py --data-dir ./data
     .venv/bin/python demos/poblar_ecommerce.py --data-dir ./data --escala 3 --reiniciar
 
+Con `--solo-si-vacia` no hace nada si el directorio ya tiene una base: es lo que corre el servicio
+`demo` de Docker en cada arranque, para cargarla solo la primera vez.
+
 Deja además los CSV de las tablas generadas —por defecto en `<data-dir>/csv/`, o donde
 diga `--csv-dir`—, que sirven para probar la carga de archivos desde la interfaz. Los de
 `demos/samples/` salen de este mismo script con la semilla y la escala por defecto.
@@ -39,6 +42,7 @@ from datetime import date, timedelta
 from pathlib import Path
 
 from config import EngineConfig
+from query.catalog import CATALOG_FILENAME
 from query.engine import Engine
 from query.loader import read_values
 from spatial.geometry import Point, Polygon
@@ -478,7 +482,13 @@ def suggest_queries() -> None:
         print(f"  -- {description}\n  {query}\n")
 
 
-def main() -> None:
+def has_database(config: EngineConfig) -> bool:
+    # Sin abrir el motor: el API puede tener tomado el directorio, y abrir un segundo motor
+    # sobre él falla con DataDirectoryInUseError.
+    return (config.data_directory / CATALOG_FILENAME).exists()
+
+
+def main(argv: Sequence[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data-dir", type=Path, required=True)
     parser.add_argument("--escala", type=float, default=DEFAULT_SCALE)
@@ -495,16 +505,25 @@ def main() -> None:
         default=ESCI_SAMPLE_DIRECTORY,
         help="carpeta de la muestra ESCI de la que se cargan las tablas de texto",
     )
-    parser.add_argument(
+    existing_data = parser.add_mutually_exclusive_group()
+    existing_data.add_argument(
         "--reiniciar",
         action="store_true",
         help="borra el contenido del directorio de datos antes de cargar",
     )
-    arguments = parser.parse_args()
+    existing_data.add_argument(
+        "--solo-si-vacia",
+        action="store_true",
+        help="no carga nada si el directorio ya tiene una base, para cargarla al primer arranque",
+    )
+    arguments = parser.parse_args(argv)
 
     if arguments.reiniciar and arguments.data_dir.exists():
         shutil.rmtree(arguments.data_dir)
     config = EngineConfig(data_directory=arguments.data_dir)
+    if arguments.solo_si_vacia and has_database(config):
+        print(f"{arguments.data_dir} ya tiene una base: la demo no se vuelve a cargar")
+        return
     generator = Generator(arguments.escala, arguments.seed)
     csv_directory = arguments.csv_dir or arguments.data_dir / CSV_DIRECTORY
 

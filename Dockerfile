@@ -25,6 +25,13 @@ RUN useradd --system --uid "${APP_UID}" --home-dir /app --shell /usr/sbin/nologi
 ENV MINIGESTOR_DATA_DIR=/data \
     MINIGESTOR_IMPORT_DIRS=/app/demos/samples
 
+# numba, debajo de librosa, guarda lo que compila junto al código de la librería, donde el
+# usuario del contenedor no puede escribir, y sin caché el primer MFCC tarda unos 18 s en
+# compilar. Se compila aquí, una vez, en un directorio del usuario.
+ENV NUMBA_CACHE_DIR=/app/.cache/numba
+RUN python -c "import numpy, librosa; librosa.feature.mfcc(y=numpy.zeros(22050, 'float32'), sr=22050)" \
+    && chown -R minigestor /app/.cache
+
 FROM base AS bench
 
 RUN pip install ".[postgres,plots,datasets]"

@@ -72,6 +72,10 @@ jobs:
             --header "content-type: application/json" \
             --data "{\"sql\": \"SELECT titulo FROM catalogo WHERE MATCH(texto, 'funda AND iphone') LIMIT 3;\"}" \
             | python3 -c "import json, sys; assert len(json.load(sys.stdin)['rows']) == 3"
+      - name: Las librerías multimedia cargan en la imagen del motor
+        run: |
+          docker compose exec -T api python -c \
+            "import numpy, faiss, cv2, librosa; cv2.SIFT_create(); librosa.feature.mfcc(y=numpy.zeros(22050, 'float32'), sr=22050)"
       - name: Con el API en marcha, la demo no se vuelve a cargar
         run: docker compose run --rm demo | grep -q "la demo no se vuelve a cargar"
       - name: El perfil bench mide GiST contra su PostgreSQL

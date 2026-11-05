@@ -89,7 +89,10 @@ class TextSearchInfo(BaseModel):
     method: Literal["TF_IDF", "BM25"]
     terms: list[str] = Field(
         default_factory=list,
-        description="Términos ya analizados: plegados, sin stopwords y reducidos a su raíz",
+        description=(
+            "Términos ya analizados: plegados, sin stopwords y reducidos a su raíz; de una "
+            "consulta booleana, solo los positivos"
+        ),
     )
     k1: float | None = Field(default=None, description="El k1 con que puntuó BM25")
     b: float | None = Field(default=None, description="El b con que puntuó BM25")

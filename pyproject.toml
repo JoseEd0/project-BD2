@@ -12,6 +12,10 @@ dependencies = [
     "uvicorn[standard]>=0.30",
     "python-multipart>=0.0.9",
     "snowballstemmer>=3.0",
+    "numpy>=1.26",
+    "faiss-cpu>=1.9",
+    "opencv-python-headless>=4.10",
+    "librosa>=0.10",
 ]
 
 [project.optional-dependencies]

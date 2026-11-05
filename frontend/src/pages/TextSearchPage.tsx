@@ -1,43 +1,51 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 
 import { runQuery } from "../api";
 import FailureNotice from "../components/FailureNotice";
-import InvertedIndexView from "../components/InvertedIndexView";
 import StatusBar from "../components/StatusBar";
 import TopBar from "../components/TopBar";
-import ExecutionDetails from "../components/text/ExecutionDetails";
+import ClauseBar from "../components/text/ClauseBar";
+import DetailTabs from "../components/text/DetailTabs";
 import IndexSetup from "../components/text/IndexSetup";
-import RankingColumn from "../components/text/RankingColumn";
-import SearchForm from "../components/text/SearchForm";
-import type { EngineDefaults } from "../components/text/SearchForm";
+import RankingPanel from "../components/text/RankingPanel";
+import SearchBar from "../components/text/SearchBar";
+import SearchIntro from "../components/text/SearchIntro";
 import { useInvertedIndex } from "../hooks/useInvertedIndex";
+import { useLiveSearch } from "../hooks/useLiveSearch";
+import type { ReadySearch } from "../hooks/useLiveSearch";
 import type { Workspace } from "../hooks/useWorkspace";
 import {
   RANKING_METHODS,
-  answeredOutcome,
   checkDraft,
-  chosenFilterColumn,
   chosenTarget,
-  failedOutcome,
+  defaultFilterColumn,
   filterableColumns,
   indexableColumns,
   positionsByKey,
   resultFields,
   searchSql,
   searchTargets,
+  sharedFailure,
 } from "../lib/textSearch";
-import type { RankingMethod, RankingOutcome, SearchDraft } from "../lib/textSearch";
+import type {
+  FilterDraft,
+  RankingMethod,
+  SearchDraft,
+  SearchRequest,
+  SearchTarget,
+} from "../lib/textSearch";
 import { DEMO_CATALOG_SQL, TEXT_SEARCH_EXAMPLES } from "../textExamples";
-import type { QueryFailure } from "../types";
+import type { QueryFailure, TableInfo } from "../types";
 
 const DEFAULT_LIMIT = 10;
 const DEMO_TABLE = "catalogo";
+/** El texto de muestra del `MATCH` en la consulta que se ve antes de escribir. */
+const SAMPLE_QUERY = "lo que escribas";
 
 const INITIAL_DRAFT: SearchDraft = {
   target: null,
   query: "",
-  filterColumn: null,
-  filterValue: "",
+  filters: [],
   k1: "",
   b: "",
   limit: DEFAULT_LIMIT,
@@ -47,21 +55,37 @@ interface TextSearchPageProps {
   workspace: Workspace;
 }
 
+/** La consulta de BM25 con lo que ya está escrito y un texto de muestra en el `MATCH`. */
+function previewSql(draft: SearchDraft, target: SearchTarget, table: TableInfo | undefined): string {
+  const sample = checkDraft({ ...draft, query: SAMPLE_QUERY }, target, table).request ?? {
+    target,
+    query: SAMPLE_QUERY,
+    conditions: [],
+    k1: null,
+    b: null,
+    limit: draft.limit,
+  };
+  return searchSql({ ...sample, method: "BM25" });
+}
+
 function otherMethod(method: RankingMethod): RankingMethod {
   return method === "TF_IDF" ? "BM25" : "TF_IDF";
 }
 
 /**
- * La búsqueda de texto de la Parte 3: la misma consulta con TF-IDF y con BM25, lado a lado.
- * Todo va por `POST /query` con el SQL que se ve en «Cómo se ejecutó», dentro de la sesión
- * de la pestaña: si la consola tiene una transacción abierta, la búsqueda corre en ella.
+ * La búsqueda de texto de la Parte 3: lo escrito es el texto de un `MATCH`, y cada búsqueda
+ * son dos consultas SQL —una con TF-IDF y otra con BM25— que se ven lado a lado con su
+ * resultado. Todo va por `POST /query`, dentro de la sesión de la pestaña: si la consola
+ * tiene una transacción abierta, la búsqueda corre en ella.
  */
 export default function TextSearchPage({ workspace }: TextSearchPageProps) {
   const { tables, sessionId, exclusively, running } = workspace;
   const [draft, setDraft] = useState<SearchDraft>(INITIAL_DRAFT);
-  const [outcomes, setOutcomes] = useState<RankingOutcome[]>([]);
-  const [defaults, setDefaults] = useState<EngineDefaults>({ k1: null, b: null });
   const [setupFailure, setSetupFailure] = useState<QueryFailure | null>(null);
+  const nextFilterId = useRef(0);
+  // Mientras una condición o un parámetro están a medio escribir, el SQL a la vista sigue
+  // siendo el último que se pudo ejecutar.
+  const lastRequest = useRef<Omit<SearchRequest, "method"> | null>(null);
 
   const targets = useMemo(() => searchTargets(tables), [tables]);
   const target = chosenTarget(targets, draft.target);
@@ -74,11 +98,16 @@ export default function TextSearchPage({ workspace }: TextSearchPageProps) {
     () => (table === undefined || target === null ? [] : filterableColumns(table, target.column)),
     [table, target],
   );
-  // El filtro va por la columna elegida o, mientras no se elija ninguna, por la marca: el
-  // valor vacío es lo que lo deja sin aplicar.
-  const filterColumn = chosenFilterColumn(filterColumns, draft.filterColumn, fields?.brand ?? null);
-  const effective = useMemo(() => ({ ...draft, filterColumn }), [draft, filterColumn]);
-  const check = checkDraft(effective, target, table);
+  const check = checkDraft(draft, target, table);
+  if (check.request !== null) {
+    lastRequest.current = check.request;
+  }
+  const typed = draft.query.trim().length > 0;
+  const shownRequest = typed ? lastRequest.current : null;
+  const ready: ReadySearch | null =
+    check.request === null || fields === null ? null : { request: check.request, fields };
+
+  const live = useLiveSearch(ready, workspace);
   const index = useInvertedIndex(
     target,
     table === undefined ? "" : `${table.row_count}:${table.indexes.join(",")}`,
@@ -86,47 +115,39 @@ export default function TextSearchPage({ workspace }: TextSearchPageProps) {
     workspace.noteBackgroundFailure,
   );
 
-  const terms = outcomes.find((outcome) => outcome.text !== null)?.text?.terms ?? [];
+  const terms = live.outcomes.find((outcome) => outcome.text !== null)?.text?.terms ?? null;
   const positions = useMemo(
-    () => new Map(outcomes.map((outcome) => [outcome.method, positionsByKey(outcome.cards)])),
-    [outcomes],
+    () => new Map(live.outcomes.map((outcome) => [outcome.method, positionsByKey(outcome.cards)])),
+    [live.outcomes],
   );
 
   const change = useCallback((patch: Partial<SearchDraft>) => {
     setDraft((previous) => ({ ...previous, ...patch }));
   }, []);
 
-  const search = useCallback(
-    async (searched: SearchDraft) => {
-      const ready = checkDraft(searched, target, table);
-      if (ready.request === null || fields === null) {
-        return;
-      }
-      const request = ready.request;
-      await exclusively(async () => {
-        const answered: RankingOutcome[] = [];
-        for (const method of RANKING_METHODS) {
-          const sql = searchSql({ ...request, method });
-          try {
-            const response = await runQuery(sql, sessionId);
-            await workspace.acknowledge(response);
-            answered.push(answeredOutcome(method, sql, response, fields));
-            const used = response.text;
-            if (method === "BM25" && used !== null) {
-              setDefaults((previous) => ({
-                k1: request.k1 === null ? used.k1 : previous.k1,
-                b: request.b === null ? used.b : previous.b,
-              }));
-            }
-          } catch (error) {
-            answered.push(failedOutcome(method, sql, await workspace.acknowledgeFailure(error)));
-          }
-        }
-        setOutcomes(answered);
-      });
-    },
-    [exclusively, fields, sessionId, table, target, workspace],
-  );
+  const addFilter = useCallback(() => {
+    const column = defaultFilterColumn(filterColumns, fields?.brand ?? null);
+    if (column === null) {
+      return;
+    }
+    nextFilterId.current += 1;
+    const added: FilterDraft = { id: nextFilterId.current, column, value: "" };
+    setDraft((previous) => ({ ...previous, filters: [...previous.filters, added] }));
+  }, [fields, filterColumns]);
+
+  const changeFilter = useCallback((id: number, patch: Partial<FilterDraft>) => {
+    setDraft((previous) => ({
+      ...previous,
+      filters: previous.filters.map((filter) => (filter.id === id ? { ...filter, ...patch } : filter)),
+    }));
+  }, []);
+
+  const removeFilter = useCallback((id: number) => {
+    setDraft((previous) => ({
+      ...previous,
+      filters: previous.filters.filter((filter) => filter.id !== id),
+    }));
+  }, []);
 
   const runSetup = useCallback(
     async (sql: string) => {
@@ -142,16 +163,12 @@ export default function TextSearchPage({ workspace }: TextSearchPageProps) {
     [exclusively, sessionId, workspace],
   );
 
-  const tryExample = useCallback(
-    (query: string) => {
-      setDraft((previous) => ({ ...previous, query }));
-      void search({ ...effective, query });
-    },
-    [effective, search],
-  );
-
+  const commonFailure = sharedFailure(live.outcomes);
+  const hasPlan = live.outcomes.some((outcome) => outcome.plan !== null);
   const hasDemoTable = tables.some((item) => item.name === DEMO_TABLE);
-  const elapsedMs = outcomes.reduce((sum, outcome) => sum + (outcome.elapsedMs ?? 0), 0);
+  const timed = live.outcomes.filter((outcome) => outcome.elapsedMs !== null);
+  const elapsedMs =
+    timed.length === 0 ? null : timed.reduce((sum, outcome) => sum + (outcome.elapsedMs ?? 0), 0);
 
   return (
     <div className="workbench">
@@ -163,86 +180,93 @@ export default function TextSearchPage({ workspace }: TextSearchPageProps) {
         theme={workspace.theme}
       />
       <main className="textpage">
-        <div className="textpage__content">
-          <header className="textpage__intro">
-            <h1 className="textpage__title">Búsqueda de texto</h1>
-            <p className="textpage__lead">
-              La misma consulta, ordenada con <strong>TF-IDF + coseno</strong> y con{" "}
-              <strong>BM25</strong> sobre el mismo índice invertido. Las palabras resaltadas son las
-              que coinciden con los términos ya analizados de la consulta.
-            </p>
-          </header>
+        {setupFailure !== null && (
+          <div className="textpage__notice">
+            <FailureNotice failure={setupFailure} />
+          </div>
+        )}
 
-          {setupFailure !== null && <FailureNotice failure={setupFailure} />}
-
-          {targets.length === 0 ? (
-            <IndexSetup
-              candidates={indexableColumns(tables)}
-              demoSql={hasDemoTable ? null : DEMO_CATALOG_SQL}
-              onRun={(sql) => void runSetup(sql)}
-              running={running}
-            />
-          ) : (
-            <>
-              <SearchForm
-                defaults={defaults}
-                draft={effective}
-                examples={TEXT_SEARCH_EXAMPLES}
+        {target === null ? (
+          <IndexSetup
+            candidates={indexableColumns(tables)}
+            demoSql={hasDemoTable ? null : DEMO_CATALOG_SQL}
+            onRun={(sql) => void runSetup(sql)}
+            running={running}
+          />
+        ) : (
+          <>
+            <SearchBar
+              onQuery={(query) => change({ query })}
+              onSubmit={live.searchNow}
+              onTarget={(key) => change({ target: key, filters: [] })}
+              query={draft.query}
+              searching={live.searching}
+              target={target}
+              targets={targets}
+              terms={terms}
+            >
+              <ClauseBar
+                b={draft.b}
+                engine={live.bm25}
                 filterColumns={filterColumns}
-                onChange={change}
-                onExample={tryExample}
-                onSearch={() => void search(effective)}
-                problem={check.problem}
-                running={running}
-                target={target}
-                targets={targets}
+                filters={draft.filters}
+                k1={draft.k1}
+                limit={draft.limit}
+                onAddFilter={addFilter}
+                onChangeFilter={changeFilter}
+                onLimit={(limit) => change({ limit })}
+                onParameters={change}
+                onRemoveFilter={removeFilter}
+                problem={typed ? check.problem : null}
               />
+            </SearchBar>
 
-              {outcomes.length > 0 && (
-                <>
-                  <div className="terms">
-                    <span className="terms__label">Términos analizados:</span>
-                    {terms.length === 0 ? (
-                      <span className="terms__none">ninguno: la consulta solo tiene stopwords</span>
-                    ) : (
-                      terms.map((term) => (
-                        <code className="terms__term" key={term}>
-                          {term}
-                        </code>
-                      ))
-                    )}
+            {shownRequest === null ? (
+              <SearchIntro
+                examples={TEXT_SEARCH_EXAMPLES}
+                onExample={(query) => change({ query })}
+                sql={previewSql(draft, target, table)}
+                target={target}
+              />
+            ) : (
+              <>
+                {commonFailure !== null && (
+                  <div className="textpage__notice textpage__notice--shared">
+                    <FailureNotice failure={commonFailure} />
                   </div>
-                  <div className="rankings">
-                    {outcomes.map((outcome) => (
-                      <RankingColumn
-                        key={outcome.method}
-                        otherMethod={otherMethod(outcome.method)}
-                        otherPositions={positions.get(otherMethod(outcome.method)) ?? new Map()}
-                        outcome={outcome}
-                        terms={terms}
-                      />
-                    ))}
-                  </div>
-                  <ExecutionDetails outcomes={outcomes} />
-                </>
-              )}
-            </>
-          )}
-
-          {index.structure !== null && target !== null && (
-            <section className="indexview">
-              <h2 className="section-title">
-                Índice {index.name} — INVERTED sobre {target.table}.{target.column}
-              </h2>
-              <InvertedIndexView inverted={index.structure} />
-            </section>
-          )}
-          {index.error !== null && <div className="notice notice--error">{index.error}</div>}
-        </div>
+                )}
+                <div className="rankpanels">
+                  {RANKING_METHODS.map((method) => (
+                    <RankingPanel
+                      key={method}
+                      method={method}
+                      onOpenInConsole={workspace.openInConsole}
+                      otherMethod={otherMethod(method)}
+                      otherPositions={positions.get(otherMethod(method)) ?? new Map()}
+                      outcome={live.outcomes.find((outcome) => outcome.method === method) ?? null}
+                      sql={searchSql({ ...shownRequest, method })}
+                      failureShownAbove={commonFailure !== null}
+                      stale={live.searching}
+                      terms={terms ?? []}
+                    />
+                  ))}
+                </div>
+                {hasPlan && (
+                  <DetailTabs
+                    index={index.structure}
+                    indexError={index.error}
+                    indexName={index.name}
+                    outcomes={live.outcomes}
+                  />
+                )}
+              </>
+            )}
+          </>
+        )}
       </main>
       <StatusBar
         connected={workspace.connected}
-        elapsedMs={outcomes.length > 0 ? elapsedMs : null}
+        elapsedMs={elapsedMs}
         rowCount={null}
         tableCount={tables.length}
         totalRows={workspace.totalRows}

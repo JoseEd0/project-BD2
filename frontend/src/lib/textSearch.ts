@@ -23,6 +23,12 @@ export const RANKING_LABEL: Record<RankingMethod, string> = {
   BM25: "BM25",
 };
 
+/** El nombre corto, para las cabeceras de columna. */
+export const RANKING_SHORT_LABEL: Record<RankingMethod, string> = {
+  TF_IDF: "TF-IDF",
+  BM25: "BM25",
+};
+
 export const INVERTED_METHOD = "INVERTED";
 export const SCORE_ALIAS = "puntaje";
 const TEXT_TYPES = new Set(["STRING", "TEXT"]);
@@ -44,13 +50,14 @@ export interface ResultFields {
   text: string;
 }
 
-/** Todo lo que decide la consulta de una búsqueda. `filter` es la condición relacional que
- * acompaña al `MATCH`, ya escrita; `k1` y `b` en `null` dejan los del motor. */
+/** Todo lo que decide la consulta de una búsqueda. `conditions` son las condiciones
+ * relacionales que acompañan al `MATCH` con `AND`, ya escritas; `k1` y `b` en `null` dejan
+ * los del motor. */
 export interface SearchRequest {
   target: SearchTarget;
   query: string;
   method: RankingMethod;
-  filter: string | null;
+  conditions: string[];
   k1: number | null;
   b: number | null;
   limit: number;
@@ -153,11 +160,11 @@ function rankingClause(request: SearchRequest): string {
 export function searchSql(request: SearchRequest): string {
   const { table, column } = request.target;
   const match = `MATCH(${column}, ${quoteText(request.query)})`;
-  const where = request.filter === null ? match : `${match}\n  AND ${request.filter}`;
   return [
     `SELECT *, SCORE() AS ${SCORE_ALIAS}`,
     `FROM ${table}`,
-    `WHERE ${where}`,
+    `WHERE ${match}`,
+    ...request.conditions.map((condition) => `  AND ${condition}`),
     rankingClause(request),
     `ORDER BY ${SCORE_ALIAS} DESC`,
     `LIMIT ${request.limit};`,
@@ -238,6 +245,17 @@ export function answeredOutcome(
   };
 }
 
+/** El error que comparten todos los rankings, si todos fallaron por lo mismo (la consulta
+ * del `MATCH` está mal escrita, por ejemplo): se muestra una vez, no una por ranking. */
+export function sharedFailure(outcomes: readonly RankingOutcome[]): QueryFailure | null {
+  const first = outcomes[0]?.failure ?? null;
+  if (first === null) {
+    return null;
+  }
+  const same = outcomes.every((outcome) => outcome.failure?.error === first.error);
+  return same ? first : null;
+}
+
 export function failedOutcome(
   method: RankingMethod,
   sql: string,
@@ -246,16 +264,14 @@ export function failedOutcome(
   return { method, sql, cards: [], elapsedMs: null, plan: null, text: null, failure };
 }
 
-/** La columna del filtro: la elegida si es de las que se pueden filtrar; si no, la
- * preferida (la marca, si la tabla tiene) o la primera. */
-export function chosenFilterColumn(
+/** La columna con que nace una condición nueva: la preferida (la marca, si la tabla tiene)
+ * o la primera que se puede filtrar. */
+export function defaultFilterColumn(
   columns: readonly ColumnInfo[],
-  chosen: string | null,
   preferred: string | null,
 ): string | null {
   const names = columns.map((column) => column.name);
-  const found = [chosen, preferred].find((name) => name !== null && names.includes(name));
-  return found ?? names[0] ?? null;
+  return preferred !== null && names.includes(preferred) ? preferred : (names[0] ?? null);
 }
 
 /** El objetivo elegido si sigue existiendo; si no, el primero. */
@@ -271,12 +287,19 @@ export function positionsByKey(cards: readonly ResultCard[]): Map<string, number
   return new Map(cards.map((card, index) => [card.key, index + 1]));
 }
 
-/** Lo que el formulario tiene escrito, tal cual: los números todavía como texto. */
+/** Una condición `AND columna = valor` tal como está escrita; `id` la distingue de las
+ * demás mientras se edita. */
+export interface FilterDraft {
+  id: number;
+  column: string;
+  value: string;
+}
+
+/** Lo que la búsqueda tiene escrito, tal cual: los números todavía como texto. */
 export interface SearchDraft {
   target: string | null;
   query: string;
-  filterColumn: string | null;
-  filterValue: string;
+  filters: FilterDraft[];
   k1: string;
   b: string;
   limit: number;
@@ -288,6 +311,26 @@ export type DraftCheck =
 
 function failed(problem: string): DraftCheck {
   return { request: null, problem };
+}
+
+/** Las condiciones escritas del borrador. Una sin valor todavía no cuenta; una sobre una
+ * columna numérica con algo que no es un número es un problema. */
+function draftConditions(
+  filters: readonly FilterDraft[],
+  table: TableInfo,
+): { conditions: string[]; problem: string | null } {
+  const conditions: string[] = [];
+  for (const filter of filters) {
+    const column = table.columns.find((item) => item.name === filter.column);
+    const condition = column === undefined ? null : filterCondition(column, filter.value);
+    if (condition === undefined) {
+      return { conditions, problem: `La condición sobre «${filter.column}» necesita un número.` };
+    }
+    if (condition !== null) {
+      conditions.push(condition);
+    }
+  }
+  return { conditions, problem: null };
 }
 
 /** Comprueba el borrador contra la tabla en la que busca. Los rangos de `k1` y `b` no se
@@ -308,13 +351,29 @@ export function checkDraft(
   if (k1 === undefined || b === undefined) {
     return failed("k1 y b tienen que ser números, o quedar vacíos para usar los del motor.");
   }
-  const column = table.columns.find((item) => item.name === draft.filterColumn);
-  const filter = column === undefined ? null : filterCondition(column, draft.filterValue);
-  if (filter === undefined) {
-    return failed(`El filtro sobre «${draft.filterColumn}» necesita un número.`);
+  const { conditions, problem } = draftConditions(draft.filters, table);
+  if (problem !== null) {
+    return failed(problem);
   }
   return {
-    request: { target, query: draft.query.trim(), filter, k1, b, limit: draft.limit },
+    request: { target, query: draft.query.trim(), conditions, k1, b, limit: draft.limit },
     problem: null,
   };
+}
+
+/** Decimales del puntaje de cada ranking: el coseno vive entre 0 y 1, y el de BM25 crece
+ * con el idf, así que con dos le basta. */
+const SCORE_DIGITS: Record<RankingMethod, number> = { TF_IDF: 3, BM25: 2 };
+
+/** Con punto decimal, como los tiempos del plan y de la barra de estado. */
+export function formatScore(score: number, method: RankingMethod): string {
+  return score.toFixed(SCORE_DIGITS[method]);
+}
+
+/** Qué fracción del mejor puntaje del ranking alcanza un documento, entre 0 y 1. */
+export function scoreShare(score: number | null, best: number | null): number {
+  if (score === null || best === null || best <= 0) {
+    return 0;
+  }
+  return Math.min(Math.max(score / best, 0), 1);
 }

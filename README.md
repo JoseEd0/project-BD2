@@ -109,6 +109,7 @@ src/                 raíz de importación: un paquete por módulo del motor
   txn/               gestor de bloqueos, transacciones y sesiones
   api/               API REST (FastAPI) sobre el motor
 frontend/            interfaz: React + TypeScript + Vite; Leaflet en el panel de mapa
+  Dockerfile         la interfaz compilada, servida por nginx con /api reenviado al motor
 tests/               espejo de la estructura de src/, más benchmarks/ y demos/
 benchmarks/          experimentos reproducibles
   esci/              corpus de texto ESCI en español: descarga y subconjuntos con juicios
@@ -117,6 +118,8 @@ benchmarks/          experimentos reproducibles
 demos/               generador del dataset, descarga de lugares reales y simulación de concurrencia
   samples/           los CSV del dataset de demostración; en esci/, la muestra real de Amazon
 docs/                informe.pdf y su fuente LaTeX
+Dockerfile           imagen del motor con su API
+compose.yaml         la aplicación completa en contenedores: api, web y la carga de la demo
 ```
 
 No hay paquete paraguas: `src` es la raíz de importación, así que se escribe
@@ -153,7 +156,56 @@ con excepciones del dominio, anotaciones de tipo en toda firma pública (`mypy` 
 
 ## 3. Manual de instalación
 
-### 3.1 Requisitos
+### 3.1 Con Docker
+
+Es la forma más rápida de verlo funcionar: no hace falta instalar Python, Node ni nada
+más que [Docker](https://docs.docker.com/get-docker/) con Compose 2.20 o posterior.
+
+```bash
+git clone https://github.com/JoseEd0/project-BD2.git
+cd project-BD2
+docker compose up --build
+```
+
+La primera vez construye las dos imágenes y carga el dataset de demostración, que tarda
+menos de un minuto. Después quedan:
+
+| Qué | Dónde |
+|---|---|
+| la interfaz | http://localhost:8080 |
+| el API y su documentación interactiva | http://localhost:8000/docs |
+
+Los servicios de [`compose.yaml`](compose.yaml):
+
+- **`demo`** carga el dataset con `demos/poblar_ecommerce.py --solo-si-vacia` y termina. Si
+  el volumen ya tiene una base, no hace nada, así que la demo se carga una sola vez.
+- **`api`** es el motor con su API ([`Dockerfile`](Dockerfile)). Arranca cuando `demo`
+  terminó bien.
+- **`web`** es la interfaz compilada y servida por nginx
+  ([`frontend/Dockerfile`](frontend/Dockerfile)). Reenvía `/api/` al motor, así que el
+  navegador habla con un solo origen. Arranca cuando el API responde a `/health`.
+
+La base vive en el volumen `minigestor-data` y sobrevive a los reinicios. Las tablas que
+se crean o se cargan desde la interfaz también quedan ahí.
+
+```bash
+docker compose up -d --build      # en segundo plano
+docker compose logs -f api        # el registro del API
+docker compose down               # apagar; la base se conserva
+docker compose down -v            # apagar y borrar la base: el próximo arranque recarga la demo
+```
+
+Si los puertos 8080 u 8000 están ocupados, se cambian con `MINIGESTOR_WEB_PORT` y
+`MINIGESTOR_API_PORT`, en la línea de comandos o en un `.env` junto a `compose.yaml`:
+
+```bash
+MINIGESTOR_WEB_PORT=9080 MINIGESTOR_API_PORT=9000 docker compose up
+```
+
+Para desarrollar (tests, recarga en caliente de la interfaz, los experimentos) se instala
+en local, como sigue.
+
+### 3.2 Requisitos para instalar en local
 
 | Para | Hace falta |
 |---|---|
@@ -162,7 +214,7 @@ con excepciones del dominio, anotaciones de tipo en toda firma pública (`mypy` 
 | redibujar las gráficas (opcional) | `matplotlib`, que se instala con el extra `plots` |
 | medir contra GiST (opcional) | PostgreSQL con la extensión PostGIS y el extra `postgres` |
 
-### 3.2 Instalar
+### 3.3 Instalar
 
 ```bash
 git clone https://github.com/JoseEd0/project-BD2.git
@@ -180,7 +232,7 @@ cp frontend/.env.example frontend/.env
 cp .env.example .env
 ```
 
-### 3.3 Poblar la base de datos y arrancar
+### 3.4 Poblar la base de datos y arrancar
 
 ```bash
 # 1. dataset de demostración: un e-commerce de cinco tablas, 3 000 tiendas con ubicación
@@ -202,7 +254,7 @@ Cada archivo del gestor lleva en su cabecera la versión de su formato. Un direc
 datos creado con una versión anterior se rechaza con un error que lo dice: basta volver a
 poblarlo con el paso 1.
 
-### 3.4 Cargar datos desde la interfaz
+### 3.5 Cargar datos desde la interfaz
 
 Con la base vacía también se puede empezar sin la terminal. El botón **Cargar CSV** crea
 una tabla a partir de un archivo con cabecera, deduciendo los tipos de su contenido, con la
@@ -246,7 +298,7 @@ caen en un rectángulo; para Lima, unos 26 600:
     --recuadro -12.52 -77.20 -11.57 -76.62
 ```
 
-### 3.5 Variables de entorno
+### 3.6 Variables de entorno
 
 Ninguna ruta, puerto ni credencial está escrita en el código. Las del API y los experimentos
 están en [`.env.example`](.env.example); las de la interfaz, en
@@ -260,13 +312,20 @@ están en [`.env.example`](.env.example); las de la interfaz, en
 | `MINIGESTOR_LOCK_TIMEOUT` | segundos que una transacción espera un bloqueo | `5` |
 | `VITE_API_URL` | dirección del API que usa la interfaz | **obligatoria** |
 | `BENCH_POSTGRES_DSN` | conexión al PostgreSQL contra el que se mide GiST | — |
+| `MINIGESTOR_WEB_PORT` | puerto de la interfaz con Docker | `8080` |
+| `MINIGESTOR_API_PORT` | puerto del API con Docker | `8000` |
 
 Las dos obligatorias no tienen un valor por omisión a propósito: sin `MINIGESTOR_CORS_ORIGINS`
 el API no arranca y dice por qué; sin `VITE_API_URL` la interfaz lo avisa en el panel de
 resultados. Un `localhost` escrito en el código funcionaría en una máquina y fallaría en
 silencio en cualquier otra.
 
-### 3.6 Comprobar la instalación
+Con Docker no hay que tocar ninguna: la imagen fija `MINIGESTOR_DATA_DIR` en el volumen y
+`MINIGESTOR_IMPORT_DIRS` en `demos/samples`, `compose.yaml` pone el origen de la interfaz,
+y la interfaz se compila con `VITE_API_URL=/api`. La imagen de la interfaz acepta además
+`API_UPSTREAM` (a dónde reenvía nginx), `WEB_PORT` y `API_TIMEOUT`.
+
+### 3.7 Comprobar la instalación
 
 ```bash
 .venv/bin/ruff check                          # estilo
@@ -279,8 +338,9 @@ npm --prefix frontend test                    # resaltado y SQL de la página de
 Lo mismo corre en GitHub Actions ([`.github/workflows/ci.yml`](.github/workflows/ci.yml))
 en cada pull request y en cada cambio de `main`, con Python 3.11 y 3.12. Los tests que
 necesitan PostgreSQL o los extras de gráficas se saltan solos cuando no están. La CI
-construye además las dos imágenes de Docker: la del motor con su API ([`Dockerfile`](Dockerfile))
-y la de la interfaz ([`frontend/Dockerfile`](frontend/Dockerfile)), servida por nginx.
+levanta además la aplicación con `docker compose`: construye las dos imágenes, espera a que
+la demo se cargue y el API y la interfaz estén sanos, y hace una búsqueda de texto a través
+de nginx.
 
 Los tests siguen la estructura de `src/`, así que se pueden ejecutar por módulo:
 
@@ -290,7 +350,7 @@ Los tests siguen la estructura de `src/`, así que se pueden ejecutar por módul
 .venv/bin/python -m pytest tests/query -q
 ```
 
-### 3.7 Reproducir los experimentos
+### 3.8 Reproducir los experimentos
 
 ```bash
 .venv/bin/pip install -e ".[plots,postgres]"

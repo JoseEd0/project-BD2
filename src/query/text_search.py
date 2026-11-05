@@ -9,6 +9,7 @@ términos resaltar, de modo que los dos miran la consulta con los mismos ojos.
 | Forma en SQL | Qué es |
 |---|---|
 | `WHERE MATCH(columna, 'consulta')` | las filas con algún término de la consulta |
+| `WHERE MATCH(columna, 'a AND NOT b')` | las filas que cumplen la expresión booleana |
 | `USING TF_IDF` / `USING BM25` | el ranking; sin `USING`, BM25 |
 | `WITH (k1 = 1.5, b = 0.6)` | los parámetros de BM25 para esta consulta |
 | `SCORE()` | el puntaje de cada fila |
@@ -86,6 +87,8 @@ class TextSearch:
         column: la columna de texto, tal como la declara la tabla.
         index_name: su índice invertido.
         query: el texto que se busca, sin analizar.
+        expression: si la consulta es booleana, la expresión tal como se evalúa, con los
+            términos analizados; `None` si es texto libre.
         method: el ranking.
         parameters: los de BM25, ya con los de la configuración donde la consulta no los
             pide; `None` con TF-IDF.
@@ -97,6 +100,7 @@ class TextSearch:
     column: str
     index_name: str
     query: str
+    expression: str | None
     method: RankingMethod
     parameters: Bm25Parameters | None
     condition: FunctionCall
@@ -112,7 +116,8 @@ class TextView:
         query: la consulta tal como se escribió.
         method: el ranking con que se ordenó.
         terms: los términos de la consulta ya analizados —plegados, sin stopwords y
-            reducidos a su raíz—, en el orden en que aparecen.
+            reducidos a su raíz—, en el orden en que aparecen; de una consulta booleana,
+            solo los positivos, que son los que pueden aparecer en el resultado.
         parameters: los `k1` y `b` con que puntuó BM25, los de la consulta o los de la
             configuración; `None` con TF-IDF.
     """
@@ -135,6 +140,7 @@ def text_search(
             sus argumentos no son una columna y una consulta constante, si la columna no
             tiene índice invertido, si el `USING` no es un ranking de texto o si el `WITH`
             no son parámetros válidos de BM25; también si hay un `SCORE()` sin `MATCH`.
+        BooleanQueryError: si la consulta es booleana y está mal formada.
         ExpressionError: si la columna no existe o es ambigua.
     """
     found = _calls_to(MATCH, statement.where)
@@ -167,6 +173,7 @@ def text_search(
         column=field.name,
         index_name=index.name,
         query=query,
+        expression=table.text_search_index(index.name).ranker().expression(query),
         method=method,
         parameters=_parameters(method, statement.options, config),
         condition=condition,

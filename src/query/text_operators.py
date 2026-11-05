@@ -4,7 +4,8 @@ Es un acceso como `IndexLookup` o `SpatialNearestScan`: sustituye al recorrido c
 WHERE tiene un `MATCH` sobre una columna con índice invertido. Entrega cada fila con su
 puntaje como una columna más, virtual, que `SCORE()` lee, y en orden de puntaje, así que un
 `ORDER BY SCORE() DESC` no necesita ordenar. Tras ejecutarse informa del trabajo del
-ranking: los términos con su df, los postings leídos y los documentos puntuados.
+ranking: los términos con su df, los postings leídos y los documentos puntuados; de una
+consulta booleana, también la expresión que evaluó.
 """
 
 from __future__ import annotations
@@ -74,9 +75,12 @@ class TextSearchScan(TableOperator):
         """Antes de ejecutar ya dice qué términos se buscan y su df, que salen del léxico
         sin leer ninguna lista; después, cuántos postings leyó y cuántos documentos puntuó."""
         search = self._search
+        detail = f"{self._table.name}.{search.column} MATCH {describe_value(search.query)}"
+        if search.expression is not None:
+            detail = f"{detail} · booleana: {search.expression or 'vacía'}"
         detail = (
-            f"{self._table.name}.{search.column} MATCH {describe_value(search.query)} · "
-            f"{self._ranking()} · {self._extent()} (índice {search.index_name}, INVERTED)"
+            f"{detail} · {self._ranking()} · {self._extent()} "
+            f"(índice {search.index_name}, INVERTED)"
         )
         executed = self._actual_rows is not None
         terms = self._stats.document_frequencies if executed else self._ranker().analyzed(

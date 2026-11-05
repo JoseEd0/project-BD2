@@ -15,7 +15,9 @@ dirección de su fila y lo que hay que indexar.
 
 Sobre el mismo índice, `Ranker` ordena los documentos que contienen algún término de la
 consulta con las dos técnicas que pide el enunciado: **TF-IDF + similitud del coseno** y
-**BM25** (ver [Ranking](#ranking)).
+**BM25** (ver [Ranking](#ranking)). También responde **consultas booleanas** con `AND`,
+`OR` y `NOT`, mezclando las listas ordenadas por `doc_id` (ver
+[Consultas booleanas](#consultas-booleanas)).
 
 Después de construirse, el índice admite inserciones y borrados sin reconstruirse: los
 documentos nuevos van a **segmentos** que se fusionan con la misma mezcla de SPIMI, y los
@@ -48,6 +50,9 @@ ranker.top_k("cable usb", RankingMethod.BM25, 10)          # list[ScoredDocument
 ranker.top_k("cable usb", RankingMethod.BM25, 10, Bm25Parameters(k1=2.0, b=0.5))
 for documento in ranker.ranked("cable usb", RankingMethod.TF_IDF):   # perezoso, en orden
     documento.doc_id, documento.record_id, documento.score
+ranker.top_k("funda AND iphone AND NOT silicona", RankingMethod.BM25, 10)   # booleana
+ranker.expression("funda AND NOT silicona")     # 'fund AND NOT silicon'; None si es texto libre
+ranker.analyzed("funda AND NOT silicona")       # {'fund': df}: solo los términos positivos
 ```
 
 | API | Qué da |
@@ -522,6 +527,7 @@ términos en la consulta:
 | puntuar | `O(P)` sumas en los acumuladores, más `O(C)` para normas y borrados |
 | `top_k` | `O(C log k)` |
 | `ranked` | `O(C)` al llamarse, y `O(log C)` por documento que se pide |
+| consulta booleana | además, `O(P)` para mezclar las listas; se puntúan solo los que la cumplen |
 | memoria | los `C` acumuladores, más las columnas de 20 bytes por documento |
 
 `S` es el número de segmentos: 1 tras una fusión.
@@ -556,6 +562,93 @@ Precision@10, como comprobación de que el ranking ordena (no es el experimento)
 «Al azar» es la precisión esperada de diez documentos cualesquiera: la fracción de
 relevantes en el corpus. Con una palabra los dos rankings casi empatan; con tres o más,
 BM25 gana por 5 a 14 puntos.
+
+### Consultas booleanas
+
+Si la consulta tiene `AND`, `OR`, `NOT` (en mayúsculas) o paréntesis, `Ranker` la trata
+como una expresión booleana: primero decide qué documentos la cumplen y después puntúa
+solo a esos. La gramática y sus reglas (precedencia, `OR` implícito, stopwords, errores)
+están en [`sql/README.md`](../../sql/README.md#búsqueda-de-texto); el parser, en
+[`text/boolean_query.py`](../../text/boolean_query.py). Una consulta sin operadores no
+pasa por nada de esto.
+
+**La forma que se evalúa.** El parser reescribe la expresión en tres nodos: un término, un
+`OR` de n operandos y un `AND` de n operandos **con sus `NOT` como parte excluida**:
+`Conjunction(incluidos, excluidos)` son los documentos de todos los incluidos y de ninguno
+de los excluidos. Nunca se calcula el complemento de una lista, que sería casi todo el
+índice. Los `NOT` se mueven con De Morgan hasta quedar como resta de un `AND`:
+`NOT a AND b` es `b AND NOT a`, y `(a OR NOT b) AND c` es `c AND NOT (b AND NOT a)`. Si
+al final la expresión entera es un complemento (`NOT a`, `a OR NOT b`), es un error.
+`EXPLAIN` muestra esa forma, con los términos ya analizados.
+
+**Las mezclas** ([`merges.py`](merges.py)). Las listas están ordenadas por `doc_id`, así
+que cada operación avanza un cursor por lista, una sola vez, como el `INTERSECT` de las
+diapositivas:
+
+```
+INTERSECT(p1, p2):                 a AND b
+    mientras p1 y p2 no se acaben:
+        si doc(p1) = doc(p2): añadir doc(p1); avanzar p1 y p2
+        si doc(p1) < doc(p2): avanzar p1
+        si no:                avanzar p2
+```
+
+| Operación | Para | Qué cambia respecto de `INTERSECT` | Coste |
+|---|---|---|---|
+| `intersect` | `a AND b` | — | `O(n + m)` |
+| `union` | `a OR b` | también añade el menor cuando difieren, y lo que sobra de las dos | `O(n + m)` |
+| `difference` | `a AND NOT b` | añade `doc(p1)` cuando es el menor, no cuando coinciden, y lo que sobra de `p1` | `O(n + m)` |
+
+Las tres entregan una lista ordenada y sin repetidos, así que se pueden volver a mezclar.
+Un `AND` de `k` operandos los interseca **del más corto al más largo**: ningún resultado
+intermedio pasa del más corto, el costo queda en `O(k · n_min + Σ n_i)` y la mezcla se
+detiene en cuanto queda vacía, sin leer los excluidos. Después resta cada excluido. Un
+`OR` une también de la lista más corta a la más larga.
+
+**El ranking.** Los documentos que cumplen la expresión se puntúan con las fórmulas de
+siempre (TF-IDF lnc.ltc o BM25) sobre los **términos positivos**: los que no están bajo
+un `NOT` o están bajo un número par de ellos. Los negados no aportan, ni a los documentos
+ni a la norma de la consulta. No hay una segunda copia de las fórmulas: la lista de cada
+término llega al ranking ya restringida a los candidatos (`PostingList.restricted_to`), y
+el resto es la evaluación término a término de arriba. Así, el puntaje de un documento es
+el mismo que tendría buscando solo los términos positivos como texto libre, y una consulta
+que solo tiene `OR` da exactamente el ranking del texto libre.
+
+| Pieza | Cómo queda |
+|---|---|
+| lectura | cada lista se lee una vez: la usan la mezcla y el ranking |
+| lápidas | como en el texto libre, se quitan de los acumuladores al final; da lo mismo que quitarlas de cada lista |
+| bloque en memoria y segmentos | la lista de un término es la de todos, una tras otra (invariante 7): la mezcla no los distingue |
+| poda MaxScore | sigue valiendo: su argumento solo usa que los puntajes parciales crecen, y aquí hay menos candidatos |
+| `analyzed` | solo los términos positivos, que son los que resalta la interfaz |
+| `RankingStats` | los postings leídos cuentan también las listas negadas; los documentos puntuados son los que cumplen la expresión |
+
+Lo comprueba un test contra un modelo: corpus al azar con un segmento construido, otro
+volcado, documentos en el bloque en memoria y borrados de los tres, y expresiones al azar
+con stopwords, palabras de dos términos y paréntesis de más. El resultado tiene que ser el
+de evaluar la expresión documento a documento sobre sus términos, y una consulta solo
+negativa, la que se cumple en un documento sin términos, tiene que ser un error.
+
+**Medido con ESCI.** Medición manual sobre el índice de las 100 000 fichas de
+[Medido con ESCI](#medido-con-esci): `top_k` con `k = 10` y BM25, mediana de 51 repeticiones con las columnas ya
+cargadas, dos términos frecuentes como texto libre (`OR`), con `AND` y con `AND NOT`.
+Apple M4 Pro, Python 3.12.
+
+| Términos | Postings leídos | Puntuados: `OR` / `AND` / `AND NOT` | `OR` | `AND` | `AND NOT` |
+|---|---:|---:|---:|---:|---:|
+| funda, iphone | 7 792 | 7 247 / 545 / 5 731 | 1,50 ms | 1,48 ms | 2,59 ms |
+| cable, usb | 14 098 | 10 610 / 3 488 / 4 930 | 2,64 ms | 3,59 ms | 3,07 ms |
+| auriculares, bluetooth | 4 011 | 3 349 / 662 / 1 087 | 0,93 ms | 1,04 ms | 0,85 ms |
+| zapatillas, mujer | 11 122 | 2 608 / 950 / 1 659 | 1,58 ms | 2,34 ms | 1,72 ms |
+| negro, algodón | 24 065 | 22 586 / 1 479 / 16 788 | 4,50 ms | 4,15 ms | 7,76 ms |
+
+Una consulta booleana **no es más barata** que el texto libre con los mismos términos:
+cuesta entre 0,9 y 1,7 veces lo mismo. Lee las mismas listas, y la mezcla, un bucle de
+Python por posting, cuesta casi lo que ahorra puntuar menos documentos. Con `zapatillas
+mujer` el texto libre ya podaba con MaxScore (2 608 puntuados), y el `AND` le suma la
+mezcla entera. Lo que da la consulta booleana es otro **resultado**, no rapidez. El texto
+libre no cambió: las mismas consultas sin operadores miden lo mismo que antes de este
+cambio (diferencias por debajo del 3 %).
 
 ## Mantenimiento: segmentos y lápidas
 
@@ -871,3 +964,14 @@ igualdad, idioma, `files_of`, reapertura) y, con el método registrado en el tes
 hará el SQL, a través del motor: el `COMMIT` vuelca el bloque, un `UPDATE` de otra columna
 no lo toca y un `ROLLBACK` de inserciones, borrados y actualizaciones deja los mismos
 documentos, y tras la fusión los mismos puntajes.
+
+Las consultas booleanas tienen dos archivos. `test_merges.py` compara cada mezcla con su
+operación de conjuntos en listas vacías, de un elemento, disjuntas, iguales, intercaladas y
+una dentro de otra, y en 300 pares al azar; y comprueba que la intersección de n listas
+empieza por la más corta y no toca las largas cuando ya quedó vacía, y que un `AND` vacío
+no lee sus excluidos. `test_boolean_search.py` es el test contra el modelo descrito en
+[Consultas booleanas](#consultas-booleanas) —cuatro semillas, 120 expresiones cada una—, y
+comprueba también que los puntajes son los del texto libre con los términos positivos, que
+el top-k podado es el principio del orden perezoso, que una consulta de solo `OR` da el
+mismo ranking que el texto libre, que cada lista se lee una vez y que los términos negados
+no puntúan ni se informan.

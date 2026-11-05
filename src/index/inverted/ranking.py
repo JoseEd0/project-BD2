@@ -4,6 +4,8 @@ similitud del coseno (SMART lnc.ltc) y BM25, sobre el mismo índice.
 Los dos se evalúan término a término: cada lista de postings se recorre una vez y suma la
 contribución de su término al acumulador de cada documento. La lista de un término es la
 de todos los segmentos del índice, una tras otra, así que el ranking no sabe cuántos hay.
+Una consulta booleana (`AND`, `OR`, `NOT`) primero mezcla las listas para saber qué
+documentos la cumplen y después puntúa solo a esos, con sus términos positivos.
 Ver `README.md` para las fórmulas y las decisiones (términos repetidos, empates, puntajes
 nulos, borrados).
 """
@@ -13,7 +15,7 @@ from __future__ import annotations
 import heapq
 import math
 from array import array
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, field
 from enum import Enum, unique
 from functools import partial
@@ -21,10 +23,11 @@ from typing import NamedTuple
 
 from config import EngineConfig, bm25_parameters_error
 from storage.record_id import RecordId
-from text import Analyzer
+from text import Analyzer, BooleanExpression, is_boolean_query, parse_boolean_query
 
 from .format import InvertedIndexError
 from .index import InvertedIndex, TermEntry
+from .merges import DocIds, matching_documents
 from .postings import PostingList
 from .weights import log_frequency_weight
 
@@ -41,6 +44,9 @@ Accumulators = dict[int, float]
 # salida es el de la dirección de la fila, que se resuelve solo entre los empatados
 # (`_in_row_order`): buscarla para cada candidato costaba un 8 % de la consulta.
 RankingKey = tuple[float, int]
+# Cómo llega al ranking la lista de cada término: entera, o solo con los documentos que
+# cumplen la consulta booleana.
+PostingsReader = Callable[[TermEntry], PostingList]
 
 
 @unique
@@ -117,6 +123,11 @@ class Ranker:
     puntaje, primero la fila de menor dirección: el orden depende solo de las filas
     vivas, no de en qué orden llegaron al índice.
 
+    Una consulta con `AND`, `OR`, `NOT` o paréntesis es booleana (`text.boolean_query`):
+    entran los documentos que cumplen la expresión, y puntúan solo sus términos
+    positivos, con las mismas fórmulas. Una consulta sin operadores sigue el camino de
+    siempre.
+
     Con `P` postings en las listas de la consulta y `C` documentos que las contienen,
     evaluar cuesta `O(P)`; la longitud y la norma de cada documento salen de
     `InvertedIndex.document_columns`, que se carga una vez por índice.
@@ -143,6 +154,7 @@ class Ranker:
 
         Raises:
             RankingParameterError: si `k` es negativo o se dan parámetros para TF-IDF.
+            BooleanQueryError: si la consulta booleana está mal formada.
         """
         if k < 0:
             raise RankingParameterError(f"k tiene que ser al menos 0, no {k}")
@@ -172,18 +184,39 @@ class Ranker:
 
         Raises:
             RankingParameterError: si se dan parámetros para TF-IDF.
+            BooleanQueryError: si la consulta booleana está mal formada.
         """
         keys = _ranking_keys(self._scores(query, method, parameters, stats, None))
         heapq.heapify(keys)
         return self._pop_in_order(keys)
 
     def analyzed(self, query: str) -> dict[str, int]:
-        """Los términos de la consulta tal como se buscan —plegados, sin stopwords y
+        """Los términos que puntúan, tal como se buscan —plegados, sin stopwords y
         reducidos a su raíz—, en el orden en que aparecen, con su df; 0 si no están en el
-        índice. No lee ninguna lista de postings."""
+        índice. De una consulta booleana, solo los positivos. No lee ninguna lista de
+        postings.
+
+        Raises:
+            BooleanQueryError: si la consulta booleana está mal formada.
+        """
         stats = RankingStats()
-        self._query_terms(query, stats)
+        if is_boolean_query(query):
+            self._query_terms(parse_boolean_query(query, self._analyzer).positive_terms, stats)
+        else:
+            self._query_terms(self._analyzer.analyze(query).frequencies, stats)
         return stats.document_frequencies
+
+    def expression(self, query: str) -> str | None:
+        """La expresión booleana tal como se evalúa —términos ya analizados y cada `NOT`
+        como resta de un `AND`—, vacía si todos sus operandos son stopwords; `None` si la
+        consulta es texto libre.
+
+        Raises:
+            BooleanQueryError: si la consulta booleana está mal formada.
+        """
+        if not is_boolean_query(query):
+            return None
+        return parse_boolean_query(query, self._analyzer).describe()
 
     def _scores(
         self,
@@ -198,34 +231,42 @@ class Ranker:
         (ver `_bm25`)."""
         stats = RankingStats() if stats is None else stats
         require_fitting_parameters(method, parameters)
-        query_terms = self._query_terms(query, stats)
+        if is_boolean_query(query):
+            boolean = parse_boolean_query(query, self._analyzer)
+            query_terms = self._query_terms(boolean.positive_terms, stats)
+            read: PostingsReader = _BooleanPostings(self._index, boolean.expression, stats).read
+        else:
+            query_terms = self._query_terms(self._analyzer.analyze(query).frequencies, stats)
+            read = partial(self._read, stats=stats)
         if self._index.total_length == 0:
             # Ningún documento vivo tiene términos: lo que haya en las listas es de
             # documentos borrados, y N o avgdl serían 0 en las fórmulas.
             return {}
         if method is RankingMethod.TF_IDF:
-            accumulators = self._tf_idf(query_terms, stats)
+            accumulators = self._tf_idf(query_terms, read)
         else:
             bm25 = self._default_bm25 if parameters is None else parameters
-            accumulators = self._bm25(query_terms, bm25, stats, k)
+            accumulators = self._bm25(query_terms, bm25, read, stats, k)
         deleted = self._index.document_columns().deleted
         if deleted:
             accumulators = {doc: score for doc, score in accumulators.items() if doc not in deleted}
         stats.documents_scored = len(accumulators)
         return accumulators
 
-    def _query_terms(self, query: str, stats: RankingStats) -> list[_QueryTerm]:
+    def _query_terms(
+        self, frequencies: Mapping[str, int], stats: RankingStats
+    ) -> list[_QueryTerm]:
         """Los términos de la consulta que están en el índice. Los que no están no aportan
         a ningún documento y, con TF-IDF, tampoco a la norma de la consulta."""
         query_terms = []
-        for term, frequency in self._analyzer.analyze(query).frequencies.items():
+        for term, frequency in frequencies.items():
             entry = self._index.lookup(term)
             stats.document_frequencies[term] = 0 if entry is None else entry.document_frequency
             if entry is not None:
                 query_terms.append(_QueryTerm(entry, frequency))
         return query_terms
 
-    def _tf_idf(self, query_terms: list[_QueryTerm], stats: RankingStats) -> Accumulators:
+    def _tf_idf(self, query_terms: list[_QueryTerm], read: PostingsReader) -> Accumulators:
         """lnc.ltc: `Σ_t q_t · (1 + log₁₀ tf_t,d) / ‖d‖`, con `q_t` el peso ltc de la consulta
         ya normalizado. La norma del documento es común a todos sus términos, así que se
         divide una sola vez, al final.
@@ -246,8 +287,7 @@ class Ranker:
             # Si todos los términos están en todos los documentos, el idf los anula y la
             # consulta es el vector nulo: su coseno con cualquier documento se toma como 0.
             query_weight = weight / query_norm if query_norm > 0 else 0.0
-            postings = self._read(term.entry, stats)
-            _add_tf_idf(accumulators, postings, query_weight)
+            _add_tf_idf(accumulators, read(term.entry), query_weight)
         norms = self._index.document_columns().norms
         return {doc_id: score / norms[doc_id] for doc_id, score in accumulators.items()}
 
@@ -255,6 +295,7 @@ class Ranker:
         self,
         query_terms: list[_QueryTerm],
         parameters: Bm25Parameters,
+        read: PostingsReader,
         stats: RankingStats,
         k: int | None,
     ) -> Accumulators:
@@ -268,7 +309,8 @@ class Ranker:
         nuevo puede entrar entre los `k` mejores, y uno que ya está solo sigue si su
         puntaje más esa cota lo alcanza (`_prune`). Desde ahí, de cada lista solo se
         puntúan los documentos que siguen. Sus puntajes son los mismos que sin poda: cada
-        uno suma las mismas contribuciones en el mismo orden.
+        uno suma las mismas contribuciones en el mismo orden. En una consulta booleana la
+        poda sigue valiendo: solo usa que los parciales crecen, y los candidatos son menos.
         """
         document_count = self._index.document_count
         k1, b = parameters.k1, parameters.b
@@ -284,13 +326,14 @@ class Ranker:
             slope=k1 * b / self._index.average_length,
             lengths=self._index.document_columns().lengths,
         )
-        return self._accumulate_with_pruning(query_terms, scaled_idfs, add, stats, k)
+        return self._accumulate_with_pruning(query_terms, scaled_idfs, add, read, stats, k)
 
     def _accumulate_with_pruning(
         self,
         query_terms: list[_QueryTerm],
         scaled_idfs: list[float],
         add: Callable[[Accumulators, PostingList, float], None],
+        read: PostingsReader,
         stats: RankingStats,
         k: int | None,
     ) -> Accumulators:
@@ -302,7 +345,7 @@ class Ranker:
         for position, (term, scaled_idf, remaining_bound) in enumerate(
             zip(query_terms, scaled_idfs, _remaining_sums(scaled_idfs), strict=True)
         ):
-            postings = self._read(term.entry, stats)
+            postings = read(term.entry)
             if pruning:
                 postings = postings.restricted_to(accumulators)
             add(accumulators, postings, scaled_idf)
@@ -375,6 +418,49 @@ class Ranker:
                 tied.append(heapq.heappop(keys))
             for key in self._in_row_order(tied):
                 yield self._scored(key)
+
+
+class _BooleanPostings:
+    """Las listas de una consulta booleana. Cada término se lee una sola vez: para mezclar
+    las listas y saber qué documentos cumplen la expresión, y para puntuar, donde de cada
+    lista solo cuentan esos documentos. Se mezcla la primera vez que se puntúa un término:
+    si ninguno positivo está en el índice, no se lee nada."""
+
+    def __init__(
+        self, index: InvertedIndex, expression: BooleanExpression | None, stats: RankingStats
+    ) -> None:
+        self._index = index
+        self._expression = expression
+        self._stats = stats
+        self._lists: dict[str, PostingList] = {}
+        self._matching: set[int] | None = None
+
+    def read(self, entry: TermEntry) -> PostingList:
+        return self._postings(entry.term).restricted_to(self._matching_documents())
+
+    def _matching_documents(self) -> set[int]:
+        """Los documentos que cumplen la expresión, borrados incluidos: `_scores` los quita
+        de los acumuladores como en el texto libre, y quitarlos de cada lista o del
+        resultado da lo mismo."""
+        if self._matching is None:
+            self._matching = set(self._found())
+        return self._matching
+
+    def _found(self) -> DocIds:
+        if self._expression is None:
+            return ()
+        return matching_documents(self._expression, self._doc_ids)
+
+    def _doc_ids(self, term: str) -> DocIds:
+        return self._postings(term).doc_ids
+
+    def _postings(self, term: str) -> PostingList:
+        postings = self._lists.get(term)
+        if postings is None:
+            postings = self._index.postings(term)
+            self._stats.postings_read += len(postings)
+            self._lists[term] = postings
+        return postings
 
 
 def require_fitting_parameters(

@@ -1,9 +1,9 @@
 # Demostraciones
 
-Cinco guiones pensados para la exposición del proyecto: un dataset relacional que se genera
+Seis guiones pensados para la exposición del proyecto: un dataset relacional que se genera
 solo, uno espacial **real** que se descarga, una muestra de productos reales de Amazon para
-la búsqueda de texto, el corpus completo con juicios de relevancia, y una simulación de
-concurrencia.
+la búsqueda de texto, el corpus completo con juicios de relevancia, una simulación de
+concurrencia y música real para la búsqueda por similitud de audio.
 
 ## 1. Poblar la base de datos — `poblar_ecommerce.py`
 
@@ -242,3 +242,68 @@ cuántas transacciones se abortaron por interbloqueo y se reintentaron; y un
 **interbloqueo** cruzado que el gestor detecta y resuelve abortando exactamente una de las
 dos transacciones. Ver [`src/txn/README.md`](../src/txn/README.md). Un test
 (`tests/demos/test_concurrencia.py`) corre las tres escenas en pequeño.
+
+## 6. Música para la demo — `descargar_fma.py`
+
+La demo de audio de la Parte 4 usa fragmentos reales de canciones del **Free Music
+Archive** (FMA), cada uno con su género, su título y su artista. `fma_small` son 8 000
+fragmentos de 30 s en MP3, mil de cada uno de ocho géneros, en un `.zip` de 7,7 GB. El
+guion **no lo baja entero**: lee por rangos HTTP el índice del final del `.zip` y después
+solo los bytes de las pistas elegidas, una petición por pista. De `fma_metadata.zip`
+(358 MB) lee solo `tracks.csv`, unos 20 MB comprimidos.
+
+```bash
+.venv/bin/python -m demos.descargar_fma --salida data/datasets/fma_small
+.venv/bin/python -m demos.descargar_fma --salida data/datasets/fma_small --pistas 800
+```
+
+| Argumento | Para qué | Por omisión |
+|---|---|---|
+| `--salida` | carpeta de la demo | — |
+| `--pistas` | cuántas pistas bajar | 2 000 |
+| `--seed` | semilla de la elección | la de los subconjuntos multimedia |
+| `--hilos` | pistas que se piden a la vez, cada hilo con su conexión | 4 |
+| `--url`, `--metadatos` | de dónde leer los dos `.zip` | el servidor oficial |
+
+Deja `pistas/<xxx>/<id>.mp3` y `canciones.csv`, que se carga tal cual con
+`CREATE TABLE ... FROM FILE`:
+
+```
+id,ruta,titulo,genero,artista
+1,data/datasets/fma_small/pistas/132/132454.mp3,Catalini,Folk,Ava Zandieh
+```
+
+- **La elección** es al azar con la semilla y en proporción a los géneros, que en
+  `fma_small` están balanceados: con 2 000 pistas salen 250 por género, de 1 084 artistas.
+  Usa la misma partición que los datasets del experimento
+  ([`benchmarks/multimedia/`](../benchmarks/multimedia/README.md)).
+- **Tres pistas de `fma_small` no tienen audio** (099134, 108925 y 133297 pesan menos de
+  2 KB y no se pueden decodificar). Se descartan antes de elegir mirando el tamaño que
+  anota el índice del `.zip`.
+- **Se reanuda.** Una pista que ya está en disco no se vuelve a pedir: cada una se escribe
+  aparte y se renombra al terminar, así que un corte no deja una a medias.
+- **La ruta** es la de `--salida` seguida de la de la pista, como en los datasets del
+  experimento: relativa a la raíz del repositorio y dentro de `data/`.
+
+| Medido (2 000 pistas) | |
+|---|---:|
+| primera ejecución | 323 s |
+| volver a ejecutarlo con las pistas en disco | 24 s (lee `tracks.csv` otra vez) |
+| en disco | 1,9 GB |
+
+Pedir cada pista por una conexión nueva costaba unas tres veces más: contra el servidor
+del FMA, un megabyte tarda 3,3 s con conexión nueva y 1,1 s reusándola. Por eso cada hilo
+mantiene la suya abierta.
+
+**Las imágenes de la demo** son el subconjunto de 1 000 fotos de ABO,
+`data/datasets/abo/subconjuntos/1000/imagenes.csv`, que deja la descarga del experimento.
+Cargar las dos tablas en la base de demostración e indexarlas llega con la búsqueda por
+similitud en SQL.
+
+**Licencia.** Los metadatos del FMA son
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/): Defferrard, Benzi,
+Vandergheynst y Bresson, *FMA: A Dataset for Music Analysis*, ISMIR 2017
+([github.com/mdeff/fma](https://github.com/mdeff/fma)). El audio **no** tiene una licencia
+única: cada pista conserva la licencia Creative Commons que eligió su artista, anotada en
+la columna `track.license` de `tracks.csv`, y el título y el artista de `canciones.csv`
+son su atribución. Nada de esto se versiona (`data/` se ignora).

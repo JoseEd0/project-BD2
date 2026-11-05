@@ -17,6 +17,10 @@ gráficas de [`figures/`](figures/) y todas las tablas de este documento.
 .venv/bin/python -m benchmarks.plot              # redibuja todas las gráficas
 ```
 
+Los datasets reales se descargan aparte, con un comando cada uno: los lugares de
+OpenStreetMap ([`demos/`](../demos/README.md)), el corpus ESCI ([`esci/`](esci/README.md))
+y las imágenes y el audio de la Parte 4 ([`multimedia/`](multimedia/README.md)).
+
 ### Con Docker
 
 Los mismos comandos corren sin instalar Python ni PostgreSQL, en el perfil `bench` de
@@ -36,6 +40,10 @@ docker compose --profile bench run --rm bench python -m benchmarks.esci.download
 docker compose --profile bench run --rm bench python -m benchmarks.esci.subsets \
     --corpus data/datasets/esci_es --sizes 1000 10000 100000 \
     --queries-per-bucket 50 --max-judged-share 0.5 --seed 20261104
+docker compose --profile bench run --rm bench python -m benchmarks.multimedia.abo \
+    --salida data/datasets/abo
+docker compose --profile bench run --rm bench python -m benchmarks.multimedia.speech_commands \
+    --salida data/datasets/speech_commands
 
 docker compose --profile bench run --rm bench python -m benchmarks.spatial_benchmark \
     --sizes 1000 10000 100000 --queries 100 --points-file data/datasets/lugares_peru.csv

@@ -116,6 +116,12 @@ class FeatureStore:
     def vocabulary_size(self) -> int:
         return self._require_vocabulary().size
 
+    @property
+    def descriptor_dimension(self) -> int:
+        """Dimensión de los descriptores con que se entrenó: 128 con SIFT, la de MFCC con
+        audio."""
+        return self._require_vocabulary().descriptor_dimension
+
     def build(
         self, objects: Iterable[tuple[RecordId, Descriptors]], training: Descriptors
     ) -> FeatureStoreBuild:

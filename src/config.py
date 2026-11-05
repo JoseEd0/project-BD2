@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import codecs
 import math
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -77,6 +78,9 @@ DEFAULT_MFCC_HOP_LENGTH = 160
 # Cuatro ventanas a cada lado, el ancho por omisión de librosa: unos 90 ms de contexto.
 DEFAULT_MFCC_DELTA_WIDTH = 9
 DEFAULT_FEATURE_CHUNK_FILES = 16
+# Un proceso de extracción por núcleo: SIFT y MFCC son cálculo puro, y con 8 procesos las
+# fotos de ABO se extraen 4,6 veces más rápido que en uno (ver `multimedia/README.md`).
+DEFAULT_FEATURE_WORKERS = os.cpu_count() or 1
 # Palabras del vocabulario visual o auditivo: la dimensión de los vectores que indexan IVF y
 # HNSW. Unos cientos alcanzan para que objetos parecidos compartan palabras sin que el
 # histograma de una foto de catálogo, con unos cientos de descriptores, quede casi vacío; el
@@ -191,6 +195,8 @@ class EngineConfig:
         feature_chunk_files: archivos que la extracción en paralelo manda juntos a un
             proceso; con dos lotes en vuelo por proceso, acota los descriptores que esperan
             en memoria.
+        feature_workers: procesos que extraen las características al construir un índice
+            multimedia; con menos archivos que un lote por proceso se extrae en el propio.
         vocabulary_size: palabras del vocabulario visual o auditivo; la dimensión de los
             vectores TF-IDF.
         kmeans_iterations: iteraciones de k-means al entrenar el vocabulario.
@@ -249,6 +255,7 @@ class EngineConfig:
     mfcc_hop_length: int = DEFAULT_MFCC_HOP_LENGTH
     mfcc_delta_width: int = DEFAULT_MFCC_DELTA_WIDTH
     feature_chunk_files: int = DEFAULT_FEATURE_CHUNK_FILES
+    feature_workers: int = DEFAULT_FEATURE_WORKERS
     vocabulary_size: int = DEFAULT_VOCABULARY_SIZE
     kmeans_iterations: int = DEFAULT_KMEANS_ITERATIONS
     kmeans_seed: int = DEFAULT_KMEANS_SEED
@@ -289,6 +296,7 @@ class EngineConfig:
             "mfcc_window_length",
             "mfcc_hop_length",
             "feature_chunk_files",
+            "feature_workers",
             "max_upload_bytes",
             "map_points",
             "max_result_rows",

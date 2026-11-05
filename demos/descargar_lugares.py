@@ -8,8 +8,8 @@ del que aquí solo se piden por HTTP los bytes de las capas que hacen falta (uno
 Solo se conservan los puntos **con nombre**: OpenStreetMap también cataloga bancas,
 papeleras y cámaras, que no son lugares que alguien vaya a buscar.
 
-    .venv/bin/python demos/descargar_lugares.py --salida data/datasets/lugares_peru.csv
-    .venv/bin/python demos/descargar_lugares.py --salida data/datasets/lugares_lima.csv \\
+    .venv/bin/python -m demos.descargar_lugares --salida data/datasets/lugares_peru.csv
+    .venv/bin/python -m demos.descargar_lugares --salida data/datasets/lugares_lima.csv \\
         --recuadro -12.52 -77.20 -11.57 -76.62
 
 El CSV tiene las columnas `id, nombre, rubro, ubicacion`, con la ubicación escrita como
@@ -25,12 +25,13 @@ import argparse
 import csv
 import io
 import struct
-import urllib.request
 import zipfile
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, BinaryIO
+from typing import BinaryIO
+
+from benchmarks.remote import HttpRangeSource, RemoteFile
 
 DEFAULT_URL = "https://download.geofabrik.de/south-america/peru-latest-free.shp.zip"
 # Capas de puntos que se leen y, de cada una, los rubros que interesan (`None`: todos). De
@@ -39,8 +40,6 @@ LAYERS: dict[str, frozenset[str] | None] = {
     "gis_osm_pois_free_1": None,
     "gis_osm_traffic_free_1": frozenset({"fuel"}),
 }
-USER_AGENT = "minigestor-bd2 (proyecto universitario)"
-TIMEOUT_SECONDS = 180
 READ_AHEAD_BYTES = 4 * 1024 * 1024
 DEFAULT_ENCODING = "utf-8"
 COORDINATE_DECIMALS = 6
@@ -204,49 +203,6 @@ class Box:
         )
 
 
-class RemoteFile(io.RawIOBase):
-    """Archivo remoto de solo lectura que pide por HTTP solo los bytes que se leen.
-
-    Es lo que permite abrir un `.zip` de cientos de MB y sacar de él una capa de unos
-    pocos: `zipfile` lee el índice del final y después únicamente los archivos pedidos.
-    """
-
-    def __init__(self, url: str) -> None:
-        request = urllib.request.Request(url, method="HEAD", headers={"User-Agent": USER_AGENT})
-        with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:
-            self._url = response.url
-            self._size = int(response.headers["Content-Length"])
-        self._position = 0
-
-    def readable(self) -> bool:
-        return True
-
-    def seekable(self) -> bool:
-        return True
-
-    def tell(self) -> int:
-        return self._position
-
-    def seek(self, offset: int, whence: int = io.SEEK_SET) -> int:
-        origin = {io.SEEK_SET: 0, io.SEEK_CUR: self._position, io.SEEK_END: self._size}[whence]
-        self._position = origin + offset
-        return self._position
-
-    def readinto(self, buffer: Any, /) -> int:
-        if self._position >= self._size:
-            return 0
-        last = min(self._position + len(buffer), self._size) - 1
-        request = urllib.request.Request(
-            self._url,
-            headers={"Range": f"bytes={self._position}-{last}", "User-Agent": USER_AGENT},
-        )
-        with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:
-            received = response.read()
-        buffer[: len(received)] = received
-        self._position += len(received)
-        return len(received)
-
-
 def read_points(shp: BinaryIO) -> Iterator[tuple[float, float] | None]:
     """Latitud y longitud de cada registro de un `.shp` de puntos; `None` si no tiene forma.
 
@@ -359,8 +315,9 @@ def main() -> None:
         help="solo los puntos dentro de este recuadro de coordenadas",
     )
     arguments = parser.parse_args()
-    remote = io.BufferedReader(RemoteFile(arguments.url), buffer_size=READ_AHEAD_BYTES)
-    with zipfile.ZipFile(remote) as archive:
+    source = HttpRangeSource(arguments.url)
+    remote = io.BufferedReader(RemoteFile(source), buffer_size=READ_AHEAD_BYTES)
+    with source, zipfile.ZipFile(remote) as archive:
         places = read_places(archive)
         if arguments.recuadro is not None:
             box = Box(*arguments.recuadro)

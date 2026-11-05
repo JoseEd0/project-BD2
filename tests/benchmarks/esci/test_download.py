@@ -165,21 +165,6 @@ def test_an_empty_catalog_gives_csvs_with_only_the_header(tmp_path: Path):
     assert read_csv(tmp_path / "corpus" / "juicios.csv") == [["query_id", "product_id", "etiqueta"]]
 
 
-def test_the_download_is_reused_when_it_is_complete(tmp_path: Path):
-    source = tmp_path / "remoto.parquet"
-    source.write_bytes(b"PAR1 datos")
-    destination = tmp_path / "cache" / "local.parquet"
-    assert esci.download(source.as_uri(), destination) == destination
-    assert destination.read_bytes() == b"PAR1 datos"
-    assert not (tmp_path / "cache" / "local.parquet.parcial").exists()
-    destination.write_bytes(b"PAR1 otro!")
-    esci.download(source.as_uri(), destination)
-    assert destination.read_bytes() == b"PAR1 otro!"
-    destination.write_bytes(b"corto")
-    esci.download(source.as_uri(), destination)
-    assert destination.read_bytes() == b"PAR1 datos"
-
-
 def test_the_products_csv_is_loaded_by_the_engine_as_it_is(config: EngineConfig):
     path = config.data_directory / "productos.csv"
     rows = [

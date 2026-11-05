@@ -155,10 +155,10 @@ su nombre, su rubro en castellano y su ubicación.
 
 ```bash
 # todo el Perú: unos 128 000 lugares
-.venv/bin/python demos/descargar_lugares.py --salida data/datasets/lugares_peru.csv
+.venv/bin/python -m demos.descargar_lugares --salida data/datasets/lugares_peru.csv
 
 # solo Lima y Callao: unos 26 600
-.venv/bin/python demos/descargar_lugares.py --salida data/datasets/lugares_lima.csv \
+.venv/bin/python -m demos.descargar_lugares --salida data/datasets/lugares_lima.csv \
     --recuadro -12.52 -77.20 -11.57 -76.62
 ```
 

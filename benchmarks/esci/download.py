@@ -27,7 +27,6 @@ Licencia de los datos: Apache-2.0, © Amazon.com, Inc. (github.com/amazon-scienc
 from __future__ import annotations
 
 import argparse
-import urllib.request
 from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from html.parser import HTMLParser
@@ -49,6 +48,7 @@ from benchmarks.esci.corpus import (
     word_count,
     write_rows,
 )
+from benchmarks.remote import download
 
 DEFAULT_BASE_URL = (
     "https://media.githubusercontent.com/media/amazon-science/esci-data/main/"
@@ -57,11 +57,7 @@ DEFAULT_BASE_URL = (
 PRODUCTS_PARQUET = "shopping_queries_dataset_products.parquet"
 EXAMPLES_PARQUET = "shopping_queries_dataset_examples.parquet"
 PARQUET_DIRECTORY = "parquet"
-PARTIAL_SUFFIX = ".parcial"
 SPANISH_LOCALE = "es"
-USER_AGENT = "minigestor-bd2 (proyecto universitario)"
-TIMEOUT_SECONDS = 180
-DOWNLOAD_CHUNK_BYTES = 1024 * 1024
 PARQUET_BATCH_ROWS = 65_536
 
 
@@ -202,35 +198,6 @@ def build_corpus(products_parquet: Path, examples_parquet: Path, output: Path) -
         ((item.query_id, item.product_id, item.label) for item in judgments),
     )
     return CorpusSummary(products, len(queries), len(judgments), discarded)
-
-
-def download(url: str, destination: Path) -> Path:
-    """Baja `url` a `destination`, salvo que ya esté completo (mismo tamaño que el remoto).
-
-    Se escribe primero a un archivo `.parcial`: un corte deja ese archivo y no uno con el
-    nombre final a medio escribir.
-    """
-    expected = _remote_size(url)
-    if destination.exists() and destination.stat().st_size == expected:
-        return destination
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    partial = destination.with_name(destination.name + PARTIAL_SUFFIX)
-    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-    with (
-        urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response,
-        partial.open("wb") as handle,
-    ):
-        while chunk := response.read(DOWNLOAD_CHUNK_BYTES):
-            handle.write(chunk)
-    if partial.stat().st_size != expected:
-        raise CorpusDownloadError(f"descarga incompleta de {url}")
-    return partial.replace(destination)
-
-
-def _remote_size(url: str) -> int:
-    request = urllib.request.Request(url, method="HEAD", headers={"User-Agent": USER_AGENT})
-    with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:
-        return int(response.headers["Content-Length"])
 
 
 def _parquet_rows(path: Path, columns: Sequence[str], locale: str) -> Iterator[dict[str, Any]]:

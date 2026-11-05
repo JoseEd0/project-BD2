@@ -58,6 +58,25 @@ DEFAULT_VECTOR_REBUILD_FRACTION = 0.30
 # de 32 dimensiones: 981 por consulta). Si el filtro deja menos filas que eso, compararlas
 # todas cuesta menos que recorrer el grafo y es exacto.
 DEFAULT_VECTOR_EXACT_FILTER_ROWS = 1_000
+# Las fotos de catálogo de ABO miden 256 px de lado mayor y pasan sin tocarse; una foto de
+# 4000 px que llegue por el API baja a 512 en vez de pagar SIFT sobre 12 megapíxeles.
+DEFAULT_IMAGE_MAX_SIDE = 512
+# Sobre 200 fotos de ABO de 256 px, SIFT da una mediana de 137 descriptores, un percentil 95
+# de 406 y un máximo de 601: el tope solo recorta al 2 % más texturado.
+DEFAULT_IMAGE_MAX_DESCRIPTORS = 500
+# Speech Commands ya viene a 16 kHz y una pista de FMA pierde solo la octava de 8 a 11 kHz,
+# que apenas pesa en los coeficientes cepstrales.
+DEFAULT_AUDIO_SAMPLE_RATE = 16_000
+DEFAULT_AUDIO_OFFSET_SECONDS = 0.0
+# Los valores clásicos del reconocimiento de voz (13 coeficientes, ventana de 25 ms con un
+# salto de 10 ms a 16 kHz) y la FFT en la potencia de dos siguiente a la ventana.
+DEFAULT_MFCC_COEFFICIENTS = 13
+DEFAULT_MFCC_FFT_LENGTH = 512
+DEFAULT_MFCC_WINDOW_LENGTH = 400
+DEFAULT_MFCC_HOP_LENGTH = 160
+# Cuatro ventanas a cada lado, el ancho por omisión de librosa: unos 90 ms de contexto.
+DEFAULT_MFCC_DELTA_WIDTH = 9
+DEFAULT_FEATURE_CHUNK_FILES = 16
 # Palabras del vocabulario visual o auditivo: la dimensión de los vectores que indexan IVF y
 # HNSW. Unos cientos alcanzan para que objetos parecidos compartan palabras sin que el
 # histograma de una foto de catálogo, con unos cientos de descriptores, quede casi vacío; el
@@ -93,6 +112,9 @@ MIN_HASH_PARTITIONS = 2
 MIN_BM25_K1 = 0.0
 MIN_BM25_B = 0.0
 MAX_BM25_B = 1.0
+# El filtro de Savitzky-Golay que deriva los MFCC necesita una ventana impar y mayor que el
+# orden de la derivada más alta (la segunda).
+MIN_MFCC_DELTA_WIDTH = 3
 
 
 class ConfigurationError(ValueError):
@@ -151,6 +173,24 @@ class EngineConfig:
             desde su entrenamiento, como fracción, a partir de la cual se reconstruye.
         vector_exact_filter_rows: filas que puede dejar un filtro para que la búsqueda de
             vectores las compare todas en vez de recorrer el índice.
+        image_max_side: lado mayor, en píxeles, al que se reduce una imagen antes de SIFT;
+            una imagen menor no se agranda.
+        image_max_descriptors: descriptores SIFT que se conservan por imagen, los de mayor
+            respuesta; acota la memoria de una imagen muy texturada.
+        audio_sample_rate: frecuencia, en Hz, a la que se remuestrea todo audio antes de
+            calcular sus MFCC, para que los de archivos distintos sean comparables.
+        audio_offset_seconds: segundo del audio en el que empieza el segmento que se
+            describe.
+        audio_duration_seconds: segundos del segmento; `None` llega hasta el final.
+        mfcc_coefficients: coeficientes cepstrales por ventana; cada descriptor de audio
+            tiene el triple, con sus primeras y segundas derivadas.
+        mfcc_fft_length: muestras de la FFT de cada ventana.
+        mfcc_window_length: muestras de la ventana de Hann, como mucho `mfcc_fft_length`.
+        mfcc_hop_length: muestras entre el inicio de una ventana y el de la siguiente.
+        mfcc_delta_width: ventanas que mira la derivada de los MFCC, impar.
+        feature_chunk_files: archivos que la extracción en paralelo manda juntos a un
+            proceso; con dos lotes en vuelo por proceso, acota los descriptores que esperan
+            en memoria.
         vocabulary_size: palabras del vocabulario visual o auditivo; la dimensión de los
             vectores TF-IDF.
         kmeans_iterations: iteraciones de k-means al entrenar el vocabulario.
@@ -198,6 +238,17 @@ class EngineConfig:
     hnsw_ef_search: int = DEFAULT_HNSW_EF_SEARCH
     vector_rebuild_fraction: float = DEFAULT_VECTOR_REBUILD_FRACTION
     vector_exact_filter_rows: int = DEFAULT_VECTOR_EXACT_FILTER_ROWS
+    image_max_side: int = DEFAULT_IMAGE_MAX_SIDE
+    image_max_descriptors: int = DEFAULT_IMAGE_MAX_DESCRIPTORS
+    audio_sample_rate: int = DEFAULT_AUDIO_SAMPLE_RATE
+    audio_offset_seconds: float = DEFAULT_AUDIO_OFFSET_SECONDS
+    audio_duration_seconds: float | None = None
+    mfcc_coefficients: int = DEFAULT_MFCC_COEFFICIENTS
+    mfcc_fft_length: int = DEFAULT_MFCC_FFT_LENGTH
+    mfcc_window_length: int = DEFAULT_MFCC_WINDOW_LENGTH
+    mfcc_hop_length: int = DEFAULT_MFCC_HOP_LENGTH
+    mfcc_delta_width: int = DEFAULT_MFCC_DELTA_WIDTH
+    feature_chunk_files: int = DEFAULT_FEATURE_CHUNK_FILES
     vocabulary_size: int = DEFAULT_VOCABULARY_SIZE
     kmeans_iterations: int = DEFAULT_KMEANS_ITERATIONS
     kmeans_seed: int = DEFAULT_KMEANS_SEED
@@ -230,6 +281,14 @@ class EngineConfig:
             "text_min_token_length",
             "spimi_block_bytes",
             "inverted_max_segments",
+            "image_max_side",
+            "image_max_descriptors",
+            "audio_sample_rate",
+            "mfcc_coefficients",
+            "mfcc_fft_length",
+            "mfcc_window_length",
+            "mfcc_hop_length",
+            "feature_chunk_files",
             "max_upload_bytes",
             "map_points",
             "max_result_rows",
@@ -260,6 +319,17 @@ class EngineConfig:
         _require_between(
             "text_max_token_length", self.text_max_token_length, self.text_min_token_length, None
         )
+        _require_between(
+            "mfcc_window_length", self.mfcc_window_length, 1, self.mfcc_fft_length
+        )
+        _require_odd_at_least("mfcc_delta_width", self.mfcc_delta_width, MIN_MFCC_DELTA_WIDTH)
+        if not 0 <= self.audio_offset_seconds < math.inf:
+            raise ConfigurationError(
+                f"audio_offset_seconds tiene que ser finito y no negativo, "
+                f"no {self.audio_offset_seconds}"
+            )
+        if self.audio_duration_seconds is not None:
+            _require_positive("audio_duration_seconds", self.audio_duration_seconds)
         bm25_error = bm25_parameters_error(self.bm25_k1, self.bm25_b)
         if bm25_error is not None:
             raise ConfigurationError(bm25_error)
@@ -299,6 +369,12 @@ def _require_between(name: str, value: int, low: int, high: int | None) -> None:
 def _require_fraction(name: str, value: float, high: float) -> None:
     if not 0.0 < value <= high:
         raise ConfigurationError(f"{name} tiene que estar en (0, {high}], no {value}")
+
+
+def _require_odd_at_least(name: str, value: int, low: int) -> None:
+    _require_between(name, value, low, None)
+    if value % 2 == 0:
+        raise ConfigurationError(f"{name} tiene que ser impar, no {value}")
 
 
 def _require_positive(name: str, value: float) -> None:

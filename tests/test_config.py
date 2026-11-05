@@ -40,6 +40,21 @@ INVALID = [
     {"bm25_b": -0.1},
     {"bm25_b": 1.1},
     {"bm25_b": float("nan")},
+    {"image_max_side": 0},
+    {"image_max_descriptors": 0},
+    {"audio_sample_rate": 0},
+    {"audio_offset_seconds": -1.0},
+    {"audio_offset_seconds": float("nan")},
+    {"audio_offset_seconds": float("inf")},
+    {"audio_duration_seconds": 0.0},
+    {"audio_duration_seconds": float("nan")},
+    {"mfcc_coefficients": 0},
+    {"mfcc_hop_length": 0},
+    {"mfcc_window_length": 0},
+    {"mfcc_fft_length": 256, "mfcc_window_length": 400},
+    {"mfcc_delta_width": 1},
+    {"mfcc_delta_width": 8},
+    {"feature_chunk_files": 0},
     {"lock_timeout_seconds": 0.0},
     {"session_idle_seconds": -5.0},
     {"max_result_rows": 0},
@@ -69,3 +84,5 @@ def test_the_bounds_themselves_are_valid():
     EngineConfig(text_min_token_length=1, text_max_token_length=1)
     EngineConfig(bm25_k1=0.0, bm25_b=0.0)
     EngineConfig(bm25_k1=0.0, bm25_b=1.0)
+    EngineConfig(mfcc_fft_length=400, mfcc_window_length=400, mfcc_delta_width=3)
+    EngineConfig(audio_offset_seconds=0.0, audio_duration_seconds=None)

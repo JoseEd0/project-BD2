@@ -53,23 +53,30 @@ jobs:
       - name: Tests
         run: npm test
 
-  images:
-    name: Imágenes Docker
+  compose:
+    name: Docker compose
     runs-on: ubuntu-latest
+    env:
+      WEB_URL: http://localhost:8080
     steps:
       - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
-      - name: Motor y API
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: false
-          cache-from: type=gha,scope=api
-          cache-to: type=gha,scope=api,mode=max
-      - name: Interfaz
-        uses: docker/build-push-action@v6
-        with:
-          context: frontend
-          push: false
-          cache-from: type=gha,scope=web
-          cache-to: type=gha,scope=web,mode=max
+      - name: Construir y levantar
+        run: docker compose up --build --detach --wait --wait-timeout 300
+      - name: La demo quedó cargada
+        run: docker compose logs demo | grep -q "filas de la muestra ESCI"
+      - name: El API responde a través de nginx
+        run: curl --fail --silent --show-error "$WEB_URL/api/health"
+      - name: Una búsqueda de texto a través de nginx
+        run: |
+          curl --fail --silent --show-error "$WEB_URL/api/query" \
+            --header "content-type: application/json" \
+            --data "{\"sql\": \"SELECT titulo FROM catalogo WHERE MATCH(texto, 'funda AND iphone') LIMIT 3;\"}" \
+            | python3 -c "import json, sys; assert len(json.load(sys.stdin)['rows']) == 3"
+      - name: Con el API en marcha, la demo no se vuelve a cargar
+        run: docker compose run --rm demo | grep -q "la demo no se vuelve a cargar"
+      - name: Registro de los servicios
+        if: failure()
+        run: docker compose logs
+      - name: Apagar
+        if: always()
+        run: docker compose down --volumes

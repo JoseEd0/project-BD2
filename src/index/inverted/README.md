@@ -89,8 +89,8 @@ otro formato da `InvertedFormatError` en vez de leer basura.
 
 ```
 productos.inv.seg0.lexicon      IVLX  │ cabecera │ registros del léxico (fijos, ordenados) │ fronteras │
-productos.inv.seg0.terms        IVTM  │ cabecera │ cabl teclad usb … (términos seguidos, sin relleno) │
-productos.inv.seg0.postings     IVPS  │ cabecera │ lista de cabl │ lista de teclad │ lista de usb │ … │
+productos.inv.seg0.terms        IVTM  │ cabecera │ cabl tecl usb … (términos seguidos, sin relleno) │
+productos.inv.seg0.postings     IVPS  │ cabecera │ lista de cabl │ lista de tecl │ lista de usb │ … │
 productos.inv.documents         IVDC  │ cabecera │ doc 0 │ doc 1 │ doc 2 │ … (registros fijos) │
 productos.inv.manifest          IVMF  │ cabecera │ generación de cada segmento │   (sin páginas)
 productos.inv.docmap, .docmap.dir     hash extendible: dirección de la fila → doc_id

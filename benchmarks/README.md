@@ -553,7 +553,7 @@ construcción aparte; la de PostgreSQL no se puede medir igual desde fuera y no 
 
 **BM25 es el más relevante, en los tres tamaños.** Su Precision@10 media es 0.57, 0.52 y
 0.35, frente a 0.55, 0.47 y 0.28 de TF-IDF. Con una palabra las tres técnicas casi
-empatan (a lo sumo 0.04 de diferencia): con un solo término, ordenar es contar
+empatan (a lo sumo 0.040 de diferencia): con un solo término, ordenar es contar
 cuántas veces aparece y en cuánto texto. La ventaja de BM25 está en las consultas largas:
 con 100 000 productos gana por 0.14 con 3 palabras y por 0.07 con 5 o más. Satura la
 frecuencia de cada término (`k1`), así que un producto no gana por repetir una palabra, y

@@ -1,4 +1,5 @@
-"""Búsqueda de texto en SQL: `MATCH`, `SCORE()`, `USING TF_IDF | BM25` y `WITH (k1, b)`.
+"""Búsqueda de texto en SQL: `MATCH`, también booleano, `SCORE()`, `USING TF_IDF | BM25` y
+`WITH (k1, b)`.
 
 Cada consulta se compara con el oráculo del ranking, que aplica las fórmulas directo a los
 textos de la tabla, sin índice: el plan puede cambiar —top-k, orden perezoso, filtros,
@@ -22,7 +23,7 @@ from query.expressions import AmbiguousColumnError, ExpressionError, UnknownColu
 from query.operators import UnsupportedQueryError
 from query.text_search import TextSearchError
 from storage.record_id import RecordId
-from text import Analyzer
+from text import Analyzer, BooleanQueryError
 from txn import LockManager, Session, TransactionManager
 
 PRODUCTS = [
@@ -609,3 +610,104 @@ def test_reopening_the_engine_answers_the_same(config: EngineConfig):
         before = engine.execute(query).rows
     with Engine(config) as engine:
         assert engine.execute(query).rows == before
+
+
+def ids_of(engine: Engine, query: str) -> list[int]:
+    return [row[0] for row in engine.execute(query).rows]
+
+
+@pytest.mark.parametrize("method", list(RankingMethod))
+def test_a_boolean_match_ranks_its_rows_by_the_positive_terms(
+    tienda: Engine, config: EngineConfig, method: RankingMethod
+):
+    """`usb AND NOT cable` son las fichas con USB que no son cables, con el puntaje que
+    tendrían buscando solo `usb`."""
+    without_cable = {3, 5, 6, 9}
+    expected = [
+        (identifier, score)
+        for identifier, score in oracle_ranking(tienda, config, "usb", method)
+        if identifier in without_cable
+    ]
+    rows = tienda.execute(
+        "SELECT id, SCORE() FROM productos WHERE MATCH(texto, 'usb AND NOT cable') "
+        f"USING {method.value}"
+    ).rows
+    assert_same_ranking(rows, expected)
+
+
+def test_a_boolean_match_follows_precedence_and_parentheses(tienda: Engine):
+    query = "SELECT id FROM productos WHERE MATCH(texto, '{}') ORDER BY id"
+    assert ids_of(tienda, query.format("usb AND (teclado OR inalámbrico)")) == [5, 6]
+    assert ids_of(tienda, query.format("usb AND teclado OR inalámbrico")) == [1, 5, 6, 7]
+    assert ids_of(tienda, query.format("teclado AND NOT usb")) == [1]
+    assert ids_of(tienda, query.format("teclado AND usb AND NOT numérico")) == []
+    assert ids_of(tienda, query.format("teclado and usb")) == ids_of(
+        tienda, query.format("teclado usb")
+    )
+
+
+def test_a_boolean_match_works_with_limit_and_a_filter(tienda: Engine):
+    match = "MATCH(texto, 'usb AND NOT cable')"
+    ranked = ids_of(tienda, f"SELECT id FROM productos WHERE {match}")
+    assert ids_of(tienda, f"SELECT id FROM productos WHERE {match} LIMIT 2") == ranked[:2]
+    prices = {identifier: price for identifier, _, price, _ in PRODUCTS}
+    cheap = ids_of(
+        tienda,
+        f"SELECT id FROM productos WHERE {match} AND precio < 35 "
+        "ORDER BY SCORE() DESC LIMIT 2",
+    )
+    assert cheap == [identifier for identifier in ranked if prices[identifier] < 35][:2]
+
+
+def test_explain_shows_the_boolean_expression_and_its_positive_terms(tienda: Engine):
+    result = tienda.execute(
+        "EXPLAIN SELECT id FROM productos WHERE MATCH(texto, 'usb AND NOT (cable OR hub)') "
+        "LIMIT 3"
+    )
+    assert result.plan is not None
+    assert result.plan.children[0].children[0].detail == (
+        "productos.texto MATCH 'usb AND NOT (cable OR hub)' · booleana: usb AND NOT "
+        "(cabl OR hub) · BM25 k1=1.2 b=0.75 · top 3 (índice idx_texto, INVERTED) · "
+        "términos: usb (df 6)"
+    )
+    analyzed = tienda.execute(
+        "EXPLAIN ANALYZE SELECT id FROM productos WHERE MATCH(texto, 'usb AND NOT cable')"
+    )
+    assert "términos: usb (df 6) · 8 postings leídos, 4 documentos puntuados" in scan_detail(
+        analyzed
+    )
+
+
+def test_a_boolean_match_of_stopwords_finds_nothing(tienda: Engine):
+    result = tienda.execute("SELECT id FROM productos WHERE MATCH(texto, 'de AND (la OR NOT con)')")
+    assert result.rows == ()
+    assert "booleana: vacía" in scan_detail(result)
+
+
+def test_the_interface_highlights_only_the_positive_terms(tienda: Engine):
+    result = tienda.execute(
+        "SELECT id FROM productos WHERE MATCH(texto, 'Teclado AND NOT (USB OR luz)')"
+    )
+    assert result.text is not None
+    assert result.text.terms == ("tecl",)
+
+
+@pytest.mark.parametrize(
+    ("query", "message"),
+    [
+        ("(usb AND cable", "falta cerrar el paréntesis"),
+        ("usb) OR cable", "cierra sin haberse abierto"),
+        ("usb AND", "AND de la posición 5 no tiene operando a la derecha"),
+        ("OR usb", "OR de la posición 1 no tiene operando a la izquierda"),
+        ("NOT usb", "solo excluye documentos"),
+        ("usb OR NOT cable", "solo excluye documentos"),
+    ],
+)
+def test_a_malformed_boolean_match_fails_before_reading_rows(
+    tienda: Engine, query: str, message: str
+):
+    tienda.execute("DELETE FROM productos")
+    with pytest.raises(BooleanQueryError, match=message):
+        tienda.execute(f"SELECT id FROM productos WHERE MATCH(texto, '{query}')")
+    with pytest.raises(BooleanQueryError, match=message):
+        tienda.execute(f"EXPLAIN SELECT id FROM productos WHERE MATCH(texto, '{query}')")

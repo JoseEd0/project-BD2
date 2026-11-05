@@ -15,6 +15,7 @@ const ACCESS_OPERATIONS = new Set([
   "SpatialNearestScan",
   "SpatialPolygonScan",
   "TextSearchScan",
+  "VectorSearchScan",
 ]);
 
 const EXTERNAL_OPERATIONS = new Set([

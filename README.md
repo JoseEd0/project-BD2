@@ -119,7 +119,9 @@ demos/               generador del dataset, descarga de lugares reales y simulac
   samples/           los CSV del dataset de demostración; en esci/, la muestra real de Amazon
 docs/                informe.pdf y su fuente LaTeX
 Dockerfile           imagen del motor con su API
-compose.yaml         la aplicación completa en contenedores: api, web y la carga de la demo
+compose.yaml         la aplicación completa en contenedores: api, web y la carga de la demo;
+                     en el perfil bench, PostgreSQL con PostGIS para los experimentos
+docker/postgres/     imagen de PostgreSQL con PostGIS contra la que se miden GiST y GIN
 ```
 
 No hay paquete paraguas: `src` es la raíz de importación, así que se escribe
@@ -212,7 +214,7 @@ en local, como sigue.
 | el motor y el API | Python 3.11 o posterior |
 | la interfaz | Node.js 18 o posterior; 22.18 para `npm test` |
 | redibujar las gráficas (opcional) | `matplotlib`, que se instala con el extra `plots` |
-| medir contra GiST (opcional) | PostgreSQL con la extensión PostGIS y el extra `postgres` |
+| medir contra GiST y GIN (opcional) | PostgreSQL con la extensión PostGIS y el extra `postgres`, o Docker (perfil `bench`) |
 
 ### 3.3 Instalar
 
@@ -314,6 +316,7 @@ están en [`.env.example`](.env.example); las de la interfaz, en
 | `BENCH_POSTGRES_DSN` | conexión al PostgreSQL contra el que se mide GiST | — |
 | `MINIGESTOR_WEB_PORT` | puerto de la interfaz con Docker | `8080` |
 | `MINIGESTOR_API_PORT` | puerto del API con Docker | `8000` |
+| `MINIGESTOR_DATASETS_DIR` | carpeta de datos que el perfil `bench` monta como `data/datasets/` | `./data/datasets` |
 
 Las dos obligatorias no tienen un valor por omisión a propósito: sin `MINIGESTOR_CORS_ORIGINS`
 el API no arranca y dice por qué; sin `VITE_API_URL` la interfaz lo avisa en el panel de
@@ -369,6 +372,11 @@ BENCH_POSTGRES_DSN="dbname=minigestor_bench" .venv/bin/python -m benchmarks.spat
 .venv/bin/python -m benchmarks.plot           # redibuja las gráficas
 .venv/bin/python demos/concurrencia.py        # race condition, transacciones e interbloqueo
 ```
+
+Con Docker no hace falta instalar nada de esto: el perfil `bench` de `compose.yaml` trae
+PostgreSQL con PostGIS y un contenedor con los extras, y corre los mismos comandos
+(`docker compose --profile bench run --rm bench python -m benchmarks.spatial_benchmark ...`).
+Los detalles están en [`benchmarks/README.md`](benchmarks/README.md#con-docker).
 
 Los resultados medidos y sus gráficas están versionados en
 [`benchmarks/results/`](benchmarks/results/) y [`benchmarks/figures/`](benchmarks/figures/).

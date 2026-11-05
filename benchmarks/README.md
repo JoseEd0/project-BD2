@@ -17,6 +17,46 @@ gráficas de [`figures/`](figures/) y todas las tablas de este documento.
 .venv/bin/python -m benchmarks.plot              # redibuja todas las gráficas
 ```
 
+### Con Docker
+
+Los mismos comandos corren sin instalar Python ni PostgreSQL, en el perfil `bench` de
+[`compose.yaml`](../compose.yaml):
+
+- **`postgres`** es PostgreSQL 17 con PostGIS ([`docker/postgres/Dockerfile`](../docker/postgres/Dockerfile)),
+  para `linux/amd64` y `linux/arm64`. No publica ningún puerto.
+- **`bench`** es la imagen del motor con los extras `postgres`, `plots` y `datasets`, y con
+  `BENCH_POSTGRES_DSN` apuntando a `postgres`. Monta `benchmarks/` y `data/datasets/` desde
+  el repositorio, así que los JSON, las gráficas y los datos descargados quedan en su sitio.
+
+```bash
+docker compose --profile bench run --rm bench python demos/descargar_lugares.py \
+    --salida data/datasets/lugares_peru.csv
+docker compose --profile bench run --rm bench python -m benchmarks.esci.download \
+    --salida data/datasets/esci_es
+docker compose --profile bench run --rm bench python -m benchmarks.esci.subsets \
+    --corpus data/datasets/esci_es --sizes 1000 10000 100000 \
+    --queries-per-bucket 50 --max-judged-share 0.5 --seed 20261104
+
+docker compose --profile bench run --rm bench python -m benchmarks.spatial_benchmark \
+    --sizes 1000 10000 100000 --queries 100 --points-file data/datasets/lugares_peru.csv
+docker compose --profile bench run --rm bench python -m benchmarks.text_benchmark \
+    --corpus data/datasets/esci_es --sizes 1000 10000 100000 --repetitions 5
+docker compose --profile bench run --rm bench python -m benchmarks.plot
+
+docker compose --profile bench down       # apaga PostgreSQL
+```
+
+- **Las cifras publicadas se midieron fuera de Docker**, con PostgreSQL 17.10 instalado en el
+  equipo. El contenedor usa la configuración por omisión de PostgreSQL, igual que esa
+  instalación: `shared_buffers` 128 MB, `work_mem` 4 MB y `maintenance_work_mem` 64 MB.
+- **Los tiempos dentro de Docker no se comparan con los publicados:** en macOS y Windows, el
+  contenedor corre en una máquina virtual. El JSON guarda la versión del servidor
+  (`postgres_server_version`), para saber de dónde salió cada medida.
+- **En Linux,** conviene agregar `--user "$(id -u):$(id -g)"` a `run`, para que los archivos
+  que escribe el contenedor en `benchmarks/` y `data/` queden a nombre del usuario.
+- **Si los datos están en otra carpeta,** `MINIGESTOR_DATASETS_DIR` cambia la que se monta
+  como `data/datasets/`.
+
 | Argumento | Qué controla |
 |---|---|
 | `--sizes` | tamaños del conjunto de datos |

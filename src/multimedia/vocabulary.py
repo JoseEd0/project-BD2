@@ -20,9 +20,9 @@ import numpy.typing as npt
 
 from errors import DomainError
 
-Descriptors: TypeAlias = npt.NDArray[np.float32]
+from .descriptors import DESCRIPTOR_DTYPE, Descriptors
+
 WordCounts: TypeAlias = npt.NDArray[np.float32]
-DESCRIPTOR_DTYPE = np.float32
 NEAREST_WORD = 1
 
 

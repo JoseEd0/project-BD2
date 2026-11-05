@@ -1,9 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ApiError, ConnectionError, closeSession, fetchTables } from "../api";
+import { pageHash } from "../routes";
 import type { QueryFailure, QueryResponse, TableInfo } from "../types";
 import { useTheme } from "./useTheme";
 import type { Theme } from "./useTheme";
+
+/** Una consulta que otra página manda al editor de la consola. `version` cambia con cada
+ * envío, para que mandar dos veces la misma también la vuelva a poner. */
+export interface ConsoleDraft {
+  sql: string;
+  version: number;
+}
 
 /**
  * Lo que comparten todas las páginas: la sesión de la pestaña —y con ella la transacción
@@ -22,8 +30,9 @@ export interface Workspace {
   theme: Theme;
   toggleTheme: () => void;
   refreshTables: () => Promise<void>;
-  /** Corre la tarea si no hay otra petición de la sesión en curso; si la hay, no hace nada. */
-  exclusively: (task: () => Promise<void>) => Promise<void>;
+  /** Corre la tarea si no hay otra petición de la sesión en curso; si la hay, no hace nada.
+   * Dice si la corrió. */
+  exclusively: (task: () => Promise<void>) => Promise<boolean>;
   /** Lo que sigue a cada respuesta: el estado de la transacción viene de ella. */
   acknowledge: (response: QueryResponse) => Promise<void>;
   /** El error para mostrar, del motor o de la conexión, ya reflejado en la transacción y la
@@ -32,6 +41,10 @@ export interface Workspace {
   /** Un error de una lectura de fondo (estructura, puntos del mapa): solo puede cambiar el
    * estado de la transacción. */
   noteBackgroundFailure: (error: unknown) => void;
+  /** La última consulta que se mandó a la consola desde otra página. */
+  consoleDraft: ConsoleDraft | null;
+  /** Pone la consulta en el editor de la consola y la abre, sin ejecutarla. */
+  openInConsole: (sql: string) => void;
 }
 
 /** Identificador de la sesión de esta pestaña. Es aleatorio de verdad: quien adivinara el de
@@ -56,6 +69,7 @@ export function useWorkspace(): Workspace {
   const [connected, setConnected] = useState(false);
   const [inTransaction, setInTransaction] = useState(false);
   const [running, setRunning] = useState(false);
+  const [consoleDraft, setConsoleDraft] = useState<ConsoleDraft | null>(null);
   const inFlight = useRef(false);
   const { theme, toggleTheme } = useTheme();
 
@@ -122,16 +136,22 @@ export function useWorkspace(): Workspace {
   // vuelva a pintar: una sentencia que espera un bloqueo se mandaría dos veces.
   const exclusively = useCallback(async (task: () => Promise<void>) => {
     if (inFlight.current) {
-      return;
+      return false;
     }
     inFlight.current = true;
     setRunning(true);
     try {
       await task();
+      return true;
     } finally {
       inFlight.current = false;
       setRunning(false);
     }
+  }, []);
+
+  const openInConsole = useCallback((sql: string) => {
+    setConsoleDraft((previous) => ({ sql, version: (previous?.version ?? 0) + 1 }));
+    window.location.hash = pageHash("consola");
   }, []);
 
   return {
@@ -148,5 +168,7 @@ export function useWorkspace(): Workspace {
     acknowledge,
     acknowledgeFailure,
     noteBackgroundFailure,
+    consoleDraft,
+    openInConsole,
   };
 }

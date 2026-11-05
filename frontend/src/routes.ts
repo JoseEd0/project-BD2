@@ -19,6 +19,10 @@ export const PAGES: readonly Page[] = [
 
 const HOME = PAGES[0];
 
+export function pageHash(id: PageId): string {
+  return PAGES.find((page) => page.id === id)?.hash ?? HOME.hash;
+}
+
 /** La página de un `location.hash`; uno vacío o desconocido lleva a la consola. */
 export function pageFromHash(hash: string): PageId {
   return PAGES.find((page) => page.hash === hash)?.id ?? HOME.id;

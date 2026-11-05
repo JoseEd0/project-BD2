@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { dropAllTables, runQuery, uploadCsv, uploadFileOnly } from "../api";
 import ConfirmDialog from "../components/ConfirmDialog";
@@ -43,6 +43,14 @@ export default function ConsolePage({ workspace }: ConsolePageProps) {
   const [pendingDrop, setPendingDrop] = useState<TableInfo | null>(null);
   const [confirmEmpty, setConfirmEmpty] = useState(false);
   const [inspected, setInspected] = useState<TableInfo | null>(null);
+
+  const { consoleDraft } = workspace;
+  useEffect(() => {
+    if (consoleDraft !== null) {
+      setSql(consoleDraft.sql);
+      setView("consulta");
+    }
+  }, [consoleDraft]);
 
   const sidebar = useSplitter(SIDEBAR.initial, SIDEBAR.min, SIDEBAR.max, "x");
   const editor = useSplitter(EDITOR.initial, EDITOR.min, EDITOR.max, "y");

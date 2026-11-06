@@ -88,9 +88,9 @@ evento `hashchange`), sin dependencias: no hace falta configurar el servidor, y 
 - **Consultas** — editor con **numeración de líneas y resaltado de sintaxis**, `⌘↵` /
   `Ctrl↵` para ejecutar, `Tab` para indentar e historial de las últimas 25 consultas.
   Admite **varias sentencias separadas por `;`**: se ejecutan en orden y el panel muestra
-  las filas de la última consulta. Debajo, **63 atajos** agrupados por bloque de la
+  las filas de la última consulta. Debajo, **71 atajos** agrupados por bloque de la
   exposición —*Carga*, *Índices*, *Plan*, *Externos*, *SQL*, *Borrar*, *Transacciones*,
-  *Espacial* y *Texto*—; un clic escribe la consulta en el editor. Todos se pueden lanzar varias veces sin error: los que
+  *Espacial*, *Texto* y *Multimedia*—; un clic escribe la consulta en el editor. Todos se pueden lanzar varias veces sin error: los que
   crean o borran tablas usan `IF [NOT] EXISTS`, y los de *Borrar* trabajan sobre filas de
   prueba que insertan ellos mismos, así que no tocan el dataset. Para editarlos, ver
   [`src/snippets.ts`](src/snippets.ts).

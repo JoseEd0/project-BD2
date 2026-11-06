@@ -487,6 +487,46 @@ que el texto nuevo ocupe su lugar en el archivo de valores o de que ese lugar se
 uno que cambia otra columna no toca el índice. `DROP INDEX` y `DROP TABLE` borran todos
 sus archivos, segmentos incluidos, y el catálogo guarda su `idioma` para reabrirlo igual.
 
+## Búsqueda por similitud
+
+`SIMILAR_TO`, `SIMILARITY_SCORE()`, `USING HNSW | IVF` y `WITH METRIC = …` (gramática en
+[`sql/README.md`](../sql/README.md#búsqueda-por-similitud)), sobre el índice de
+[`index/similarity/`](../index/similarity/README.md). La misma forma que la de texto, y lo
+que comparten —sacar la condición del `WHERE`, leer el puntaje como columna virtual y
+reconocer el `ORDER BY` del puntaje— vive una sola vez en `scored_search.py`:
+
+| Archivo | Qué hace |
+|---|---|
+| `scored_search.py` | lo común a `MATCH` y `SIMILAR_TO`: la condición, el puntaje y su orden |
+| `similarity_search.py` | reconoce el `SIMILAR_TO` del `WHERE`, elige el índice y la métrica, resuelve el archivo y rechaza lo que no se puede responder |
+| `similarity_operators.py` | `VectorSearchScan`, el camino de acceso que entrega las k filas más parecidas con su puntaje |
+
+```sql
+SELECT titulo, SIMILARITY_SCORE() AS score FROM imagenes
+    WHERE SIMILAR_TO('consulta.jpg', k = 10) AND categoria = 'SHOES'
+    USING HNSW WITH METRIC = cosine, ef_search = 100
+    ORDER BY score DESC;
+```
+
+- **El índice se elige** por el `USING` y, si la consulta nombra la columna
+  (`SIMILAR_TO(ruta, 'archivo', k = 10)`), por ella; sin ninguno de los dos, es el único
+  índice de similitud de las tablas de la consulta. Si hay varios, el error pide elegir.
+- **El resto del `WHERE` filtra antes de buscar.** Con una sola tabla, sus condiciones
+  pasan a `VectorSearchScan` como filtro previo, con su propio camino de acceso (un índice si
+  lo hay), y la búsqueda solo puede devolver esas filas: la consulta da las k más parecidas
+  que lo cumplen, no k menos las que un filtro descarta después. El plan muestra ese acceso
+  como hijo. Con un `JOIN`, o con una condición sobre el puntaje, se aplican después.
+- **Métrica distinta a la del índice:** el índice se construyó para ordenar con la suya, así
+  que se compara contra todas las filas y el plan lo dice. pgvector hace lo mismo.
+- **No hay búsqueda sin índice.** Extraer las características de cada fila en cada consulta
+  sería absurdo; sin índice, el error dice el `CREATE INDEX` que falta.
+- `ORDER BY score DESC` no reordena: es el orden en que el acceso ya entrega las filas.
+
+Tras ejecutarse, el plan dice cuánto tardó extraer la consulta, cuántas distancias se
+calcularon, cuántas filas dejó el filtro y, si las hubo, las pasadas extra o la búsqueda
+exacta y por qué. La respuesta lleva en `similarity` la tabla, la columna, el índice, la
+métrica y `k`, para que la interfaz pinte la galería.
+
 ## Motor (`engine.py`)
 
 Ejecuta `CREATE`/`DROP TABLE`, `CREATE`/`DROP INDEX`, `INSERT`, `UPDATE`, `DELETE`,

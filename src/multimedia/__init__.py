@@ -21,7 +21,12 @@ from .parallel import (
     extract_each,
     extract_in_parallel,
 )
-from .vocabulary import NotEnoughDescriptorsError, Vocabulary, training_sample
+from .vocabulary import (
+    NotEnoughDescriptorsError,
+    Vocabulary,
+    training_positions,
+    training_sample,
+)
 from .weighting import inverse_document_frequencies, tf_idf
 
 __all__ = [
@@ -51,5 +56,6 @@ __all__ = [
     "media_kind_of",
     "mfcc_dimension",
     "tf_idf",
+    "training_positions",
     "training_sample",
 ]

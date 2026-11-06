@@ -796,7 +796,7 @@ def test_an_upload_that_announces_too_many_bytes_is_refused_before_reading_it(
     def never_copied(*_: object) -> None:
         raise AssertionError("la ruta no debía recibir el archivo")
 
-    monkeypatch.setattr(uploads_route, "_copy_limited", never_copied)
+    monkeypatch.setattr(uploads_route, "copy_limited", never_copied)
     small = replace(config, max_upload_bytes=1024)
     oversized = b"id\n" + b"1\n" * uploads_route.MULTIPART_ALLOWANCE_BYTES
     with TestClient(create_app(small)) as limited:
@@ -811,13 +811,13 @@ def test_each_upload_writes_to_its_own_temporary_file(
 ):
     """Dos subidas con el mismo nombre a la vez no pueden escribir en el mismo temporal."""
     targets: list[Path] = []
-    original = uploads_route._copy_limited
+    original = uploads_route.copy_limited
 
     def recording(source: BinaryIO, target: Path, limit: int) -> None:
         targets.append(target)
         original(source, target, limit)
 
-    monkeypatch.setattr(uploads_route, "_copy_limited", recording)
+    monkeypatch.setattr(uploads_route, "copy_limited", recording)
     for _ in range(2):
         assert post_csv(client, "/files/upload", "datos", CSV_CONTENT.encode()).status_code == 200
     assert len(set(targets)) == 2

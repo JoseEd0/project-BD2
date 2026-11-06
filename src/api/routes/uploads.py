@@ -21,7 +21,8 @@ from sql.nodes import CreateTableFromFileStatement, IndexSpec, IndexType
 
 FILE_UPLOAD_PATH = "/files/upload"
 TABLE_UPLOAD_PATH = "/tables/upload"
-UPLOAD_PATHS = frozenset({FILE_UPLOAD_PATH, TABLE_UPLOAD_PATH})
+MEDIA_UPLOAD_PATH = "/media/queries"
+UPLOAD_PATHS = frozenset({FILE_UPLOAD_PATH, TABLE_UPLOAD_PATH, MEDIA_UPLOAD_PATH})
 CONTENT_LENGTH_HEADER = "content-length"
 # El límite es del archivo, pero Content-Length mide el cuerpo multipart entero: los
 # separadores, las cabeceras de cada parte y los campos de texto del formulario.
@@ -76,17 +77,17 @@ def upload_file(
     `CREATE TABLE ... FROM FILE`, eligiendo la organización en el propio SQL.
     """
     _require_identifier(name, "archivo")
-    path = _uploads_of(service) / f"{name}{CSV_SUFFIX}"
+    path = uploads_of(service) / f"{name}{CSV_SUFFIX}"
     partial = path.with_name(f"{path.name}.{uuid.uuid4().hex}{PARTIAL_SUFFIX}")
     try:
-        _copy_limited(file.file, partial, service.config.max_upload_bytes)
+        copy_limited(file.file, partial, service.config.max_upload_bytes)
         columns = read_header(partial, service.config)
         partial.replace(path)
     except LoaderError as error:
         raise as_http_error(error) from error
     finally:
         partial.unlink(missing_ok=True)
-    return FileUploadResponse(path=_path_for_sql(path), columns=columns)
+    return FileUploadResponse(path=path_for_sql(path), columns=columns)
 
 
 @router.post(TABLE_UPLOAD_PATH, response_model=QueryResponse)
@@ -104,11 +105,11 @@ def upload(
     borra al terminar, haya salido bien o no.
     """
     statement = _upload_statement(name, organization, key_column)
-    workspace = _uploads_of(service) / uuid.uuid4().hex
+    workspace = uploads_of(service) / uuid.uuid4().hex
     workspace.mkdir()
     try:
         path = workspace / f"{name}{CSV_SUFFIX}"
-        _copy_limited(file.file, path, service.config.max_upload_bytes)
+        copy_limited(file.file, path, service.config.max_upload_bytes)
         with service.session(session_id) as session:
             try:
                 result = session.run(_with_path(statement, path))
@@ -166,13 +167,13 @@ def _require_identifier(name: str, what: str) -> None:
         raise invalid_request(f"'{name}' no es un nombre de {what} válido")
 
 
-def _uploads_of(service: Service) -> Path:
+def uploads_of(service: Service) -> Path:
     directory = service.config.data_directory / UPLOAD_DIRECTORY
     directory.mkdir(parents=True, exist_ok=True)
     return directory
 
 
-def _copy_limited(source: BinaryIO, target: Path, limit: int) -> None:
+def copy_limited(source: BinaryIO, target: Path, limit: int) -> None:
     """Copia el archivo subido por bloques, sin tenerlo entero en memoria.
 
     Raises:
@@ -191,7 +192,7 @@ def _copy_limited(source: BinaryIO, target: Path, limit: int) -> None:
         raise invalid_request("el archivo está vacío") if copied == 0 else upload_too_large(limit)
 
 
-def _path_for_sql(path: Path) -> str:
+def path_for_sql(path: Path) -> str:
     """Ruta tal como la resolverá el motor: relativa al directorio del proceso si cabe.
 
     El motor abre `FROM FILE` respecto al directorio desde el que corre el API, así que una

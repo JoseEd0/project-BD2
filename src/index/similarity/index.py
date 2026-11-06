@@ -58,6 +58,8 @@ from storage.record import FieldReader
 from storage.record_id import RecordId
 from storage.types import Key
 
+from .spill import DescriptorSpill
+
 FEATURES_SUFFIX = ".features"
 HNSW_KIND = "hnsw"
 IVF_KIND = "ivf"
@@ -217,12 +219,16 @@ class SimilarityIndex(ColumnIndex):
             if isinstance(value := self._value_of(record), str)
         ]
         _require_one_kind(files)
-        training = training_sample(
-            (descriptors for _, descriptors in self._extracted(self._training_files(files))),
-            self._config.vocabulary_size * self._config.kmeans_samples_per_word,
-            self._config.kmeans_seed,
-        )
-        self._store.build(self._extracted(files), training)
+        with DescriptorSpill(self._path) as spill:
+            training = training_sample(
+                (
+                    spill.keep(record_id, descriptors)
+                    for record_id, descriptors in self._extracted(self._training_files(files))
+                ),
+                self._config.vocabulary_size * self._config.kmeans_samples_per_word,
+                self._config.kmeans_seed,
+            )
+            self._store.build(self._reusing(spill, files), training)
         self._vectors = self._from_store()
         self._save()
 
@@ -377,6 +383,19 @@ class SimilarityIndex(ColumnIndex):
             len(files), size=count, replace=False
         )
         return [files[position] for position in sorted(chosen.tolist())]
+
+    def _reusing(
+        self, spill: DescriptorSpill, files: list[tuple[RecordId, Path]]
+    ) -> Iterator[tuple[RecordId, Descriptors]]:
+        """Los descriptores de todas las filas en el orden de la tabla: los de la muestra,
+        del archivo temporal; los demás, extraídos. El orden es el mismo que sin la muestra
+        guardada, así que el almacén y el índice salen idénticos."""
+        pending = self._extracted([item for item in files if item[0] not in spill])
+        for record_id, _ in files:
+            if record_id in spill:
+                yield record_id, spill.read(record_id)
+            else:
+                yield next(pending)
 
     def _extracted(
         self, files: list[tuple[RecordId, Path]]

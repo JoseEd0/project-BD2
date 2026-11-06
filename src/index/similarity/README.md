@@ -22,7 +22,18 @@ ruta ─► ExtractFeatures (SIFT / MFCC) ─► vocabulario + TF-IDF ─► vec
 4. llena el índice de vectores con los vectores TF-IDF y lo guarda.
 
 La extracción va en paralelo (`feature_workers` procesos) cuando hay al menos un lote por
-proceso; si no, en el propio proceso. Un archivo que no se puede leer detiene la
+proceso; si no, en el propio proceso. Los descriptores de la muestra se guardan en un
+archivo temporal ([`spill.py`](spill.py)) y el paso 3 los lee de ahí en vez de volver a
+decodificar: con una tabla de hasta 2 000 filas, la muestra es la tabla entera. El orden de
+las filas no cambia, así que el almacén y el índice salen idénticos a los de antes.
+
+| `CREATE INDEX` (dos corridas alternadas, la misma máquina) | Decodificando dos veces | Con la muestra guardada |
+|---|---:|---:|
+| 1 000 fotos de ABO, HNSW | 2,68 s y 2,85 s | 2,03 s y 1,91 s |
+| 2 000 pistas de FMA de 30 s, IVF | 22,81 s y 23,19 s | 13,12 s y 12,95 s |
+
+El archivo temporal crece con la muestra, no con la tabla: unos 160 MB con 2 000 fotos y
+unos 900 MB con 2 000 pistas de 30 s, y se borra al terminar. Un archivo que no se puede leer detiene la
 construcción con su error, y como `CREATE INDEX` es todo o nada, no queda nada a medias.
 Una tabla vacía no tiene con qué entrenar el vocabulario: el índice se crea sobre una
 tabla con filas.

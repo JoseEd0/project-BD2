@@ -15,10 +15,19 @@ def table_names(data_directory: Path) -> list[str]:
 
 
 def test_an_empty_database_gets_the_demo(dataset: ModuleType, tmp_path: Path):
-    dataset.main(["--data-dir", str(tmp_path), "--escala", SMALL_SCALE, "--solo-si-vacia"])
+    # Sin datasets multimedia: la prueba no depende de lo que el equipo tenga descargado.
+    no_datasets = tmp_path / "sin-datasets"
+    dataset.main(
+        [
+            "--data-dir", str(tmp_path / "base"),
+            "--escala", SMALL_SCALE,
+            "--solo-si-vacia",
+            "--datasets", str(no_datasets),
+        ]
+    )
 
     expected = sorted([spec.name for spec in dataset.SPECS] + [t.spec.name for t in dataset.ESCI_TABLES])
-    assert table_names(tmp_path) == expected
+    assert table_names(tmp_path / "base") == expected
 
 
 def test_a_database_with_tables_is_left_as_it_is(dataset: ModuleType, tmp_path: Path):

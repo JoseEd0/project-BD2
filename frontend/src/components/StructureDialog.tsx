@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { ApiError, fetchStructure } from "../api";
 import { averageFill } from "../lib/spatial";
 import InvertedIndexView from "./InvertedIndexView";
+import SimilarityIndexView from "./SimilarityIndexView";
 import Modal from "./Modal";
 import Stat from "./Stat";
 import type {
@@ -210,6 +211,7 @@ function IndexView({ structure }: { structure: IndexStructure }) {
   if (structure.kind === "bplustree") return <TreeView tree={structure} />;
   if (structure.kind === "rtree") return <RTreeView tree={structure} />;
   if (structure.kind === "inverted") return <InvertedIndexView inverted={structure} />;
+  if (structure.kind === "hnsw" || structure.kind === "ivf") return <SimilarityIndexView index={structure} />;
   return <HashView hash={structure} />;
 }
 

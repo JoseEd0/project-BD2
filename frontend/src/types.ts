@@ -226,7 +226,54 @@ export interface InvertedStructure {
   top_terms: InvertedTerm[];
 }
 
-export type IndexStructure = TreeStructure | HashStructure | RTreeStructure | InvertedStructure;
+/** El almacén de características de un índice de similitud: vocabulario e histogramas. */
+export interface FeatureStoreStructure {
+  built: boolean;
+  vocabulary_size?: number;
+  descriptor_dimension?: number;
+  objects?: number;
+  objects_at_build?: number;
+  words_in_use?: number;
+  pages?: number;
+}
+
+interface SimilarityCommon {
+  metric: "euclidean" | "dot" | "cosine";
+  dimension?: number;
+  vectors?: number;
+  media: "image" | "audio" | null;
+  features: FeatureStoreStructure;
+}
+
+export interface HnswStructure extends SimilarityCommon {
+  kind: "hnsw";
+  m?: number;
+  ef_construction?: number;
+  ef_search?: number;
+  nodes?: number;
+  tombstones?: number;
+  /** Cuántos nodos llegan a cada nivel, del 0 hacia arriba. */
+  nodes_per_level?: number[];
+  mean_base_degree?: number;
+}
+
+export interface IvfStructure extends SimilarityCommon {
+  kind: "ivf";
+  lists?: number;
+  probes?: number;
+  trained_on?: number;
+  list_sizes?: number[];
+  imbalance?: number;
+}
+
+export type SimilarityStructure = HnswStructure | IvfStructure;
+
+export type IndexStructure =
+  | TreeStructure
+  | HashStructure
+  | RTreeStructure
+  | InvertedStructure
+  | SimilarityStructure;
 
 export interface HeapStorage {
   kind: "heap";

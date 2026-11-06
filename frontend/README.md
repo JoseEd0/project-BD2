@@ -219,6 +219,36 @@ Es una aproximación, porque el stemmer de Snowball no se repite en el navegador
 
 Las funciones son puras y tienen tests (`npm test`, ver abajo).
 
+## Multimedia
+
+La página de la Parte 4 ([`src/pages/MediaSearchPage.tsx`](src/pages/MediaSearchPage.tsx)),
+con el mismo criterio que la de texto: **cada búsqueda es un `SIMILAR_TO` en SQL**, el que se
+ve escrito sobre su resultado, y se puede copiar o abrir en la consola.
+
+- **La columna** es la que tiene un índice HNSW o IVF; si hay varias, se elige arriba, junto
+  al `k` del `SIMILAR_TO`. Sin ninguna, la página dice cómo crear el índice.
+- **El archivo de la consulta** se arrastra o se elige (lo guarda `POST /media/queries` y la
+  consulta usa la ruta que devuelve), o se toma de una de las primeras filas de la tabla. Con
+  una fila se conoce su clase —categoría, género o palabra—, y cada resultado dice cuántos
+  vecinos la comparten.
+- **Dos consultas lado a lado.** Por omisión, los dos índices de la columna con el coseno, o
+  el mismo índice con coseno y con euclidiana. Lo que cambia entre ellas son cláusulas del
+  SQL: `USING HNSW | IVF`, `METRIC = …` y el esfuerzo (`ef_search` o `probes`; vacío, el del
+  índice). Con una métrica distinta a la del índice, el plan explica que comparó contra
+  todas las filas.
+- **La galería es una tabla con cabeceras:** `#`, el archivo (miniatura servida por
+  `GET /media/thumbnail`, o un reproductor que pide el audio por rangos a `GET /media/file`),
+  la fila con su clase, marcada si coincide con la de la consulta sin depender solo del
+  color, y la similitud con una barra relativa a la mejor.
+- **Debajo, en pestañas,** el plan de cada consulta (`VectorSearchScan`) y cada índice de la
+  columna: vectores, palabras del vocabulario y en uso, y los nodos por nivel de HNSW o el
+  tamaño de cada lista de IVF. La misma vista sale en «⌬ Estructura» de la consola.
+
+Las consultas van de una en una por la sesión de la pestaña
+([`useSimilaritySearch`](src/hooks/useSimilaritySearch.ts)), y toda la lógica sin React —el
+SQL, las tarjetas, los valores por omisión— está en
+[`src/lib/mediaSearch.ts`](src/lib/mediaSearch.ts), con sus tests.
+
 ## Detalles de la interfaz
 
 - **Tema claro y oscuro**, con el botón `☾` / `☀` de la cabecera. Arranca con el tema del
@@ -290,17 +320,20 @@ src/
   pages/
     ConsolePage.tsx      la consola SQL: estado y disposición de sus paneles
     TextSearchPage.tsx   la búsqueda de texto: estado y disposición
+    MediaSearchPage.tsx  la búsqueda multimedia: archivo, dos consultas y detalle
   hooks/
     useWorkspace.ts      sesión, transacción, tablas, tema y una petición a la vez
     useHashRoute.ts      la página que pide la dirección
     useInvertedIndex.ts  forma del índice invertido de una columna
     useLiveSearch.ts     búsqueda mientras se escribe, de una consulta a la vez
+    useSimilaritySearch.ts  las dos consultas SIMILAR_TO, de una en una
     useSplitter.ts       divisores arrastrables
     useTheme.ts          tema claro u oscuro, recordado entre visitas
     useLeafletMap.ts     ciclo de vida del mapa de Leaflet
   lib/
     textHighlight.ts     resaltado de los términos analizados sobre el texto original
     textSearch.ts        objetivos de búsqueda, SQL de cada ranking y tarjetas
+    mediaSearch.ts       columnas con HNSW o IVF, SQL de cada SIMILAR_TO y galería
     bytes.ts             tamaños en B, KB y MB
     highlight.ts         tokenizador de SQL para el resaltado
     relations.ts         inferencia de relaciones y reparto en columnas
@@ -320,11 +353,14 @@ src/
     ResultsPanel.tsx     pestañas de filas, mensajes y mapa; exportación y errores
     MapPanel.tsx         mapa con el resultado, las figuras y los MBR
     PlanPanel.tsx        árbol del plan con leyenda (PlanView, también en la página de texto)
-    StructureDialog.tsx  estructura física: B+, hash, R-Tree, invertido y valores TEXT
+    StructureDialog.tsx  estructura física: B+, hash, R-Tree, invertido, HNSW, IVF y TEXT
     UploadDialog.tsx     carga de CSV
     SchemaView.tsx       diagrama de esquema y relaciones
     StatusBar.tsx        barra de estado
     text/                la página de texto: búsqueda, cláusulas, rankings y detalle
+    media/               la página multimedia: consulta, paneles, galería y detalle
+    SimilarityIndexView.tsx  forma de un índice HNSW o IVF (en ⌬ y en la página multimedia)
+    CopyButton.tsx       copia el SQL de una consulta
   styles.css             los dos temas, por variables CSS
 tests/                   tests de lib/ (node --test)
 ```

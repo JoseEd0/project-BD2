@@ -394,7 +394,7 @@ Los tests siguen la estructura de `src/`, así que se pueden ejecutar por módul
 ### 3.8 Reproducir los experimentos
 
 ```bash
-.venv/bin/pip install -e ".[plots,postgres]"
+.venv/bin/pip install -e ".[plots,postgres,usearch]"
 .venv/bin/python -m benchmarks.storage_benchmark --sizes 1000 10000 100000
 .venv/bin/python -m benchmarks.index_benchmark   --sizes 1000 10000 100000
 
@@ -406,6 +406,10 @@ BENCH_POSTGRES_DSN="dbname=minigestor_bench" .venv/bin/python -m benchmarks.spat
 # imágenes y audio de la Parte 4: 1 000, 10 000 y 100 000 más las consultas
 .venv/bin/python -m benchmarks.multimedia.abo --salida data/datasets/abo
 .venv/bin/python -m benchmarks.multimedia.speech_commands --salida data/datasets/speech_commands
+# IVF vs HNSW y euclidiana vs coseno, contra USearch y pgvector (ver benchmarks/README.md §5)
+BENCH_POSTGRES_DSN="host=127.0.0.1 port=55432 dbname=minigestor_bench user=postgres" \
+    .venv/bin/python -m benchmarks.multimedia_benchmark --images data/datasets/abo \
+    --audio data/datasets/speech_commands --sizes 1000 10000 100000
 
 # velocidad del analizador de texto, sobre texto real en español
 .venv/bin/python -m benchmarks.text_analyzer_benchmark --repetitions 5 \

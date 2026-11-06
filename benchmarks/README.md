@@ -14,6 +14,8 @@ gráficas de [`figures/`](figures/) y todas las tablas de este documento.
     --input Proyecto_Integrador_BD2.md docs/latex/informe/*.tex
 .venv/bin/python -m benchmarks.text_benchmark --corpus data/datasets/esci_es \
     --sizes 1000 10000 100000 --repetitions 5
+.venv/bin/python -m benchmarks.multimedia_benchmark --images data/datasets/abo \
+    --audio data/datasets/speech_commands --sizes 1000 10000 100000 --repetitions 3
 .venv/bin/python -m benchmarks.plot              # redibuja todas las gráficas
 ```
 
@@ -49,6 +51,8 @@ docker compose --profile bench run --rm bench python -m benchmarks.spatial_bench
     --sizes 1000 10000 100000 --queries 100 --points-file data/datasets/lugares_peru.csv
 docker compose --profile bench run --rm bench python -m benchmarks.text_benchmark \
     --corpus data/datasets/esci_es --sizes 1000 10000 100000 --repetitions 5
+docker compose --profile bench run --rm bench python -m benchmarks.multimedia_benchmark \
+    --images data/datasets/abo --audio data/datasets/speech_commands --sizes 1000 10000 100000
 docker compose --profile bench run --rm bench python -m benchmarks.plot
 
 docker compose --profile bench down       # apaga PostgreSQL
@@ -57,6 +61,10 @@ docker compose --profile bench down       # apaga PostgreSQL
 - **Las cifras publicadas se midieron fuera de Docker**, con PostgreSQL 17.10 instalado en el
   equipo. El contenedor usa la configuración por omisión de PostgreSQL, igual que esa
   instalación: `shared_buffers` 128 MB, `work_mem` 4 MB y `maintenance_work_mem` 64 MB.
+  **Salvo pgvector:** la instalación local no lo trae, así que el experimento multimedia
+  corrió el gestor fuera de Docker y PostgreSQL con pgvector en el contenedor de la imagen
+  `postgres` del perfil, con un puerto publicado solo para la medida (ver
+  [5. Reproducirlo](#reproducirlo-2)).
 - **Los tiempos dentro de Docker no se comparan con los publicados:** en macOS y Windows, el
   contenedor corre en una máquina virtual. El JSON guarda la versión del servidor
   (`postgres_server_version`), para saber de dónde salió cada medida.
@@ -79,6 +87,15 @@ docker compose --profile bench down       # apaga PostgreSQL
 | `--postgres-configuration`, `--ts-rank-normalization` | diccionario de PostgreSQL y normalización de `ts_rank_cd` |
 | `--input`, `--repetitions`, `--language` | textos, pasadas calientes e idioma de la medida del analizador de texto ([resultado](../src/text/README.md#velocidad-medida)); `--repetitions` y `--language` también en el de texto |
 | `--queries` | en el experimento de texto, consultas por cubeta (por omisión, todas las del subconjunto) |
+| `--images`, `--audio` | carpetas de ABO y de Speech Commands (experimento multimedia) |
+| `--metrics`, `--ivf-probes`, `--ef-search` | métricas y esfuerzos que barre el experimento multimedia |
+| `--threads`, `--workers` | hilos de FAISS, USearch y pgvector, y procesos que extraen las características |
+| `--hnsw-m`, `--hnsw-ef-construction`, `--hnsw-ef-search`, `--vocabulary` | parámetros de HNSW y palabras del vocabulario |
+| `--sql-sizes`, `--sql-metric` | tamaños y métrica en que el gestor se mide por SQL de punta a punta |
+| `--gallery-metric`, `--gallery-cases`, `--gallery-neighbours` | qué galería se arma |
+| `--build-repetitions` | construcciones de cada índice (texto y multimedia) |
+| `--postgres-maintenance-work-mem` | memoria con la que pgvector construye sus índices |
+| `--features-dir` | guarda las características y las reutiliza en la siguiente ejecución |
 | `--output` | dónde dejar el JSON |
 
 | Experimento | Qué compara | Gráficas |
@@ -87,6 +104,7 @@ docker compose --profile bench down       # apaga PostgreSQL
 | [2. Indexación](#2-indexación--b-agrupado-vs-b-no-agrupado-vs-hash-extendible) | B+ agrupado vs B+ no agrupado vs hash extendible | [índices](figures/indices.png) |
 | [3. Datos espaciales](#3-datos-espaciales--búsqueda-secuencial-vs-r-tree-vs-gist) | búsqueda secuencial vs R-Tree vs GiST de PostgreSQL | [radio](figures/espacial-radio.png), [k-NN](figures/espacial-knn.png), [índice](figures/espacial-indice.png), [nodos](figures/espacial-nodos.png) |
 | [4. Búsqueda de texto](#4-búsqueda-de-texto--tf-idf--coseno-vs-bm25-vs-gin) | TF-IDF + coseno vs BM25 vs GIN de PostgreSQL | [consultas](figures/texto-consultas.png), [relevancia](figures/texto-relevancia.png), [índice](figures/texto-indice.png) |
+| [5. Búsqueda por similitud](#5-búsqueda-por-similitud--ivf-vs-hnsw-y-euclidiana-vs-coseno) | IVF vs HNSW y euclidiana vs coseno, con FAISS, USearch y pgvector | [consultas](figures/multimedia-consulta.png), [curvas](figures/multimedia-curvas.png), [recall](figures/multimedia-recall.png), [clase](figures/multimedia-categoria.png), [características](figures/multimedia-caracteristicas.png), [índice](figures/multimedia-indice.png), [capas](figures/multimedia-capas.png), galerías de [imágenes](figures/multimedia-galeria-imagenes.png) y [audio](figures/multimedia-galeria-audio.png) |
 
 **Cómo leer las gráficas.** Cada una es una fila de paneles, uno por operación, con el
 número de filas en horizontal y una línea por técnica. Los dos ejes son logarítmicos: los
@@ -664,6 +682,371 @@ Tarda unos seis minutos, casi todo en construir el índice de 100 000 productos 
 y una cuarta con `tracemalloc`). El experimento no escribe los subconjuntos: si falta uno,
 dice qué comando lo crea. En PostgreSQL solo usa tablas temporales. Sin
 `BENCH_POSTGRES_DSN` mide TF-IDF y BM25 y omite GIN.
+
+## 5. Búsqueda por similitud — IVF vs HNSW y euclidiana vs coseno
+
+`multimedia_benchmark.py` responde las mismas consultas, sobre los mismos vectores, con
+estas técnicas:
+
+| Técnica | Qué es |
+|---|---|
+| **búsqueda exacta (gestor)** | `FlatIndex` de [`src/index/vector/`](../src/index/vector/README.md): compara contra todos; es lo que hace el plan sin un índice de la métrica pedida |
+| **IVF (gestor)** | `IVFIndex` de [`src/index/ivf/`](../src/index/ivf/README.md): `IndexIVFFlat` de FAISS con √N listas y √listas `probes`, más la capa del gestor |
+| **HNSW (gestor)** | `HNSWIndex` de [`src/index/hnsw/`](../src/index/hnsw/README.md): `IndexHNSWFlat` de FAISS con `M` 16, `ef_construction` 64 y `ef_search` 40 |
+| **IVF y HNSW (FAISS directo)** | las mismas estructuras de FAISS con los mismos parámetros, sin el gestor |
+| **HNSW (USearch)** | USearch 2.26 en `float32` con el mismo `M`, `ef_construction` y `ef` (el HNSW que usa DuckDB) |
+| **ivfflat y hnsw (pgvector)** | pgvector 0.8.7 en PostgreSQL 17.11: `ivfflat` con las mismas listas y `probes`; `hnsw` con `m` 16 y `ef_construction` 64 |
+| **IVF y HNSW (gestor, SQL)** | `CREATE INDEX ... USING HNSW | IVF (ruta)` y `SIMILAR_TO('consulta.jpg', k = 10)` de punta a punta |
+
+**Los datos son reales.** Fotos de producto de ABO (la clase es la categoría del producto)
+y clips de un segundo de Speech Commands (la clase es la palabra), en los subconjuntos
+anidados de 1 000, 10 000 y 100 000 objetos que describe
+[`multimedia/README.md`](multimedia/README.md). Las 500 consultas de cada dataset **no están
+en la base**: en el audio, ni siquiera su hablante.
+
+**Todas las técnicas comparan los mismos vectores.** Cada colección pasa una vez por el
+camino de `CREATE INDEX`: SIFT (imágenes) o MFCC (audio), un vocabulario de 256 palabras con
+k-means sobre una muestra de 2 000 objetos, conteos y TF-IDF. Hay **un vocabulario por
+tamaño**, como lo construiría el gestor sobre esa tabla, así que entre tamaños cambian los
+vectores, no solo cuántos hay. Por SQL, `CREATE INDEX` extrae por su cuenta con el mismo
+camino y llega a los mismos vectores: con 1 000 objetos su Recall@10 es idéntico al del
+índice que construye el experimento. Con más, difiere un poco por cómo llena el índice (ver
+[Cuánto cuesta cada capa del gestor](#cuánto-cuesta-cada-capa-del-gestor)).
+
+**Qué se mide.**
+
+- **Recall@10** contra la búsqueda exacta, calculada aparte con numpy en `float64`, sin
+  ninguna de las bibliotecas que se comparan. Un vecino cuenta si su puntaje exacto llega al
+  décimo mejor: dos fotos con el mismo vector empatan y vale cualquiera.
+- **Vecinos de su clase@10**: qué parte de los 10 vecinos es de la categoría o la palabra de
+  la consulta. Mide la **representación**, no el índice, y es lo que separa a la euclidiana
+  del coseno: con la búsqueda exacta, las dos tienen Recall@10 de 1.
+- **Tiempo por consulta**: cada consulta se responde 3 veces y cuenta su mediana; se
+  reportan la mediana (p50) y el percentil 95 entre las 500. A pgvector se le pregunta
+  desde el cliente, con el viaje incluido, y `EXPLAIN ANALYZE` da además el tiempo dentro
+  del servidor.
+- **Construcción**: cada etapa de las características por separado y cada índice desde los
+  vectores ya calculados, mediana de 3 construcciones. **Memoria**: lo que ocupa la
+  estructura de cada biblioteca (`serialize_index` de FAISS, `memory_usage` de USearch,
+  `pg_relation_size` del índice), y aparte los objetos de Python que retiene la capa del
+  gestor. **Disco**: el archivo que guarda cada uno.
+- **Curvas de recall contra latencia**: `probes` de 1 a 128 e `ef_search` de 10 a 320.
+
+**Un hilo.** FAISS, USearch y pgvector construyen y buscan con un hilo
+(`--threads 1`; en pgvector, `max_parallel_maintenance_workers` 0), para comparar
+algoritmos y no repartos de núcleos. La extracción sí usa los 12 procesos del gestor.
+
+**Dónde corrió.** Apple M4 Pro (12 núcleos), macOS, Python 3.12, FAISS 1.15.1. El equipo
+estaba compartido con otro trabajo (carga media de 6 a 16 durante la medida, guardada en el
+JSON). **pgvector corrió en Docker:** la instalación local de PostgreSQL no lo trae, así que
+PostgreSQL 17.11 con pgvector corrió en la imagen del perfil `bench`, con un puerto publicado
+solo para la medida, `shared_buffers` de 1 GB y `maintenance_work_mem` de 1 GB para que el
+grafo quepa al construir. En macOS el contenedor corre en una máquina virtual: sus tiempos
+incluyen ese costo, y el del servidor se reporta aparte.
+
+### Antes de medir: ¿qué tan buena es la representación?
+
+![Vecinos de la clase de la consulta con la búsqueda exacta, IVF y HNSW, por métrica](figures/multimedia-categoria.png)
+
+Vecinos de su clase@10 de la **búsqueda exacta**, frente a elegir 10 vecinos al azar:
+
+| Dataset | Objetos | Al azar | Euclidiana | Coseno | Producto punto |
+|---|---:|---:|---:|---:|---:|
+| Imágenes | 1 000 | 0.28 | 0.40 | **0.44** | 0.36 |
+|  | 10 000 | 0.27 | 0.51 | **0.53** | 0.31 |
+|  | 100 000 | 0.27 | 0.60 | **0.63** | 0.11 |
+| Audio | 1 000 | 0.03 | **0.050** | **0.050** | 0.047 |
+|  | 10 000 | 0.03 | **0.074** | 0.070 | 0.050 |
+|  | 100 000 | 0.03 | **0.131** | 0.126 | 0.052 |
+
+- **En imágenes el coseno gana en los tres tamaños**, por 0.02 a 0.04. Una foto con pocos
+  descriptores tiene un histograma con pocos valores grandes y una norma alta; la
+  euclidiana la aleja de todo, el coseno solo mira hacia dónde apunta.
+- **En audio, euclidiana y coseno empatan** (0.131 y 0.126 con 100 000): todos los clips duran
+  un segundo y dan 101 descriptores, así que sus vectores tienen normas parecidas y las dos
+  métricas ordenan casi igual.
+- **El producto punto empeora con el tamaño** hasta quedar por **debajo del azar** en
+  imágenes (0.11 frente a 0.27): sobre TF-IDF sin normalizar premia la norma, y con más
+  objetos aparecen más fotos de norma alta que salen primero para cualquier consulta.
+- **El audio es la parte difícil.** Con 100 000 clips, 1.3 de cada 10 vecinos dicen la misma
+  palabra, 4 veces el azar pero lejos de las imágenes: la bolsa de palabras pierde el orden de
+  los sonidos, y «left» y «right» comparten casi todo.
+
+### Tiempo por consulta
+
+![Mediana por consulta de cada técnica, por dataset y métrica](figures/multimedia-consulta.png)
+
+Con 100 000 objetos y el esfuerzo por omisión (IVF 18 de 316 listas, HNSW `ef` 40), en
+milisegundos; Recall@10 entre paréntesis:
+
+| Técnica | Imágenes, euclidiana | Imágenes, coseno | Audio, euclidiana | Audio, coseno |
+|---|---:|---:|---:|---:|
+| búsqueda exacta (gestor) | 1.43 (1.00) | 1.38 (1.00) | 1.44 (1.00) | 1.39 (1.00) |
+| IVF (gestor) | 0.31 (0.987) | 0.14 (0.974) | 0.16 (0.983) | 0.10 (0.994) |
+| HNSW (gestor) | **0.047** (0.538) | **0.063** (0.927) | **0.062** (0.984) | **0.054** (0.969) |
+| HNSW (USearch) | 0.078 (0.892) | 0.095 (0.930) | 0.088 (0.985) | 0.069 (0.958) |
+| ivfflat (pgvector) | 4.95 (0.991) | 1.68 (0.969) | 1.92 (0.986) | 0.99 (0.996) |
+| hnsw (pgvector) | 0.60 (0.947) | 0.53 (0.953) | 0.56 (0.990) | 0.50 (0.986) |
+| HNSW (gestor, SQL) | — | 4.62 (0.935) | — | 1.30 (0.960) |
+
+Y por tamaño, con el coseno (p50 en ms):
+
+| Técnica | Imágenes 1 000 | 10 000 | 100 000 | Audio 1 000 | 10 000 | 100 000 |
+|---|---:|---:|---:|---:|---:|---:|
+| búsqueda exacta (gestor) | 0.034 | 0.156 | 1.38 | 0.035 | 0.153 | 1.39 |
+| IVF (gestor) | **0.026** | **0.042** | 0.14 | **0.025** | **0.038** | 0.10 |
+| HNSW (gestor) | 0.038 | **0.042** | **0.063** | 0.038 | **0.038** | **0.054** |
+| HNSW (USearch) | 0.050 | 0.064 | 0.095 | 0.053 | 0.043 | 0.069 |
+| ivfflat (pgvector) | 0.29 | 0.46 | 1.68 | 0.27 | 0.37 | 0.99 |
+| hnsw (pgvector) | 0.34 | 0.44 | 0.53 | 0.33 | 0.34 | 0.50 |
+
+- **La búsqueda exacta crece en proporción** (de 0.034 a 1.38 ms, 41 veces para 100 veces
+  más objetos) y **HNSW casi no se mueve** (0.038 a 0.063 ms): con 100 000 objetos es 22
+  veces más rápido que la exacta. IVF crece como √N: sondea 5 de 25 listas con 1 000, 10 de
+  100 con 10 000 y 18 de 316 con 100 000, y cada lista es más larga.
+- **Con 1 000 objetos la exacta compite**: 0.034 ms frente a 0.038 de HNSW, sin perder nada.
+- **pgvector paga el viaje**: con `hnsw` y el coseno, 0.53 ms en el cliente y 0.31 ms en el
+  servidor. Parte de la diferencia con FAISS es la máquina virtual de Docker.
+- **IVF es más lento con la euclidiana** (0.31 frente a 0.14 ms en imágenes, con las mismas 18
+  listas): sin normalizar, k-means junta muchos vectores en las listas del centro, y las que
+  se sondean son más largas. En `ivfflat` la diferencia es mayor (4.95 frente a 1.68 ms).
+
+### Recall contra latencia
+
+![Recall@10 contra la mediana por consulta al barrer probes y ef_search](figures/multimedia-curvas.png)
+
+![Recall@10 de cada índice con el esfuerzo por omisión, por métrica y tamaño](figures/multimedia-recall.png)
+
+El esfuerzo más chico del barrido que llega a un Recall@10 de 0.95, con 100 000 objetos y el
+coseno:
+
+| Técnica | Imágenes: esfuerzo | ms | recall | Audio: esfuerzo | ms | recall |
+|---|---:|---:|---:|---:|---:|---:|
+| IVF (gestor) | 16 probes | 0.124 | 0.971 | 4 probes | **0.046** | 0.958 |
+| HNSW (gestor) | ef 80 | **0.098** | 0.963 | ef 40 | 0.054 | 0.969 |
+| HNSW (USearch) | ef 80 | 0.147 | 0.963 | ef 40 | 0.069 | 0.958 |
+| ivfflat (pgvector) | 16 probes | 1.53 | 0.963 | 4 probes | 0.454 | 0.972 |
+| hnsw (pgvector) | ef 40 | 0.532 | 0.953 | ef 20 | 0.422 | 0.961 |
+
+- **HNSW gana en imágenes y IVF en audio.** En imágenes, IVF necesita 16 listas para 0.95 y
+  HNSW llega con `ef` 80 en menos tiempo; en audio basta sondear 4 de 316 listas, porque los
+  clips se agrupan bien. Por eso no hay un ganador único: depende de cómo se reparten los
+  vectores.
+- **Con el esfuerzo por omisión HNSW queda corto con 100 000 imágenes** (0.927 con el coseno):
+  `ef` 40 alcanza con 1 000 objetos (0.995) y no con 100 000. Subirlo a 80 cuesta 0.035 ms y
+  llega a 0.963.
+- **FAISS y USearch hacen el mismo grafo:** a igual `ef`, su recall casi coincide (0.927 y
+  0.930), y FAISS responde en la mitad del tiempo (0.043 frente a 0.095 ms).
+- **pgvector necesita menos `ef` para el mismo recall** (0.953 con `ef` 40, donde FAISS da
+  0.927), pero cada consulta cuesta 0.5 ms por lo menos.
+
+#### Un caso aparte: HNSW, la euclidiana y los vectores cero
+
+Con la euclidiana y 100 000 imágenes, **el HNSW de FAISS se queda en un Recall@10 de 0.538**
+con `ef` 40, y ni con `ef` 320 pasa de 0.70; USearch, con el mismo grafo, llega a 0.892 y
+pgvector a 0.947. La causa son **294 fotos de las que SIFT no saca ningún descriptor**: su
+vector es el cero, los 294 son idénticos, y en la euclidiana el origen está cerca de todo.
+El experimento mide el mismo HNSW sin esos vectores (`HNSW (FAISS, sin vectores cero)`):
+
+| `ef_search` | 10 | 20 | 40 | 80 | 160 | 320 |
+|---|---:|---:|---:|---:|---:|---:|
+| HNSW con los vectores cero | 0.462 | 0.507 | 0.538 | 0.552 | 0.605 | 0.700 |
+| HNSW sin los vectores cero | 0.737 | 0.816 | **0.878** | 0.919 | 0.949 | 0.968 |
+| HNSW (USearch), con ellos | 0.746 | 0.838 | 0.892 | 0.934 | 0.956 | 0.969 |
+
+Quitarlos devuelve a FAISS a la altura de USearch. En el audio no hay ningún vector cero y
+en el coseno el cero queda lejos de todo (su coseno es 0), así que ahí no cambia nada. El
+gestor guarda hoy los vectores cero en su HNSW: con la euclidiana conviene dejarlos fuera del
+grafo y responderlos con la búsqueda exacta, que es lo que pierde menos.
+
+### De archivos a vectores: lo que cuesta cada etapa
+
+![Tiempo de cada etapa de las características y de CREATE INDEX completo](figures/multimedia-caracteristicas.png)
+
+En segundos:
+
+| Etapa | Imágenes 1 000 | 10 000 | 100 000 | Audio 1 000 | 10 000 | 100 000 |
+|---|---:|---:|---:|---:|---:|---:|
+| extracción (12 procesos) | 1.02 | 6.94 | 71.7 | 1.78 | 3.21 | 15.9 |
+| muestra del vocabulario | 1.15 | 1.73 | 1.72 | 1.96 | 2.15 | 2.04 |
+| vocabulario (k-means) | 0.28 | 0.30 | 0.32 | 0.24 | 0.24 | 0.24 |
+| cuantización y TF-IDF (1 hilo) | 0.68 | 7.26 | 70.0 | 0.21 | 2.24 | 23.9 |
+| lectura de los vectores | 0.01 | 0.15 | 1.50 | 0.01 | 0.16 | 1.50 |
+| `CREATE INDEX ... USING HNSW` completo | 1.9 | 9.7 | 90.6 | 2.7 | 8.1 | 45.2 |
+| `CREATE INDEX ... USING IVF` completo | 1.8 | 9.7 | 85.4 | 2.4 | 7.6 | 40.1 |
+
+- **Construir el índice es lo de menos.** Con 100 000 fotos, `CREATE INDEX` tarda 90.6 s, y el
+  HNSW sobre los vectores ya calculados, 5.4 s: el 94 % es extraer y cuantizar.
+- **Cuantizar cuesta tanto como extraer**: 16.9 millones de descriptores SIFT contra 256
+  palabras son 16.9 millones de búsquedas del centroide más cercano, y aquí FAISS corre con un
+  hilo mientras la extracción usa 12 procesos. Es el primer lugar donde mirar al optimizar.
+- **El vocabulario no crece con la colección**: la muestra son siempre 2 000 objetos y 65 536
+  descriptores, y k-means tarda 0.3 s en los tres tamaños.
+- **La consulta**: extraer una foto cuesta 3.97 ms y llevarla a vector 0.27 ms; un clip, 1.18
+  y 0.09 ms.
+
+### Construcción, memoria y disco de los índices
+
+![Construcción y memoria de cada índice con el coseno](figures/multimedia-indice.png)
+
+Con 100 000 objetos y el coseno; construcción en segundos, el resto en MiB:
+
+| Técnica | Construir imágenes | Construir audio | Memoria | Disco | Python del gestor |
+|---|---:|---:|---:|---:|---:|
+| búsqueda exacta (gestor) | **0.057** | **0.051** | — | 98.4 | 7.0 |
+| IVF (gestor) | 0.27 | 0.26 | — | 100.3 | 7.0 |
+| IVF (FAISS directo) | 0.25 | 0.25 | 98.7 | — | — |
+| HNSW (gestor) | 5.43 | 4.18 | — | 112.3 | 11.9 |
+| HNSW (FAISS directo) | 5.39 | 4.23 | 111.4 | — | — |
+| HNSW (USearch) | 14.5 | 10.4 | 145.0 | 111.8 | — |
+| ivfflat (pgvector) | 2.46 | 1.90 | 112.7 | 112.7 | — |
+| hnsw (pgvector) | 18.0 | 15.2 | 129.6 | 129.6 | — |
+
+Como referencia, los 100 000 vectores de 256 `float32` ocupan 97.7 MiB, el almacén de
+características del gestor (heap y hash de la Parte 1) 132.3 MiB y la tabla de pgvector 111.9
+MiB.
+
+- **IVF construye 20 veces más rápido que HNSW** (0.27 frente a 5.43 s): entrena k-means con
+  316 centroides y reparte; HNSW inserta cada vector buscando sus vecinos en el grafo.
+- **HNSW de FAISS es el más rápido de los tres HNSW**: 5.4 s, frente a 14.5 s de USearch y
+  18.0 s de pgvector, todos con un hilo y el mismo `M` y `ef_construction`.
+- **El grafo cuesta un 14 % sobre los vectores** (111.4 frente a 97.7 MiB en FAISS): `M` 16
+  son 32 vecinos de 4 bytes por nodo en el nivel 0. IVF solo añade los centroides y los
+  identificadores (98.7 MiB). USearch reporta 145 MiB porque reserva capacidad por adelantado:
+  en disco ocupa 111.8.
+- **La capa del gestor retiene 7 a 12 MiB de Python** para 100 000 filas: el conjunto de
+  identificadores vivos y, en HNSW, la fila de cada nodo.
+
+### Cuánto cuesta cada capa del gestor
+
+![FAISS directo, el índice del gestor y SQL, con la extracción de la consulta](figures/multimedia-capas.png)
+
+Con 100 000 objetos y el coseno, mediana en ms:
+
+| Capa | IVF imágenes | HNSW imágenes | IVF audio | HNSW audio |
+|---|---:|---:|---:|---:|
+| FAISS directo | 0.124 | 0.043 | 0.085 | 0.034 |
+| índice del gestor (`VectorIndex.search`) | 0.138 | 0.063 | 0.100 | 0.054 |
+| extraer la consulta y llevarla a vector | 4.23 | 4.23 | 1.28 | 1.28 |
+| `SIMILAR_TO` por SQL, todo incluido | 4.85 | 4.62 | 1.44 | 1.30 |
+
+- **La capa del índice suma 0.015 a 0.020 ms** por consulta: validar y normalizar la consulta,
+  y convertir los resultados en filas.
+- **Por SQL, el IVF no es el mismo.** `CREATE INDEX` llena el índice de vectores desde el
+  almacén en lotes de 4 096 filas, y `IVFIndex` entrena sus listas con el primero: con 10 000
+  clips queda con 64 listas y 8 `probes` en vez de 100 y 10 (comprobado con su `describe`).
+  Por eso su Recall@10 con 100 000 imágenes es 0.965 y no 0.974, y su consulta, 4.85 ms
+  frente a 4.62 del HNSW. El HNSW por SQL inserta los mismos vectores por lotes y su grafo
+  sale algo distinto (0.935 frente a 0.927). Arreglarlo es cosa del gestor, no del experimento.
+- **Por SQL, el 92 % del tiempo es extraer la consulta.** Con una foto, `SIMILAR_TO` tarda
+  4.62 ms, y extraerla y llevarla a vector, 4.23: analizar el SQL, planificar, buscar y leer
+  las 10 filas cabe en lo que queda, unos 0.3 ms. Con un clip, extraerlo cuesta 1.28 ms de
+  los 1.30, y el resto se pierde en lo que varía la medida.
+
+### Galería de aciertos y errores
+
+El HNSW del gestor con el coseno y 100 000 objetos: arriba, las consultas con más vecinos de
+su clase (cada una de una clase distinta); abajo, las que menos. En imágenes, en promedio el
+62 % de los 10 vecinos es de la categoría de la consulta; en audio, el 12 %.
+
+![Galería de imágenes: aciertos y errores](figures/multimedia-galeria-imagenes.png)
+
+Los aciertos son casi duplicados: la misma funda para otros modelos de celular, la misma
+cortina en otro color, soportes de televisor fotografiados igual. Algunos errores lo son solo
+para la etiqueta: unos marcadores clasificados como «safety supply» encuentran marcadores
+(«marking pen»). Otros son formas parecidas sin relación: una pieza didáctica circular
+encuentra sillas de oficina, y una bandeja de cocina, muebles con rejillas.
+
+![Galería de audio: aciertos y errores](figures/multimedia-galeria-audio.png)
+
+En audio los errores son de sonido: «left» encuentra «right», «learn» encuentra «four» y
+«follow». La bolsa de palabras auditivas sabe qué sonidos hay, no en qué orden.
+
+### Conclusiones
+
+**IVF contra HNSW.** HNSW es el más rápido por consulta y el que menos crece: con 100 000
+objetos responde en 0.054 a 0.063 ms, 22 a 26 veces antes que la búsqueda exacta. Pero su
+recall cae con el tamaño a `ef` fijo (0.995, 0.972 y 0.927 en imágenes con el coseno) y
+construir le cuesta 20 veces lo que a IVF. IVF, con sus √listas, sube de recall con el tamaño
+(0.926, 0.940 y 0.974) y es el más preciso por omisión, a cambio de unas consultas el doble de
+lentas (0.14 ms). En audio, donde los clips se agrupan bien, IVF con 4 listas ya da 0.958 en
+0.046 ms y gana la curva.
+
+**Euclidiana contra coseno.** El coseno es la métrica para estos vectores: da vecinos más
+parecidos en imágenes (0.63 frente a 0.60 de su clase con 100 000), empata en audio, hace
+más rápido a IVF (0.14 frente a 0.31 ms) y evita el problema del vector cero en el grafo de
+FAISS. El producto punto sobre TF-IDF sin normalizar no sirve: queda por debajo del azar en
+imágenes.
+
+**Las bibliotecas.** Con los mismos parámetros, FAISS y USearch construyen grafos de calidad
+parecida; FAISS construye 2.7 veces más rápido y responde en la mitad del tiempo. pgvector
+encuentra un poco más con el mismo `ef` y es la opción si los datos ya viven en PostgreSQL,
+pero cada consulta cuesta al menos 0.5 ms desde el cliente y construir su HNSW, 3.3 veces lo
+de FAISS.
+
+**El gestor.** Su capa suma unos 0.02 ms por consulta sobre FAISS, y por SQL lo que domina
+es extraer el archivo de la consulta: 4 ms de los 4.6 de una foto. Al construir, el 94 % es
+extraer y cuantizar, no el índice.
+
+### Tabla comparativa y recomendaciones
+
+| | Búsqueda exacta | IVF (gestor) | HNSW (gestor) | HNSW (USearch) | pgvector |
+|---|---|---|---|---|---|
+| **Consulta, 100 000 (coseno)** | 1.38 ms | 0.14 ms | 0.063 ms | 0.095 ms | `hnsw` 0.53 ms, `ivfflat` 1.68 ms |
+| **Recall@10 por omisión** | 1 | 0.974 imágenes, 0.994 audio | 0.927 imágenes, 0.969 audio | 0.930, 0.958 | `hnsw` 0.953, 0.986 |
+| **Construir 100 000** | 0.06 s | 0.27 s | 5.4 s | 14.5 s | `hnsw` 18.0 s, `ivfflat` 2.5 s |
+| **Memoria sobre los vectores** | ninguna | +1 % | +14 % | +14 % en disco | `hnsw` +33 % |
+| **Ventajas** | Exacta, sin parámetros, sin construir | Construye en segundos; recall alto y que sube con el tamaño; borra de verdad | La consulta más rápida y la que menos crece | Mismo grafo que FAISS, embebible (DuckDB) | Transaccional y junto a los datos; más recall con el mismo `ef` |
+| **Desventajas** | Crece en proporción: 41 veces de 1 000 a 100 000 | Más lento con la euclidiana; el recall depende de cómo se reparten los vectores | Construir es caro; recall cae con el tamaño a `ef` fijo; el vector cero rompe el grafo en la euclidiana | 2.7 veces más lento al construir que FAISS | Medio milisegundo de viaje; `ivfflat` lento con la euclidiana (4.95 ms) |
+| **Se elige cuando** | Hasta unos 10 000 objetos, o con un filtro que deja pocas filas | La colección cambia mucho o se reconstruye seguido; se pide recall alto | Colecciones grandes y estables, con `ef` 80 en vez de 40 | Se quiere un HNSW sin FAISS | Los vectores ya están en PostgreSQL |
+
+**Recomendaciones para el gestor**, que salen de estas cifras: usar el **coseno** por
+omisión (ya lo es); subir `ef_search` por omisión a 80 con colecciones de 100 000 (0.963 en
+0.098 ms); **no meter los vectores cero en el HNSW** y responderlos con la búsqueda exacta;
+cuantizar con todos los hilos de FAISS, que es la mitad de `CREATE INDEX`; y que
+`CREATE INDEX ... USING IVF` entrene sus listas con todos los vectores y no con el primer lote.
+
+**Lo que este experimento no dice.**
+
+- Los tiempos son de un hilo. Con varios, FAISS reparte la cuantización y la construcción del
+  HNSW, y pgvector construye en paralelo; aquí no se midió.
+- pgvector corrió en Docker y las demás técnicas fuera: su tiempo en el servidor está en el
+  JSON, pero ni ese número está libre de la máquina virtual.
+- Un vocabulario de 256 palabras es chico: más palabras separarían mejor las clases, sobre
+  todo en audio, a cambio de vectores más largos. Este experimento lo deja fijo.
+- La regla de las listas es la de FAISS (√N). pgvector recomienda filas / 1 000 (100 con
+  100 000) y un `probes` de √listas; aquí `ivfflat` usa las mismas 316 listas que el gestor
+  para comparar la misma estructura.
+- El producto punto no es una distancia: un HNSW construido con él no tiene las garantías del
+  grafo, y su recall (0.834 en imágenes) lo refleja.
+
+### Reproducirlo
+
+```bash
+.venv/bin/pip install -e ".[postgres,plots,usearch]"
+.venv/bin/python -m benchmarks.multimedia.abo --salida data/datasets/abo
+.venv/bin/python -m benchmarks.multimedia.speech_commands --salida data/datasets/speech_commands
+
+# PostgreSQL con pgvector, de la imagen del perfil bench, solo mientras se mide
+docker compose --profile bench build postgres
+docker run --rm -d --name minigestor-pgvector -p 127.0.0.1:55432:5432 \
+    -e POSTGRES_HOST_AUTH_METHOD=trust -e POSTGRES_DB=minigestor_bench \
+    minigestor-postgres -c shared_buffers=1GB
+export BENCH_POSTGRES_DSN="host=127.0.0.1 port=55432 dbname=minigestor_bench user=postgres"
+
+.venv/bin/python -m benchmarks.multimedia_benchmark --images data/datasets/abo \
+    --audio data/datasets/speech_commands --sizes 1000 10000 100000 \
+    --repetitions 3 --build-repetitions 3 --postgres-maintenance-work-mem 1GB \
+    --features-dir data/bench-multimedia
+docker stop minigestor-pgvector
+```
+
+Tarda unos 30 minutos: 9 en extraer y cuantizar (dos pasadas por colección, una solo para
+medir la extracción), 6 en los `CREATE INDEX` por SQL y el resto en construir cada índice 3
+veces y barrer los esfuerzos. Con `--features-dir`, las características quedan en
+`data/` (unos 300 MB) y la siguiente ejecución las reutiliza: el JSON lo anota
+(`reutilizadas`). Sin `BENCH_POSTGRES_DSN` se omite pgvector, y sin `usearch` instalado, USearch.
+Todo corre también dentro del perfil `bench` de Docker, más lento.
 
 ## Gráficas
 

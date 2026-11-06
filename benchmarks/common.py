@@ -9,7 +9,11 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import platform
 import random
+import shutil
+import subprocess
+import sys
 import time
 import tracemalloc
 from collections.abc import Callable, Sequence
@@ -34,6 +38,9 @@ DELETIONS_STREAM = "borrados"
 # Ranuras por página de las direcciones inventadas: cualquier número que quepa en el campo
 # de la ranura sirve, porque nadie va a leer esas páginas.
 SYNTHETIC_SLOTS_PER_PAGE = 100
+MACOS_CPU_NAME_COMMAND = ("sysctl", "-n", "machdep.cpu.brand_string")
+LINUX_CPU_INFO = Path("/proc/cpuinfo")
+LINUX_CPU_NAME_FIELD = "model name"
 
 
 @dataclass
@@ -211,6 +218,36 @@ def synthetic_record_id(position: int) -> RecordId:
     sin la tabla detrás. La página 0 es la cabecera de un archivo paginado: se empieza en 1.
     """
     return RecordId(1 + position // SYNTHETIC_SLOTS_PER_PAGE, position % SYNTHETIC_SLOTS_PER_PAGE)
+
+
+def machine_description() -> dict[str, Any]:
+    """El equipo en que se midió: procesador, núcleos, sistema, Python y la carga media del
+    último minuto, que dice si otro proceso ocupaba la CPU al empezar."""
+    return {
+        "procesador": _cpu_name(),
+        "nucleos": os.cpu_count(),
+        "sistema": platform.platform(),
+        "python": sys.version.split()[0],
+        "carga_media_1_min": load_average(),
+    }
+
+
+def load_average() -> float:
+    """La carga media del último minuto; 0 en un sistema que no la da."""
+    read = getattr(os, "getloadavg", None)
+    return 0.0 if read is None else round(float(read()[0]), 2)
+
+
+def _cpu_name() -> str:
+    if LINUX_CPU_INFO.is_file():
+        for line in LINUX_CPU_INFO.read_text(encoding="utf-8").splitlines():
+            if line.startswith(LINUX_CPU_NAME_FIELD):
+                return line.split(":", 1)[1].strip()
+    if shutil.which(MACOS_CPU_NAME_COMMAND[0]) is not None:
+        named = subprocess.run(MACOS_CPU_NAME_COMMAND, capture_output=True, text=True, check=False)
+        if named.stdout.strip():
+            return named.stdout.strip()
+    return platform.processor()
 
 
 def results_directory(root: Path) -> Path:

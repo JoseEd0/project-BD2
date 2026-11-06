@@ -4,12 +4,13 @@
 un experimento nuevo solo añade su módulo y lo suma aquí.
 """
 
-from benchmarks.plots import indexes, spatial, storage, text_search
-from benchmarks.plots.model import BarFigure, Figure
+from benchmarks.plots import indexes, multimedia, spatial, storage, text_search
+from benchmarks.plots.model import BarFigure, CurveFigure, Figure, GalleryFigure
 
-FIGURES: tuple[Figure | BarFigure, ...] = (
+FIGURES: tuple[Figure | BarFigure | CurveFigure | GalleryFigure, ...] = (
     *storage.FIGURES,
     *indexes.FIGURES,
     *spatial.FIGURES,
     *text_search.FIGURES,
+    *multimedia.FIGURES,
 )

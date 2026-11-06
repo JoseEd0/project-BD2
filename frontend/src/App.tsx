@@ -16,6 +16,7 @@ interface PageProps {
 const PAGE_COMPONENTS: Record<PageId, LazyExoticComponent<ComponentType<PageProps>>> = {
   consola: lazy(() => import("./pages/ConsolePage")),
   texto: lazy(() => import("./pages/TextSearchPage")),
+  multimedia: lazy(() => import("./pages/MediaSearchPage")),
 };
 
 /** Lo que se ve mientras llega el código de una página: la cabecera y la barra de estado

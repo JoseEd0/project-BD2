@@ -2540,3 +2540,306 @@ select.field__input:disabled {
     padding: 14px 16px 20px;
   }
 }
+
+/* ---------- página multimedia ---------- */
+
+/* La columna donde se busca y cuántas filas devuelve cada consulta: el `FROM` y el `k` del
+   `SIMILAR_TO`, sobre todo lo demás. */
+.mediabar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  padding: 12px 20px;
+  background: var(--surface-1);
+  border-bottom: 1px solid var(--border);
+}
+
+.mediabar__field {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mediabar__label {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.mediabar__select {
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-2);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 13px;
+}
+
+.mediaquery {
+  display: grid;
+  grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
+  gap: 1px;
+  background: var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.mediadrop {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+  padding: 16px 20px;
+  background: var(--surface-1);
+  outline: 2px dashed transparent;
+  outline-offset: -8px;
+  transition: outline-color 120ms ease, background-color 120ms ease;
+}
+
+.mediadrop--active {
+  outline-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.mediadrop__lead {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.mediaquery__current {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  margin: 0;
+  min-width: 0;
+}
+
+.mediaquery__current .thumb {
+  flex: none;
+  width: 96px;
+  height: 96px;
+}
+
+/* Un audio no tiene imagen que poner al lado: el reproductor va arriba, a todo el ancho. */
+.mediaquery__current:has(.player) {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.mediaquery__current .player {
+  width: 100%;
+}
+
+.mediaquery__caption {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+}
+
+.mediaquery__name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.mediaquery__path {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-faint);
+  font-size: 12px;
+}
+
+.samples {
+  padding: 14px 20px 16px;
+  background: var(--surface-1);
+  min-width: 0;
+}
+
+.samples__title {
+  margin: 0 0 10px;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.samples__empty {
+  margin: 0;
+  color: var(--text-faint);
+  font-size: 13px;
+}
+
+.samples__list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sample {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  width: 100%;
+  padding: 4px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  cursor: pointer;
+  font: inherit;
+}
+
+.sample:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.sample:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.sample--chosen {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+  color: var(--text);
+}
+
+.sample .thumb {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+}
+
+.sample__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11.5px;
+  text-align: left;
+}
+
+/* La miniatura de una foto: recortada al cuadrado, sobre un fondo neutro para las que
+   tienen transparencia. */
+.thumb {
+  display: block;
+  width: 64px;
+  height: 64px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface-3);
+  object-fit: cover;
+}
+
+.thumb--audio {
+  display: grid;
+  place-items: center;
+  color: var(--text-faint);
+  font-size: 22px;
+}
+
+.player {
+  width: 220px;
+  height: 36px;
+}
+
+.mediapanel__clauses {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* Cabe «del índice», lo que vale mientras no se escriba un número. */
+.mediapanel__effort {
+  width: 13ch;
+}
+
+.mediapanel .clause select.clause__input {
+  height: 24px;
+  font-family: var(--mono);
+}
+
+.mediagallery__media {
+  width: 88px;
+  padding-top: 8px !important;
+  padding-bottom: 8px !important;
+}
+
+.mediagallery .hits__title {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.mediagallery .badge {
+  padding: 2px 9px;
+  font-size: 12px;
+}
+
+/* La fila es de la misma clase que la consulta: se marca sin depender solo del color, con el
+   texto oculto para lectores de pantalla y un borde. */
+.badge--match {
+  border-color: var(--success-border);
+  background: var(--success-soft);
+  color: var(--success-text);
+}
+
+.indexview {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.levelbar {
+  min-width: 160px;
+}
+
+.levelbar__fill {
+  display: block;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--accent);
+}
+
+.listbars {
+  display: flex;
+  align-items: flex-end;
+  gap: 1px;
+  height: 96px;
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+.listbars__bar {
+  flex: 1;
+  min-width: 1px;
+  border-radius: 1px 1px 0 0;
+  background: var(--accent);
+}
+
+@media (max-width: 900px) {
+  .mediaquery {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mediadrop {
+    transition: none;
+  }
+}

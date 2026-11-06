@@ -1,6 +1,7 @@
 import { API_URL, MISSING_API_URL } from "./config";
 import type {
   FileUpload,
+  MediaUpload,
   QueryFailure,
   QueryResponse,
   TableInfo,
@@ -107,6 +108,23 @@ export function uploadFileOnly(file: File, name: string): Promise<FileUpload> {
   form.append("file", file);
   form.append("name", name);
   return request("/files/upload", { method: "POST", body: form });
+}
+
+/** Guarda la imagen o el audio de una consulta y devuelve la ruta que va en `SIMILAR_TO`. */
+export function uploadMediaQuery(file: File): Promise<MediaUpload> {
+  const form = new FormData();
+  form.append("file", file);
+  return request("/media/queries", { method: "POST", body: form });
+}
+
+/** Dirección de un archivo multimedia tal cual, para un `<audio>` (acepta `Range`). */
+export function mediaFileUrl(path: string): string {
+  return apiUrl(`/media/file?${new URLSearchParams({ path })}`);
+}
+
+/** Dirección de la miniatura de una imagen. */
+export function thumbnailUrl(path: string): string {
+  return apiUrl(`/media/thumbnail?${new URLSearchParams({ path })}`);
 }
 
 /** Estructura física de la tabla, leída dentro de la sesión: si tiene una transacción que

@@ -4,7 +4,7 @@
  * dependencia, y los botones «atrás» y «adelante» del navegador funcionan solos.
  */
 
-export type PageId = "consola" | "texto";
+export type PageId = "consola" | "texto" | "multimedia";
 
 export interface Page {
   id: PageId;
@@ -15,6 +15,7 @@ export interface Page {
 export const PAGES: readonly Page[] = [
   { id: "consola", label: "Consola SQL", hash: "#/" },
   { id: "texto", label: "Texto", hash: "#/texto" },
+  { id: "multimedia", label: "Multimedia", hash: "#/multimedia" },
 ];
 
 const HOME = PAGES[0];

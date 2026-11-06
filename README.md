@@ -32,7 +32,7 @@ Contenido de este documento:
               src/query/               catálogo · planificador · operadores (Volcano)
                  ┌────┴────┐
           src/sql/     src/index/      B+ agrupado, B+ no agrupado, hash extendible, R-Tree,
-                            │          índice invertido (SPIMI)
+                            │          índice invertido (SPIMI), HNSW e IVF sobre FAISS
                             │
                        src/external/   ordenamiento, hashing y bucles anidados externos
                             │
@@ -40,7 +40,8 @@ Contenido de este documento:
                             │          heap file · archivo secuencial
                        src/spatial/    puntos, rectángulos, polígonos y distancias
                        src/text/       analizador de texto: plegado, tokens, stopwords, raíces
-                       src/multimedia/ descriptores locales: SIFT de imágenes, MFCC de audio
+                       src/multimedia/ SIFT y MFCC, vocabulario con k-means, TF-IDF y el almacén
+                                       de vectores por fila
 ```
 
 **Cada capa solo conoce a la de abajo**: el motor no sabe qué es una transacción, y ninguna
@@ -84,7 +85,11 @@ operador lleva las filas que entregó y el tiempo que tardó.
 | Índice invertido con SPIMI | bloques con memoria acotada y mezcla k-vías; léxico ordenado, listas contiguas | [`index/inverted`](src/index/inverted/README.md) |
 | TF-IDF + coseno y BM25 | SMART lnc.ltc e idf de Lucene, término a término sobre el mismo índice; top-k con montículo | [`index/inverted`](src/index/inverted/README.md#ranking) |
 | Consultas booleanas | `AND`, `OR` y `NOT` dentro de `MATCH`, con mezclas lineales de las listas ordenadas por `doc_id` y ranking por los términos positivos | [`index/inverted`](src/index/inverted/README.md#consultas-booleanas) |
-| Interfaz, panel de mapa y página de texto | cuatro paneles visibles a la vez; mapa con Leaflet; TF-IDF y BM25 lado a lado con los términos resaltados | [`frontend`](frontend/README.md) |
+| `ExtractFeatures` | SIFT (OpenCV) para imágenes y MFCC con derivadas (librosa) para audio, en paralelo por procesos con memoria acotada | [`multimedia`](src/multimedia/README.md) |
+| Bag of visual/audio words con TF-IDF | vocabulario con k-means de FAISS sobre una muestra de reservorio; TF-IDF de Sivic y Zisserman; conteos por fila en un heap file con hash extendible | [`multimedia`](src/multimedia/README.md#vocabulario-vocabularypy) |
+| Índices IVF y HNSW, tres métricas | FAISS (`IndexIVFFlat`, `IndexHNSWFlat`), con lápidas y reconstrucción al 30 %, filtros dentro de la búsqueda y búsqueda iterativa que no devuelve menos de k | [`index/vector`](src/index/vector/README.md), [`index/ivf`](src/index/ivf/README.md), [`index/hnsw`](src/index/hnsw/README.md) |
+| `SIMILAR_TO` en SQL | índice sobre la columna de las rutas, `VectorSearchScan` con el resto del WHERE como filtro previo, búsqueda exacta si la métrica no es la del índice | [`index/similarity`](src/index/similarity/README.md), [`sql`](src/sql/README.md#búsqueda-por-similitud) |
+| Interfaz, panel de mapa, páginas de texto y multimedia | cuatro paneles visibles a la vez; mapa con Leaflet; TF-IDF y BM25 lado a lado con los términos resaltados; dos `SIMILAR_TO` lado a lado con su galería | [`frontend`](frontend/README.md) |
 | Comparación experimental | tres experimentos medidos, con resultados crudos y gráficas | [`benchmarks`](benchmarks/README.md) |
 
 ---
@@ -103,10 +108,14 @@ src/                 raíz de importación: un paquete por módulo del motor
     hash/            hash extendible
     rtree/           R-Tree
     inverted/        índice invertido construido con SPIMI y su ranking TF-IDF y BM25
+    vector/          métricas, búsqueda exacta y lo común a los índices de vectores
+    ivf/             IVF sobre FAISS
+    hnsw/            HNSW sobre FAISS
+    similarity/      HNSW o IVF sobre la columna de las rutas: lo que responde SIMILAR_TO
   external/          algoritmos externos: sort/, hash/ y loop/
   spatial/           geometría y métricas de distancia; no depende de ningún otro paquete
   text/              analizador de texto de documentos y consultas; stopwords en stopwords/
-  multimedia/        extracción de descriptores SIFT y MFCC, en paralelo y en flujo
+  multimedia/        SIFT y MFCC en paralelo, vocabulario, TF-IDF y almacén de vectores
   query/             catálogo, tabla, planificador, operadores y motor
   txn/               gestor de bloqueos, transacciones y sesiones
   api/               API REST (FastAPI) sobre el motor
@@ -125,8 +134,9 @@ demos/               generador del dataset, descarga de lugares reales y de mús
 docs/                informe.pdf y su fuente LaTeX
 Dockerfile           imagen del motor con su API
 compose.yaml         la aplicación completa en contenedores: api, web y la carga de la demo;
-                     en el perfil bench, PostgreSQL con PostGIS para los experimentos
-docker/postgres/     imagen de PostgreSQL con PostGIS contra la que se miden GiST y GIN
+                     en el perfil bench, PostgreSQL con PostGIS y pgvector para los experimentos
+docker/postgres/     imagen de PostgreSQL con PostGIS y pgvector contra la que se miden GiST,
+                     GIN, ivfflat y hnsw
 ```
 
 No hay paquete paraguas: `src` es la raíz de importación, así que se escribe
@@ -147,12 +157,16 @@ proyecto:
 | [`src/index/inverted/`](src/index/inverted/) | índice invertido: SPIMI, léxico, postings, documentos y ranking | [README](src/index/inverted/README.md) |
 | [`src/spatial/`](src/spatial/) | geometría y métricas euclidiana y Haversine | [README](src/spatial/README.md) |
 | [`src/text/`](src/text/) | analizador de texto: plegado, tokens, stopwords y raíces | [README](src/text/README.md) |
-| [`src/multimedia/`](src/multimedia/) | `ExtractFeatures`: SIFT para imágenes y MFCC para audio | [README](src/multimedia/README.md) |
+| [`src/index/vector/`](src/index/vector/) | métricas, búsqueda exacta, filtros y persistencia de los índices de vectores | [README](src/index/vector/README.md) |
+| [`src/index/ivf/`](src/index/ivf/) | IVF sobre FAISS | [README](src/index/ivf/README.md) |
+| [`src/index/hnsw/`](src/index/hnsw/) | HNSW sobre FAISS | [README](src/index/hnsw/README.md) |
+| [`src/index/similarity/`](src/index/similarity/) | el índice que crea `CREATE INDEX ... USING HNSW` o `USING IVF` sobre la ruta | [README](src/index/similarity/README.md) |
+| [`src/multimedia/`](src/multimedia/) | `ExtractFeatures` (SIFT y MFCC), vocabulario, TF-IDF y almacén de características | [README](src/multimedia/README.md) |
 | [`src/external/`](src/external/) | ordenamiento, hashing y bucles anidados externos | [README](src/external/README.md) |
 | [`src/query/`](src/query/) | catálogo, planificador, ejecutor | [README](src/query/README.md) |
 | [`src/txn/`](src/txn/) | transacciones y concurrencia | [README](src/txn/README.md) |
 | [`src/api/`](src/api/) | API REST | [README](src/api/README.md) |
-| [`frontend/`](frontend/) | consola SQL de 4 paneles con panel de mapa, y página de búsqueda de texto | [README](frontend/README.md) |
+| [`frontend/`](frontend/) | consola SQL de 4 paneles con panel de mapa, y páginas de búsqueda de texto y multimedia | [README](frontend/README.md) |
 | [`benchmarks/`](benchmarks/) | comparación experimental, con resultados y gráficas | [README](benchmarks/README.md) |
 | [`demos/`](demos/) | datasets de demostración y simulación de concurrencia | [README](demos/README.md) |
 
@@ -259,6 +273,22 @@ El dataset carga unas 33 000 filas en nueve tablas, **cada una con una organizac
 o un índice distinto**, para que las diferencias entre estructuras se vean en la interfaz.
 Los detalles están en [`demos/README.md`](demos/README.md).
 
+**Imágenes y audio (Parte 4).** Si están descargados, el paso 1 carga además `imagenes`
+(1 000 fotos de catálogo de ABO, con un índice HNSW) y `canciones` (2 000 pistas de FMA, con
+un índice IVF). Como las fotos y las pistas no viven en el repositorio, se bajan antes, una
+vez (unos 6 GB; licencias y detalles en
+[`benchmarks/multimedia/README.md`](benchmarks/multimedia/README.md)):
+
+```bash
+.venv/bin/python -m benchmarks.multimedia.abo --salida data/datasets/abo
+.venv/bin/python -m demos.descargar_fma --salida data/datasets/fma_small
+```
+
+`MINIGESTOR_IMPORT_DIRS` tiene que incluir `./data/datasets` (ya lo hace `.env.example`):
+el API solo lee archivos de los directorios permitidos. Con Docker, `compose.yaml` monta
+`data/datasets` (o `MINIGESTOR_DATASETS_DIR`) en el API y en la carga de la demo; sin
+descargarlos, la aplicación funciona igual, sin esas dos tablas.
+
 Cada archivo del gestor lleva en su cabecera la versión de su formato. Un directorio de
 datos creado con una versión anterior se rechaza con un error que lo dice: basta volver a
 poblarlo con el paso 1.
@@ -288,8 +318,9 @@ Los CSV del dataset están en [`demos/samples/`](demos/samples/):
 
 Después, el atajo **Carga → Índices tras cargar CSV** crea los dos índices secundarios del
 e-commerce, **Espacial → Crear R-Tree**, el de `tiendas.ubicacion`, y **Texto → Índice
-invertido**, el de `catalogo.texto`. Con eso los 63 atajos del editor quedan listos para
-usarse.
+invertido**, el de `catalogo.texto`. Con eso los 71 atajos del editor quedan listos para
+usarse; los 8 del grupo **Multimedia** necesitan además las tablas `imagenes` y `canciones`
+de la demo.
 
 **Datos espaciales reales.** Para probar el R-Tree con lugares de verdad —unos 128 000
 puntos de interés del Perú, de OpenStreetMap— hay un guion que los descarga en el formato
@@ -477,6 +508,37 @@ En la interfaz, la página **Texto** (pestaña de la cabecera) lanza la misma b�
 TF-IDF y con BM25 y pone los dos rankings lado a lado, con los términos resaltados, un
 filtro relacional, `k1` y `b` ajustables, el SQL y el plan de cada una y la forma del
 índice invertido ([`frontend/README.md`](frontend/README.md#texto)).
+
+### Búsqueda multimedia
+
+```sql
+CREATE INDEX idx_img ON imagenes USING HNSW (ruta) WITH (METRIC = cosine, M = 16);
+CREATE INDEX idx_audio ON canciones USING IVF (ruta) WITH (METRIC = euclidean);
+
+-- los dos ejemplos del enunciado
+SELECT * FROM imagenes
+    WHERE SIMILAR_TO('data/datasets/abo/imagenes/c8/c8fa4944.jpg', k=10)
+    USING HNSW WITH METRIC=cosine;
+SELECT titulo, artista, SIMILARITY_SCORE() as score FROM canciones
+    WHERE SIMILAR_TO('data/datasets/fma_small/pistas/132/132454.mp3', k=5)
+    USING IVF WITH METRIC=euclidean ORDER BY score DESC;
+-- el resto del WHERE filtra antes de buscar
+SELECT titulo, categoria, SIMILARITY_SCORE() FROM imagenes
+    WHERE SIMILAR_TO('data/datasets/abo/imagenes/c8/c8fa4944.jpg', k=10)
+      AND categoria <> 'CELLULAR_PHONE_CASE'
+    USING HNSW WITH ef_search = 100;
+```
+
+El índice va sobre la columna que guarda la ruta de cada imagen o audio: crearlo extrae SIFT
+o MFCC de cada archivo, entrena el vocabulario con k-means y guarda el vector TF-IDF de cada
+fila. El plan pasa a `VectorSearchScan`, que extrae la consulta, busca en el índice y dice
+cuántas distancias calculó; con una métrica distinta a la del índice compara contra todas
+las filas y lo explica ([`src/index/similarity/README.md`](src/index/similarity/README.md)).
+
+En la interfaz, la página **Multimedia** recibe el archivo de la consulta (arrastrado o de
+una fila de la tabla) y pone dos `SIMILAR_TO` lado a lado —HNSW contra IVF, o coseno contra
+euclidiana—, cada uno con su SQL, su plan y una galería con miniaturas o reproductores
+([`frontend/README.md`](frontend/README.md#multimedia)).
 
 ### Desde Python
 

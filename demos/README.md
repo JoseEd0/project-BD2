@@ -297,8 +297,12 @@ mantiene la suya abierta.
 
 **Las imágenes de la demo** son el subconjunto de 1 000 fotos de ABO,
 `data/datasets/abo/subconjuntos/1000/imagenes.csv`, que deja la descarga del experimento.
-Cargar las dos tablas en la base de demostración e indexarlas llega con la búsqueda por
-similitud en SQL.
+
+`poblar_ecommerce.py` carga las dos tablas si sus CSV están en `--datasets`
+(`data/datasets` por omisión), con su índice: `imagenes` con un HNSW coseno y `canciones`
+con un IVF euclidiano, los dos ejemplos del enunciado. Si faltan, lo dice y sigue con las
+demás. Con la versión que no decodifica dos veces la muestra del vocabulario, indexar las
+1 000 fotos tarda unos 2 s y las 2 000 pistas unos 13 s en un Apple M4 Pro.
 
 **Licencia.** Los metadatos del FMA son
 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/): Defferrard, Benzi,

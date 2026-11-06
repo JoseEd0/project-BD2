@@ -32,7 +32,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.errors import error_response, server_failure, upload_too_large, validation_failed
-from api.routes import query, sessions, tables, uploads
+from api.routes import media, query, sessions, tables, uploads
 from api.service import Service
 from api.settings import settings_from_environment
 from config import EngineConfig
@@ -98,6 +98,6 @@ def create_app(config: EngineConfig, cors_origins: Sequence[str] = ()) -> FastAP
     def health() -> dict[str, str]:
         return {"status": "ok", "version": VERSION}
 
-    for router in (tables.router, query.router, uploads.router, sessions.router):
+    for router in (tables.router, query.router, uploads.router, sessions.router, media.router):
         app.include_router(router)
     return app

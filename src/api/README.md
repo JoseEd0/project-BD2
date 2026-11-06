@@ -48,6 +48,9 @@ Ninguna ruta ni puerto está escrito en el código.
 | `GET` | `/tables/{name}/structure` | estructura física: páginas del archivo, niveles del B+, profundidad global y cubetas del hash, MBR de cada nodo del R-Tree, archivo de valores TEXT |
 | `GET` | `/tables/{name}/points` | panel de mapa: los puntos de una columna `POINT` |
 | `DELETE` | `/tables` | borra todas las tablas y sus archivos (dejar la BD vacía) |
+| `POST` | `/media/queries` | guarda la imagen o el audio de una consulta y devuelve la ruta que va en `SIMILAR_TO` |
+| `GET` | `/media/thumbnail?path=…` | miniatura en JPEG de una imagen, con caché en disco |
+| `GET` | `/media/file?path=…` | el archivo tal cual; con `Range`, solo el trozo pedido (`206`), para el reproductor de audio |
 | `POST` | `/sessions/{id}/close` | cierra una sesión y aborta lo que tuviera abierto; es `POST` para que el navegador lo envíe con `sendBeacon` al cerrar la pestaña |
 
 ### Sesiones y transacciones
@@ -190,6 +193,32 @@ dentro del event loop congelaría todo el servidor.
 `CREATE TABLE ... FROM FILE` solo lee archivos del directorio de datos o de los
 `MINIGESTOR_IMPORT_DIRS`; cualquier otra ruta da `ForbiddenFileError`. Sin ese límite,
 quien pudiera enviar una consulta leería cualquier CSV del servidor.
+
+### Archivos multimedia
+
+La página «Multimedia» los usa para el resultado de un `SIMILAR_TO`:
+
+- **`POST /media/queries`** recibe el archivo de la consulta (*multipart*, campo `file`),
+  con el mismo límite de `max_upload_bytes` y `413` que los CSV. Solo acepta imágenes y
+  audios por su extensión. Lo guarda en `uploads/consultas/` con un nombre nuevo, para que
+  dos consultas `foto.jpg` no se pisen, y borra las más viejas al pasar de
+  `max_query_uploads` (100). Devuelve `path`, la ruta para `SIMILAR_TO('…')`, `media`
+  (`image` o `audio`) y el nombre original.
+- **`GET /media/thumbnail`** reduce la imagen a `thumbnail_side` píxeles (256) y la guarda en
+  `.miniaturas/` del directorio de datos, con el tamaño y la fecha del original en la clave:
+  pedirla de nuevo no decodifica nada, y si el original cambia se rehace.
+- **`GET /media/file`** sirve el archivo con `Range`, que es lo que necesita un `<audio>`
+  para saltar a otro segundo.
+
+Las dos lecturas pasan por el mismo control que `FROM FILE` y que el archivo de un
+`SIMILAR_TO`: el archivo tiene que estar en el directorio de datos o en
+`MINIGESTOR_IMPORT_DIRS`, y ser una imagen o un audio. Quien puede escribir
+`SIMILAR_TO('ruta')` ya puede hacer que el motor lea esa ruta, así que servirla no abre
+nada nuevo; un CSV o un archivo fuera de esos directorios da `400`.
+
+Una consulta con `SIMILAR_TO` trae en `similarity` la tabla, la columna de las rutas, el
+índice, el método, la métrica, `k`, la ruta de la consulta y si son imágenes o audios: con
+eso la interfaz pinta la galería sin adivinar qué columna es un archivo.
 
 ### Errores
 

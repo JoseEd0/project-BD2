@@ -94,6 +94,8 @@ class Figure:
     """Una imagen: el informe del que sale y los paneles que la componen.
 
     `rows_label` dice qué cuenta el eje horizontal: filas de una tabla, puntos indexados.
+    `legend_columns` fija cuántas series caben en una fila de la leyenda cuando sus nombres
+    son largos; con 0, dos por columna de paneles.
     """
 
     filename: str
@@ -103,6 +105,7 @@ class Figure:
     rows_label: str
     columns: int
     panels: tuple[Panel, ...]
+    legend_columns: int = 0
 
 
 def compare(
@@ -157,3 +160,58 @@ class BarFigure:
     subtitle: str
     sizes_label: str
     panels: tuple[BarPanel, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class CurvePanel:
+    """Una curva de calidad contra latencia por técnica, con las medidas de `operation`
+    en el tamaño más grande que se midió."""
+
+    title: str
+    operation: str
+    techniques: tuple[Technique, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class CurveFigure:
+    """Una imagen de curvas: la latencia en un eje logarítmico y una fracción de 0 a 1 en
+    el otro; cada punto es un esfuerzo de búsqueda.
+
+    `field` es la clave de `extra` de la fracción, `order_field` la del esfuerzo, que une
+    los puntos en orden, y `default_field` la que marca el del esfuerzo por omisión, que
+    se dibuja con un anillo. `sizes_label` dice qué cuenta el tamaño del título y
+    `legend_columns`, como en `Figure`, cuántas series van en una fila de la leyenda.
+    """
+
+    filename: str
+    report: str
+    title: str
+    subtitle: str
+    columns: int
+    x_axis: str
+    y_axis: str
+    field: str
+    order_field: str
+    default_field: str
+    sizes_label: str
+    panels: tuple[CurvePanel, ...]
+    legend_columns: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class GalleryFigure:
+    """Una galería: por fila, una consulta y sus primeros vecinos, con el borde del color
+    de si comparten su clase.
+
+    `cases` son las claves de `extra` con las listas de casos (éxitos, errores) y `images`
+    dice si cada celda muestra el archivo o solo su clase, como con el audio.
+    """
+
+    filename: str
+    report: str
+    title: str
+    subtitle: str
+    technique: str
+    operation: str
+    cases: tuple[tuple[str, str], ...]
+    images: bool

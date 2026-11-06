@@ -19,8 +19,10 @@ from benchmarks.plots.drawing import (
     horizontal_limits,
     load,
     points_of,
+    short_label,
     spread_labels,
     ticks_between,
+    title_detail,
     vertical_scale,
 )
 from benchmarks.plots.model import (
@@ -312,3 +314,13 @@ def test_a_note_stays_clear_of_the_grid(figure: Figure):
         for note in notes:
             assert Text.get_window_extent(note, renderer).y0 > grid_line + NOTE_CLEARANCE
     pyplot.close(canvas)
+
+
+def test_a_gallery_label_is_readable_and_fits_its_cell():
+    assert short_label("CELLULAR_PHONE_CASE") == "cellular phone case"
+    assert short_label("FINENECKLACEBRACELETANKLET") == "finenecklacebracele\N{HORIZONTAL ELLIPSIS}"
+
+
+def test_a_clip_is_captioned_with_what_its_title_has_in_parentheses():
+    assert title_detail("six (33903159, toma 0)") == "33903159, toma 0"
+    assert title_detail("sin detalle") == ""

@@ -23,7 +23,7 @@ RUN useradd --system --uid "${APP_UID}" --home-dir /app --shell /usr/sbin/nologi
     && chown minigestor /data
 
 ENV MINIGESTOR_DATA_DIR=/data \
-    MINIGESTOR_IMPORT_DIRS=/app/demos/samples
+    MINIGESTOR_IMPORT_DIRS=/app/demos/samples,/app/data/datasets
 
 # numba, debajo de librosa, guarda lo que compila junto al código de la librería, donde el
 # usuario del contenedor no puede escribir, y sin caché el primer MFCC tarda unos 18 s en

@@ -76,6 +76,14 @@ jobs:
         run: |
           docker compose exec -T api python -c \
             "import numpy, faiss, cv2, librosa; cv2.SIFT_create(); librosa.feature.mfcc(y=numpy.zeros(22050, 'float32'), sr=22050)"
+      - name: Un audio de consulta se sube y se sirve por rangos a través de nginx
+        run: |
+          python3 -c "import math, struct, wave; w = wave.open('/tmp/tono.wav', 'wb'); w.setnchannels(1); w.setsampwidth(2); w.setframerate(16000); w.writeframes(b''.join(struct.pack('<h', int(8000 * math.sin(i / 5))) for i in range(16000)))"
+          uploaded=$(curl --fail --silent --show-error --form "file=@/tmp/tono.wav" "$WEB_URL/api/media/queries" \
+            | python3 -c "import json, sys; print(json.load(sys.stdin)['path'])")
+          curl --fail --silent --show-error --get --data-urlencode "path=$uploaded" \
+            --header "Range: bytes=0-99" --output /dev/null --write-out "%{http_code}" \
+            "$WEB_URL/api/media/file" | grep -q 206
       - name: Con el API en marcha, la demo no se vuelve a cargar
         run: docker compose run --rm demo | grep -q "la demo no se vuelve a cargar"
       - name: El perfil bench mide GiST contra su PostgreSQL

@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 
+import CopyButton from "../CopyButton";
 import FailureNotice from "../FailureNotice";
 import SqlBlock from "../SqlBlock";
 import { excerpt, withoutLeadingTitle } from "../../lib/textHighlight";
@@ -11,8 +12,6 @@ import HighlightedText from "./HighlightedText";
  * antes de la primera coincidencia. */
 const EXCERPT_LENGTH = 220;
 const EXCERPT_LEADING = 60;
-/** Cuánto se ve «Copiado» tras copiar el SQL. */
-const COPIED_MS = 1500;
 
 interface RankingPanelProps {
   method: RankingMethod;
@@ -28,26 +27,6 @@ interface RankingPanelProps {
   /** El error del motor ya se ve una vez para los dos rankings. */
   failureShownAbove: boolean;
   onOpenInConsole: (sql: string) => void;
-}
-
-function CopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
-  useEffect(() => {
-    if (!copied) {
-      return;
-    }
-    const timer = window.setTimeout(() => setCopied(false), COPIED_MS);
-    return () => window.clearTimeout(timer);
-  }, [copied]);
-  return (
-    <button
-      className="action action--quiet"
-      onClick={() => void navigator.clipboard.writeText(text).then(() => setCopied(true))}
-      type="button"
-    >
-      {copied ? "Copiado" : "Copiar"}
-    </button>
-  );
 }
 
 function Summary({ outcome }: { outcome: RankingOutcome | null }) {

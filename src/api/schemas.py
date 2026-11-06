@@ -98,6 +98,28 @@ class TextSearchInfo(BaseModel):
     b: float | None = Field(default=None, description="El b con que puntuó BM25")
 
 
+class SimilarityInfo(BaseModel):
+    """Qué buscó el `SIMILAR_TO` de la consulta y en qué columna están los archivos, para
+    mostrarlos como galería."""
+
+    table: str
+    column: str = Field(description="La columna con las rutas de los archivos")
+    index: str
+    method: str = Field(description="HNSW o IVF")
+    metric: Literal["euclidean", "dot", "cosine"]
+    k: int
+    query: str = Field(description="La ruta de la consulta tal como se escribió")
+    media: Literal["image", "audio"]
+
+
+class MediaUploadResponse(BaseModel):
+    """El archivo de una consulta, guardado para usarlo en `SIMILAR_TO`."""
+
+    path: str = Field(description="La ruta que va en SIMILAR_TO('...')")
+    media: Literal["image", "audio"]
+    name: str = Field(description="El nombre con que se subió")
+
+
 class TablePoints(BaseModel):
     """Puntos de una tabla para pintarla en el mapa; una muestra si la tabla es grande."""
 
@@ -133,6 +155,7 @@ class QueryResponse(BaseModel):
     in_transaction: bool = False
     spatial: SpatialInfo | None = None
     text: TextSearchInfo | None = None
+    similarity: SimilarityInfo | None = None
 
 
 class FileUploadResponse(BaseModel):

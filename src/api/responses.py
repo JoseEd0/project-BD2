@@ -9,12 +9,14 @@ from api.schemas import (
     PlanInfo,
     PointInfo,
     QueryResponse,
+    SimilarityInfo,
     SpatialInfo,
     StatementOutcome,
     TextSearchInfo,
 )
 from query.engine import QueryResult
 from query.plan import PlanNode
+from query.similarity_search import SimilarityView
 from query.spatial import SpatialView
 from query.text_search import TextView
 from spatial.geometry import Point
@@ -69,6 +71,22 @@ def as_response(
         in_transaction=in_transaction,
         spatial=_as_spatial(last_query.spatial),
         text=_as_text_search(last_query.text),
+        similarity=_as_similarity(last_query.similarity),
+    )
+
+
+def _as_similarity(view: SimilarityView | None) -> SimilarityInfo | None:
+    if view is None:
+        return None
+    return SimilarityInfo(
+        table=view.table,
+        column=view.column,
+        index=view.index_name,
+        method=view.method.value,
+        metric=view.metric.value,
+        k=view.k,
+        query=view.query,
+        media=view.media.value,
     )
 
 

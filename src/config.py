@@ -99,6 +99,12 @@ DEFAULT_LOCK_TIMEOUT_SECONDS = 5.0
 DEFAULT_CSV_DELIMITER = ","
 DEFAULT_CSV_ENCODING = "utf-8"
 DEFAULT_MAX_UPLOAD_BYTES = 64 * 1024 * 1024
+# El lado de las fotos de ABO: la galería las muestra sin perder nada y una foto grande que
+# llegue por el API viaja en unos kilobytes.
+DEFAULT_THUMBNAIL_SIDE = 256
+# Una exposición sube unas decenas de consultas; con cien, las de la última media hora
+# siguen ahí para repetirlas y el directorio no crece sin límite.
+DEFAULT_MAX_QUERY_UPLOADS = 100
 DEFAULT_MAP_POINTS = 5000
 DEFAULT_MAX_RESULT_ROWS = 10_000
 DEFAULT_SESSION_IDLE_SECONDS = 15 * 60
@@ -208,6 +214,9 @@ class EngineConfig:
         csv_delimiter: separador de los archivos que carga `CREATE TABLE ... FROM FILE`.
         csv_encoding: codificación de esos archivos.
         max_upload_bytes: tamaño máximo de un archivo subido por el API.
+        thumbnail_side: lado mayor, en píxeles, de las miniaturas que sirve el API.
+        max_query_uploads: archivos de consulta de `SIMILAR_TO` subidos que se conservan; al
+            pasar de ahí se borran los más viejos.
         map_points: puntos que el API entrega como máximo para dibujar una tabla en el mapa.
         max_result_rows: filas que el API devuelve como máximo por consulta; el resto se
             cuenta pero no viaja.
@@ -265,6 +274,8 @@ class EngineConfig:
     csv_delimiter: str = DEFAULT_CSV_DELIMITER
     csv_encoding: str = DEFAULT_CSV_ENCODING
     max_upload_bytes: int = DEFAULT_MAX_UPLOAD_BYTES
+    thumbnail_side: int = DEFAULT_THUMBNAIL_SIDE
+    max_query_uploads: int = DEFAULT_MAX_QUERY_UPLOADS
     map_points: int = DEFAULT_MAP_POINTS
     max_result_rows: int = DEFAULT_MAX_RESULT_ROWS
     session_idle_seconds: float = DEFAULT_SESSION_IDLE_SECONDS
@@ -298,6 +309,8 @@ class EngineConfig:
             "feature_chunk_files",
             "feature_workers",
             "max_upload_bytes",
+            "thumbnail_side",
+            "max_query_uploads",
             "map_points",
             "max_result_rows",
             "hnsw_m",

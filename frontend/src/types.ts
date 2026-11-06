@@ -78,6 +78,28 @@ export interface TextSearchInfo {
   b: number | null;
 }
 
+/** Qué buscó el `SIMILAR_TO` y en qué columna están los archivos, para pintar la galería. */
+export interface SimilarityInfo {
+  table: string;
+  /** La columna con las rutas de las imágenes o los audios. */
+  column: string;
+  index: string;
+  method: "HNSW" | "IVF";
+  metric: "euclidean" | "dot" | "cosine";
+  k: number;
+  /** La ruta de la consulta tal como se escribió. */
+  query: string;
+  media: "image" | "audio";
+}
+
+/** El archivo de una consulta subido con `POST /media/queries`. */
+export interface MediaUpload {
+  /** La ruta que va en `SIMILAR_TO('…')`. */
+  path: string;
+  media: "image" | "audio";
+  name: string;
+}
+
 export interface QueryResponse {
   statements: StatementOutcome[];
   columns: string[];
@@ -91,6 +113,7 @@ export interface QueryResponse {
   in_transaction: boolean;
   spatial: SpatialInfo | null;
   text: TextSearchInfo | null;
+  similarity: SimilarityInfo | null;
 }
 
 export interface QueryFailure {

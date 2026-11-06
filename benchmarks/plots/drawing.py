@@ -9,7 +9,16 @@ from math import ceil, floor, log10
 from pathlib import Path
 from typing import Any, TypeVar
 
-from benchmarks.plots.model import BarFigure, BarPanel, Figure, Line, Panel
+from benchmarks.plots.model import (
+    BarFigure,
+    BarPanel,
+    CurveFigure,
+    CurvePanel,
+    Figure,
+    GalleryFigure,
+    Line,
+    Panel,
+)
 from benchmarks.plots.style import (
     AXIS,
     BAR_GROUP_SHARE,
@@ -18,10 +27,14 @@ from benchmarks.plots.style import (
     BAR_PANEL_HEIGHT,
     BAR_PANEL_WIDTH,
     BASELINE_CLEARANCE,
+    CURVE_PANEL_HEIGHT,
+    CURVE_PANEL_WIDTH,
     DASHES,
     DECADES_NEEDING_SUBTICKS,
+    DEFAULT_RING_SIZE,
     DENSE_TICKS,
     DPI,
+    ELLIPSIS,
     END_LABEL_GAP,
     END_LABEL_OFFSET,
     END_LABEL_PADDING,
@@ -29,6 +42,13 @@ from benchmarks.plots.style import (
     FONT_FAMILY,
     FRACTION_AXIS_TOP,
     FRACTION_TICKS,
+    GALLERY_BORDER,
+    GALLERY_CELL_HEIGHT,
+    GALLERY_CELL_WIDTH,
+    GALLERY_LABEL_CHARACTERS,
+    GALLERY_LABEL_SIZE,
+    GALLERY_ROW_GAP,
+    GALLERY_WORD_SIZE,
     GRID,
     GUTTER_PADDING,
     HEADER_BOTTOM,
@@ -43,8 +63,10 @@ from benchmarks.plots.style import (
     LINE_WIDTH,
     MARKER_RING,
     MARKER_SIZE,
+    MATCH,
     MAXIMUM_LABEL_SHARE,
     MINIMUM_DECADES,
+    MISMATCH,
     MUTED_INK,
     NOTE_INSET,
     NOTE_LINE_HEADROOM,
@@ -180,10 +202,17 @@ def _top(group: tuple[float, int], gap: float) -> float:
     return total / count + (count - 1) * gap / 2
 
 
-def compose(figure: Figure | BarFigure, report: dict[str, Any]) -> Any:
+AnyFigure = Figure | BarFigure | CurveFigure | GalleryFigure
+
+
+def compose(figure: AnyFigure, report: dict[str, Any]) -> Any:
     """Monta la figura de una comparación y la devuelve sin guardarla."""
     if isinstance(figure, BarFigure):
         return _compose_bars(figure, report)
+    if isinstance(figure, CurveFigure):
+        return _compose_curves(figure, report)
+    if isinstance(figure, GalleryFigure):
+        return _compose_gallery(figure, report)
     return _compose_lines(figure, report)
 
 
@@ -212,7 +241,7 @@ def _header_height(subtitle: str, legend_rows: int) -> float:
 def _compose_lines(figure: Figure, report: dict[str, Any]) -> Any:
     plt = _start_drawing()
     rows = -(-len(figure.panels) // figure.columns)
-    legend_columns = LEGEND_ENTRIES_PER_COLUMN * figure.columns
+    legend_columns = figure.legend_columns or LEGEND_ENTRIES_PER_COLUMN * figure.columns
     legend_rows = -(-len(_legend_labels(figure)) // legend_columns)
     header = _header_height(figure.subtitle, legend_rows)
     width = PANEL_WIDTH * figure.columns
@@ -352,7 +381,7 @@ def _draw_bar_panel(
     axis.set_title(title, color=INK, fontsize=PANEL_TITLE_SIZE, loc="left", pad=TITLE_PAD)
 
 
-def draw(figure: Figure | BarFigure, report: dict[str, Any], output: Path) -> Path:
+def draw(figure: AnyFigure, report: dict[str, Any], output: Path) -> Path:
     """Escribe la imagen de una comparación y devuelve su ruta."""
     import matplotlib.pyplot as plt
 
@@ -384,9 +413,7 @@ def _legend_labels(figure: Figure) -> list[str]:
     return list(dict.fromkeys(labels))
 
 
-def _draw_header(
-    canvas: Any, figure: Figure | BarFigure, height: float, legend_columns: int
-) -> None:
+def _draw_header(canvas: Any, figure: AnyFigure, height: float, legend_columns: int) -> None:
     """Título, subtítulo y leyenda, alineados a la izquierda sobre los paneles."""
     left = 0.14 / canvas.get_figwidth()
     top = 1.0 - HEADER_TOP / height
@@ -537,3 +564,207 @@ def _label_ends(axis: Any, panel: Panel, report: dict[str, Any], room: float) ->
             arrowprops={"arrowstyle": "-", "color": AXIS, "linewidth": 0.8} if moved else None,
             zorder=4,
         )
+
+
+def curve_points(
+    report: dict[str, Any], figure: CurveFigure, panel: CurvePanel, technique: str
+) -> tuple[int, list[tuple[float, float, bool]]]:
+    """El tamaño más grande medido y sus puntos `(latencia, fracción, por omisión)`, en
+    orden de esfuerzo; ningún punto si la técnica no se midió."""
+    found = [
+        item
+        for item in report["measurements"]
+        if item["technique"] == technique and item["operation"] == panel.operation
+    ]
+    if not found:
+        return 0, []
+    largest = max(int(item["dataset_size"]) for item in found)
+    chosen = sorted(
+        (item for item in found if int(item["dataset_size"]) == largest),
+        key=lambda item: item["extra"][figure.order_field],
+    )
+    points = [
+        (
+            float(item["milliseconds"]),
+            float(item["extra"][figure.field]),
+            bool(item["extra"][figure.default_field]),
+        )
+        for item in chosen
+    ]
+    return largest, points
+
+
+def _compose_curves(figure: CurveFigure, report: dict[str, Any]) -> Any:
+    plt = _start_drawing()
+    rows = -(-len(figure.panels) // figure.columns)
+    legend_columns = figure.legend_columns or LEGEND_ENTRIES_PER_COLUMN * figure.columns
+    techniques = list(
+        dict.fromkeys(technique for panel in figure.panels for technique in panel.techniques)
+    )
+    header = _header_height(figure.subtitle, -(-len(techniques) // legend_columns))
+    height = CURVE_PANEL_HEIGHT * rows + header
+    canvas, grid = plt.subplots(
+        rows,
+        figure.columns,
+        figsize=(CURVE_PANEL_WIDTH * figure.columns, height),
+        dpi=DPI,
+        squeeze=False,
+    )
+    canvas.set_facecolor(SURFACE)
+    axes = [axis for row in grid for axis in row]
+    for axis in axes[len(figure.panels) :]:
+        axis.remove()
+    for axis, panel in zip(axes, figure.panels, strict=False):
+        _draw_curve_panel(axis, figure, panel, report)
+    _draw_header(canvas, figure, height, legend_columns)
+    canvas.tight_layout(rect=(0.0, 0.0, 1.0, 1.0 - header / height), w_pad=PANEL_GAP, h_pad=ROW_GAP)
+    return canvas
+
+
+def _draw_curve_panel(
+    axis: Any, figure: CurveFigure, panel: CurvePanel, report: dict[str, Any]
+) -> None:
+    from matplotlib.ticker import FixedLocator, FuncFormatter, NullLocator
+
+    axis.set_facecolor(SURFACE)
+    latencies: list[float] = []
+    largest = 0
+    for technique in panel.techniques:
+        size, points = curve_points(report, figure, panel, technique.name)
+        if not points:
+            continue
+        largest = max(largest, size)
+        latencies += [latency for latency, _, _ in points]
+        style = technique.style
+        axis.plot(
+            [latency for latency, _, _ in points],
+            [fraction for _, fraction, _ in points],
+            label=technique.label or technique.name,
+            color=style.color,
+            linewidth=LINE_WIDTH,
+            linestyle=(0, DASHES) if style.dashed else "solid",
+            marker=style.marker,
+            markersize=MARKER_SIZE,
+            markeredgecolor=style.color if style.marker == "x" else SURFACE,
+            markeredgewidth=MARKER_RING,
+            zorder=3,
+        )
+        axis.plot(
+            [latency for latency, _, default in points if default],
+            [fraction for _, fraction, default in points if default],
+            linestyle="none",
+            marker="o",
+            markersize=DEFAULT_RING_SIZE,
+            markerfacecolor="none",
+            markeredgecolor=style.color,
+            markeredgewidth=MARKER_RING,
+            zorder=4,
+        )
+    axis.set_xscale("log")
+    if latencies:
+        scale = vertical_scale(latencies, 0.0)
+        axis.set_xlim(scale.low, scale.high)
+        axis.xaxis.set_major_locator(FixedLocator(scale.ticks))
+    axis.xaxis.set_minor_locator(NullLocator())
+    axis.xaxis.set_major_formatter(FuncFormatter(lambda value, _: format_tick(value)))
+    axis.set_ylim(0.0, FRACTION_AXIS_TOP)
+    axis.yaxis.set_major_locator(FixedLocator(FRACTION_TICKS))
+    axis.yaxis.set_major_formatter(FuncFormatter(lambda value, _: format_tick(value)))
+    axis.grid(visible=True, color=GRID, linewidth=0.8, linestyle="solid", zorder=0)
+    axis.set_axisbelow(True)
+    for side in ("top", "right"):
+        axis.spines[side].set_visible(False)
+    for side in ("bottom", "left"):
+        axis.spines[side].set_color(AXIS)
+    axis.tick_params(axis="both", colors=MUTED_INK, length=0, labelsize=LABEL_SIZE)
+    axis.set_xlabel(figure.x_axis, color=SECONDARY_INK, fontsize=LABEL_SIZE, labelpad=4)
+    axis.set_ylabel(figure.y_axis, color=SECONDARY_INK, fontsize=LABEL_SIZE)
+    title = panel.title if not largest else f"{panel.title} · {format_tick(largest)} "
+    title += figure.sizes_label if largest else ""
+    axis.set_title(title, color=INK, fontsize=PANEL_TITLE_SIZE, loc="left", pad=TITLE_PAD)
+
+
+def gallery_rows(report: dict[str, Any], figure: GalleryFigure) -> list[tuple[str, dict[str, Any]]]:
+    """Los casos de la galería, cada uno con el rótulo de su fila, en el orden de
+    `figure.cases`; ninguno si no se midió."""
+    for item in report["measurements"]:
+        if (item["technique"], item["operation"]) == (figure.technique, figure.operation):
+            return [(label, case) for key, label in figure.cases for case in item["extra"][key]]
+    return []
+
+
+def short_label(text: str) -> str:
+    """Una clase en minúsculas y con espacios, cortada para que quepa en su celda."""
+    readable = text.replace("_", " ").lower()
+    if len(readable) <= GALLERY_LABEL_CHARACTERS:
+        return readable
+    return readable[: GALLERY_LABEL_CHARACTERS - 1].rstrip() + ELLIPSIS
+
+
+def title_detail(title: str) -> str:
+    """Lo que el título lleva entre paréntesis: el hablante y la toma de un clip, que la
+    celda no repite porque ya muestra la palabra."""
+    opened, closed = title.find("("), title.rfind(")")
+    return title[opened + 1 : closed] if 0 <= opened < closed else ""
+
+
+def _compose_gallery(figure: GalleryFigure, report: dict[str, Any]) -> Any:
+    plt = _start_drawing()
+    rows = gallery_rows(report, figure)
+    columns = 1 + max((len(case["vecinos"]) for _, case in rows), default=0)
+    header = _header_height(figure.subtitle, 1)
+    height = GALLERY_CELL_HEIGHT * max(len(rows), 1) + header
+    canvas, grid = plt.subplots(
+        max(len(rows), 1),
+        columns,
+        figsize=(GALLERY_CELL_WIDTH * columns, height),
+        dpi=DPI,
+        squeeze=False,
+    )
+    canvas.set_facecolor(SURFACE)
+    for cells, (label, case) in zip(grid, rows, strict=False):
+        query = case["consulta"]
+        title = f"{label} · {round(case['precision_categoria'] * 100)} % de su clase"
+        _draw_gallery_cell(cells[0], figure, query, INK, title)
+        for cell, neighbour in zip(cells[1:], case["vecinos"], strict=False):
+            color = MATCH if neighbour["clase"] == query["clase"] else MISMATCH
+            _draw_gallery_cell(cell, figure, neighbour, color, "")
+    first = grid[0][0]
+    for color, text in ((MATCH, "misma clase que la consulta"), (MISMATCH, "otra clase")):
+        first.plot(
+            [], [], linestyle="none", marker="s", markersize=MARKER_SIZE, color=color, label=text
+        )
+    _draw_header(canvas, figure, height, LEGEND_ENTRIES_PER_COLUMN)
+    canvas.tight_layout(rect=(0.0, 0.0, 1.0, 1.0 - header / height), h_pad=GALLERY_ROW_GAP)
+    return canvas
+
+
+def _draw_gallery_cell(
+    axis: Any, figure: GalleryFigure, item: dict[str, str], color: str, title: str
+) -> None:
+    axis.set_facecolor(SURFACE)
+    axis.set_xticks([])
+    axis.set_yticks([])
+    for spine in axis.spines.values():
+        spine.set_color(color)
+        spine.set_linewidth(GALLERY_BORDER)
+    path = Path(item["ruta"])
+    if figure.images and path.is_file():
+        import matplotlib.pyplot as plt
+
+        axis.imshow(plt.imread(path), aspect="equal")
+    else:
+        axis.text(
+            0.5,
+            0.5,
+            short_label(item["clase"]) if not figure.images else "sin imagen",
+            transform=axis.transAxes,
+            ha="center",
+            va="center",
+            color=INK,
+            fontsize=GALLERY_WORD_SIZE if not figure.images else LABEL_SIZE,
+        )
+    caption = short_label(item["clase"]) if figure.images else title_detail(item["titulo"])
+    axis.set_xlabel(caption, color=SECONDARY_INK, fontsize=GALLERY_LABEL_SIZE)
+    if title:
+        axis.set_title(title, color=INK, fontsize=GALLERY_LABEL_SIZE, loc="left", pad=TITLE_PAD)

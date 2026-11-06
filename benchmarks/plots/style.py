@@ -120,3 +120,24 @@ def format_average(value: float) -> str:
 def format_fraction(value: float) -> str:
     """Una fracción de 0 a 1 con dos decimales: `0.52`."""
     return f"{value:.{FRACTION_DECIMALS}f}"
+
+
+# Curvas de recall contra latencia: paneles más anchos, porque los puntos se reparten a lo
+# ancho, y un anillo alrededor del punto del esfuerzo por omisión.
+CURVE_PANEL_WIDTH = 4.1
+CURVE_PANEL_HEIGHT = 3.0
+DEFAULT_RING_SIZE = 14.0
+# Galería: cada celda es una miniatura con su clase debajo, y el borde dice si comparte la
+# clase de la consulta: aguamarina y naranja, dos de los tres colores de serie que se
+# distinguen también con daltonismo.
+MATCH = AQUA
+MISMATCH = ORANGE
+GALLERY_CELL_WIDTH = 1.35
+GALLERY_CELL_HEIGHT = 1.6
+GALLERY_BORDER = 3.5
+GALLERY_LABEL_SIZE = 8.5
+GALLERY_WORD_SIZE = 15.0
+GALLERY_ROW_GAP = 2.4
+# Una clase más larga se corta con «…»: a 8.5 pt, unos 20 caracteres caben en la celda.
+GALLERY_LABEL_CHARACTERS = 20
+ELLIPSIS = "\N{HORIZONTAL ELLIPSIS}"

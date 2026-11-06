@@ -4,6 +4,9 @@ x-engine: &engine
   image: minigestor-api
   volumes:
     - minigestor-data:/data
+    # Las fotos y pistas de la Parte 4 (ver `benchmarks/multimedia/README.md`). Si no están
+    # descargadas, la demo no carga sus tablas y lo demás funciona igual.
+    - ${MINIGESTOR_DATASETS_DIR:-./data/datasets}:/app/data/datasets:ro
 
 services:
   demo:

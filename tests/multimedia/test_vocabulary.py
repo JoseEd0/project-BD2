@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from multimedia import NotEnoughDescriptorsError, Vocabulary, training_sample
+from multimedia import NotEnoughDescriptorsError, Vocabulary, training_positions, training_sample
 
 CENTROIDS = np.array([[0.0, 0.0], [10.0, 0.0], [0.0, 10.0]], dtype=np.float32)
 ITERATIONS = 10
@@ -87,3 +87,16 @@ def test_no_descriptors_give_an_empty_sample():
 def test_batches_of_different_dimensions_are_rejected():
     with pytest.raises(ValueError, match="dimensión"):
         training_sample([np.ones((2, 2)), np.ones((2, 3))], limit=10, seed=SEED)
+
+
+def test_the_training_objects_are_a_sorted_seeded_sample_without_repeats():
+    positions = training_positions(1_000, 50, seed=SEED)
+
+    assert len(set(positions)) == 50
+    assert positions == sorted(positions)
+    assert all(0 <= position < 1_000 for position in positions)
+    assert training_positions(1_000, 50, seed=SEED) == positions
+
+
+def test_with_fewer_objects_than_asked_every_object_trains():
+    assert training_positions(7, 50, seed=SEED) == list(range(7))

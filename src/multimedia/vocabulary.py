@@ -90,6 +90,14 @@ class Vocabulary:
         return counts
 
 
+def training_positions(total: int, objects: int, seed: int) -> list[int]:
+    """Las posiciones, de menor a mayor, de los objetos cuyos descriptores entrenan el
+    vocabulario: `objects` de los `total` (todos, si hay menos) al azar, fijos por la
+    semilla."""
+    chosen = np.random.default_rng(seed).choice(total, size=min(total, objects), replace=False)
+    return sorted(chosen.tolist())
+
+
 def training_sample(
     batches: Iterable[npt.ArrayLike], limit: int, seed: int
 ) -> Descriptors:

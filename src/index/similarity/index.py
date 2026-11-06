@@ -52,6 +52,7 @@ from multimedia import (
     extract_features,
     extract_in_parallel,
     media_kind_of,
+    training_positions,
     training_sample,
 )
 from storage.record import FieldReader
@@ -378,11 +379,10 @@ class SimilarityIndex(ColumnIndex):
     def _training_files(self, files: list[tuple[RecordId, Path]]) -> list[tuple[RecordId, Path]]:
         """Los archivos cuyos descriptores entrenan el vocabulario: una muestra al azar,
         fija por la semilla, de `vocabulary_training_objects` filas."""
-        count = min(len(files), self._config.vocabulary_training_objects)
-        chosen = np.random.default_rng(self._config.kmeans_seed).choice(
-            len(files), size=count, replace=False
+        positions = training_positions(
+            len(files), self._config.vocabulary_training_objects, self._config.kmeans_seed
         )
-        return [files[position] for position in sorted(chosen.tolist())]
+        return [files[position] for position in positions]
 
     def _reusing(
         self, spill: DescriptorSpill, files: list[tuple[RecordId, Path]]

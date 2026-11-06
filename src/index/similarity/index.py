@@ -35,6 +35,7 @@ from index.ivf import IVFIndex
 from index.secondary import ColumnIndex
 from index.vector import (
     FlatIndex,
+    VectorHit,
     VectorIndex,
     VectorIndexFileError,
     VectorMetric,
@@ -55,6 +56,7 @@ from multimedia import (
     training_positions,
     training_sample,
 )
+from storage.atomic import write_atomically
 from storage.record import FieldReader
 from storage.record_id import RecordId
 from storage.types import Key
@@ -62,6 +64,7 @@ from storage.types import Key
 from .spill import DescriptorSpill
 
 FEATURES_SUFFIX = ".features"
+ZEROS_SUFFIX = ".ceros.npy"
 HNSW_KIND = "hnsw"
 IVF_KIND = "ivf"
 SECONDS_TO_MILLISECONDS = 1000
@@ -178,14 +181,16 @@ class SimilarityIndex(ColumnIndex):
         )
         self._resolve = resolve
         self._store = FeatureStore(features_path(path), self._config)
+        self._zeros: set[int] = set()
         self._vectors = self._open_vectors()
         self._saved = path.exists()
         self._exact: dict[VectorMetric, FlatIndex] = {}
 
     @staticmethod
     def files_of(path: Path) -> list[Path]:
-        """El índice de vectores y los archivos de su almacén de características."""
-        return [path, *FeatureStore.files_of(features_path(path))]
+        """El índice de vectores, la lista de vectores cero y los archivos de su almacén de
+        características."""
+        return [path, zeros_path(path), *FeatureStore.files_of(features_path(path))]
 
     @property
     def settings(self) -> VectorIndexSettings:
@@ -258,6 +263,7 @@ class SimilarityIndex(ColumnIndex):
         exact_reason = None
         if chosen is self._settings.metric:
             found = self._require_vectors().search(vector, k, allowed=ids, effort=effort)
+            found = replace(found, hits=self._with_zeros(found.hits, vector, k, ids, chosen))
         else:
             exact_reason = (
                 f"el índice ordena con {self._settings.metric.value} y la consulta pide "
@@ -273,6 +279,7 @@ class SimilarityIndex(ColumnIndex):
             "kind": self._settings.kind,
             **vectors,
             "metric": self._settings.metric.value,
+            "zero_vectors": len(self._zeros),
             "media": None if self.media_kind is None else self.media_kind.value,
             "features": self._store.describe(),
         }
@@ -296,13 +303,21 @@ class SimilarityIndex(ColumnIndex):
         self._require_kind(media_kind_of(path))
         descriptors = extract_features(path, self._config)
         self._store.add(record_id, descriptors)
-        vectors.add([vector_id_of(record_id)], self._store.vectorize(descriptors)[None, :])
+        vector = self._store.vectorize(descriptors)
+        if vector.any():
+            vectors.add([vector_id_of(record_id)], vector[None, :])
+        else:
+            self._zeros.add(vector_id_of(record_id))
         self._changed()
 
     def _remove(self, value: Key, record_id: RecordId) -> bool:
         if not self._store.remove(record_id):
             return False
-        self._require_vectors().remove([vector_id_of(record_id)])
+        vector_id = vector_id_of(record_id)
+        if vector_id in self._zeros:
+            self._zeros.discard(vector_id)
+        else:
+            self._require_vectors().remove([vector_id])
         self._changed()
         return True
 
@@ -318,6 +333,8 @@ class SimilarityIndex(ColumnIndex):
 
     def _save(self) -> None:
         self._require_vectors().save(self._path)
+        zeros = np.array(sorted(self._zeros), dtype=np.int64)
+        write_atomically(zeros_path(self._path), lambda file: np.save(file, zeros))
         self._saved = True
 
     def _open_vectors(self) -> VectorIndex | None:
@@ -325,19 +342,59 @@ class SimilarityIndex(ColumnIndex):
         almacén; `None` mientras el almacén no esté construido."""
         if not self._store.built:
             return None
-        if self._path.exists():
+        if self._path.exists() and zeros_path(self._path).exists():
             try:
-                return self._settings.load(self._path, self._config)
-            except VectorIndexFileError:
-                self._path.unlink()
+                index = self._settings.load(self._path, self._config)
+                self._zeros = set(np.load(zeros_path(self._path), allow_pickle=False).tolist())
+                return index
+            except (VectorIndexFileError, OSError, ValueError):
+                self._path.unlink(missing_ok=True)
         return self._from_store()
 
     def _from_store(self) -> VectorIndex:
-        """Un índice de vectores nuevo con los vectores del almacén."""
+        """Un índice de vectores nuevo con los vectores del almacén, añadidos de una vez: un
+        IVF entrena sus listas con lo primero que recibe, y por lotes entrenaría con el
+        primero. Los vectores cero quedan fuera (ver `_with_zeros`)."""
         index = self._settings.create(self._store.vocabulary_size, self._config)
-        for ids, vectors in self._store.vectors():
-            index.add(ids, vectors)
+        batches = list(self._store.vectors())
+        if not batches:
+            self._zeros = set()
+            return index
+        ids = np.concatenate([batch_ids for batch_ids, _ in batches])
+        vectors = np.concatenate([batch_vectors for _, batch_vectors in batches])
+        empty = ~vectors.any(axis=1)
+        self._zeros = set(ids[empty].tolist())
+        if (~empty).any():
+            index.add(ids[~empty], vectors[~empty])
         return index
+
+    def _with_zeros(
+        self,
+        hits: tuple[VectorHit, ...],
+        query: np.ndarray,
+        k: int,
+        allowed: list[int] | None,
+        metric: VectorMetric,
+    ) -> tuple[VectorHit, ...]:
+        """El resultado del índice con las filas de vector cero que le correspondan.
+
+        Una imagen sin descriptores SIFT tiene el vector TF-IDF cero. En un HNSW con la
+        euclidiana esos nodos degradan el grafo (con 100 000 fotos, el recall bajaba de
+        0,878 a 0,538), así que no entran al índice. Todos tienen el mismo puntaje contra
+        cualquier consulta —coseno y producto punto 0, euclidiana `1 / (1 + ‖q‖)`—: se
+        calcula una vez y las k primeras se mezclan con lo que devolvió el índice.
+        """
+        permitted = self._zeros if allowed is None else self._zeros.intersection(allowed)
+        if not permitted:
+            return hits
+        zero = np.zeros((1, self._store.vocabulary_size), dtype=np.float32)
+        score = float(metric.similarity(query, zero)[0])
+        candidates = [
+            *hits,
+            *(VectorHit(vector_id, score) for vector_id in sorted(permitted)[:k]),
+        ]
+        candidates.sort(key=lambda hit: (-hit.score, hit.vector_id))
+        return tuple(candidates[:k])
 
     def _exact_index(self, metric: VectorMetric) -> FlatIndex:
         if metric not in self._exact:
@@ -421,6 +478,11 @@ class SimilarityIndex(ColumnIndex):
 
 
 _KIND_NAMES = {MediaKind.IMAGE: "imágenes", MediaKind.AUDIO: "audios"}
+
+
+def zeros_path(path: Path) -> Path:
+    """Los identificadores de las filas cuyo vector es cero, que no están en el índice."""
+    return path.with_name(path.name + ZEROS_SUFFIX)
 
 
 def features_path(path: Path) -> Path:

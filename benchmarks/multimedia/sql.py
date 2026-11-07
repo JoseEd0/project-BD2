@@ -11,6 +11,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
+from typing import Any
 
 from benchmarks.common import time_it
 from benchmarks.multimedia.collection import MediaFile
@@ -23,6 +24,7 @@ TABLE = "medios"
 PATH_LENGTH = 200
 LABEL_LENGTH = 60
 FIRST_ID = 1
+STRUCTURE_KEYS = ("lists", "probes", "trained_on", "vectors", "zero_vectors", "ef_search")
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,13 +56,22 @@ class SqlCollection:
     def create_index(self, index: SqlIndex, metric: VectorMetric) -> float:
         """Milisegundos de `CREATE INDEX`, con la extracción y el vocabulario incluidos."""
         statement = (
-            f"CREATE INDEX idx_{index.method.lower()} ON {TABLE} USING {index.method} (ruta) "
+            f"CREATE INDEX {_index_name(index)} ON {TABLE} USING {index.method} (ruta) "
             f"WITH (METRIC = {metric.value})"
         )
         return time_it(lambda: self._engine.execute(statement))
 
+    def structure(self, index: SqlIndex) -> dict[str, Any]:
+        """Lo que `describe` dice del índice: listas y `probes` de un IVF, vectores en el
+        índice y los vectores cero que quedan fuera."""
+        for described in self._engine.describe_table(TABLE)["indexes"]:
+            if described["name"] == _index_name(index):
+                found: dict[str, Any] = described["structure"]
+                return {key: found[key] for key in STRUCTURE_KEYS if key in found}
+        raise KeyError(f"el índice {_index_name(index)} no está en la tabla {TABLE}")
+
     def drop_index(self, index: SqlIndex) -> None:
-        self._engine.execute(f"DROP INDEX idx_{index.method.lower()}")
+        self._engine.execute(f"DROP INDEX {_index_name(index)}")
 
     def similar(self, index: SqlIndex, query: str, k: int, effort: int | None) -> list[int]:
         """Las posiciones en la colección de las `k` filas que da `SIMILAR_TO`."""
@@ -79,6 +90,10 @@ def sql_config(config: EngineConfig, data_directory: Path, media: Path) -> Engin
     """La configuración de la medida con sus archivos en `data_directory` y los medios del
     dataset, en `media`, como directorio de importación."""
     return replace(config, data_directory=data_directory, import_directories=(media,))
+
+
+def _index_name(index: SqlIndex) -> str:
+    return f"idx_{index.method.lower()}"
 
 
 def _position_of(value: Value) -> int:

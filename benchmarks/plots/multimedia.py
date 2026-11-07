@@ -102,12 +102,11 @@ LAYER_TECHNIQUES = {
 
 
 def _query_panel(dataset: str, metric: VectorMetric) -> Panel:
-    techniques = (*WITH_EXACT, SQL) if metric is VectorMetric.COSINE else WITH_EXACT
     return compare(
         metric_operation(dataset, metric, QUERY),
         f"{dataset.capitalize()} · {METRIC_NAMES[metric].lower()}",
         QUERY_MEDIAN,
-        techniques,
+        (*WITH_EXACT, SQL),
     )
 
 
@@ -119,7 +118,7 @@ def _stages_panel(dataset: str) -> Panel:
             "CREATE INDEX completo (SQL)",
             Style(DARK_BLUE, "P"),
             SQL_HNSW,
-            dataset_operation(dataset, CREATE_INDEX),
+            metric_operation(dataset, VectorMetric.COSINE, CREATE_INDEX),
         )
     )
     return Panel(f"Características de {dataset}", TOTAL_TIME, tuple(lines))

@@ -169,7 +169,7 @@ class Settings:
     ivf_probes: tuple[int, ...] = DEFAULT_IVF_PROBES
     ef_search: tuple[int, ...] = DEFAULT_EF_SEARCH
     sql_sizes: tuple[int, ...] = ()
-    sql_metric: VectorMetric = VectorMetric.COSINE
+    sql_metrics: tuple[VectorMetric, ...] = (VectorMetric.COSINE,)
     gallery_metric: VectorMetric = VectorMetric.COSINE
     gallery_cases: int = DEFAULT_GALLERY_CASES
     gallery_neighbours: int = DEFAULT_GALLERY_NEIGHBOURS
@@ -247,7 +247,7 @@ def _parameters(settings: Settings) -> dict[str, Any]:
         "kmeans_iterations": config.kmeans_iterations,
         "image_max_descriptors": config.image_max_descriptors,
         "sql_sizes": list(settings.sql_sizes),
-        "sql_metric": settings.sql_metric.value,
+        "sql_metrics": [metric.value for metric in settings.sql_metrics],
         "gallery_metric": settings.gallery_metric.value,
         "seed": settings.seed,
         "postgres": settings.postgres_dsn is not None,
@@ -363,7 +363,7 @@ def _measure_size(
         if metric is settings.gallery_metric and collection.size == max(settings.sizes):
             _record_gallery(report, collection, found, settings)
     if collection.size in settings.sql_sizes:
-        _measure_sql(report, collection, truths[settings.sql_metric], settings, workspace)
+        _measure_sql(report, collection, truths, settings, workspace)
 
 
 def _record_features(
@@ -673,7 +673,7 @@ def _described(item: MediaFile) -> dict[str, str]:
 def _measure_sql(
     report: Report,
     collection: Collection,
-    truth: GroundTruth,
+    truths: dict[VectorMetric, GroundTruth],
     settings: Settings,
     workspace: Path,
 ) -> None:
@@ -681,8 +681,11 @@ def _measure_sql(
     config = sql_config(settings.engine, directory, collection.spec.directory)
     table = SqlCollection(collection.files, config)
     try:
-        for index, name in ((SQL_HNSW_INDEX, SQL_HNSW), (SQL_IVF_INDEX, SQL_IVF)):
-            _measure_sql_index(report, collection, truth, settings, table, index, name)
+        for metric in settings.sql_metrics:
+            for index, name in ((SQL_HNSW_INDEX, SQL_HNSW), (SQL_IVF_INDEX, SQL_IVF)):
+                _measure_sql_index(
+                    report, collection, truths[metric], metric, settings, table, index, name
+                )
     finally:
         table.close()
         shutil.rmtree(directory, ignore_errors=True)
@@ -692,19 +695,19 @@ def _measure_sql_index(
     report: Report,
     collection: Collection,
     truth: GroundTruth,
+    metric: VectorMetric,
     settings: Settings,
     table: SqlCollection,
     index: SqlIndex,
     name: str,
 ) -> None:
-    metric = settings.sql_metric
     report.add(
         name,
-        dataset_operation(collection.spec.name, CREATE_INDEX),
+        metric_operation(collection.spec.name, metric, CREATE_INDEX),
         collection.size,
         table.create_index(index, metric),
-        metrica=metric.value,
         carga_media_1_min=load_average(),
+        **table.structure(index),
     )
     paths = [item.path for item in collection.queries]
     measured = timed_queries(
@@ -773,7 +776,12 @@ def _parser() -> argparse.ArgumentParser:
         nargs="*",
         help="tamaños en que se mide el gestor por SQL; por omisión, todos",
     )
-    parser.add_argument("--sql-metric", default=VectorMetric.COSINE.value)
+    parser.add_argument(
+        "--sql-metrics",
+        nargs="+",
+        default=[VectorMetric.COSINE.value],
+        help="métricas con que se mide el gestor por SQL",
+    )
     parser.add_argument("--gallery-metric", default=VectorMetric.COSINE.value)
     parser.add_argument("--gallery-cases", type=int, default=DEFAULT_GALLERY_CASES)
     parser.add_argument("--gallery-neighbours", type=int, default=DEFAULT_GALLERY_NEIGHBOURS)
@@ -814,7 +822,7 @@ def main() -> None:
         ivf_probes=tuple(arguments.ivf_probes),
         ef_search=tuple(arguments.ef_search),
         sql_sizes=sizes if arguments.sql_sizes is None else tuple(arguments.sql_sizes),
-        sql_metric=vector_metric_named(arguments.sql_metric),
+        sql_metrics=tuple(vector_metric_named(name) for name in arguments.sql_metrics),
         gallery_metric=vector_metric_named(arguments.gallery_metric),
         gallery_cases=arguments.gallery_cases,
         gallery_neighbours=arguments.gallery_neighbours,

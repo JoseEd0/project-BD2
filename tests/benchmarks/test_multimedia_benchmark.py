@@ -230,6 +230,7 @@ def _settings(features: Path) -> Settings:
         ivf_probes=(1, 2),
         ef_search=(4, 8),
         sql_sizes=(SIZE,),
+        sql_metrics=(VectorMetric.COSINE, VectorMetric.EUCLIDEAN),
         gallery_cases=1,
         gallery_neighbours=2,
         usearch=USEARCH,
@@ -278,13 +279,18 @@ def test_the_engine_and_faiss_directly_find_the_same_neighbours(report):
 
 def test_through_sql_the_engine_answers_with_the_same_vectors(report):
     """`CREATE INDEX` extrae por su cuenta: si sus vectores fueran otros, su recall contra
-    la verdad del experimento no sería el del índice construido con los del experimento."""
+    la verdad del experimento no sería el del índice construido con los del experimento.
+    El IVF por SQL entrena además con todos los vectores, como el del experimento."""
     for dataset in (IMAGES, AUDIO):
-        answered = _measured(report, metric_operation(dataset, VectorMetric.COSINE, QUERY))
-        created = _measured(report, dataset_operation(dataset, CREATE_INDEX))
-        assert {SQL_HNSW, SQL_IVF} <= created.keys()
-        assert answered[SQL_HNSW]["recall_en_k"] == answered[ENGINE_HNSW]["recall_en_k"]
-        assert answered[SQL_IVF]["recall_en_k"] == answered[ENGINE_IVF]["recall_en_k"]
+        for metric in (VectorMetric.COSINE, VectorMetric.EUCLIDEAN):
+            answered = _measured(report, metric_operation(dataset, metric, QUERY))
+            created = _measured(report, metric_operation(dataset, metric, CREATE_INDEX))
+            built = _measured(report, metric_operation(dataset, metric, BUILD))
+            assert {SQL_HNSW, SQL_IVF} <= created.keys()
+            assert created[SQL_IVF]["lists"] == built[ENGINE_IVF]["listas"]
+            assert created[SQL_HNSW]["zero_vectors"] + created[SQL_HNSW]["vectors"] == SIZE
+            assert answered[SQL_HNSW]["recall_en_k"] == answered[ENGINE_HNSW]["recall_en_k"]
+            assert answered[SQL_IVF]["recall_en_k"] == answered[ENGINE_IVF]["recall_en_k"]
 
 
 def test_the_curve_sweeps_the_effort_and_marks_the_default(report):

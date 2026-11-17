@@ -43,7 +43,7 @@ services:
 
   postgres:
     profiles: [bench]
-    build: ./docker/postgres
+    build: ./deploy/postgres
     image: minigestor-postgres
     environment:
       POSTGRES_DB: minigestor_bench

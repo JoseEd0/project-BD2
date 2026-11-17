@@ -27,6 +27,7 @@ from query.catalog import (
     field_from_column,
     organization_for,
 )
+from query.deadline import within_deadline
 from query.expressions import (
     NO_COLUMNS,
     NO_ROW,
@@ -563,7 +564,7 @@ class Engine:
         """Filas donde buscar las que cambia un UPDATE o un DELETE: las del camino de acceso
         que el planificador elegiría para un SELECT con ese WHERE."""
         planner = Planner({table.name.lower(): table}, self.config)
-        return planner.access_path(table, where).addressed()
+        return within_deadline(planner.access_path(table, where).addressed())
 
     def _tables_of(self, statement: SelectStatement) -> dict[str, Table]:
         names = [statement.source.name, *(join.table.name for join in statement.joins)]

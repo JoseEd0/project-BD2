@@ -29,6 +29,7 @@ from external.sort import ExternalSorter
 from hashing import canonical_key_bytes
 from query.aggregation import Accumulator, Aggregate, accumulator_for, check_argument_type
 from query.comparison import describe_value
+from query.deadline import current_deadline
 from query.expressions import (
     ColumnSlot,
     ExpressionError,
@@ -106,11 +107,21 @@ class Operator(ABC):
         El tiempo es inclusivo, como el `actual time` de PostgreSQL: incluye lo que tardan
         los hijos, porque se mide alrededor de cada petición de fila. No incluye el tiempo
         que el consumidor pasa entre una fila y la siguiente.
+
+        Antes de cada fila mira el plazo de la sentencia con el mismo reloj (ver
+        `query.deadline`).
+
+        Raises:
+            StatementTimeoutError: si la sentencia pasa de su tiempo máximo.
+            StatementCancelledError: si alguien la cancela desde fuera.
         """
+        deadline = current_deadline()
         produced = iter(self._produce())
         self._actual_rows = 0
         while True:
             started = time.perf_counter()
+            if started > deadline.expires_at:
+                raise deadline.expired()
             try:
                 row = next(produced)
             except StopIteration:

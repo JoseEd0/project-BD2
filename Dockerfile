@@ -64,11 +64,15 @@ ENV MPLCONFIGDIR=/tmp/matplotlib
 FROM base AS engine
 
 USER minigestor
-ENV API_PORT=8000
+ENV API_PORT=8000 \
+    API_DRAIN_SECONDS=5
 VOLUME /data
 EXPOSE ${API_PORT}
 
 HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=3 \
     CMD python -c "import os, urllib.request; urllib.request.urlopen(f'http://127.0.0.1:{os.environ[\"API_PORT\"]}/health', timeout=2)"
 
-CMD ["sh", "-c", "exec uvicorn --factory api.main:app_from_environment --host 0.0.0.0 --port \"$API_PORT\""]
+# `exec` deja a uvicorn como PID 1, el que recibe el SIGTERM de `docker stop`: deja de
+# aceptar conexiones, espera API_DRAIN_SECONDS a las que siguen abiertas y el cierre del
+# servicio cancela las sentencias que queden y escribe en disco tablas e índices.
+CMD ["sh", "-c", "exec uvicorn --factory api.main:app_from_environment --host 0.0.0.0 --port \"$API_PORT\" --timeout-graceful-shutdown \"$API_DRAIN_SECONDS\""]

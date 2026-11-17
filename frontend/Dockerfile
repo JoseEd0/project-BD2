@@ -21,9 +21,11 @@ FROM nginxinc/nginx-unprivileged:${NGINX_VERSION}-alpine
 COPY nginx.conf.template /etc/nginx/templates/default.conf.template
 COPY --from=build /frontend/dist /usr/share/nginx/html
 
+# CONSOLE_API_KEY vacía: el API no tiene claves configuradas y no la pide.
 ENV WEB_PORT=8080 \
     API_UPSTREAM=http://api:8000 \
-    API_TIMEOUT=300s
+    API_TIMEOUT=300s \
+    CONSOLE_API_KEY=
 
 EXPOSE ${WEB_PORT}
 

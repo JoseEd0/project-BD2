@@ -462,6 +462,24 @@ def test_a_match_that_cannot_be_answered_fails_before_reading_rows(
         tienda.execute(f"SELECT id FROM productos WHERE {condition}")
 
 
+def test_a_match_query_and_its_limit_can_be_parameters(tienda: Engine):
+    written = tienda.execute(
+        "SELECT id, SCORE() FROM productos WHERE MATCH(texto, 'cable usb') LIMIT 3"
+    )
+    bound = tienda.execute(
+        "SELECT id, SCORE() FROM productos WHERE MATCH(texto, $1) LIMIT $2",
+        parameters=["cable usb", 3],
+    )
+
+    assert bound.rows == written.rows
+
+
+def test_a_match_parameter_that_is_not_a_text_fails_before_reading_rows(tienda: Engine):
+    tienda.execute("DELETE FROM productos")
+    with pytest.raises(TextSearchError, match="texto constante"):
+        tienda.execute("SELECT id FROM productos WHERE MATCH(texto, $1)", parameters=[5])
+
+
 def test_a_match_without_an_inverted_index_says_how_to_create_it(tienda: Engine):
     tienda.execute("DROP INDEX idx_texto")
     with pytest.raises(TextSearchError, match=r"CREATE INDEX ON productos USING INVERTED \(texto\)"):

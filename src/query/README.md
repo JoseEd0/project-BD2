@@ -578,7 +578,14 @@ with Engine(EngineConfig()) as engine:
     result = engine.execute("SELECT * FROM alumnos WHERE id = 1")
     print(result.columns, result.rows)
     print(result.plan.render())
+    engine.execute("SELECT * FROM alumnos WHERE nombre = $1", parameters=["ana"])
 ```
+
+`parameters` son los valores de `$1`, `$2`, … tal como llegan en JSON; `parameters.py` los
+convierte en la expresión que se habría escrito en su lugar —una lista de números es un
+vector y `{"lat", "lon"}` un `POINT(lat, lon)`— y el parser la pone donde va cada `$n`
+(ver [`sql/README.md`](../sql/README.md#parámetros-posicionales)). Así un parámetro se
+valida contra su columna igual que un literal, antes de leer filas.
 
 ## Tests
 

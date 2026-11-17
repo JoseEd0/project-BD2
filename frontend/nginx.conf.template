@@ -10,6 +10,10 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_read_timeout ${API_TIMEOUT};
+        # La clave de la consola la pone nginx y no el navegador: así no viaja en el bundle,
+        # y también la llevan las peticiones que el navegador hace solo, como el <img> de una
+        # miniatura o el sendBeacon que cierra la sesión. Reemplaza cualquier otra que llegue.
+        proxy_set_header Authorization "Bearer ${CONSOLE_API_KEY}";
         # El motor aplica su propio límite de subida y lo explica en JSON; uno aquí
         # respondería antes con el 413 en HTML de nginx.
         client_max_body_size 0;

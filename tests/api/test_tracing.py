@@ -95,3 +95,25 @@ def test_any_log_line_inside_a_request_carries_its_id():
         line = json.loads(JsonFormatter().format(record))
     assert (line["request_id"], line["message"]) == ("dentro", "aviso")
     assert json.loads(JsonFormatter().format(record))["request_id"] is None
+
+
+def test_successful_probes_are_logged_at_debug_and_failing_ones_are_not(
+    client: TestClient, caplog: pytest.LogCaptureFixture
+):
+    caplog.set_level(logging.DEBUG, logger=ACCESS_LOGGER)
+    client.get("/health")
+    client.get("/ready")
+    client.app.state.service.close()
+    client.get("/ready")
+    client.get("/tables")
+    levels = [
+        (record.path, record.status, record.levelno)
+        for record in caplog.records
+        if record.name == ACCESS_LOGGER
+    ]
+    assert levels == [
+        ("/health", 200, logging.DEBUG),
+        ("/ready", 200, logging.DEBUG),
+        ("/ready", 503, logging.INFO),
+        ("/tables", 200, logging.INFO),
+    ]

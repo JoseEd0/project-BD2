@@ -47,7 +47,7 @@ from api.errors import (
     validation_failed,
 )
 from api.limits import BodySizeLimit, body_limit_for
-from api.logs import configure_logging, log_request
+from api.logs import HEALTH_PATH, READY_PATH, configure_logging, log_request
 from api.routes import media, query, sessions, tables, uploads
 from api.service import Service, ServiceStoppingError
 from api.settings import settings_from_environment
@@ -110,11 +110,11 @@ def create_app(
     for stopping in (ServiceStoppingError, StatementCancelledError):
         app.add_exception_handler(stopping, service_unavailable)
 
-    @app.get("/health")
+    @app.get(HEALTH_PATH)
     def health() -> dict[str, str]:
         return {"status": "ok", "version": VERSION}
 
-    @app.get("/ready")
+    @app.get(READY_PATH)
     def ready() -> JSONResponse:
         if service.is_ready():
             return JSONResponse({"status": "ready"})

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import threading
 import time
 from collections.abc import Iterable, Iterator
@@ -12,12 +13,23 @@ from typing import Annotated
 from fastapi import Depends, Request
 
 from api.schemas import ColumnInfo, TableInfo, TablePoints
+from api.tracing import Stage, record_stage
 from config import EngineConfig
+from errors import DomainError
 from query.catalog import CatalogError, TableDefinition, UnknownTableError
-from query.engine import Engine
+from query.deadline import Deadline, statement_deadline
+from query.engine import Engine, QueryResult
+from query.plan import MILLISECONDS_PER_SECOND
+from sql.nodes import Statement
 from storage.schema import Field
 from storage.types import FieldType
 from txn import LockManager, Session, TransactionManager
+
+SHUTDOWN_REASON = "el servidor se está apagando"
+
+
+class ServiceStoppingError(Exception):
+    """El servidor se está apagando y ya no admite peticiones al motor."""
 
 
 @dataclass
@@ -44,6 +56,9 @@ class Service:
     lock. Una sesión que pasa `session_idle_seconds` sin usarse se cierra y aborta lo que
     tuviera abierto: sin eso, una pestaña cerrada a mitad de una transacción dejaría sus
     tablas bloqueadas hasta reiniciar el servidor.
+
+    `_activity` cuenta las peticiones que están usando el motor y los plazos de las
+    sentencias en curso, para que el apagado pueda cancelarlas y esperar a que salgan.
     """
 
     def __init__(self, config: EngineConfig) -> None:
@@ -53,24 +68,64 @@ class Service:
         self.transactions = TransactionManager()
         self._sessions: dict[str, _SessionSlot] = {}
         self._sessions_guard = threading.Lock()
+        self._activity = threading.Condition()
+        self._in_flight = 0
+        self._running: set[Deadline] = set()
+        self._stopping = False
 
     @contextmanager
     def session(self, identifier: str | None) -> Iterator[Session]:
         """La sesión del cliente mientras dura la petición.
 
         Sin identificador es una sesión efímera, en autocommit, que se cierra al terminar.
+
+        Raises:
+            ServiceStoppingError: si el servidor se está apagando.
         """
-        if identifier is None:
-            with Session(self.engine, self.locks, self.transactions) as ephemeral:
-                yield ephemeral
-            return
-        slot, expired = self._claim(identifier)
+        with self._admitted():
+            if identifier is None:
+                with Session(self.engine, self.locks, self.transactions) as ephemeral:
+                    yield ephemeral
+                return
+            slot, expired = self._claim(identifier)
+            try:
+                _close_all(expired)
+                with slot.guard:
+                    yield slot.session
+            finally:
+                self._release(slot)
+
+    def run(self, session: Session, statement: Statement) -> QueryResult:
+        """Ejecuta la sentencia en la sesión con `statement_timeout_seconds` de plazo y anota
+        sus etapas en la traza de la petición.
+
+        `txn` es lo que la sentencia pasó fuera del motor: esperando bloqueos y, en
+        autocommit, escribiendo en disco al confirmar.
+
+        Raises:
+            StatementTimeoutError: si pasa del plazo; la sesión ya la deshizo.
+            StatementCancelledError: si el servidor se apaga mientras corre.
+            ServiceStoppingError: si el servidor ya se estaba apagando.
+        """
+        deadline = Deadline(self.config.statement_timeout_seconds)
+        started = time.perf_counter()
+        with self._tracked(deadline), statement_deadline(deadline):
+            result = session.run(statement)
+        wall_ms = (time.perf_counter() - started) * MILLISECONDS_PER_SECOND
+        record_stage(Stage.PLAN, result.planning_ms)
+        record_stage(Stage.EXECUTE, result.elapsed_ms - result.planning_ms)
+        record_stage(Stage.TRANSACTION, max(wall_ms - result.elapsed_ms, 0.0))
+        return result
+
+    def is_ready(self) -> bool:
+        """Si atiende consultas: no se está apagando y el catálogo responde."""
+        if self._stopping:
+            return False
         try:
-            _close_all(expired)
-            with slot.guard:
-                yield slot.session
-        finally:
-            self._release(slot)
+            self.engine.table_names()
+        except DomainError:
+            return False
+        return True
 
     def close_session(self, identifier: str) -> bool:
         """Cierra la sesión y aborta lo que tuviera abierto.
@@ -125,17 +180,75 @@ class Service:
         )
 
     def close(self) -> None:
-        """Cierra todas las sesiones y después el motor.
+        """Apagado ordenado: deja de admitir peticiones, cancela las sentencias en curso,
+        espera como mucho `shutdown_grace_seconds` a que salgan, cierra todas las sesiones
+        y después el motor, que escribe en disco las páginas y los índices.
 
         El motor se cierra aunque falle el cierre de alguna sesión: es él quien escribe en
-        disco lo que queda en memoria, y no hacerlo perdería datos ya confirmados.
+        disco lo que queda en memoria, y no hacerlo perdería datos ya confirmados. Cerrar
+        dos veces no hace nada.
         """
+        if not self._stop_admitting():
+            return
+        self._drain()
         with self._sessions_guard:
             slots = list(self._sessions.values())
             self._sessions.clear()
         with ExitStack() as closing:
             closing.callback(self.engine.close)
             closing.callback(_close_all, slots)
+
+    @contextmanager
+    def _admitted(self) -> Iterator[None]:
+        with self._activity:
+            if self._stopping:
+                raise ServiceStoppingError(SHUTDOWN_REASON)
+            self._in_flight += 1
+        try:
+            yield
+        finally:
+            with self._activity:
+                self._in_flight -= 1
+                self._activity.notify_all()
+
+    @contextmanager
+    def _tracked(self, deadline: Deadline) -> Iterator[None]:
+        """Registra el plazo para que el apagado pueda cancelarlo; una petición que esperaba
+        su turno cuando empezó el apagado ya no arranca su sentencia."""
+        with self._activity:
+            if self._stopping:
+                raise ServiceStoppingError(SHUTDOWN_REASON)
+            self._running.add(deadline)
+        try:
+            yield
+        finally:
+            with self._activity:
+                self._running.discard(deadline)
+
+    def _stop_admitting(self) -> bool:
+        """Cancela las sentencias en curso; `False` si el apagado ya había empezado."""
+        with self._activity:
+            if self._stopping:
+                return False
+            self._stopping = True
+            for deadline in self._running:
+                deadline.cancel(SHUTDOWN_REASON)
+        return True
+
+    def _drain(self) -> None:
+        """Espera a que salgan las peticiones; una sentencia que no lee filas (un CREATE
+        INDEX) no se puede cancelar, y pasado el plazo se cierra igual."""
+        with self._activity:
+            drained = self._activity.wait_for(
+                lambda: self._in_flight == 0, timeout=self.config.shutdown_grace_seconds
+            )
+            pending = self._in_flight
+        if not drained:
+            logging.getLogger(__name__).warning(
+                "apagado con %d petición(es) aún en curso tras %g s",
+                pending,
+                self.config.shutdown_grace_seconds,
+            )
 
     def _claim(self, identifier: str) -> tuple[_SessionSlot, list[_SessionSlot]]:
         """La sesión pedida, ya contada como en uso, y las caducadas que hay que cerrar."""

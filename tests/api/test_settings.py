@@ -4,11 +4,16 @@ from pathlib import Path
 
 import pytest
 
+from api.auth import Role, digest_of
 from api.settings import (
     CORS_ORIGINS_VARIABLE,
     DATA_DIRECTORY_VARIABLE,
     IMPORT_DIRECTORIES_VARIABLE,
     LOCK_TIMEOUT_VARIABLE,
+    LOG_LEVEL_VARIABLE,
+    MAX_REQUEST_BYTES_VARIABLE,
+    SERVICE_KEYS_VARIABLE,
+    STATEMENT_TIMEOUT_VARIABLE,
     SettingsError,
     settings_from_environment,
 )
@@ -23,6 +28,10 @@ def clean_environment(monkeypatch: pytest.MonkeyPatch) -> None:
         DATA_DIRECTORY_VARIABLE,
         IMPORT_DIRECTORIES_VARIABLE,
         LOCK_TIMEOUT_VARIABLE,
+        LOG_LEVEL_VARIABLE,
+        MAX_REQUEST_BYTES_VARIABLE,
+        SERVICE_KEYS_VARIABLE,
+        STATEMENT_TIMEOUT_VARIABLE,
     ):
         monkeypatch.delenv(variable, raising=False)
 
@@ -72,4 +81,61 @@ def test_an_empty_data_directory_is_reported(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv(CORS_ORIGINS_VARIABLE, ORIGINS)
     monkeypatch.setenv(DATA_DIRECTORY_VARIABLE, "  ")
     with pytest.raises(SettingsError, match=DATA_DIRECTORY_VARIABLE):
+        settings_from_environment()
+
+
+def test_limits_and_log_level_come_from_the_environment(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv(CORS_ORIGINS_VARIABLE, ORIGINS)
+    monkeypatch.setenv(STATEMENT_TIMEOUT_VARIABLE, "2.5")
+    monkeypatch.setenv(MAX_REQUEST_BYTES_VARIABLE, "4096")
+    monkeypatch.setenv(LOG_LEVEL_VARIABLE, "debug")
+    settings = settings_from_environment()
+    assert settings.config.statement_timeout_seconds == 2.5
+    assert settings.config.max_request_bytes == 4096
+    assert settings.log_level == "DEBUG"
+
+
+def test_an_unknown_log_level_is_reported(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv(CORS_ORIGINS_VARIABLE, ORIGINS)
+    monkeypatch.setenv(LOG_LEVEL_VARIABLE, "ruidoso")
+    with pytest.raises(SettingsError, match=LOG_LEVEL_VARIABLE):
+        settings_from_environment()
+
+
+def test_without_keys_the_api_is_open(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv(CORS_ORIGINS_VARIABLE, ORIGINS)
+    monkeypatch.setenv(SERVICE_KEYS_VARIABLE, "")
+    assert settings_from_environment().service_keys == ()
+
+
+def test_service_keys_are_read_as_service_role_and_hash(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv(CORS_ORIGINS_VARIABLE, ORIGINS)
+    monkeypatch.setenv(
+        SERVICE_KEYS_VARIABLE, f"consola:admin:{digest_of('a')}, ventas : read : {digest_of('b')}"
+    )
+    keys = settings_from_environment().service_keys
+    assert [(key.service, key.role, key.digest) for key in keys] == [
+        ("consola", Role.ADMIN, digest_of("a")),
+        ("ventas", Role.READ, digest_of("b")),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("entry", "reason"),
+    [
+        (f"consola:{digest_of('a')}", "servicio:rol:sha256"),
+        (f"consola:root:{digest_of('a')}", "rol desconocido"),
+        ("consola:admin:clave-en-claro", "SHA-256"),
+        (f"consola:admin:{digest_of('a').upper()}", "SHA-256"),
+        (f"con sola:admin:{digest_of('a')}", "nombre de servicio"),
+        (f"a:read:{digest_of('x')},a:write:{digest_of('y')}", "repite"),
+        (f"a:read:{digest_of('x')},b:write:{digest_of('x')}", "repite"),
+    ],
+)
+def test_a_malformed_service_key_is_reported(
+    monkeypatch: pytest.MonkeyPatch, entry: str, reason: str
+):
+    monkeypatch.setenv(CORS_ORIGINS_VARIABLE, ORIGINS)
+    monkeypatch.setenv(SERVICE_KEYS_VARIABLE, entry)
+    with pytest.raises(SettingsError, match=reason):
         settings_from_environment()

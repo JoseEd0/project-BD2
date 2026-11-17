@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
+from api.auth import CallerDependency, authorize, required_role
 from api.errors import as_http_error
 from api.responses import as_response, describe_statement
 from api.schemas import QueryRequest, QueryResponse
 from api.service import ServiceDependency
+from api.tracing import Stage, timed
 from errors import DomainError
 from query.parameters import bound_parameters
 from sql import parse_script
@@ -19,28 +21,33 @@ router = APIRouter()
 
 
 @router.post("/query", response_model=QueryResponse)
-def query(request: QueryRequest, service: ServiceDependency) -> QueryResponse:
+def query(
+    request: QueryRequest, service: ServiceDependency, caller: CallerDependency
+) -> QueryResponse:
     """Ejecuta el script del editor y devuelve las filas y el plan de la última consulta.
 
     Las sentencias corren en orden y el script se detiene en la primera que falle: las
     anteriores ya quedaron aplicadas, igual que en cualquier gestor fuera de una
     transacción. Un `BEGIN` necesita `session_id`: sin sesión no habría dónde guardar la
     transacción entre una petición y la siguiente. `params` lleva los valores de `$1`, `$2`,
-    …, y entonces `sql` tiene que ser una sola sentencia.
+    …, y entonces `sql` tiene que ser una sola sentencia. El rol de quien llama tiene que
+    alcanzar para todo el script antes de ejecutar la primera sentencia.
     """
     try:
-        statements = parse_script(request.sql, bound_parameters(request.params))
+        with timed(Stage.PARSE):
+            statements = parse_script(request.sql, bound_parameters(request.params))
     except SqlPositionError as error:
         raise as_http_error(error, line=error.line, column=error.column) from error
     except DomainError as error:
         raise as_http_error(error) from error
+    authorize(caller, required_role(statements))
     if request.session_id is None and any(
         isinstance(statement, BeginTransactionStatement) for statement in statements
     ):
         raise as_http_error(SessionError("BEGIN necesita un session_id para seguir la transacción"))
     with service.session(request.session_id) as session:
         try:
-            results = [session.run(statement) for statement in statements]
+            results = [service.run(session, statement) for statement in statements]
         except SqlPositionError as error:
             raise as_http_error(
                 error, session.in_transaction, error.line, error.column
@@ -48,6 +55,7 @@ def query(request: QueryRequest, service: ServiceDependency) -> QueryResponse:
         except DomainError as error:
             raise as_http_error(error, session.in_transaction) from error
         labels = [describe_statement(statement) for statement in statements]
-        return as_response(
-            results, labels, session.in_transaction, service.config.max_result_rows
-        )
+        with timed(Stage.SERIALIZE):
+            return as_response(
+                results, labels, session.in_transaction, service.config.max_result_rows
+            )

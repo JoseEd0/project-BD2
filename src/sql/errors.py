@@ -42,3 +42,11 @@ class SqlLexicalError(SqlPositionError):
 
 class SqlSyntaxError(SqlPositionError):
     """The token sequence does not match the grammar."""
+
+
+class SqlParameterError(SqlError):
+    """The values sent for the `$n` parameters do not match the statement."""
+
+
+class SqlMissingParameterError(SqlPositionError, SqlParameterError):
+    """The statement references a `$n` for which no value was sent."""

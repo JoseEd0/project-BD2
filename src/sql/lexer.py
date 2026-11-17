@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 
 from .errors import SqlLexicalError
-from .tokens import KEYWORDS, Token, TokenType
+from .tokens import KEYWORDS, PARAMETER_PREFIX, Token, TokenType
 
 LINE_COMMENT_PREFIX = "--"
 BLOCK_COMMENT_OPEN = "/*"
@@ -22,6 +22,8 @@ _SINGLE_CHAR_TOKENS: dict[str, TokenType] = {
     ";": TokenType.SEMICOLON,
     "(": TokenType.LPAREN,
     ")": TokenType.RPAREN,
+    "[": TokenType.LBRACKET,
+    "]": TokenType.RBRACKET,
     ".": TokenType.DOT,
     "*": TokenType.STAR,
     "+": TokenType.PLUS,
@@ -72,6 +74,8 @@ class Lexer:
         char = self._peek()
         if char in DIGITS:
             return self._read_number(line, column)
+        if char == PARAMETER_PREFIX and self._peek(1) in DIGITS:
+            return self._read_parameter(line, column)
         if char.isalpha() or char in IDENTIFIER_EXTRA_CHARS:
             return self._read_word(line, column)
         if char == STRING_QUOTE:
@@ -138,6 +142,19 @@ class Lexer:
         """`float('1e400')` is infinity, which no column stores and JSON cannot carry."""
         if math.isinf(float(text)):
             raise self._error("literal decimal demasiado grande", line, column)
+
+    def _read_parameter(self, line: int, column: int) -> Token:
+        start = self._position
+        self._advance()
+        self._consume_digits()
+        text = self._source[start : self._position]
+        if self._peek().isalnum() or self._peek() in IDENTIFIER_EXTRA_CHARS:
+            raise self._error(f"parámetro no válido '{text}{self._peek()}'", line, column)
+        number = text.removeprefix(PARAMETER_PREFIX)
+        self._reject_unconvertible_integer(number, line, column)
+        if int(number) == 0:
+            raise self._error(f"los parámetros se numeran desde {PARAMETER_PREFIX}1", line, column)
+        return Token(TokenType.PARAMETER, text, line, column)
 
     def _exponent_follows(self) -> bool:
         offset = 2 if self._peek(1) in SIGN_CHARS else 1

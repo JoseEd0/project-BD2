@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from enum import Enum, unique
 from types import MappingProxyType
 
-LiteralValue = int | float | str | bool | None
+LiteralValue = int | float | str | bool | tuple[float, ...] | None
 OptionValue = int | float | str | bool | None
 
 EMPTY_OPTIONS: Mapping[str, OptionValue] = MappingProxyType({})

@@ -6,7 +6,7 @@ lógica de base de datos**; si algo hay que decidir sobre datos, lo decide el mo
 ## Arrancar
 
 ```bash
-.venv/bin/pip install -e .
+uv sync
 cp .env.example .env
 .venv/bin/uvicorn --factory api.main:app_from_environment --env-file .env --reload --port 8000
 ```

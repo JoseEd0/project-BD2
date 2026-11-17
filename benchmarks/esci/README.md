@@ -16,7 +16,7 @@ anotador calificó como **E**xacto, **S**ustituto, **C**omplemento o **I**rrelev
 queda solo con la tienda de España.
 
 ```bash
-.venv/bin/pip install -e ".[datasets]"     # pyarrow, solo para leer los parquet
+uv sync --all-packages --extra datasets     # pyarrow, solo para leer los parquet
 .venv/bin/python -m benchmarks.esci.download --salida data/datasets/esci_es
 ```
 

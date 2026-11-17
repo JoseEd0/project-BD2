@@ -20,7 +20,7 @@ ese argumento se generan puntos sintéticos sobre Lima, que no necesitan descarg
 GiST se mide contra un PostgreSQL con PostGIS, usando el tipo `geography` para que la
 distancia sea geodésica como la del motor. La conexión se toma de `--postgres-dsn` o de la
 variable `BENCH_POSTGRES_DSN`; sin ninguna de las dos se miden solo las dos técnicas del
-motor. Requiere `pip install -e ".[postgres]"`.
+motor. Requiere `uv sync --all-packages --extra postgres`.
 """
 
 from __future__ import annotations

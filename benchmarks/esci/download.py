@@ -7,7 +7,7 @@ la tienda de España (`product_locale = 'es'`). Es lo que hace falta para medir
 Precision@10 y Recall@10 en la búsqueda de texto: qué productos debió devolver cada
 consulta.
 
-    .venv/bin/pip install -e ".[datasets]"
+    uv sync --all-packages --extra datasets
     .venv/bin/python -m benchmarks.esci.download --salida data/datasets/esci_es
 
 Deja en la carpeta de salida tres CSV con el formato que carga el gestor:

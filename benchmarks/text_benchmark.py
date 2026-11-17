@@ -23,7 +23,7 @@ se decide qué consultas se miden.
   `tsvector` generada con `to_tsvector` y un índice GIN sobre ella. La consulta es el OR de
   sus términos, ordenado con `ts_rank_cd`. La conexión se toma de `--postgres-dsn` o de la
   variable `BENCH_POSTGRES_DSN`; sin ninguna de las dos se miden solo las técnicas del
-  motor. Requiere `pip install -e ".[postgres]"`.
+  motor. Requiere `uv sync --all-packages --extra postgres`.
 
 En los dos lados la construcción empieza con los textos ya cargados: en el motor, en una
 lista en memoria; en PostgreSQL, en la tabla. El tiempo cuenta el análisis del texto y el

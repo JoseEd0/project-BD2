@@ -1,6 +1,6 @@
 """Demostración de concurrencia: varias transacciones compitiendo por las mismas filas.
 
-Ejecutar con (requiere `pip install -e .`):
+Ejecutar con (requiere `uv sync`):
 
     .venv/bin/python demos/concurrencia.py
 

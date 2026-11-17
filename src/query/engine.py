@@ -39,6 +39,7 @@ from query.index_methods import Capability, method_named, secondary_method_names
 from query.journal import DiscardingJournal, Journal
 from query.loader import infer_schema, read_values
 from query.operators import UnsupportedQueryError
+from query.parameters import bound_parameters
 from query.plan import MILLISECONDS_PER_SECOND, PlanNode
 from query.planner import Planner
 from query.row_store import AddressedRecord
@@ -154,14 +155,17 @@ class Engine:
             self._directory_lock.release()
             raise
 
-    def execute(self, sql: str, journal: Journal | None = None) -> QueryResult:
-        """Ejecuta una sola sentencia.
+    def execute(
+        self, sql: str, journal: Journal | None = None, parameters: Sequence[object] = ()
+    ) -> QueryResult:
+        """Ejecuta una sola sentencia; `parameters` son los valores de `$1`, `$2`, …
 
         Raises:
             EngineError: si el texto no contiene exactamente una sentencia.
-            SqlError: si el texto no se puede parsear.
+            SqlError: si el texto no se puede parsear o los parámetros no encajan con él.
+            ParameterValueError: si un parámetro no es de un tipo del dialecto.
         """
-        statements = parse_script(sql)
+        statements = parse_script(sql, bound_parameters(parameters))
         if len(statements) != 1:
             raise EngineError(f"se esperaba una sentencia y llegaron {len(statements)}")
         return self.run(statements[0], journal)

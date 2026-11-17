@@ -197,6 +197,24 @@ def test_the_column_can_be_named(fotos, gallery):
     assert found[0] == 9
 
 
+def test_the_query_file_and_k_can_be_parameters(fotos, gallery):
+    query = str(gallery[9][0])
+
+    bound = fotos.execute(
+        "SELECT id FROM fotos WHERE SIMILAR_TO($1, k = $2)", parameters=[query, 3]
+    )
+
+    assert [row[0] for row in bound.rows] == ids(fotos, similar(gallery[9][0], 3))
+
+
+def test_a_k_parameter_that_is_not_a_count_is_rejected(fotos, gallery):
+    with pytest.raises(SimilaritySearchError, match="k es cuántas filas"):
+        fotos.execute(
+            "SELECT id FROM fotos WHERE SIMILAR_TO($1, k = $2)",
+            parameters=[str(gallery[1][0]), "3"],
+        )
+
+
 def test_hnsw_and_ivf_agree_with_the_exact_search(fotos, gallery):
     fotos.execute(CREATE_IVF)
     query = gallery[3][0]

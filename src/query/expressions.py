@@ -779,6 +779,8 @@ def _literal_type(value: object) -> tuple[FieldType, int | None]:
         return FieldType.FLOAT, None
     if isinstance(value, str):
         return FieldType.STRING, max(len(value.encode()), MINIMUM_TEXT_LENGTH)
+    if isinstance(value, tuple):
+        return FieldType.VECTOR, len(value)
     return FieldType.INT, None
 
 

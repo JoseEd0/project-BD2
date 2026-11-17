@@ -115,6 +115,11 @@ def literal_for(field: Field, value: Value) -> Value:
             f"la columna '{field.name}' es {field.type.value} y no se puede comparar "
             f"con {_described(value)}"
         ) from None
+    if field.type is FieldType.VECTOR and isinstance(value, tuple) and len(value) != field.length:
+        raise ComparisonError(
+            f"la columna '{field.name}' es un vector de dimensión {field.length} y no se "
+            f"puede comparar con uno de dimensión {len(value)}"
+        )
     if field.type is FieldType.DATE:
         return date_from(value)
     if field.type is FieldType.INT and isinstance(value, float) and value.is_integer():
@@ -203,6 +208,8 @@ def describe_value(value: object) -> str:
         return f"POINT({value.lat!r}, {value.lon!r})"
     if isinstance(value, str):
         return "'" + value.replace("'", "''") + "'"
+    if isinstance(value, tuple):
+        return f"[{', '.join(map(repr, value))}]"
     return repr(value)
 
 

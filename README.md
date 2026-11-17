@@ -354,6 +354,11 @@ están en [`.env.example`](.env.example); las de la interfaz, en
 | `MINIGESTOR_IMPORT_DIRS` | otros directorios de los que `FROM FILE` puede leer | ninguno |
 | `MINIGESTOR_CORS_ORIGINS` | orígenes desde los que llama la interfaz | **obligatoria** |
 | `MINIGESTOR_LOCK_TIMEOUT` | segundos que una transacción espera un bloqueo | `5` |
+| `MINIGESTOR_STATEMENT_TIMEOUT` | segundos que puede durar cada sentencia | `30` |
+| `MINIGESTOR_MAX_REQUEST_BYTES` | bytes del cuerpo de una petición sin archivo | `8388608` |
+| `MINIGESTOR_API_KEYS` | claves de los servicios, `servicio:rol:sha256` | ninguna: API abierto |
+| `MINIGESTOR_LOG_LEVEL` | nivel de los logs JSON | `INFO` |
+| `MINIGESTOR_CONSOLE_KEY` | con Docker, la clave que nginx añade a las peticiones de la interfaz | — |
 | `VITE_API_URL` | dirección del API que usa la interfaz | **obligatoria** |
 | `BENCH_POSTGRES_DSN` | conexión al PostgreSQL contra el que se mide GiST | — |
 | `MINIGESTOR_WEB_PORT` | puerto de la interfaz con Docker | `8080` |
@@ -369,6 +374,13 @@ Con Docker no hay que tocar ninguna: la imagen fija `MINIGESTOR_DATA_DIR` en el 
 `MINIGESTOR_IMPORT_DIRS` en `demos/samples`, `compose.yaml` pone el origen de la interfaz,
 y la interfaz se compila con `VITE_API_URL=/api`. La imagen de la interfaz acepta además
 `API_UPSTREAM` (a dónde reenvía nginx), `WEB_PORT` y `API_TIMEOUT`.
+
+Sin `MINIGESTOR_API_KEYS` el API queda abierto, que es lo cómodo para desarrollar. Para
+que otros servicios se conecten, cada uno recibe una clave con su rol (`read`, `write` o
+`admin`), y la interfaz la suya en `MINIGESTOR_CONSOLE_KEY`, que nginx añade a cada
+petición sin que entre en el bundle. Cómo crearlas, qué permite cada rol, los logs JSON,
+`X-Request-ID`, `Server-Timing`, los límites y `/ready` están en
+[`src/api/README.md`](src/api/README.md#el-gestor-como-servicio).
 
 ### 3.7 Comprobar la instalación
 

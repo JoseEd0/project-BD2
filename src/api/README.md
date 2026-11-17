@@ -19,6 +19,10 @@ Documentación interactiva generada por FastAPI en `http://localhost:8000/docs`.
 | `MINIGESTOR_IMPORT_DIRS` | otros directorios de los que `FROM FILE` puede leer, separados por comas | ninguno |
 | `MINIGESTOR_CORS_ORIGINS` | orígenes desde los que llama el frontend, separados por comas | **obligatoria** |
 | `MINIGESTOR_LOCK_TIMEOUT` | segundos que una transacción espera un bloqueo; un número finito | `5` |
+| `MINIGESTOR_STATEMENT_TIMEOUT` | segundos que puede durar cada sentencia | `30` |
+| `MINIGESTOR_MAX_REQUEST_BYTES` | bytes del cuerpo de una petición que no sube un archivo | `8388608` (8 MiB) |
+| `MINIGESTOR_API_KEYS` | claves de los servicios, `servicio:rol:sha256` separadas por comas | ninguna: API abierto |
+| `MINIGESTOR_LOG_LEVEL` | nivel de los logs JSON | `INFO` |
 
 Están recogidas en [`.env.example`](../../.env.example), en la raíz del repositorio.
 
@@ -28,9 +32,13 @@ Ninguna ruta ni puerto está escrito en el código.
 
 | Módulo | Qué hace |
 |---|---|
-| [`main.py`](main.py) | `create_app`: arma la aplicación; uvicorn la llama con `--factory` |
-| [`settings.py`](settings.py) | configuración leída de las variables de entorno |
-| [`service.py`](service.py) | estado compartido: motor, bloqueos y sesiones |
+| [`main.py`](main.py) | `create_app`: arma la aplicación y sus middlewares; uvicorn la llama con `--factory` |
+| [`settings.py`](settings.py) | configuración leída de las variables de entorno, claves incluidas |
+| [`service.py`](service.py) | estado compartido: motor, bloqueos, sesiones, plazos y apagado |
+| [`auth.py`](auth.py) | claves por servicio, roles y el rol que pide cada sentencia |
+| [`tracing.py`](tracing.py) | `X-Request-ID` y las etapas de `Server-Timing` de la petición en curso |
+| [`logs.py`](logs.py) | logs en JSON, una línea por petición |
+| [`limits.py`](limits.py) | tamaño máximo del cuerpo, anunciado o enviado por trozos |
 | [`routes/`](routes/) | un router por dominio: tablas, consultas, subidas y sesiones |
 | [`responses.py`](responses.py) | del resultado del motor al JSON de la respuesta |
 | [`errors.py`](errors.py) | la forma única de toda respuesta de error |
@@ -40,7 +48,8 @@ Ninguna ruta ni puerto está escrito en el código.
 
 | Método | Ruta | Para qué |
 |---|---|---|
-| `GET` | `/health` | comprobar que el servidor responde |
+| `GET` | `/health` | vivo: el proceso responde (sin clave; es el healthcheck de Docker) |
+| `GET` | `/ready` | listo: el catálogo responde y no se está apagando; `503` si no (sin clave) |
 | `GET` | `/tables` | panel de archivos: tablas, columnas, tipos, índices y número de filas |
 | `POST` | `/query` | ejecuta un script y devuelve filas, mensajes y plan |
 | `POST` | `/tables/upload` | crea una tabla a partir de un CSV subido |
@@ -275,12 +284,120 @@ la carga de archivos o de bloqueos— se devuelven como `400`: son culpa de lo q
 Todas derivan de una misma clase, `DomainError` ([`src/errors.py`](../errors.py)), así que
 un módulo nuevo no tiene que anotarse en ninguna lista para que sus errores lleguen bien.
 Un cuerpo que no cumple el esquema de la ruta es un `422`, con la misma forma de `detail`.
-Un archivo más grande que el límite es un `413`. Cualquier otra excepción es un fallo del
+Un archivo o un cuerpo más grande que el límite es un `413`; sin clave válida, un `401`;
+con un rol que no alcanza, un `403`; con el servidor apagándose, un `503` (ver *El gestor
+como servicio*). Cualquier otra excepción es un fallo del
 servidor y llega como `500`, con la misma forma, la clase de la excepción en `kind` y la
 traza en el log; convertirla en un `400` escondería el bug detrás de un «error del
 usuario». El middleware de CORS envuelve a todos los demás, así que también los `413` y
 `500` llevan sus cabeceras: sin ellas el navegador descartaría la respuesta y el frontend
 solo vería un fallo de red.
+
+## El gestor como servicio
+
+En la Parte 5 el gestor es un contenedor aparte y las aplicaciones le hablan solo por HTTP.
+Para eso el API sabe quién llama, deja rastro de cada petición, no deja que una consulta
+tumbe a las demás y le dice al orquestador si está vivo y listo.
+
+### Claves por servicio y roles
+
+Cada servicio tiene su clave y la envía como `Authorization: Bearer <clave>`. El servidor
+guarda solo su SHA-256 en `MINIGESTOR_API_KEYS`, junto al nombre del servicio y su rol:
+
+```bash
+clave=$(python3 -c "import secrets; print(secrets.token_urlsafe(32))")
+printf %s "$clave" | shasum -a 256          # el hash va en MINIGESTOR_API_KEYS
+MINIGESTOR_API_KEYS=consola:admin:<sha256>,recomendador:read:<sha256>,ventas:write:<sha256>
+```
+
+| Rol | Qué permite |
+|---|---|
+| `read` | `SELECT`, `EXPLAIN`, `BEGIN`/`COMMIT`/`ROLLBACK`, las rutas `GET`, cerrar su sesión, subir el archivo de un `SIMILAR_TO` |
+| `write` | además `INSERT`, `UPDATE` y `DELETE` |
+| `admin` | además `CREATE` y `DROP`, cargar CSV (`/tables/upload`, `/files/upload`) y vaciar la base (`DELETE /tables`) |
+
+El rol de `POST /query` sale del **AST ya parseado**, no del texto: el script entero tiene
+que caber en el rol antes de que corra la primera sentencia, así que `INSERT …; DROP TABLE t`
+con una clave `write` no inserta nada. Una sentencia que no se reconozca pide `admin`. Sin
+clave o con una que no es de nadie la respuesta es `401` (con `WWW-Authenticate: Bearer`);
+con un rol que no alcanza, `403`. Un hash rápido basta porque las claves son aleatorias y
+largas, no contraseñas que se puedan adivinar con un diccionario. Sin
+`MINIGESTOR_API_KEYS` el API queda **abierto**, para desarrollar, y lo avisa en el log al
+arrancar. `/health`, `/ready` y `/docs` no piden clave.
+
+**La consola** no lleva la clave en el bundle: nginx, en el contenedor `web`, añade
+`Authorization: Bearer $CONSOLE_API_KEY` a cada petición que reenvía a `/api/`, y reemplaza
+la que traiga el navegador. Así también la llevan las peticiones que el navegador hace solo
+—el `<img>` de una miniatura, el `sendBeacon` que cierra la sesión—, que no pueden añadir
+cabeceras. Con Docker se da en `MINIGESTOR_CONSOLE_KEY` (ver [`.env.example`](../../.env.example))
+y su hash va en `MINIGESTOR_API_KEYS`, normalmente con rol `admin`. Quien llega a la interfaz
+actúa con la clave de la consola: el puerto de `web` es la puerta de administración y se
+publica solo donde deba. Con `npm run dev` la interfaz habla directo con el API, sin nginx,
+así que en desarrollo se deja el API sin claves.
+
+Las sesiones (`session_id`) no se separan por servicio: dos servicios que usen el mismo
+identificador comparten la transacción. Cada aplicación debe usar los suyos.
+
+### Trazas: `X-Request-ID`, logs y `Server-Timing`
+
+- **`X-Request-ID`**: si la petición trae uno válido (hasta 128 caracteres entre letras,
+  dígitos y `._:-`) se usa ese; si no, se genera uno. Vuelve en la respuesta, también en
+  los errores, y va en cada línea de log escrita durante la petición.
+- **Logs**: JSON a la salida estándar, con `logging` de la biblioteca estándar; los de
+  uvicorn salen por el mismo camino. Una línea por petición:
+
+  ```json
+  {"time": "2026-11-17T15:04:05.123456+00:00", "level": "INFO", "logger": "api.access",
+   "message": "POST /query 200", "request_id": "3f2a…", "method": "POST", "path": "/query",
+   "status": 200, "service": "recomendador", "duration_ms": 4.81}
+  ```
+
+  `service` es `-` si la petición no llegó a autenticarse y `anonymous` con el API abierto.
+- **`Server-Timing`**, el estándar que muestran las herramientas del navegador (pestaña
+  *Network → Timing*), con las etapas medidas en milisegundos:
+
+  | Métrica | Qué mide |
+  |---|---|
+  | `parse` | analizar el SQL |
+  | `plan` | planificar (`QueryResult.planning_ms`, como el *Planning Time* de PostgreSQL) |
+  | `exec` | ejecutar en el motor, sin la planificación |
+  | `txn` | lo que la sentencia pasó fuera del motor: esperar bloqueos y escribir al confirmar |
+  | `serialize` | convertir el resultado en la respuesta |
+  | `total` | la petición entera, en el servidor |
+
+  En un script, cada métrica suma las de todas sus sentencias. Las rutas que no ejecutan
+  SQL solo llevan `total`.
+
+### Límites
+
+- **Tiempo por sentencia** (`MINIGESTOR_STATEMENT_TIMEOUT`, 30 s): una sentencia que se
+  pasa se corta con `400` de tipo `StatementTimeoutError` y la sesión la deshace como
+  cualquier otro error; dentro de una transacción, la transacción sigue abierta. Las demás
+  peticiones siguen respondiendo mientras tanto: cada una corre en su hilo y la cortada
+  suelta sus bloqueos al terminar. La cancelación es **cooperativa**: un hilo no se puede
+  matar sin dejar páginas y bloqueos a medias, así que el ejecutor mira el plazo entre fila
+  y fila ([`query/deadline.py`](../query/deadline.py)). La espera de un bloqueo tiene su
+  propio plazo (`MINIGESTOR_LOCK_TIMEOUT`), y un `CREATE INDEX`, que no pasa filas por el
+  ejecutor, no se corta.
+- **Tamaño del cuerpo** (`MINIGESTOR_MAX_REQUEST_BYTES`, 8 MiB): `413` de tipo
+  `RequestTooLargeError`. Si el cuerpo lo anuncia en `Content-Length` se rechaza sin
+  leerlo; si llega por trozos, se cuenta y se corta en cuanto pasa. Las subidas de archivos
+  tienen su propio límite, `max_upload_bytes` (ver *Carga de CSV*).
+- **Tamaño del resultado**: viajan como mucho `max_result_rows` filas y `total_rows` dice
+  cuántas había (ver *Sesiones y transacciones*).
+
+### Salud y apagado ordenado
+
+`/health` responde mientras el proceso vive; el `HEALTHCHECK` de Docker lo usa. `/ready`
+responde `200` solo si el catálogo contesta y el servidor no se está apagando, y `503` si
+no: es la que debe mirar quien reparte tráfico.
+
+Al recibir `SIGTERM` (`docker stop`), uvicorn deja de aceptar conexiones y espera
+`API_DRAIN_SECONDS` (5 s) a las que siguen abiertas. Después el cierre del servicio deja de
+admitir sentencias (`503 ServiceStoppingError`), cancela las que están corriendo
+(`503 StatementCancelledError`, deshechas), espera como mucho `shutdown_grace_seconds`
+(5 s) a que salgan, cierra las sesiones abortando sus transacciones y cierra el motor, que
+escribe en disco tablas e índices. `compose.yaml` le da 20 s antes de matar el proceso.
 
 ## Tests
 
@@ -290,4 +407,8 @@ solo vería un fallo de red.
 
 Cubren las cuatro rutas, la estructura que consume el panel de archivos, el plan devuelto
 en un `SELECT`, los errores con posición y el ciclo completo de una transacción a través de
-varias peticiones (incluido el rollback al cerrar la sesión).
+varias peticiones (incluido el rollback al cerrar la sesión). `test_auth.py` prueba las
+claves y los roles; `test_tracing.py`, el `X-Request-ID`, `Server-Timing` y la línea JSON
+del log; `test_limits.py`, una consulta que pasa del tiempo máximo mientras otra en paralelo
+responde, el cuerpo demasiado grande, `/ready` y el apagado que cancela una consulta en
+curso sin perder lo confirmado.

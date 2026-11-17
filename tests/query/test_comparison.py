@@ -7,6 +7,7 @@ import pytest
 from query.comparison import (
     ComparisonError,
     comparable,
+    describe_value,
     literal_for,
     orderable,
     plainly_comparable,
@@ -67,6 +68,18 @@ def test_a_point_is_not_a_vector():
     """Un VECTOR(2) y un POINT guardan dos números, pero no son lo mismo."""
     with pytest.raises(ComparisonError, match=r"un punto .* con un vector"):
         comparable(Point(1.0, 2.0), (1.0, 2.0))
+
+
+def test_a_vector_compares_only_with_a_vector_of_its_dimension():
+    column = Field("v", FieldType.VECTOR, 2)
+
+    assert literal_for(column, (1.0, 2.0)) == (1.0, 2.0)
+    with pytest.raises(ComparisonError, match=r"dimensión 2 .* dimensión 3"):
+        literal_for(column, (1.0, 2.0, 3.0))
+
+
+def test_a_vector_is_written_as_its_sql_literal():
+    assert describe_value((0.5, -1.0)) == "[0.5, -1.0]"
 
 
 def test_a_literal_takes_the_type_of_its_column():

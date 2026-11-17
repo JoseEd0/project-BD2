@@ -6,7 +6,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Query
 
-from api.auth import Role, requires
+from api.auth import CallerDependency, Role, requires
 from api.errors import as_http_error
 from api.responses import as_response
 from api.schemas import QueryResponse, TableInfo, TablePoints
@@ -27,11 +27,14 @@ def tables(service: ServiceDependency) -> list[TableInfo]:
 
 @router.get("/tables/{name}/structure")
 def table_structure(
-    name: str, service: ServiceDependency, session_id: SessionQuery = None
+    name: str,
+    service: ServiceDependency,
+    caller: CallerDependency,
+    session_id: SessionQuery = None,
 ) -> dict[str, Any]:
     """Organización física de la tabla y forma real de sus índices: niveles del B+,
     profundidad global y cubetas del hash. Lee con bloqueo compartido sobre la tabla."""
-    with service.session(session_id) as session:
+    with service.session(caller.service, session_id) as session:
         try:
             return session.inspect([name], lambda: service.engine.describe_table(name))
         except DomainError as error:
@@ -42,6 +45,7 @@ def table_structure(
 def table_points(
     name: str,
     service: ServiceDependency,
+    caller: CallerDependency,
     column: Annotated[str | None, Query(description="Columna POINT")] = None,
     limit: Annotated[int | None, Query(ge=1, description="Máximo de puntos")] = None,
     session_id: SessionQuery = None,
@@ -52,7 +56,7 @@ def table_points(
     que el mapa siga siendo fluido y la muestra no se concentre en una zona. Lee con
     bloqueo compartido sobre la tabla.
     """
-    with service.session(session_id) as session:
+    with service.session(caller.service, session_id) as session:
         try:
             return session.inspect([name], lambda: service.points(name, column, limit))
         except DomainError as error:
@@ -60,12 +64,14 @@ def table_points(
 
 
 @router.delete("/tables", response_model=QueryResponse, dependencies=[requires(Role.ADMIN)])
-def drop_all_tables(service: ServiceDependency, session_id: SessionQuery = None) -> QueryResponse:
+def drop_all_tables(
+    service: ServiceDependency, caller: CallerDependency, session_id: SessionQuery = None
+) -> QueryResponse:
     """Borra todas las tablas y sus archivos. Deja la base de datos vacía.
 
     Existe para poder empezar una demostración desde cero sin tocar el disco a mano.
     """
-    with service.session(session_id) as session:
+    with service.session(caller.service, session_id) as session:
         names = service.engine.table_names()
         try:
             results = [service.run(session, DropTableStatement(name=name)) for name in names]

@@ -122,3 +122,29 @@ def test_without_keys_the_api_is_open_and_says_so(
 )
 def test_the_role_comes_from_the_parsed_statements(sql: str, role: Role):
     assert required_role(parse_script(sql)) is role
+
+
+def test_two_services_with_the_same_session_id_have_separate_transactions(client: TestClient):
+    session = {"session_id": "compartido"}
+    writer, admin = bearer(WRITER_KEY), bearer(ADMIN_KEY)
+    client.post("/query", json={"sql": "BEGIN", **session}, headers=writer)
+    client.post("/query", json={"sql": "INSERT INTO t VALUES (1)", **session}, headers=writer)
+    rolled_back = client.post("/query", json={"sql": "ROLLBACK", **session}, headers=admin)
+    assert rolled_back.status_code == 400
+    assert rolled_back.json()["detail"]["kind"] == "SessionError"
+    committed = client.post("/query", json={"sql": "COMMIT", **session}, headers=writer)
+    assert committed.status_code == 200
+    assert query(client, READER_KEY, "SELECT * FROM t").json()["rows"] == [[1]]
+
+
+def test_a_service_cannot_close_the_session_of_another(client: TestClient):
+    session = {"session_id": "ajena"}
+    writer = bearer(WRITER_KEY)
+    client.post("/query", json={"sql": "BEGIN", **session}, headers=writer)
+    client.post("/query", json={"sql": "INSERT INTO t VALUES (5)", **session}, headers=writer)
+    closed = client.post("/sessions/ajena/close", headers=bearer(ADMIN_KEY))
+    assert closed.json() == {"closed": False}
+    still_open = client.post("/query", json={"sql": "COMMIT", **session}, headers=writer)
+    assert still_open.status_code == 200
+    assert query(client, READER_KEY, "SELECT * FROM t").json()["rows"] == [[5]]
+    assert client.post("/sessions/ajena/close", headers=writer).json() == {"closed": True}

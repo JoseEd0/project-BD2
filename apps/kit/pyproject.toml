@@ -1,0 +1,13 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "minigestor-kit"
+version = "0.1.0"
+description = "Lo común de los servicios de la Parte 5: configuración, logs, salud y errores"
+requires-python = ">=3.11"
+dependencies = []
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/appkit"]

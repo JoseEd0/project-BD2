@@ -95,6 +95,8 @@ config.local.*
 *.spimi
 *.wal
 *.lock
+# El lock de uv sí se versiona: fija las versiones de todo el monorepo.
+!/uv.lock
 *.db
 *.sqlite
 *.sqlite3

@@ -357,6 +357,8 @@ abierto todos son `anonymous` y comparten el espacio de sesiones, como antes.
   ```
 
   `service` es `-` si la petición no llegó a autenticarse y `anonymous` con el API abierto.
+  `/health` y `/ready` que responden bien se registran en `DEBUG`: el healthcheck de Docker
+  llama cada 10 s y taparía las demás líneas. Si fallan, salen en `INFO` como cualquier otra.
 - **`Server-Timing`**, el estándar que muestran las herramientas del navegador (pestaña
   *Network → Timing*), con las etapas medidas en milisegundos:
 

@@ -20,6 +20,10 @@ ACCESS_FIELDS = ("method", "path", "status", "service", "duration_ms")
 # en JSON. Su log de acceso sobra: la línea de `api.access` dice lo mismo y más.
 UVICORN_LOGGERS = ("uvicorn", "uvicorn.error")
 UVICORN_ACCESS_LOGGER = "uvicorn.access"
+HEALTH_PATH = "/health"
+READY_PATH = "/ready"
+PROBE_PATHS = frozenset({HEALTH_PATH, READY_PATH})
+FIRST_ERROR_STATUS = 400
 
 
 class JsonFormatter(logging.Formatter):
@@ -64,8 +68,13 @@ def configure_logging(level: str) -> None:
 
 
 def log_request(method: str, path: str, status: int, trace: RequestTrace) -> None:
-    """La línea de acceso de una petición ya respondida, con su tiempo total."""
-    logging.getLogger(ACCESS_LOGGER).info(
+    """La línea de acceso de una petición ya respondida, con su tiempo total.
+
+    Las sondas de salud que responden bien van en DEBUG: el healthcheck de Docker llama cada
+    pocos segundos y taparía las líneas que importan. Una sonda que falla sí se ve.
+    """
+    logging.getLogger(ACCESS_LOGGER).log(
+        _access_level(path, status),
         "%s %s %d",
         method,
         path,
@@ -79,6 +88,12 @@ def log_request(method: str, path: str, status: int, trace: RequestTrace) -> Non
             "duration_ms": trace.stages.get(Stage.TOTAL),
         },
     )
+
+
+def _access_level(path: str, status: int) -> int:
+    if path in PROBE_PATHS and status < FIRST_ERROR_STATUS:
+        return logging.DEBUG
+    return logging.INFO
 
 
 def _request_id_of(record: logging.LogRecord) -> str | None:

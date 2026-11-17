@@ -45,7 +45,7 @@ def query(
         isinstance(statement, BeginTransactionStatement) for statement in statements
     ):
         raise as_http_error(SessionError("BEGIN necesita un session_id para seguir la transacción"))
-    with service.session(request.session_id) as session:
+    with service.session(caller.service, request.session_id) as session:
         try:
             results = [service.run(session, statement) for statement in statements]
         except SqlPositionError as error:

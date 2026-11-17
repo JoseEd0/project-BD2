@@ -10,7 +10,7 @@ from typing import Annotated, BinaryIO
 
 from fastapi import APIRouter, File, Form, UploadFile
 
-from api.auth import Role, requires
+from api.auth import CallerDependency, Role, requires
 from api.errors import as_http_error, invalid_request, upload_too_large
 from api.responses import as_response
 from api.schemas import FileUploadResponse, QueryResponse
@@ -81,6 +81,7 @@ def upload_file(
 )
 def upload(
     service: ServiceDependency,
+    caller: CallerDependency,
     file: Annotated[UploadFile, File(description="CSV con cabecera")],
     name: Annotated[str, Form()],
     organization: Annotated[str, Form()] = Organization.HEAP.value,
@@ -98,7 +99,7 @@ def upload(
     try:
         path = workspace / f"{name}{CSV_SUFFIX}"
         copy_limited(file.file, path, service.config.max_upload_bytes)
-        with service.session(session_id) as session:
+        with service.session(caller.service, session_id) as session:
             try:
                 result = service.run(session, _with_path(statement, path))
             except DomainError as error:

@@ -9,6 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import api.routes.uploads as uploads_route
+from api.auth import OPEN_ACCESS_SERVICE
 from api.main import create_app
 from api.service import Service
 from config import DEFAULT_BM25_B, DEFAULT_BM25_K1, EngineConfig
@@ -758,10 +759,10 @@ def test_closing_the_server_saves_committed_data_even_if_a_session_fails(
     config: EngineConfig, monkeypatch: pytest.MonkeyPatch
 ):
     service = Service(config)
-    with service.session(None) as autocommit:
+    with service.session(OPEN_ACCESS_SERVICE, None) as autocommit:
         autocommit.execute("CREATE TABLE t (id INT PRIMARY KEY)")
         autocommit.execute("INSERT INTO t VALUES (1), (2), (3)")
-    with service.session("rota") as broken:
+    with service.session(OPEN_ACCESS_SERVICE, "rota") as broken:
         broken.execute("BEGIN")
 
         def fail() -> None:
@@ -928,21 +929,21 @@ def test_closing_a_session_with_a_request_in_flight_waits_for_it(config: EngineC
     esa petición: queda pendiente y lo hace ella al terminar. Si la sesión se cerrara
     antes, la petición abriría una transacción que nadie podría cerrar, con sus bloqueos."""
     service = Service(config)
-    with service.session(None) as autocommit:
+    with service.session(OPEN_ACCESS_SERVICE, None) as autocommit:
         autocommit.execute("CREATE TABLE t (id INT PRIMARY KEY, v INT)")
         autocommit.execute("INSERT INTO t VALUES (1, 1)")
-    with service.session(SESSION):
+    with service.session(OPEN_ACCESS_SERVICE, SESSION):
         pass
-    slot = service._sessions[SESSION]
+    slot = service._sessions[(OPEN_ACCESS_SERVICE, SESSION)]
     slot.guard.acquire()
 
     def late_request() -> None:
-        with service.session(SESSION) as session:
+        with service.session(OPEN_ACCESS_SERVICE, SESSION) as session:
             session.execute("BEGIN")
             session.execute("UPDATE t SET v = 2 WHERE id = 1")
 
     worker = threading.Thread(target=late_request)
-    closer = threading.Thread(target=service.close_session, args=(SESSION,))
+    closer = threading.Thread(target=service.close_session, args=(OPEN_ACCESS_SERVICE, SESSION))
     worker.start()
     queued = _eventually(lambda: slot.requests == 1)
     closer.start()
@@ -955,7 +956,7 @@ def test_closing_a_session_with_a_request_in_flight_waits_for_it(config: EngineC
     assert not worker.is_alive()
     assert not slot.session.in_transaction
     assert service.locks.holders_of("t") == {}
-    with service.session(None) as autocommit:
+    with service.session(OPEN_ACCESS_SERVICE, None) as autocommit:
         assert autocommit.execute("SELECT v FROM t").rows == ((1,),)
     service.close()
 
@@ -964,22 +965,22 @@ def test_one_expired_session_that_fails_to_close_does_not_keep_the_others_open(
     config: EngineConfig, monkeypatch: pytest.MonkeyPatch
 ):
     service = Service(impatient_config(config, session_idle_seconds=IMPATIENT_TIMEOUT))
-    with service.session(None) as autocommit:
+    with service.session(OPEN_ACCESS_SERVICE, None) as autocommit:
         autocommit.execute("CREATE TABLE a (id INT PRIMARY KEY)")
         autocommit.execute("CREATE TABLE b (id INT PRIMARY KEY)")
     for identifier, table in (("rota", "a"), ("sana", "b")):
-        with service.session(identifier) as session:
+        with service.session(OPEN_ACCESS_SERVICE, identifier) as session:
             session.execute("BEGIN")
             session.execute(f"INSERT INTO {table} VALUES (1)")
 
     def fail() -> None:
         raise RuntimeError("no se pudo deshacer")
 
-    monkeypatch.setattr(service._sessions["rota"].session, "close", fail)
+    monkeypatch.setattr(service._sessions[(OPEN_ACCESS_SERVICE, "rota")].session, "close", fail)
     time.sleep(IMPATIENT_TIMEOUT * 2)
-    with pytest.raises(RuntimeError), service.session("nueva"):
+    with pytest.raises(RuntimeError), service.session(OPEN_ACCESS_SERVICE, "nueva"):
         pass
     assert service.locks.holders_of("b") == {}
-    assert service._sessions["nueva"].requests == 0
+    assert service._sessions[(OPEN_ACCESS_SERVICE, "nueva")].requests == 0
     monkeypatch.undo()
     service.close()

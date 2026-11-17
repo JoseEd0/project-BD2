@@ -72,7 +72,8 @@ Ninguna ruta ni puerto está escrito en el código.
   funciona a través de varias llamadas. Eso es lo que permite demostrar transacciones desde
   la interfaz.
 
-Dos peticiones con el mismo `session_id` se atienden una tras otra. Una sesión que pasa
+Dos peticiones con el mismo `session_id` (del mismo servicio, ver *Claves por servicio y
+roles*) se atienden una tras otra. Una sesión que pasa
 `EngineConfig.session_idle_seconds` (15 minutos) sin usarse se cierra y aborta su
 transacción: una pestaña cerrada no deja tablas bloqueadas. Si cerrar una de ellas falla,
 las demás se cierran igual. `POST /sessions/{id}/close` responde enseguida aunque la sesión
@@ -335,8 +336,11 @@ actúa con la clave de la consola: el puerto de `web` es la puerta de administra
 publica solo donde deba. Con `npm run dev` la interfaz habla directo con el API, sin nginx,
 así que en desarrollo se deja el API sin claves.
 
-Las sesiones (`session_id`) no se separan por servicio: dos servicios que usen el mismo
-identificador comparten la transacción. Cada aplicación debe usar los suyos.
+**Las sesiones son de quien las abre.** El servidor las guarda por el par (servicio que
+llama, `session_id`): dos servicios que usen el mismo identificador tienen transacciones
+distintas, y uno que adivine el `session_id` de otro no puede continuar su transacción ni
+cerrarla con `POST /sessions/{id}/close`, que solo cierra las del propio servicio. Con el API
+abierto todos son `anonymous` y comparten el espacio de sesiones, como antes.
 
 ### Trazas: `X-Request-ID`, logs y `Server-Timing`
 

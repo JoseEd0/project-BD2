@@ -26,6 +26,9 @@ from storage.types import FieldType
 from txn import LockManager, Session, TransactionManager
 
 SHUTDOWN_REASON = "el servidor se está apagando"
+# Una sesión se reconoce por el servicio que la abrió y su `session_id`: otro servicio que
+# adivine el identificador no puede continuar ni cerrar una transacción que no es suya.
+SessionKey = tuple[str, str]
 
 
 class ServiceStoppingError(Exception):
@@ -66,7 +69,7 @@ class Service:
         self.engine = Engine(config)
         self.locks = LockManager(config)
         self.transactions = TransactionManager()
-        self._sessions: dict[str, _SessionSlot] = {}
+        self._sessions: dict[SessionKey, _SessionSlot] = {}
         self._sessions_guard = threading.Lock()
         self._activity = threading.Condition()
         self._in_flight = 0
@@ -74,10 +77,11 @@ class Service:
         self._stopping = False
 
     @contextmanager
-    def session(self, identifier: str | None) -> Iterator[Session]:
-        """La sesión del cliente mientras dura la petición.
+    def session(self, owner: str, identifier: str | None) -> Iterator[Session]:
+        """La sesión `identifier` del servicio `owner` mientras dura la petición.
 
         Sin identificador es una sesión efímera, en autocommit, que se cierra al terminar.
+        Dos servicios con el mismo identificador tienen sesiones distintas.
 
         Raises:
             ServiceStoppingError: si el servidor se está apagando.
@@ -87,7 +91,7 @@ class Service:
                 with Session(self.engine, self.locks, self.transactions) as ephemeral:
                     yield ephemeral
                 return
-            slot, expired = self._claim(identifier)
+            slot, expired = self._claim((owner, identifier))
             try:
                 _close_all(expired)
                 with slot.guard:
@@ -127,8 +131,9 @@ class Service:
             return False
         return True
 
-    def close_session(self, identifier: str) -> bool:
-        """Cierra la sesión y aborta lo que tuviera abierto.
+    def close_session(self, owner: str, identifier: str) -> bool:
+        """Cierra la sesión `identifier` del servicio `owner` y aborta lo que tuviera abierto;
+        la de otro servicio con el mismo identificador no se toca.
 
         Si alguna petición de la sesión sigue en curso o esperando su turno, el cierre
         queda para cuando termine la última: cerrarla antes dejaría que esa petición
@@ -136,7 +141,7 @@ class Service:
         retenidos para siempre.
         """
         with self._sessions_guard:
-            slot = self._sessions.pop(identifier, None)
+            slot = self._sessions.pop((owner, identifier), None)
             if slot is None:
                 return False
             slot.closing = True
@@ -250,14 +255,14 @@ class Service:
                 self.config.shutdown_grace_seconds,
             )
 
-    def _claim(self, identifier: str) -> tuple[_SessionSlot, list[_SessionSlot]]:
+    def _claim(self, key: SessionKey) -> tuple[_SessionSlot, list[_SessionSlot]]:
         """La sesión pedida, ya contada como en uso, y las caducadas que hay que cerrar."""
         with self._sessions_guard:
-            expired = self._take_expired(identifier)
-            slot = self._sessions.get(identifier)
+            expired = self._take_expired(key)
+            slot = self._sessions.get(key)
             if slot is None:
                 slot = _SessionSlot(Session(self.engine, self.locks, self.transactions))
-                self._sessions[identifier] = slot
+                self._sessions[key] = slot
             slot.requests += 1
         return slot, expired
 
@@ -269,15 +274,15 @@ class Service:
         if pending_close:
             slot.session.close()
 
-    def _take_expired(self, keep: str) -> list[_SessionSlot]:
+    def _take_expired(self, keep: SessionKey) -> list[_SessionSlot]:
         """Quita del registro las sesiones inactivas para cerrarlas fuera del lock."""
         limit = time.monotonic() - self.config.session_idle_seconds
         expired = [
-            identifier
-            for identifier, slot in self._sessions.items()
-            if identifier != keep and slot.requests == 0 and slot.last_used < limit
+            key
+            for key, slot in self._sessions.items()
+            if key != keep and slot.requests == 0 and slot.last_used < limit
         ]
-        return [self._sessions.pop(identifier) for identifier in expired]
+        return [self._sessions.pop(key) for key in expired]
 
     def _describe(self, name: str) -> TableInfo:
         table = self.engine.table(name)

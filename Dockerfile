@@ -1,19 +1,39 @@
 # syntax=docker/dockerfile:1
 
 ARG PYTHON_VERSION=3.12
+ARG UV_VERSION=0.10.11
+
+FROM ghcr.io/astral-sh/uv:${UV_VERSION} AS uv
 
 FROM python:${PYTHON_VERSION}-slim AS base
 
+COPY --from=uv /uv /usr/local/bin/uv
+
+# Las dependencias salen de uv.lock, las mismas versiones que en la CI. El entorno vive fuera
+# de /app y uv usa el Python de la imagen, nunca uno descargado.
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
+    UV_PROJECT_ENVIRONMENT=/opt/venv \
+    UV_PYTHON_DOWNLOADS=never \
+    UV_LINK_MODE=copy \
+    PATH=/opt/venv/bin:$PATH
 
 WORKDIR /app
 
-COPY pyproject.toml ./
+# Primero solo las dependencias, para que cambiar el código no las vuelva a instalar. Los
+# pyproject de los servicios entran montados: uv los necesita para validar el lock, pero no
+# forman parte de esta imagen.
+RUN --mount=type=cache,target=/root/.cache/uv \
+    --mount=type=bind,source=uv.lock,target=uv.lock \
+    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
+    --mount=type=bind,source=apps,target=apps \
+    uv sync --locked --no-dev --no-install-workspace --package minigestor-bd2
+
+COPY pyproject.toml uv.lock ./
 COPY src ./src
-RUN pip install .
+RUN --mount=type=cache,target=/root/.cache/uv \
+    --mount=type=bind,source=apps,target=apps \
+    uv sync --locked --no-dev --no-editable --package minigestor-bd2
 
 COPY demos ./demos
 
@@ -34,7 +54,10 @@ RUN python -c "import numpy, librosa; librosa.feature.mfcc(y=numpy.zeros(22050, 
 
 FROM base AS bench
 
-RUN pip install ".[postgres,plots,datasets,usearch]"
+RUN --mount=type=cache,target=/root/.cache/uv \
+    --mount=type=bind,source=apps,target=apps \
+    uv sync --locked --no-dev --no-editable --package minigestor-bd2 \
+        --extra postgres --extra plots --extra datasets --extra usearch
 USER minigestor
 ENV MPLCONFIGDIR=/tmp/matplotlib
 

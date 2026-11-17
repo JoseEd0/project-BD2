@@ -6,6 +6,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Query
 
+from api.auth import Role, requires
 from api.errors import as_http_error
 from api.responses import as_response
 from api.schemas import QueryResponse, TableInfo, TablePoints
@@ -58,7 +59,7 @@ def table_points(
             raise as_http_error(error, session.in_transaction) from error
 
 
-@router.delete("/tables", response_model=QueryResponse)
+@router.delete("/tables", response_model=QueryResponse, dependencies=[requires(Role.ADMIN)])
 def drop_all_tables(service: ServiceDependency, session_id: SessionQuery = None) -> QueryResponse:
     """Borra todas las tablas y sus archivos. Deja la base de datos vacía.
 
@@ -67,7 +68,7 @@ def drop_all_tables(service: ServiceDependency, session_id: SessionQuery = None)
     with service.session(session_id) as session:
         names = service.engine.table_names()
         try:
-            results = [session.run(DropTableStatement(name=name)) for name in names]
+            results = [service.run(session, DropTableStatement(name=name)) for name in names]
         except DomainError as error:
             raise as_http_error(error, session.in_transaction) from error
         labels = ["DropTable"] * len(results)

@@ -108,6 +108,14 @@ DEFAULT_MAX_QUERY_UPLOADS = 100
 DEFAULT_MAP_POINTS = 5000
 DEFAULT_MAX_RESULT_ROWS = 10_000
 DEFAULT_SESSION_IDLE_SECONDS = 15 * 60
+# Un recorrido completo de las tablas de la demo tarda menos de un segundo; treinta dejan
+# margen a un JOIN grande y cortan a tiempo un producto cartesiano escrito por descuido.
+DEFAULT_STATEMENT_TIMEOUT_SECONDS = 30.0
+# El cuerpo de un `POST /query`: un script con miles de filas en un INSERT cabe de sobra.
+# Los archivos tienen su propio límite, `max_upload_bytes`.
+DEFAULT_MAX_REQUEST_BYTES = 8 * 1024 * 1024
+# Por debajo de los 10 s que Docker espera tras SIGTERM antes de matar el proceso.
+DEFAULT_SHUTDOWN_GRACE_SECONDS = 5.0
 FALLBACK_DATA_DIRECTORY = "data"
 # Lo justo para la cabecera de un nodo y un par de entradas; con menos, ninguna estructura
 # cabe en una página.
@@ -222,6 +230,12 @@ class EngineConfig:
             cuenta pero no viaja.
         session_idle_seconds: inactividad tras la que el API cierra una sesión y aborta su
             transacción, para que una pestaña cerrada no deje tablas bloqueadas.
+        statement_timeout_seconds: tiempo máximo de cada sentencia que ejecuta el API; al
+            pasarlo se corta y se deshace (ver `query.deadline`).
+        max_request_bytes: tamaño máximo del cuerpo de una petición al API que no es una
+            subida de archivo.
+        shutdown_grace_seconds: lo que el API espera, al apagarse, a que terminen las
+            peticiones en curso después de cancelar sus sentencias.
         data_directory: raíz donde viven los archivos del gestor.
         import_directories: directorios, además de `data_directory`, de los que
             `CREATE TABLE ... FROM FILE` puede leer.
@@ -279,6 +293,9 @@ class EngineConfig:
     map_points: int = DEFAULT_MAP_POINTS
     max_result_rows: int = DEFAULT_MAX_RESULT_ROWS
     session_idle_seconds: float = DEFAULT_SESSION_IDLE_SECONDS
+    statement_timeout_seconds: float = DEFAULT_STATEMENT_TIMEOUT_SECONDS
+    max_request_bytes: int = DEFAULT_MAX_REQUEST_BYTES
+    shutdown_grace_seconds: float = DEFAULT_SHUTDOWN_GRACE_SECONDS
     data_directory: Path = Path(FALLBACK_DATA_DIRECTORY)
     import_directories: tuple[Path, ...] = ()
 
@@ -313,6 +330,7 @@ class EngineConfig:
             "max_query_uploads",
             "map_points",
             "max_result_rows",
+            "max_request_bytes",
             "hnsw_m",
             "hnsw_ef_construction",
             "hnsw_ef_search",
@@ -357,6 +375,8 @@ class EngineConfig:
         _require_between("vector_exact_filter_rows", self.vector_exact_filter_rows, 0, None)
         _require_positive("lock_timeout_seconds", self.lock_timeout_seconds)
         _require_positive("session_idle_seconds", self.session_idle_seconds)
+        _require_positive("statement_timeout_seconds", self.statement_timeout_seconds)
+        _require_positive("shutdown_grace_seconds", self.shutdown_grace_seconds)
         if len(self.csv_delimiter) != 1:
             raise ConfigurationError("csv_delimiter tiene que ser un solo carácter")
         try:

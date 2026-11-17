@@ -8,8 +8,9 @@ import uuid
 from pathlib import Path
 from typing import Annotated, BinaryIO
 
-from fastapi import APIRouter, File, Form, Request, UploadFile
+from fastapi import APIRouter, File, Form, UploadFile
 
+from api.auth import Role, requires
 from api.errors import as_http_error, invalid_request, upload_too_large
 from api.responses import as_response
 from api.schemas import FileUploadResponse, QueryResponse
@@ -23,7 +24,6 @@ FILE_UPLOAD_PATH = "/files/upload"
 TABLE_UPLOAD_PATH = "/tables/upload"
 MEDIA_UPLOAD_PATH = "/media/queries"
 UPLOAD_PATHS = frozenset({FILE_UPLOAD_PATH, TABLE_UPLOAD_PATH, MEDIA_UPLOAD_PATH})
-CONTENT_LENGTH_HEADER = "content-length"
 # El límite es del archivo, pero Content-Length mide el cuerpo multipart entero: los
 # separadores, las cabeceras de cada parte y los campos de texto del formulario.
 MULTIPART_ALLOWANCE_BYTES = 64 * 1024
@@ -49,23 +49,9 @@ router = APIRouter()
 # espera congelaría al servidor entero, incluido el COMMIT que liberaría el bloqueo.
 
 
-def declares_oversized_upload(request: Request, limit: int) -> bool:
-    """Si la petición anuncia un archivo mayor que `limit` antes de enviarlo.
-
-    Sirve para rechazarla sin recibir el cuerpo: el servidor lo leería entero a un temporal
-    antes de entrar en la ruta. Sin Content-Length válido no se decide aquí; el límite se
-    vuelve a comprobar al copiar el archivo.
-    """
-    if request.url.path not in UPLOAD_PATHS:
-        return False
-    try:
-        declared = int(request.headers.get(CONTENT_LENGTH_HEADER, ""))
-    except ValueError:
-        return False
-    return declared > limit + MULTIPART_ALLOWANCE_BYTES
-
-
-@router.post(FILE_UPLOAD_PATH, response_model=FileUploadResponse)
+@router.post(
+    FILE_UPLOAD_PATH, response_model=FileUploadResponse, dependencies=[requires(Role.ADMIN)]
+)
 def upload_file(
     service: ServiceDependency,
     file: Annotated[UploadFile, File(description="CSV con cabecera")],
@@ -90,7 +76,9 @@ def upload_file(
     return FileUploadResponse(path=path_for_sql(path), columns=columns)
 
 
-@router.post(TABLE_UPLOAD_PATH, response_model=QueryResponse)
+@router.post(
+    TABLE_UPLOAD_PATH, response_model=QueryResponse, dependencies=[requires(Role.ADMIN)]
+)
 def upload(
     service: ServiceDependency,
     file: Annotated[UploadFile, File(description="CSV con cabecera")],
@@ -112,7 +100,7 @@ def upload(
         copy_limited(file.file, path, service.config.max_upload_bytes)
         with service.session(session_id) as session:
             try:
-                result = session.run(_with_path(statement, path))
+                result = service.run(session, _with_path(statement, path))
             except DomainError as error:
                 raise as_http_error(error, session.in_transaction) from error
             return as_response(

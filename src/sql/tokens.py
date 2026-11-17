@@ -13,11 +13,14 @@ class TokenType(Enum):
     STRING = "cadena"
     INTEGER = "número entero"
     FLOAT = "número decimal"
+    PARAMETER = "parámetro"
 
     COMMA = ","
     SEMICOLON = ";"
     LPAREN = "("
     RPAREN = ")"
+    LBRACKET = "["
+    RBRACKET = "]"
     DOT = "."
     STAR = "*"
     PLUS = "+"
@@ -94,6 +97,8 @@ class TokenType(Enum):
 
     EOF = "fin de la entrada"
 
+
+PARAMETER_PREFIX = "$"
 
 KEYWORDS: dict[str, TokenType] = {
     member.value: member

@@ -13,9 +13,11 @@ catálogo, ni el almacenamiento. Por eso se puede probar solo.
 
 ```python
 from sql import parse, parse_script
+from sql.nodes import Literal
 
 statement = parse("SELECT * FROM tiendas WHERE id = 1")
 statements = parse_script("BEGIN; UPDATE t SET v = 1; COMMIT;")
+bound = parse("SELECT * FROM tiendas WHERE nombre = $1", [Literal("Centro")])
 ```
 
 El parser acepta el núcleo relacional de la Parte 1 y las extensiones espacial, de texto y
@@ -39,10 +41,12 @@ se ejecutan: ver [Búsqueda de texto](#búsqueda-de-texto) y
 | Elemento | Regla |
 |---|---|
 | Palabras clave | insensibles a mayúsculas (`select` = `SELECT`) |
-| Identificadores | letra (incluye acentuadas), `_` o `$` iniciales; luego alfanuméricos, `_` o `$` |
+| Identificadores | letra (incluye acentuadas), `_` o `$` iniciales (salvo `$` seguido de dígito, que es un parámetro); luego alfanuméricos, `_` o `$` |
 | Identificadores citados | `"entre comillas dobles"`; única forma de usar una palabra reservada como nombre |
 | Cadenas | `'entre comillas simples'`; `''` inserta una comilla; la barra invertida es literal (rutas de Windows) |
 | Números | `42`, `3.14`, `1e3`, `2.5E-4`; solo dígitos ASCII |
+| Vectores | `[0.5, -1, 2e-3]`: números entre corchetes, con signo opcional, al menos uno |
+| Parámetros | `$1`, `$2`, …: `$` y dígitos, desde `$1`; `$0` y `$1a` son errores léxicos |
 | Comentarios | `-- hasta fin de línea` y `/* en bloque */` |
 | Separador | `;` entre sentencias |
 
@@ -67,12 +71,13 @@ select       ::= 'SELECT' ['DISTINCT'] projection (',' projection)*
                  ['USING' method]
                  ['WITH' options]
                  ['ORDER' 'BY' order_item (',' order_item)*]
-                 ['LIMIT' integer] ['OFFSET' integer]
+                 ['LIMIT' count] ['OFFSET' count]
 
 projection   ::= '*' | name '.' '*' | expression [['AS'] alias]
 table_ref    ::= name [['AS'] alias]
 join         ::= ['INNER' | ('LEFT'|'RIGHT'|'FULL') ['OUTER']] 'JOIN' table_ref 'ON' expression
 order_item   ::= expression ['ASC' | 'DESC']
+count        ::= integer | parameter
 
 insert       ::= 'INSERT' 'INTO' name ['(' name (',' name)* ')']
                  'VALUES' row (',' row)*
@@ -93,6 +98,11 @@ drop_index   ::= 'DROP' 'INDEX' ['IF' 'EXISTS'] name ['ON' name]
 
 options      ::= option (',' option)* | '(' option (',' option)* ')'
 option       ::= name '=' (number | string | identifier | 'TRUE' | 'FALSE' | 'NULL')
+
+literal      ::= number | string | 'TRUE' | 'FALSE' | 'NULL' | vector
+vector       ::= '[' signed_number (',' signed_number)* ']'
+signed_number ::= ['+' | '-'] number
+parameter    ::= '$' digit+
 ```
 
 `END TRANSACTION` y `COMMIT` producen el mismo nodo: confirmar la transacción.
@@ -135,8 +145,9 @@ OR  <  AND  <  NOT  <  comparación  <  + -  <  * / %  <  - unario  <  primaria
 
 - Comparación: `=` `==` `!=` `<>` `<` `<=` `>` `>=`
 - Predicados: `x [NOT] BETWEEN a AND b`, `x [NOT] IN (…)`, `x [NOT] LIKE p`, `x IS [NOT] NULL`
-- Primarias: literales, `col`, `tabla.col`, `f(args)`, `(expr)`, `(a, b)` (tupla, p. ej. vértices
-  de un polígono), `*` como argumento de agregado
+- Primarias: literales (también vectores `[0.5, 1]`), parámetros `$n`, `col`, `tabla.col`,
+  `f(args)`, `(expr)`, `(a, b)` (tupla, p. ej. vértices de un polígono), `*` como argumento
+  de agregado
 - Llamadas con argumentos nombrados: `SIMILAR_TO('foto.jpg', k = 10)`; los posicionales van primero
 
 Dos límites hacen que una consulta patológica falle como error de sintaxis y no como
@@ -147,6 +158,58 @@ operador de una cadena: `a OR b OR c` es un árbol de tres niveles. Esa profundi
 sobre el árbol terminado (`expression_depth`, sin recursión), así que dos cadenas cortas
 encajadas, como `a * b * … + c + …`, suman sus niveles. Una lista larga de alternativas se
 escribe con `IN (...)`.
+
+### Literales vectoriales
+
+`[0.5, -1, 2e-3]` es un valor `VECTOR`: el mismo que guarda una columna `VECTOR(n)`, con
+cada componente como real. Va en `VALUES`, en el `WHERE` y en el `SELECT`, y se compara solo
+con `=` y `<>` contra un vector de su misma dimensión (otra dimensión es un error antes de
+leer filas). Los componentes son números escritos tal cual; un vector que depende de la fila
+no existe.
+
+```sql
+CREATE TABLE embeddings (id INT PRIMARY KEY, v VECTOR(3));
+INSERT INTO embeddings VALUES (1, [0.1, 0.2, 0.3]), (2, [1, 0, -1]);
+SELECT id FROM embeddings WHERE v = [1, 0, -1];
+```
+
+### Parámetros posicionales
+
+`$1`, `$2`, … ocupan el lugar de un valor: en `VALUES` (también de varias filas), en el
+`WHERE`, en el `SET` de un `UPDATE`, en el `SELECT`, en `LIMIT`/`OFFSET` y como argumento de
+una función, con nombre o sin él (`MATCH(texto, $1)`, `SIMILAR_TO($1, k = $2)`). Es lo que
+usa una aplicación para enviar el texto del usuario sin concatenarlo al SQL: el valor nunca
+pasa por el lexer, así que `'; DROP TABLE x; --` llega como un texto más.
+
+```python
+from query.parameters import bound_parameters
+from sql import parse
+
+statement = parse(
+    "SELECT * FROM tiendas WHERE distancia(ubicacion, $1) < $2 LIMIT $3",
+    bound_parameters([{"lat": -12.0464, "lon": -77.0428}, 5000, 10]),
+)
+```
+
+- **El enlace ocurre al parsear.** El parser recibe cada valor ya convertido en la
+  expresión que se habría escrito en su lugar (`bound_parameters`, en
+  [`query/parameters.py`](../query/parameters.py), traduce el JSON: número, texto, booleano y
+  `null` al literal del mismo tipo; una lista de números a un vector; `{"lat", "lon"}` a
+  `POINT(lat, lon)`) y la pone donde va cada `$n`. El árbol que sale es el mismo que con el
+  valor escrito, así que el motor lo valida igual: contra el tipo de la columna o del
+  argumento, antes de leer ninguna fila.
+- **`EXPLAIN` muestra el valor, no `$n`**, como el plan personalizado de PostgreSQL: el
+  planificador elige el camino de acceso con el valor (una igualdad sobre la clave usa el
+  índice) y el plan dice con cuál.
+- **Un mismo `$n` puede aparecer varias veces**; todos valen lo mismo.
+- **Cada valor enviado se usa**: un `$n` sin valor es `SqlMissingParameterError`, con línea y
+  columna; un valor que ningún `$n` usa —sobra o se saltó un número, `$1` y `$3` sin `$2`—
+  es `SqlParameterError`.
+- **Con parámetros, una sola sentencia.** En un script, `$1` de la segunda sentencia podría
+  querer ser otro valor que el de la primera; en vez de adivinarlo, un script con varias
+  sentencias y parámetros es `SqlParameterError`.
+- `LIMIT $n` y `OFFSET $n` piden un entero no negativo; otro valor es `SqlSyntaxError` en la
+  posición del `$n`.
 
 ### Funciones espaciales
 
@@ -349,7 +412,10 @@ posición exacta del error:
 - tamaño de tipo obligatorio en `VECTOR`, prohibido donde no aplica y siempre mayor que cero;
 - opciones repetidas en `WITH` y argumentos nombrados repetidos en una llamada;
 - identificador citado vacío (`""`), literal entero fuera del rango convertible y literal
-  decimal que desborda a infinito (`1e400`).
+  decimal que desborda a infinito (`1e400`);
+- vector vacío (`[]`), con algo que no sea un número o con un componente que desborda;
+- cada `$n` con su valor y cada valor usado por algún `$n`, y parámetros solo con una
+  sentencia.
 
 La existencia de tablas y columnas, la compatibilidad de tipos y la aridad de las funciones
 corresponden al analizador semántico, que trabaja contra el catálogo.
@@ -357,7 +423,9 @@ corresponden al analizador semántico, que trabaja contra el catálogo.
 ### Errores
 
 `parse` lanza `SqlLexicalError` o `SqlSyntaxError`, ambas subclases de `SqlError`, con `message`,
-`line`, `column` y `source_line`. El mensaje formateado incluye la línea ofensora y un cursor:
+`line`, `column` y `source_line`; con parámetros, también `SqlParameterError` (sin posición)
+y `SqlMissingParameterError` (subclase de las dos, con posición). El mensaje formateado
+incluye la línea ofensora y un cursor:
 
 ```
 se esperaba un número de filas después de LIMIT, se encontró 'x' (línea 1, columna 23)

@@ -7,11 +7,12 @@ access structure and `WITH <options>` carries its tuning parameters.
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Mapping
+import math
+from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from types import MappingProxyType
 
-from .errors import SqlSyntaxError
+from .errors import SqlMissingParameterError, SqlParameterError, SqlSyntaxError
 from .lexer import tokenize
 from .nodes import (
     EMPTY_OPTIONS,
@@ -60,7 +61,7 @@ from .nodes import (
     UpdateStatement,
     expression_depth,
 )
-from .tokens import Token, TokenType
+from .tokens import PARAMETER_PREFIX, Token, TokenType
 
 # Two caps keep a pathological query inside the interpreter stack, so it fails as a syntax
 # error instead of a RecursionError. Parentheses, NOT and unary minus recurse through the
@@ -135,6 +136,7 @@ RANKING_METHODS: dict[str, RankingMethod] = {
 }
 
 NAME_TOKENS = frozenset({TokenType.IDENTIFIER, TokenType.QUOTED_NAME})
+NUMBER_TOKENS = frozenset({TokenType.INTEGER, TokenType.FLOAT})
 STRING_TOKENS = frozenset({TokenType.STRING, TokenType.QUOTED_NAME})
 
 _OUTER_JOIN_KINDS: dict[TokenType, JoinKind] = {
@@ -151,22 +153,33 @@ _TRANSACTION_STARTERS = frozenset(
 class Parser:
     """Builds an AST from SQL text.
 
+    `parameters` holds the value of each `$n`, `$1` first. Every `$n` is replaced by its
+    value while parsing, so the tree that comes out is the same one the SQL would give with
+    the value written in its place, and a value never reaches the lexer.
+
     Raises:
         SqlLexicalError: when the input cannot be tokenized.
         SqlSyntaxError: when the tokens do not match the grammar.
+        SqlMissingParameterError: when a `$n` has no value.
+        SqlParameterError: when a value is not used by any `$n`, or when values come
+            with a script of more than one statement.
     """
 
-    def __init__(self, source: str) -> None:
+    def __init__(self, source: str, parameters: Sequence[Expression] = ()) -> None:
         self._source = source
         self._tokens = tokenize(source)
         self._index = 0
         self._nesting_depth = 0
+        self._parameters = tuple(parameters)
+        self._used_parameters: set[int] = set()
 
     def parse_script(self) -> list[Statement]:
         statements: list[Statement] = []
         while True:
             self._skip_separators()
             if self._check(TokenType.EOF):
+                self._require_single_statement_for_parameters(len(statements))
+                self._require_every_parameter_used()
                 return statements
             statements.append(self._parse_statement())
             if not self._check(TokenType.EOF) and not self._check(TokenType.SEMICOLON):
@@ -180,7 +193,24 @@ class Parser:
         self._skip_separators()
         if not self._check(TokenType.EOF):
             raise self._error_here("se esperaba una sola sentencia")
+        self._require_every_parameter_used()
         return statement
+
+    # Numbering the `$n` of a whole script would mean guessing whether `$1` in the second
+    # statement is the same value as in the first; a single statement leaves no doubt.
+    def _require_single_statement_for_parameters(self, statements: int) -> None:
+        if self._parameters and statements > 1:
+            raise SqlParameterError(
+                f"los parámetros solo se admiten con una sola sentencia y llegaron {statements}"
+            )
+
+    def _require_every_parameter_used(self) -> None:
+        for number in range(1, len(self._parameters) + 1):
+            if number not in self._used_parameters:
+                raise SqlParameterError(
+                    f"el parámetro {PARAMETER_PREFIX}{number} no aparece en la sentencia: "
+                    f"llegaron {len(self._parameters)} parámetro(s)"
+                )
 
     def _skip_separators(self) -> None:
         while self._match(TokenType.SEMICOLON):
@@ -344,8 +374,15 @@ class Parser:
     def _parse_count(self, keyword: TokenType) -> int | None:
         if not self._match(keyword):
             return None
-        token = self._expect(TokenType.INTEGER, f"un número de filas después de {keyword.value}")
-        return int(token.text)
+        description = f"un número de filas después de {keyword.value}"
+        if not self._check(TokenType.PARAMETER):
+            return int(self._expect(TokenType.INTEGER, description).text)
+        token = self._advance()
+        bound = self._bound_parameter(token)
+        count = bound.value if isinstance(bound, Literal) else None
+        if not isinstance(count, int) or isinstance(count, bool) or count < 0:
+            raise self._error_at(token, f"se esperaba {description}, un entero no negativo")
+        return count
 
     def _parse_search_method(self) -> SearchMethod | None:
         if not self._match(TokenType.USING):
@@ -797,6 +834,10 @@ class Parser:
         literal = self._literal_of(token)
         if literal is not None:
             return literal
+        if token.type is TokenType.PARAMETER:
+            return self._bound_parameter(token)
+        if token.type is TokenType.LBRACKET:
+            return self._parse_vector_literal()
         if token.type is TokenType.LPAREN:
             return self._parse_group_or_tuple()
         if token.type is TokenType.QUOTED_NAME:
@@ -817,6 +858,41 @@ class Parser:
             elements.append(self._parse_expression())
         self._expect(TokenType.RPAREN)
         return TupleExpression(elements=tuple(elements))
+
+    def _bound_parameter(self, token: Token) -> Expression:
+        number = int(token.text.removeprefix(PARAMETER_PREFIX))
+        if number > len(self._parameters):
+            raise SqlMissingParameterError(
+                f"el parámetro {token.text} no tiene valor: llegaron "
+                f"{len(self._parameters)} parámetro(s)",
+                token.line,
+                token.column,
+                self._line_text(token.line),
+            )
+        self._used_parameters.add(number)
+        return self._parameters[number - 1]
+
+    def _parse_vector_literal(self) -> Literal:
+        if self._check(TokenType.RBRACKET):
+            raise self._error_here("un vector necesita al menos un componente")
+        components = [self._parse_vector_component()]
+        while self._match(TokenType.COMMA):
+            components.append(self._parse_vector_component())
+        self._expect(TokenType.RBRACKET, "']' al final del vector")
+        return Literal(tuple(components))
+
+    def _parse_vector_component(self) -> float:
+        negative = self._match(TokenType.MINUS)
+        if not negative:
+            self._match(TokenType.PLUS)
+        token = self._advance()
+        if token.type not in NUMBER_TOKENS:
+            raise self._error_at(token, "se esperaba un número como componente del vector")
+        component = float(token.text)
+        # Un entero de más de 308 cifras se convierte en infinito sin avisar.
+        if math.isinf(component):
+            raise self._error_at(token, "componente del vector demasiado grande")
+        return -component if negative else component
 
     def _literal_of(self, token: Token) -> Literal | None:
         if token.type is TokenType.INTEGER:
@@ -945,11 +1021,17 @@ class Parser:
         return lines[line - 1] if 0 < line <= len(lines) else ""
 
 
-def parse(source: str) -> Statement:
-    """Parses exactly one SQL statement and returns its AST root."""
-    return Parser(source).parse_single()
+def parse(source: str, parameters: Sequence[Expression] = ()) -> Statement:
+    """Parses exactly one SQL statement and returns its AST root.
+
+    `parameters` are the values of `$1`, `$2`, …; see `Parser`.
+    """
+    return Parser(source, parameters).parse_single()
 
 
-def parse_script(source: str) -> list[Statement]:
-    """Parses a `;`-separated script and returns one AST per statement."""
-    return Parser(source).parse_script()
+def parse_script(source: str, parameters: Sequence[Expression] = ()) -> list[Statement]:
+    """Parses a `;`-separated script and returns one AST per statement.
+
+    Parameters are only accepted when the script holds a single statement.
+    """
+    return Parser(source, parameters).parse_script()

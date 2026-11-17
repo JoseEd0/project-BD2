@@ -86,6 +86,63 @@ def test_syntax_error_reports_its_position(client: TestClient):
     assert detail["column"] is not None
 
 
+def run_with(client: TestClient, sql: str, params: list[object]) -> dict:
+    response = client.post("/query", json={"sql": sql, "params": params})
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def failure(client: TestClient, sql: str, params: list[object]) -> dict:
+    response = client.post("/query", json={"sql": sql, "params": params})
+    assert response.status_code == 400, response.text
+    return response.json()["detail"]
+
+
+def test_params_travel_apart_from_the_sql(client: TestClient):
+    run(client, "CREATE TABLE t (id INT PRIMARY KEY, v VARCHAR(40), p VECTOR(2), c POINT)")
+    injection = "'; DROP TABLE t; --"
+    point = {"lat": -12.5, "lon": -77.25}
+
+    run_with(client, "INSERT INTO t VALUES ($1, $2, $3, $4)", [1, injection, [0.5, 1], point])
+    found = run_with(client, "SELECT * FROM t WHERE v = $1 OR v = $1", [injection])
+
+    assert found["rows"] == [[1, injection, [0.5, 1.0], point]]
+    assert [table["name"] for table in client.get("/tables").json()] == ["t"]
+
+
+def test_a_missing_param_is_pinned_to_its_position(client: TestClient):
+    detail = failure(client, "SELECT $1 FROM t", [])
+
+    assert detail["kind"] == "SqlMissingParameterError"
+    assert (detail["line"], detail["column"]) == (1, len("SELECT ") + 1)
+
+
+def test_params_need_a_single_statement(client: TestClient):
+    run(client, "CREATE TABLE t (id INT PRIMARY KEY)")
+
+    detail = failure(client, "INSERT INTO t VALUES ($1); SELECT * FROM t", [1])
+
+    assert detail["kind"] == "SqlParameterError"
+    assert "una sola sentencia" in detail["error"]
+    assert run(client, "SELECT * FROM t")["rows"] == []
+
+
+@pytest.mark.parametrize(
+    ("params", "kind"),
+    [
+        ([1, 2], "SqlParameterError"),
+        ([{"x": 1}], "ParameterValueError"),
+        (["uno"], "ExpressionError"),
+    ],
+)
+def test_a_param_that_does_not_fit_is_a_bad_request(
+    client: TestClient, params: list[object], kind: str
+):
+    run(client, "CREATE TABLE t (id INT PRIMARY KEY)")
+
+    assert failure(client, "SELECT * FROM t WHERE id = $1", params)["kind"] == kind
+
+
 def test_unknown_table_is_reported(client: TestClient):
     response = client.post("/query", json={"sql": "SELECT * FROM fantasma"})
     assert response.status_code == 400

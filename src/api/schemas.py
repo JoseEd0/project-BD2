@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, JsonValue
 
 
 class QueryRequest(BaseModel):
@@ -14,6 +14,13 @@ class QueryRequest(BaseModel):
     session_id: str | None = Field(
         default=None,
         description="Identificador de sesión; sin él la sentencia va en autocommit",
+    )
+    params: list[JsonValue] = Field(
+        default_factory=list,
+        description=(
+            "Valores de $1, $2, …: número, texto, booleano, null, lista de números (VECTOR) "
+            'u objeto {"lat", "lon"} (POINT); solo con una sentencia en `sql`'
+        ),
     )
 
 

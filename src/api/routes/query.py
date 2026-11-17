@@ -9,6 +9,7 @@ from api.responses import as_response, describe_statement
 from api.schemas import QueryRequest, QueryResponse
 from api.service import ServiceDependency
 from errors import DomainError
+from query.parameters import bound_parameters
 from sql import parse_script
 from sql.errors import SqlPositionError
 from sql.nodes import BeginTransactionStatement
@@ -24,12 +25,15 @@ def query(request: QueryRequest, service: ServiceDependency) -> QueryResponse:
     Las sentencias corren en orden y el script se detiene en la primera que falle: las
     anteriores ya quedaron aplicadas, igual que en cualquier gestor fuera de una
     transacción. Un `BEGIN` necesita `session_id`: sin sesión no habría dónde guardar la
-    transacción entre una petición y la siguiente.
+    transacción entre una petición y la siguiente. `params` lleva los valores de `$1`, `$2`,
+    …, y entonces `sql` tiene que ser una sola sentencia.
     """
     try:
-        statements = parse_script(request.sql)
+        statements = parse_script(request.sql, bound_parameters(request.params))
     except SqlPositionError as error:
         raise as_http_error(error, line=error.line, column=error.column) from error
+    except DomainError as error:
+        raise as_http_error(error) from error
     if request.session_id is None and any(
         isinstance(statement, BeginTransactionStatement) for statement in statements
     ):

@@ -107,7 +107,9 @@ class QueryResult:
         plan: árbol del plan de ejecución, en los SELECT y los EXPLAIN.
         message: descripción de lo ocurrido para las sentencias sin filas.
         affected_rows: filas creadas, borradas o modificadas.
-        elapsed_ms: tiempo de ejecución medido.
+        elapsed_ms: tiempo de ejecución medido, planificación incluida.
+        planning_ms: parte de `elapsed_ms` que se fue en planificar, en los SELECT y los
+            EXPLAIN; como el `Planning Time` de PostgreSQL.
         spatial: tabla, columna y figuras que el panel de mapa debe dibujar, si la consulta
             toca alguna columna POINT.
         text: tabla, columna y términos analizados de su `MATCH`, para resaltarlos.
@@ -121,6 +123,7 @@ class QueryResult:
     message: str = ""
     affected_rows: int = 0
     elapsed_ms: float = 0.0
+    planning_ms: float = 0.0
     spatial: SpatialView | None = None
     text: TextView | None = None
     similarity: SimilarityView | None = None
@@ -179,8 +182,7 @@ class Engine:
                 result = self._define(statement)
         else:
             result = self._dispatch(statement, NO_JOURNAL if journal is None else journal)
-        elapsed = (time.perf_counter() - started) * MILLISECONDS_PER_SECOND
-        return replace(result, elapsed_ms=elapsed)
+        return replace(result, elapsed_ms=_milliseconds_since(started))
 
     def table_names(self) -> list[str]:
         with self._holding_guard():
@@ -283,13 +285,16 @@ class Engine:
     def _select(self, statement: SelectStatement) -> QueryResult:
         tables = self._tables_of(statement)
         planner = Planner(tables, self.config)
+        started = time.perf_counter()
         operator = planner.plan(statement)
+        planning_ms = _milliseconds_since(started)
         rows = tuple(operator.rows())
         return QueryResult(
             columns=operator.layout.names,
             rows=rows,
             plan=operator.plan(),
             affected_rows=len(rows),
+            planning_ms=planning_ms,
             spatial=spatial_view(statement, tables),
             text=text_view(statement, tables, self.config),
             similarity=similarity_view(planner.similarity_search),
@@ -301,16 +306,22 @@ class Engine:
         El planificador es por reglas, no por costos: el plan sin ejecutar dice qué camino se
         eligió, pero no trae una estimación de filas. Las cifras reales salen con ANALYZE.
         """
-        operator = Planner(self._tables_of(statement.query), self.config).plan(statement.query)
+        planner = Planner(self._tables_of(statement.query), self.config)
+        started = time.perf_counter()
+        operator = planner.plan(statement.query)
+        planning_ms = _milliseconds_since(started)
         if not statement.analyze:
             return QueryResult(
-                plan=operator.plan(), message="plan elegido, sin ejecutar la consulta"
+                plan=operator.plan(),
+                message="plan elegido, sin ejecutar la consulta",
+                planning_ms=planning_ms,
             )
         produced = sum(1 for _ in operator.rows())
         return QueryResult(
             plan=operator.plan(),
             message=f"consulta ejecutada: {produced} fila(s); se muestran el plan y sus medidas",
             affected_rows=produced,
+            planning_ms=planning_ms,
         )
 
     def _insert(self, statement: InsertStatement, journal: Journal) -> QueryResult:
@@ -640,6 +651,10 @@ class _JournalOf:
 
     def updated(self, before: Record, after: Record) -> None:
         self.journal.record_update(self.table, before, after)
+
+
+def _milliseconds_since(started: float) -> float:
+    return (time.perf_counter() - started) * MILLISECONDS_PER_SECOND
 
 
 def _require_heap_for_secondary_index(organization: Organization, column: str) -> None:

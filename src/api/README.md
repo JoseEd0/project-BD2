@@ -107,6 +107,41 @@ y el plan de la última consulta**, que es lo que el editor enseña.
 }
 ```
 
+### Parámetros
+
+`POST /query` acepta además `params`, una lista JSON con los valores de `$1`, `$2`, … (por
+omisión, vacía). Es como una aplicación envía lo que escribe su usuario sin concatenarlo
+al SQL: el valor nunca se lee como SQL, así que `'; DROP TABLE x; --` se guarda o se busca
+como un texto más.
+
+```jsonc
+// POST /query
+{ "sql": "SELECT id, nombre FROM tiendas WHERE distancia(ubicacion, $1) < $2 LIMIT $3",
+  "params": [{ "lat": -12.0464, "lon": -77.0428 }, 5000, 10] }
+```
+
+| JSON | Valor en el motor |
+|---|---|
+| número, texto, `true`/`false`, `null` | el literal del mismo tipo |
+| lista de números, `[0.1, 0.2]` | un `VECTOR`, igual que el literal `[0.1, 0.2]` |
+| `{"lat": …, "lon": …}` | un `POINT`, la misma forma con que vuelve en `rows` |
+
+- Cada valor se comprueba contra la columna o el argumento con que se usa, **antes de leer
+  filas** y con los errores de siempre (`ExpressionError` si `id = $1` recibe un texto,
+  `TextSearchError` si `MATCH(texto, $1)` recibe un número, `InvalidValueError` si un `INSERT`
+  no cabe en su columna).
+- **Con `params` no vacío, `sql` es una sola sentencia**: en un script no se sabría si `$1`
+  de la segunda sentencia es el mismo valor que el de la primera. Una transacción se arma
+  con varias peticiones y el mismo `session_id`.
+- Un `$n` sin valor es `400` con `kind` `SqlMissingParameterError`, `line` y `column`; un
+  valor que ningún `$n` usa (sobra o se saltó un número), `SqlParameterError`; un valor de
+  ningún tipo del dialecto (un objeto que no es un punto, una lista con un texto, un
+  `NaN`), `ParameterValueError`.
+- `EXPLAIN` muestra el valor enlazado y no `$1`, como el plan personalizado de PostgreSQL:
+  el planificador eligió el camino de acceso con ese valor.
+
+La gramática completa está en [`sql/README.md`](../sql/README.md#parámetros-posicionales).
+
 ### Consultas espaciales y el panel de mapa
 
 Un punto viaja como `{"lat": -12.0464, "lon": -77.0428}`. Cuando la consulta toca una

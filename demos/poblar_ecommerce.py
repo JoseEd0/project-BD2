@@ -16,7 +16,7 @@ Las tres últimas no se generan: `catalogo`, `consultas` y `juicios` se cargan d
 real de Amazon que vive en `demos/samples/esci/` (ver `demos/muestra_esci.py`), y
 `catalogo` lleva un índice invertido para la búsqueda de texto con `MATCH`.
 
-Ejecutar (requiere `pip install -e .`):
+Ejecutar (requiere `uv sync`):
 
     .venv/bin/python demos/poblar_ecommerce.py --data-dir ./data
     .venv/bin/python demos/poblar_ecommerce.py --data-dir ./data --escala 3 --reiniciar

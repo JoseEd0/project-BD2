@@ -28,7 +28,7 @@ y las imágenes y el audio de la Parte 4 ([`multimedia/`](multimedia/README.md))
 Los mismos comandos corren sin instalar Python ni PostgreSQL, en el perfil `bench` de
 [`compose.yaml`](../compose.yaml):
 
-- **`postgres`** es PostgreSQL 17 con PostGIS y pgvector ([`docker/postgres/Dockerfile`](../docker/postgres/Dockerfile)),
+- **`postgres`** es PostgreSQL 17 con PostGIS y pgvector ([`deploy/postgres/Dockerfile`](../deploy/postgres/Dockerfile)),
   para `linux/amd64` y `linux/arm64`. No publica ningún puerto.
 - **`bench`** es la imagen del motor con los extras `postgres`, `plots`, `datasets` y `usearch`, y con
   `BENCH_POSTGRES_DSN` apuntando a `postgres`. Monta `benchmarks/` y `data/datasets/` desde
@@ -434,7 +434,7 @@ página una sola vez.
 ### Reproducirlo
 
 ```bash
-.venv/bin/pip install -e ".[postgres,plots]"
+uv sync --all-packages --extra postgres --extra plots
 .venv/bin/python -m demos.descargar_lugares --salida data/datasets/lugares_peru.csv
 createdb minigestor_bench                       # el experimento crea ahí la extensión PostGIS
 export BENCH_POSTGRES_DSN="dbname=minigestor_bench"
@@ -669,7 +669,7 @@ Pero el ranking de GIN necesita además la columna `tsvector`, que ocupa 115 MiB
 ### Reproducirlo
 
 ```bash
-.venv/bin/pip install -e ".[postgres,plots,datasets]"
+uv sync --all-packages --extra postgres --extra plots --extra datasets
 .venv/bin/python -m benchmarks.esci.download --salida data/datasets/esci_es
 .venv/bin/python -m benchmarks.esci.subsets --corpus data/datasets/esci_es \
     --sizes 1000 10000 100000 --queries-per-bucket 50 --max-judged-share 0.5 --seed 20261104
@@ -1048,7 +1048,7 @@ extraer y cuantizar, no el índice.
 ### Reproducirlo
 
 ```bash
-.venv/bin/pip install -e ".[postgres,plots,usearch]"
+uv sync --all-packages --extra postgres --extra plots --extra usearch
 .venv/bin/python -m benchmarks.multimedia.abo --salida data/datasets/abo
 .venv/bin/python -m benchmarks.multimedia.speech_commands --salida data/datasets/speech_commands
 
@@ -1080,7 +1080,7 @@ Todo corre también dentro del perfil `bench` de Docker, más lento.
 `plot.py` lee los JSON de `results/` y redibuja todas las imágenes de `figures/`:
 
 ```bash
-.venv/bin/pip install -e ".[plots]"
+uv sync --all-packages --extra plots
 .venv/bin/python -m benchmarks.plot
 ```
 

@@ -1,6 +1,6 @@
 """Figuras comparativas a partir de los resultados crudos de los benchmarks.
 
-    .venv/bin/pip install -e ".[plots]"
+    uv sync --all-packages --extra plots
     .venv/bin/python -m benchmarks.plot
 
 Lee los JSON de `results/` y escribe en `figures/` una imagen por comparación del

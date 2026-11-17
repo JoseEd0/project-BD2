@@ -131,12 +131,16 @@ benchmarks/          experimentos reproducibles
 demos/               generador del dataset, descarga de lugares reales y de música (FMA)
                      y simulación de concurrencia
   samples/           los CSV del dataset de demostración; en esci/, la muestra real de Amazon
+apps/                servicios de la Parte 5, que usan el gestor solo por su API REST
+  client/            cliente tipado del API del gestor
+  kit/               configuración, logs, salud y errores comunes a los servicios
 docs/                informe.pdf y su fuente LaTeX
 Dockerfile           imagen del motor con su API
 compose.yaml         la aplicación completa en contenedores: api, web y la carga de la demo;
                      en el perfil bench, PostgreSQL con PostGIS y pgvector para los experimentos
-docker/postgres/     imagen de PostgreSQL con PostGIS y pgvector contra la que se miden GiST,
+deploy/postgres/     imagen de PostgreSQL con PostGIS y pgvector contra la que se miden GiST,
                      GIN, ivfflat y hnsw
+pyproject.toml       el gestor y el espacio de trabajo de uv; uv.lock fija las versiones
 ```
 
 No hay paquete paraguas: `src` es la raíz de importación, así que se escribe
@@ -231,9 +235,9 @@ en local, como sigue.
 
 | Para | Hace falta |
 |---|---|
-| el motor y el API | Python 3.11 o posterior |
+| el motor, el API y los servicios | Python 3.11 o posterior y [uv](https://docs.astral.sh/uv/) 0.10 o posterior |
 | la interfaz | Node.js 18 o posterior; 22.18 para `npm test` |
-| redibujar las gráficas (opcional) | `matplotlib`, que se instala con el extra `plots` |
+| redibujar las gráficas (opcional) | `matplotlib`, que se instala con el extra `plots` (`uv sync --all-packages --extra plots`) |
 | medir contra GiST y GIN (opcional) | PostgreSQL con la extensión PostGIS y el extra `postgres`, o Docker (perfil `bench`) |
 | medir contra pgvector y USearch (opcional) | PostgreSQL con la extensión pgvector y los extras `postgres` y `usearch`, o Docker (perfil `bench`) |
 
@@ -243,9 +247,9 @@ en local, como sigue.
 git clone https://github.com/JoseEd0/project-BD2.git
 cd project-BD2
 
-# motor, API y herramientas de desarrollo
-python3 -m venv .venv
-.venv/bin/pip install -e ".[dev]"
+# motor, API, servicios y herramientas de desarrollo, con las versiones de uv.lock
+# (uv: https://docs.astral.sh/uv/getting-started/installation/)
+uv sync --all-packages
 
 # interfaz
 npm --prefix frontend install
@@ -394,7 +398,7 @@ Los tests siguen la estructura de `src/`, así que se pueden ejecutar por módul
 ### 3.8 Reproducir los experimentos
 
 ```bash
-.venv/bin/pip install -e ".[plots,postgres,usearch]"
+uv sync --all-packages --extra plots --extra postgres --extra usearch
 .venv/bin/python -m benchmarks.storage_benchmark --sizes 1000 10000 100000
 .venv/bin/python -m benchmarks.index_benchmark   --sizes 1000 10000 100000
 

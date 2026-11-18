@@ -7,7 +7,7 @@ import {
   THEME_STORAGE_KEY,
   toThemePreference,
   type ThemePreference,
-} from "./themePreference";
+} from "./themePreference.ts";
 
 function appliedPreference(): ThemePreference {
   return toThemePreference(document.documentElement.dataset.themePreference);

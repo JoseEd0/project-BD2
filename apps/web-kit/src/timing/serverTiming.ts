@@ -1,14 +1,15 @@
 /**
  * Lectura de la cabecera `Server-Timing` (W3C Server Timing) y su reparto por etapa.
  *
- * El gestor la emite como `parse;dur=0.412, plan;dur=0.130, exec;dur=3.201, total;dur=4.020`.
+ * El gestor y el API de cada app la emiten como
+ * `parse;dur=0.412, plan;dur=0.130, exec;dur=3.201, total;dur=4.020`.
  * Una cabecera ausente, vacía o con entradas mal formadas no rompe nada: lo que no se
  * entiende se descarta y el resto se muestra.
  */
 
 export const SERVER_TIMING_HEADER = "Server-Timing";
 
-/** Nombre de la métrica que el gestor usa para la petición completa. */
+/** Nombre de la métrica que mide la petición completa en toda la plataforma. */
 const TOTAL_METRIC = "total";
 
 export interface TimingMetric {

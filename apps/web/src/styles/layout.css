@@ -1,0 +1,145 @@
+.shell {
+  max-width: calc(var(--page-width) + 2 * var(--gutter));
+  margin: 0 auto;
+  padding: 0 var(--gutter) var(--space-8);
+}
+
+.skip-link {
+  position: absolute;
+  left: var(--gutter);
+  top: -100px;
+  padding: var(--space-2) var(--space-4);
+  background: var(--ink);
+  color: var(--ground);
+  border-radius: var(--radius-small);
+  z-index: 10;
+}
+
+.skip-link:focus {
+  top: var(--space-2);
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  padding: var(--space-4) 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.wordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--step-1);
+  font-weight: 750;
+  letter-spacing: -0.03em;
+  text-decoration: none;
+}
+
+/* La marca es el icono en miniatura: cuatro columnas sobre una losa. */
+.wordmark-mark {
+  width: 1.4rem;
+  height: 1.4rem;
+  background:
+    linear-gradient(var(--ink), var(--ink)) bottom / 100% 22% no-repeat,
+    linear-gradient(
+        90deg,
+        var(--app-copyright) 0 19%,
+        transparent 19% 27%,
+        var(--app-shop) 27% 46%,
+        transparent 46% 54%,
+        var(--app-papers) 54% 73%,
+        transparent 73% 81%,
+        var(--app-faces) 81%
+      )
+      top / 100% 70% no-repeat;
+  border-radius: 3px;
+}
+
+.app-nav {
+  margin-left: auto;
+}
+
+.app-nav ul {
+  display: flex;
+  gap: var(--space-1);
+  padding: 0;
+  list-style: none;
+}
+
+.app-nav-link {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-small);
+  color: var(--ink-soft);
+  font-weight: 560;
+  text-decoration: none;
+}
+
+.app-nav-link .glyph {
+  color: var(--accent);
+}
+
+.app-nav-link:hover {
+  color: var(--ink);
+  background: var(--surface-sunk);
+}
+
+.app-nav-link[aria-current="page"] {
+  color: var(--ink);
+  background: var(--surface);
+  box-shadow: inset 0 -3px 0 var(--accent);
+}
+
+main {
+  padding-top: var(--space-7);
+}
+
+.page {
+  display: grid;
+  gap: var(--space-7);
+}
+
+@media (max-width: 760px) {
+  .shell {
+    padding-bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom) + var(--space-6));
+  }
+
+  .topbar {
+    justify-content: space-between;
+    gap: var(--space-3);
+  }
+
+  .theme-option span {
+    padding-inline: var(--space-2);
+  }
+
+  main {
+    padding-top: var(--space-6);
+  }
+
+  /* En el celular la navegación es una barra inferior, al alcance del pulgar. */
+  .app-nav {
+    position: fixed;
+    inset: auto 0 0;
+    z-index: 5;
+    margin: 0;
+    padding: var(--space-1) var(--space-2) calc(var(--space-1) + env(safe-area-inset-bottom));
+    background: var(--surface);
+    border-top: 1px solid var(--line);
+  }
+
+  .app-nav ul {
+    justify-content: space-around;
+  }
+
+  .app-nav-link {
+    flex-direction: column;
+    gap: 2px;
+    min-width: 4.25rem;
+    font-size: 0.75rem;
+  }
+}

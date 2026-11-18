@@ -31,6 +31,8 @@ class SecondaryIndex(Protocol):
 
     def build(self, rows: Iterable[tuple[bytes, RecordId]]) -> None: ...
 
+    def check(self, row: Record) -> None: ...
+
     def insert(self, record: bytes, record_id: RecordId) -> None: ...
 
     def delete(self, record: bytes, record_id: RecordId) -> bool: ...
@@ -80,6 +82,14 @@ class ColumnIndex(ABC):
         for record, record_id in rows:
             self.insert(record, record_id)
 
+    def check(self, row: Record) -> None:
+        """Lanza, sin escribir nada, el error que `insert` daría con la fila lógica `row`
+        si se puede saber de antemano. La tabla lo pregunta antes de escribir la primera
+        fila de una sentencia, para que lo común no tenga que deshacerse."""
+        value = row[self._position]
+        if value is not None:
+            self._check(value)
+
     def insert(self, record: bytes, record_id: RecordId) -> None:
         value = self._value_of(record)
         if value is not None:
@@ -114,6 +124,10 @@ class ColumnIndex(ABC):
     @abstractmethod
     def close(self) -> None:
         """Escribe en disco lo modificado y suelta el archivo."""
+
+    def _check(self, value: Key) -> None:
+        """Por omisión, nada se sabe antes de insertar."""
+        return
 
     @abstractmethod
     def _add(self, value: Key, record_id: RecordId) -> None: ...

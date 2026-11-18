@@ -36,6 +36,7 @@ from multimedia import (
     MediaKind,
     MediaReference,
     TemporalFragment,
+    check_media,
     decode_segments,
     describe_segments,
     descriptor_dimension,
@@ -233,10 +234,12 @@ class MediaSimilarityIndex(SimilarityIndex):
             search_ms=_milliseconds(described, searched),
         )
 
+    def _check(self, value: Key) -> None:
+        reference = self._reference_to(value)
+        check_media(reference.path, self._config, reference.fragment)
+
     def _add(self, value: Key, record_id: RecordId) -> None:
-        reference = media_reference(self._path_text(value), self._resolve)
-        self._require_built()
-        self._require_kind(media_kind_of(reference.path))
+        reference = self._reference_to(value)
         descriptors = extract_features(reference.path, self._config, reference.fragment)
         self._store.add(record_id, descriptors)
         try:
@@ -244,6 +247,14 @@ class MediaSimilarityIndex(SimilarityIndex):
         except Exception:
             self._store.remove(record_id)
             raise
+
+    def _reference_to(self, value: Key) -> MediaReference:
+        """El archivo y el tramo que nombra el valor de la columna, si este índice los
+        admite."""
+        reference = media_reference(self._path_text(value), self._resolve)
+        self._require_built()
+        self._require_kind(media_kind_of(reference.path))
+        return reference
 
     def _remove(self, value: Key, record_id: RecordId) -> bool:
         if not self._store.remove(record_id):

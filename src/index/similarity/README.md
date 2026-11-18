@@ -63,7 +63,11 @@ tabla con filas.
 ### Mantener
 
 - `INSERT`: extrae el archivo de la fila nueva, lo cuantiza con el vocabulario y el idf
-  fijados, y lo añade al almacén y al índice.
+  fijados, y lo añade al almacén y al índice. Antes de escribir la primera fila de la
+  sentencia, la tabla le pregunta al índice lo que se sabe sin decodificar (`check`): que
+  el archivo exista y se pueda leer, y que el tramo `#t=` empiece antes del final, leído de
+  la cabecera. Un archivo que falla después, al extraerlo, se deshace como cualquier
+  índice que rechaza una fila (ver [`query/`](../../query/README.md#escrituras-todo-o-nada)).
 - `DELETE`: lo quita de los dos (HNSW deja una lápida).
 - `UPDATE` de la ruta: borrar y volver a insertar.
 - `ROLLBACK`: pasa por los mismos caminos, como en el resto de los índices.

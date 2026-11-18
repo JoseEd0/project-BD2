@@ -52,6 +52,7 @@ for outcome in extract_in_parallel(references, config, workers=8):
 | API | Qué da |
 |---|---|
 | `extract_features(path, config, fragment=None) -> Descriptors` | la matriz `(n, d)` en `float32` de un archivo, o de un tramo de un audio; `n` puede ser 0 |
+| `check_media(path, config, fragment=None)` | lanza lo que `extract_features` rechazaría y se sabe sin decodificar: un audio que no se puede leer o un tramo que empieza después del final (solo la cabecera) |
 | `descriptor_dimension(kind, config) -> int` | la `d` de un tipo de archivo, antes de extraer nada |
 | `media_kind_of(path) -> MediaKind` | `IMAGE` o `AUDIO` según la extensión, sin leer el archivo |
 | `media_reference(texto, locate) -> MediaReference` | la ruta escrita, con su `#t=` si lo lleva, ya localizada |

@@ -1,0 +1,289 @@
+{
+  "name": "rostros",
+  "parameters": {
+    "fotos_lfw": 13233,
+    "lado_lfw": 250,
+    "lados": [
+      500,
+      1000,
+      2000,
+      4000
+    ],
+    "muestra": 500,
+    "calentamiento": 20,
+    "semilla": 20261118,
+    "hilos_opencv": 1,
+    "calidad_jpeg": 92,
+    "pipeline": {
+      "max_image_pixels": 50000000,
+      "detection_max_side": 640,
+      "detection_min_side": 320,
+      "score_threshold": 0.9,
+      "nms_threshold": 0.3,
+      "top_k": 5000
+    },
+    "opencv": "5.0.0",
+    "pillow": "13.0.0",
+    "equipo": {
+      "procesador": "Apple M4 Pro",
+      "nucleos": 12,
+      "sistema": "macOS-27.0.1-arm64-arm-64bit",
+      "python": "3.12.11",
+      "carga_media_1_min": 6.34
+    }
+  },
+  "measurements": [
+    {
+      "technique": "YuNet",
+      "operation": "cobertura en LFW",
+      "dataset_size": 13233,
+      "milliseconds": 48172.192,
+      "extra": {
+        "con_rostro": 13221,
+        "sin_rostro": 12,
+        "con_varios": 1033,
+        "cobertura": 0.99909
+      }
+    },
+    {
+      "technique": "decodificar",
+      "operation": "latencia",
+      "dataset_size": 250,
+      "milliseconds": 0.412,
+      "extra": {
+        "p95_ms": 0.463,
+        "media_ms": 0.416,
+        "fotos": 13233,
+        "con_rostro": 13221
+      }
+    },
+    {
+      "technique": "detectar (YuNet)",
+      "operation": "latencia",
+      "dataset_size": 250,
+      "milliseconds": 3.63,
+      "extra": {
+        "p95_ms": 3.72,
+        "media_ms": 3.64,
+        "fotos": 13233,
+        "con_rostro": 13221
+      }
+    },
+    {
+      "technique": "alinear y embeber (SFace)",
+      "operation": "latencia",
+      "dataset_size": 250,
+      "milliseconds": 12.992,
+      "extra": {
+        "p95_ms": 13.274,
+        "media_ms": 13.009,
+        "fotos": 13221,
+        "con_rostro": 13221
+      }
+    },
+    {
+      "technique": "total",
+      "operation": "latencia",
+      "dataset_size": 250,
+      "milliseconds": 17.033,
+      "extra": {
+        "p95_ms": 17.362,
+        "media_ms": 17.054,
+        "fotos": 13233,
+        "con_rostro": 13221
+      }
+    },
+    {
+      "technique": "decodificar",
+      "operation": "latencia",
+      "dataset_size": 500,
+      "milliseconds": 1.189,
+      "extra": {
+        "p95_ms": 1.27,
+        "media_ms": 1.195,
+        "fotos": 500,
+        "con_rostro": 498
+      }
+    },
+    {
+      "technique": "detectar (YuNet)",
+      "operation": "latencia",
+      "dataset_size": 500,
+      "milliseconds": 9.137,
+      "extra": {
+        "p95_ms": 9.282,
+        "media_ms": 9.122,
+        "fotos": 500,
+        "con_rostro": 498
+      }
+    },
+    {
+      "technique": "alinear y embeber (SFace)",
+      "operation": "latencia",
+      "dataset_size": 500,
+      "milliseconds": 13.068,
+      "extra": {
+        "p95_ms": 13.455,
+        "media_ms": 13.092,
+        "fotos": 498,
+        "con_rostro": 498
+      }
+    },
+    {
+      "technique": "total",
+      "operation": "latencia",
+      "dataset_size": 500,
+      "milliseconds": 23.4,
+      "extra": {
+        "p95_ms": 23.882,
+        "media_ms": 23.356,
+        "fotos": 500,
+        "con_rostro": 498
+      }
+    },
+    {
+      "technique": "decodificar",
+      "operation": "latencia",
+      "dataset_size": 1000,
+      "milliseconds": 3.822,
+      "extra": {
+        "p95_ms": 4.016,
+        "media_ms": 3.825,
+        "fotos": 500,
+        "con_rostro": 498
+      }
+    },
+    {
+      "technique": "detectar (YuNet)",
+      "operation": "latencia",
+      "dataset_size": 1000,
+      "milliseconds": 23.266,
+      "extra": {
+        "p95_ms": 23.586,
+        "media_ms": 23.27,
+        "fotos": 500,
+        "con_rostro": 498
+      }
+    },
+    {
+      "technique": "alinear y embeber (SFace)",
+      "operation": "latencia",
+      "dataset_size": 1000,
+      "milliseconds": 13.108,
+      "extra": {
+        "p95_ms": 13.391,
+        "media_ms": 13.114,
+        "fotos": 498,
+        "con_rostro": 498
+      }
+    },
+    {
+      "technique": "total",
+      "operation": "latencia",
+      "dataset_size": 1000,
+      "milliseconds": 40.203,
+      "extra": {
+        "p95_ms": 40.659,
+        "media_ms": 40.157,
+        "fotos": 500,
+        "con_rostro": 498
+      }
+    },
+    {
+      "technique": "decodificar",
+      "operation": "latencia",
+      "dataset_size": 2000,
+      "milliseconds": 14.384,
+      "extra": {
+        "p95_ms": 14.949,
+        "media_ms": 14.411,
+        "fotos": 500,
+        "con_rostro": 498
+      }
+    },
+    {
+      "technique": "detectar (YuNet)",
+      "operation": "latencia",
+      "dataset_size": 2000,
+      "milliseconds": 21.867,
+      "extra": {
+        "p95_ms": 22.158,
+        "media_ms": 21.875,
+        "fotos": 500,
+        "con_rostro": 498
+      }
+    },
+    {
+      "technique": "alinear y embeber (SFace)",
+      "operation": "latencia",
+      "dataset_size": 2000,
+      "milliseconds": 13.195,
+      "extra": {
+        "p95_ms": 13.453,
+        "media_ms": 13.191,
+        "fotos": 498,
+        "con_rostro": 498
+      }
+    },
+    {
+      "technique": "total",
+      "operation": "latencia",
+      "dataset_size": 2000,
+      "milliseconds": 49.425,
+      "extra": {
+        "p95_ms": 50.166,
+        "media_ms": 49.424,
+        "fotos": 500,
+        "con_rostro": 498
+      }
+    },
+    {
+      "technique": "decodificar",
+      "operation": "latencia",
+      "dataset_size": 4000,
+      "milliseconds": 55.518,
+      "extra": {
+        "p95_ms": 58.059,
+        "media_ms": 55.718,
+        "fotos": 500,
+        "con_rostro": 498
+      }
+    },
+    {
+      "technique": "detectar (YuNet)",
+      "operation": "latencia",
+      "dataset_size": 4000,
+      "milliseconds": 26.869,
+      "extra": {
+        "p95_ms": 27.369,
+        "media_ms": 26.873,
+        "fotos": 500,
+        "con_rostro": 498
+      }
+    },
+    {
+      "technique": "alinear y embeber (SFace)",
+      "operation": "latencia",
+      "dataset_size": 4000,
+      "milliseconds": 13.229,
+      "extra": {
+        "p95_ms": 13.542,
+        "media_ms": 13.237,
+        "fotos": 498,
+        "con_rostro": 498
+      }
+    },
+    {
+      "technique": "total",
+      "operation": "latencia",
+      "dataset_size": 4000,
+      "milliseconds": 95.61,
+      "extra": {
+        "p95_ms": 98.435,
+        "media_ms": 95.774,
+        "fotos": 500,
+        "con_rostro": 498
+      }
+    }
+  ]
+}

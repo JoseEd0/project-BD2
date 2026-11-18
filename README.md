@@ -137,6 +137,7 @@ apps/                servicios de la Parte 5, que usan el gestor solo por su API
   kit/               configuración, logs, salud, errores y descargas verificadas
   shop/              tienda con recomendaciones (opción B): dataset de Amazon Reviews 2023
                      con tiendas de Lima
+  faces/             reconocimiento facial: YuNet, alineación con cinco puntos, SFace y LFW
   web-kit/           lógica sin estilos que comparten las interfaces de las aplicaciones
     template/        plantilla de la interfaz de cada app: React + TypeScript, Docker y nginx
   <app>/web/         la interfaz de cada aplicación, con su propio puerto y diseño
@@ -181,6 +182,7 @@ proyecto:
 | [`frontend/`](frontend/) | consola SQL de 4 paneles con panel de mapa, y páginas de búsqueda de texto y multimedia | [README](frontend/README.md) |
 | [`apps/`](apps/) | aplicaciones de la Parte 5: su API y su interfaz | [README](apps/README.md) |
 | [`apps/shop/`](apps/shop/) | tienda con recomendaciones: dataset de compras reales, fotos, tiendas de Lima e inventario | [README](apps/shop/README.md) |
+| [`apps/faces/`](apps/faces/) | rostros: decodificación segura, detección con YuNet, embedding con SFace, descarga de modelos y de LFW | [README](apps/faces/README.md) |
 | [`apps/web-kit/`](apps/web-kit/) | kit de las interfaces: cliente tipado, salud, tiempos por etapa, tema, PWA y la plantilla de cada app | [README](apps/web-kit/README.md) |
 | [`benchmarks/`](benchmarks/) | comparación experimental, con resultados y gráficas | [README](benchmarks/README.md) |
 | [`demos/`](demos/) | datasets de demostración y simulación de concurrencia | [README](demos/README.md) |
@@ -317,6 +319,16 @@ Cada archivo del gestor lleva en su cabecera la versión de su formato. Un direc
 datos creado con una versión anterior se rechaza con un error que lo dice: basta volver a
 poblarlo con el paso 1.
 
+**Rostros (Parte 5, opción D).** El servicio de rostros necesita dos modelos de OpenCV Zoo
+(37 MiB) y su experimento, la galería LFW (172 MiB). Se bajan con su SHA-256 comprobado y,
+si se cortan, siguen donde quedaron:
+
+```bash
+.venv/bin/python -m faces models --salida data/models/faces
+.venv/bin/python -m faces lfw --salida data/datasets/lfw
+export FACES_MODELS_DIR=data/models/faces   # para los tests que corren los modelos
+```
+
 ### 3.5 Cargar datos desde la interfaz
 
 Con la base vacía también se puede empezar sin la terminal. El botón **Cargar CSV** crea
@@ -390,6 +402,7 @@ están en [`.env.example`](.env.example); las de la interfaz, en
 | `MINIGESTOR_LOG_LEVEL` | nivel de los logs JSON | `INFO` |
 | `MINIGESTOR_CONSOLE_KEY` | con Docker, la clave que nginx añade a las peticiones de la interfaz | — |
 | `VITE_API_URL` | dirección del API que usa la interfaz | **obligatoria** |
+| `FACES_MODELS_DIR` | carpeta de los modelos YuNet y SFace del servicio de rostros y de sus tests | — |
 | `BENCH_POSTGRES_DSN` | conexión al PostgreSQL contra el que se mide GiST | — |
 | `MINIGESTOR_WEB_PORT` | puerto de la interfaz con Docker | `8080` |
 | `MINIGESTOR_API_PORT` | puerto del API con Docker | `8000` |

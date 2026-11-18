@@ -20,7 +20,9 @@ Documentación interactiva generada por FastAPI en `http://localhost:8000/docs`.
 | `MINIGESTOR_CORS_ORIGINS` | orígenes desde los que llama el frontend, separados por comas | **obligatoria** |
 | `MINIGESTOR_LOCK_TIMEOUT` | segundos que una transacción espera un bloqueo; un número finito | `5` |
 | `MINIGESTOR_STATEMENT_TIMEOUT` | segundos que puede durar cada sentencia | `30` |
-| `MINIGESTOR_MAX_REQUEST_BYTES` | bytes del cuerpo de una petición que no sube un archivo | `8388608` (8 MiB) |
+| `MINIGESTOR_MAX_REQUEST_BYTES` | bytes del cuerpo de una petición que no sube un archivo ni carga filas | `8388608` (8 MiB) |
+| `MINIGESTOR_INGEST_BATCH_ROWS` | filas por lote de la carga masiva | `1000` |
+| `MINIGESTOR_MAX_INGEST_LINE_BYTES` | bytes de una línea (una fila) de la carga masiva | `262144` (256 KiB) |
 | `MINIGESTOR_API_KEYS` | claves de los servicios, `servicio:rol:sha256` separadas por comas | ninguna: API abierto |
 | `MINIGESTOR_LOG_LEVEL` | nivel de los logs JSON | `INFO` |
 
@@ -39,7 +41,8 @@ Ninguna ruta ni puerto está escrito en el código.
 | [`tracing.py`](tracing.py) | `X-Request-ID` y las etapas de `Server-Timing` de la petición en curso |
 | [`logs.py`](logs.py) | logs en JSON, una línea por petición |
 | [`limits.py`](limits.py) | tamaño máximo del cuerpo, anunciado o enviado por trozos |
-| [`routes/`](routes/) | un router por dominio: tablas, consultas, subidas y sesiones |
+| [`ingest.py`](ingest.py) | carga masiva: líneas NDJSON en lotes, índices diferidos y el resumen |
+| [`routes/`](routes/) | un router por dominio: tablas, carga masiva, consultas, subidas y sesiones |
 | [`responses.py`](responses.py) | del resultado del motor al JSON de la respuesta |
 | [`errors.py`](errors.py) | la forma única de toda respuesta de error |
 | [`schemas.py`](schemas.py) | forma de cada mensaje que entra y sale |
@@ -57,6 +60,7 @@ Ninguna ruta ni puerto está escrito en el código.
 | `GET` | `/tables/{name}/structure` | estructura física: páginas del archivo, niveles del B+, profundidad global y cubetas del hash, MBR de cada nodo del R-Tree, archivo de valores TEXT |
 | `GET` | `/tables/{name}/points` | panel de mapa: los puntos de una columna `POINT` |
 | `DELETE` | `/tables` | borra todas las tablas y sus archivos (dejar la BD vacía) |
+| `POST` | `/tables/{name}/rows` | carga masiva: filas en NDJSON, leídas por partes y confirmadas por lotes |
 | `POST` | `/media/queries` | guarda la imagen o el audio de una consulta y devuelve la ruta que va en `SIMILAR_TO` |
 | `POST` | `/media/segments` | corta un audio subido en ventanas y devuelve las `k` filas más parecidas a cada una |
 | `GET` | `/media/thumbnail?path=…` | miniatura en JPEG de una imagen, con caché en disco |
@@ -240,6 +244,71 @@ dentro del event loop congelaría todo el servidor.
 `MINIGESTOR_IMPORT_DIRS`; cualquier otra ruta da `ForbiddenFileError`. Sin ese límite,
 quien pudiera enviar una consulta leería cualquier CSV del servidor.
 
+### Carga masiva
+
+`POST /tables/{name}/rows` (rol `write`) carga las filas de un cuerpo NDJSON, un objeto
+por línea, como lo hace un servicio que llena sus tablas con decenas de miles de vectores:
+
+```bash
+curl --data-binary @filas.ndjson -H 'Content-Type: application/x-ndjson' \
+  http://localhost:8000/tables/fragmentos/rows
+```
+
+```json
+{"id": 1, "titulo": "Introducción", "emb": [0.12, -0.03, 0.88], "lugar": {"lat": -12.05, "lon": -77.04}}
+{"id": 2, "titulo": "Métodos", "emb": [0.40, 0.11, -0.27]}
+```
+
+Cada valor sigue las reglas de los parámetros `$n` (ver *Parámetros*) y una columna que
+falta queda en NULL. Las filas entran en lotes de `MINIGESTOR_INGEST_BATCH_ROWS`, y cada
+lote **entra entero o no entra**: una línea que no es JSON, un valor de otro tipo, una
+columna que no existe, un `NOT NULL` sin valor, un vector de otra dimensión o una clave
+repetida rechazan su lote, que se deshace con sus entradas en los índices. La carga sigue
+con el siguiente, y la respuesta (`200`) lo resume:
+
+```json
+{
+  "table": "fragmentos", "rows_loaded": 9000, "rows_rejected": 1000,
+  "batches_committed": 9, "batches_rejected": 1, "last_line": 10000, "elapsed_ms": 812.4,
+  "rejected": [{"first_line": 4001, "last_line": 5000, "rows": 1000, "line": 4217,
+                "reason": "la clave primaria 4217 ya existe en 'fragmentos'"}],
+  "deferred_indexes": ["idx_fragmentos_emb"], "interrupted": null
+}
+```
+
+Repetir una carga no duplica nada si la tabla tiene clave primaria: los lotes que ya
+entraron se rechazan por clave repetida, y los que faltaban entran.
+
+**El cuerpo nunca está entero en memoria.** La ruta lo lee según llega, corta las líneas y
+retiene solo el lote en curso, así que no tiene límite para el cuerpo completo: tenerlo
+obligaría a partir en varias peticiones una carga que así se hace en una, y quien tiene
+rol `write` podría escribir lo mismo de todos modos. Lo que se limita es **cada línea**
+(`MINIGESTOR_MAX_INGEST_LINE_BYTES`): una que pasa no se acumula —se descarta hasta el
+salto de línea— y rechaza su lote. La memoria queda acotada por un lote de líneas.
+
+**Índices.** Si la tabla tiene filas, cada lote es una transacción propia, como un
+`INSERT` en autocommit: bloquea la tabla mientras escribe y la suelta entre lotes, y los
+índices se mantienen fila a fila. Si la tabla está **vacía** y tiene un R-Tree, un índice
+invertido, un HNSW o un IVF, esos índices no se tocan durante la carga: al terminar se
+construyen de una vez con todas las filas (carga STR del R-Tree, SPIMI, todos los vectores
+de una vez en FAISS), que es mucho más barato (ver `benchmarks/README.md`). Mientras tanto
+la carga retiene la tabla en exclusiva: con los índices a medias, una lectura respondería
+filas de menos, así que espera su turno como frente a cualquier transacción. Los índices de
+la clave primaria y de las columnas `UNIQUE` sí se mantienen fila a fila, porque son los que
+detectan una clave repetida, y también los B+ y los hash, que no tienen construcción en
+bloque.
+
+**Cortes.** Cada lote tiene el plazo de una sentencia (`MINIGESTOR_STATEMENT_TIMEOUT`): si
+lo pasa, se rechaza entero. Si el cliente corta la conexión, los lotes confirmados quedan,
+el que se estaba juntando se descarta y el servidor deja una línea `WARNING` en el log con
+lo que quedó. Si el servidor se apaga, el lote en curso se deshace y la respuesta lo dice
+en `interrupted`; `last_line` es la última línea resuelta, la carga se reanuda en la
+siguiente. En los dos casos, si había índices diferidos, se construyen con las filas
+confirmadas antes de soltar la tabla. Lo que no cubre: si el **proceso muere** a mitad de
+una carga con índices diferidos, las filas confirmadas están en la tabla pero no en esos
+índices (el gestor no tiene un log de escritura anticipada); `DROP INDEX` y `CREATE INDEX`
+los rehacen.
+
 ### Archivos multimedia
 
 La página «Multimedia» los usa para el resultado de un `SIMILAR_TO`:
@@ -349,7 +418,7 @@ MINIGESTOR_API_KEYS=consola:admin:<sha256>,recomendador:read:<sha256>,ventas:wri
 | Rol | Qué permite |
 |---|---|
 | `read` | `SELECT`, `EXPLAIN`, `BEGIN`/`COMMIT`/`ROLLBACK`, las rutas `GET`, cerrar su sesión, subir el archivo de un `SIMILAR_TO` |
-| `write` | además `INSERT`, `UPDATE` y `DELETE` |
+| `write` | además `INSERT`, `UPDATE` y `DELETE`, y la carga masiva (`/tables/{name}/rows`) |
 | `admin` | además `CREATE` y `DROP`, cargar CSV (`/tables/upload`, `/files/upload`) y vaciar la base (`DELETE /tables`) |
 
 El rol de `POST /query` sale del **AST ya parseado**, no del texto: el script entero tiene
@@ -423,7 +492,8 @@ abierto todos son `anonymous` y comparten el espacio de sesiones, como antes.
 - **Tamaño del cuerpo** (`MINIGESTOR_MAX_REQUEST_BYTES`, 8 MiB): `413` de tipo
   `RequestTooLargeError`. Si el cuerpo lo anuncia en `Content-Length` se rechaza sin
   leerlo; si llega por trozos, se cuenta y se corta en cuanto pasa. Las subidas de archivos
-  tienen su propio límite, `max_upload_bytes` (ver *Carga de CSV*).
+  tienen su propio límite, `max_upload_bytes` (ver *Carga de CSV*), y la carga masiva limita
+  cada línea en vez del cuerpo (ver *Carga masiva*).
 - **Tamaño del resultado**: viajan como mucho `max_result_rows` filas y `total_rows` dice
   cuántas había (ver *Sesiones y transacciones*).
 

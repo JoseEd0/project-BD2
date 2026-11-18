@@ -267,6 +267,57 @@
         }
       }
     },
+    "/tables/{name}/rows": {
+      "post": {
+        "summary": "Load Rows",
+        "description": "Carga en la tabla las filas del cuerpo, que lee por partes, en lotes de\n`ingest_batch_rows` que entran enteros o no entran.\n\nUn lote rechazado no detiene la carga: lo dice `rejected`, con la línea culpable, y la\ncarga sigue. Si el cliente corta la conexión, los lotes confirmados quedan y el que se\nestaba juntando se descarta; si el servidor se apaga, se deshace el lote en curso y la\nrespuesta lo dice en `interrupted`.",
+        "operationId": "load_rows_tables__name__rows_post",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RowLoadResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "description": "Un objeto JSON por línea, {\"columna\": valor}, con los valores de los parámetros $n: número, texto, booleano, null, lista de números (VECTOR) u objeto {\"lat\", \"lon\"} (POINT). Una columna que falta queda en NULL.",
+          "content": {
+            "application/x-ndjson": {
+              "schema": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
     "/query": {
       "post": {
         "summary": "Query",
@@ -1144,6 +1195,125 @@
         "type": "object",
         "title": "QueryResponse",
         "description": "Resultado de un script. Las filas y el plan son los de la última consulta."
+      },
+      "RejectedBatch": {
+        "properties": {
+          "first_line": {
+            "type": "integer",
+            "title": "First Line",
+            "description": "Primera línea del lote, contando desde 1"
+          },
+          "last_line": {
+            "type": "integer",
+            "title": "Last Line",
+            "description": "Última línea del lote"
+          },
+          "rows": {
+            "type": "integer",
+            "title": "Rows",
+            "description": "Filas del lote, sin las líneas en blanco"
+          },
+          "line": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Line",
+            "description": "La línea que lo impidió; null si fue el lote entero, como un plazo vencido"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "first_line",
+          "last_line",
+          "rows",
+          "line",
+          "reason"
+        ],
+        "title": "RejectedBatch",
+        "description": "Un lote de la carga masiva que no entró: ninguna de sus filas quedó en la tabla."
+      },
+      "RowLoadResponse": {
+        "properties": {
+          "table": {
+            "type": "string",
+            "title": "Table"
+          },
+          "rows_loaded": {
+            "type": "integer",
+            "title": "Rows Loaded",
+            "description": "Filas confirmadas en la tabla"
+          },
+          "rows_rejected": {
+            "type": "integer",
+            "title": "Rows Rejected",
+            "description": "Filas de los lotes rechazados"
+          },
+          "batches_committed": {
+            "type": "integer",
+            "title": "Batches Committed"
+          },
+          "batches_rejected": {
+            "type": "integer",
+            "title": "Batches Rejected"
+          },
+          "last_line": {
+            "type": "integer",
+            "title": "Last Line",
+            "description": "Última línea cuyo lote quedó confirmado o rechazado: tras una interrupción, la carga se reanuda en la siguiente"
+          },
+          "elapsed_ms": {
+            "type": "number",
+            "title": "Elapsed Ms"
+          },
+          "rejected": {
+            "items": {
+              "$ref": "#/components/schemas/RejectedBatch"
+            },
+            "type": "array",
+            "title": "Rejected"
+          },
+          "deferred_indexes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Deferred Indexes",
+            "description": "Índices que, por estar la tabla vacía, se construyeron de una vez al final en lugar de fila a fila"
+          },
+          "interrupted": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interrupted",
+            "description": "Por qué la carga terminó antes de leer todo el cuerpo (el servidor se apaga); null si lo leyó entero"
+          }
+        },
+        "type": "object",
+        "required": [
+          "table",
+          "rows_loaded",
+          "rows_rejected",
+          "batches_committed",
+          "batches_rejected",
+          "last_line",
+          "elapsed_ms"
+        ],
+        "title": "RowLoadResponse",
+        "description": "Lo que hizo una carga masiva. Responde `200` aunque haya lotes rechazados: los que\nentraron ya están confirmados, y `rejected` dice qué líneas volver a enviar."
       },
       "SegmentInfo": {
         "properties": {

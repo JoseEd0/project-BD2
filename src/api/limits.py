@@ -14,6 +14,7 @@ from starlette.datastructures import Headers
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from api.errors import error_response, request_too_large, upload_too_large
+from api.routes.rows import is_rows_path
 from api.routes.uploads import MULTIPART_ALLOWANCE_BYTES, UPLOAD_PATHS
 from config import EngineConfig
 
@@ -21,8 +22,17 @@ CONTENT_LENGTH_HEADER = "content-length"
 BodyLimit = tuple[int, HTTPException]
 
 
-def body_limit_for(path: str, config: EngineConfig) -> BodyLimit:
-    """Los bytes que admite la ruta y el error que explica el límite al pasarlos."""
+def body_limit_for(path: str, config: EngineConfig) -> BodyLimit | None:
+    """Los bytes que admite la ruta y el error que explica el límite al pasarlos; `None` si
+    la ruta no limita el cuerpo entero.
+
+    La carga masiva no lo limita: lee el cuerpo por partes, nunca lo tiene completo en
+    memoria y limita cada línea (`max_ingest_line_bytes`). Un tope para el cuerpo solo
+    obligaría a partir en varias peticiones una carga que así se hace en una, con lo que
+    un cliente con permiso de escritura podría escribir lo mismo.
+    """
+    if is_rows_path(path):
+        return None
     if path in UPLOAD_PATHS:
         allowed = config.max_upload_bytes + MULTIPART_ALLOWANCE_BYTES
         return allowed, upload_too_large(config.max_upload_bytes)
@@ -30,13 +40,14 @@ def body_limit_for(path: str, config: EngineConfig) -> BodyLimit:
 
 
 class BodySizeLimit:
-    """Middleware ASGI que aplica `limit_for(ruta)` al cuerpo de cada petición HTTP.
+    """Middleware ASGI que aplica `limit_for(ruta)` al cuerpo de cada petición HTTP que
+    tenga límite.
 
     El exceso se avisa lanzando el `HTTPException` desde `receive`: FastAPI deja pasar los
     `HTTPException` que surgen al leer el cuerpo y responde con su forma de siempre.
     """
 
-    def __init__(self, app: ASGIApp, limit_for: Callable[[str], BodyLimit]) -> None:
+    def __init__(self, app: ASGIApp, limit_for: Callable[[str], BodyLimit | None]) -> None:
         self._app = app
         self._limit_for = limit_for
 
@@ -44,7 +55,11 @@ class BodySizeLimit:
         if scope["type"] != "http":
             await self._app(scope, receive, send)
             return
-        limit, error = self._limit_for(scope["path"])
+        body_limit = self._limit_for(scope["path"])
+        if body_limit is None:
+            await self._app(scope, receive, send)
+            return
+        limit, error = body_limit
         declared = _declared_length(scope)
         if declared is not None and declared > limit:
             await error_response(error)(scope, receive, send)

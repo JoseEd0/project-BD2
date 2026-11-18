@@ -222,3 +222,48 @@ class FileUploadResponse(BaseModel):
 
     path: str = Field(description="Ruta para usar en CREATE TABLE ... FROM FILE")
     columns: list[str] = Field(default_factory=list)
+
+
+class RejectedBatch(BaseModel):
+    """Un lote de la carga masiva que no entró: ninguna de sus filas quedó en la tabla."""
+
+    first_line: int = Field(description="Primera línea del lote, contando desde 1")
+    last_line: int = Field(description="Última línea del lote")
+    rows: int = Field(description="Filas del lote, sin las líneas en blanco")
+    line: int | None = Field(
+        description="La línea que lo impidió; null si fue el lote entero, como un plazo vencido"
+    )
+    reason: str
+
+
+class RowLoadResponse(BaseModel):
+    """Lo que hizo una carga masiva. Responde `200` aunque haya lotes rechazados: los que
+    entraron ya están confirmados, y `rejected` dice qué líneas volver a enviar."""
+
+    table: str
+    rows_loaded: int = Field(description="Filas confirmadas en la tabla")
+    rows_rejected: int = Field(description="Filas de los lotes rechazados")
+    batches_committed: int
+    batches_rejected: int
+    last_line: int = Field(
+        description=(
+            "Última línea cuyo lote quedó confirmado o rechazado: tras una interrupción, la "
+            "carga se reanuda en la siguiente"
+        )
+    )
+    elapsed_ms: float
+    rejected: list[RejectedBatch] = Field(default_factory=list)
+    deferred_indexes: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Índices que, por estar la tabla vacía, se construyeron de una vez al final en "
+            "lugar de fila a fila"
+        ),
+    )
+    interrupted: str | None = Field(
+        default=None,
+        description=(
+            "Por qué la carga terminó antes de leer todo el cuerpo (el servidor se apaga); "
+            "null si lo leyó entero"
+        ),
+    )

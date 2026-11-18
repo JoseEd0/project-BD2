@@ -10,6 +10,7 @@ Expone lo justo para que el frontend funcione:
 | `GET` | `/tables/{name}/structure` | forma física de la tabla y de sus índices |
 | `GET` | `/tables/{name}/points` | panel de mapa: puntos de una columna POINT |
 | `DELETE` | `/tables` | borra todas las tablas |
+| `POST` | `/tables/{name}/rows` | carga masiva: filas en NDJSON, por lotes |
 | `POST` | `/query` | panel de consultas: ejecuta SQL y devuelve filas, plan y figuras |
 | `POST` | `/files/upload` | guarda un CSV para cargarlo después con `FROM FILE` |
 | `POST` | `/tables/upload` | crea una tabla a partir de un CSV |
@@ -48,7 +49,7 @@ from api.errors import (
 )
 from api.limits import BodySizeLimit, body_limit_for
 from api.logs import HEALTH_PATH, READY_PATH, configure_logging, log_request
-from api.routes import media, query, sessions, tables, uploads
+from api.routes import media, query, rows, sessions, tables, uploads
 from api.service import Service, ServiceStoppingError
 from api.settings import settings_from_environment
 from api.tracing import (
@@ -120,7 +121,15 @@ def create_app(
             return JSONResponse({"status": "ready"})
         return JSONResponse({"status": "unavailable"}, status_code=SERVICE_UNAVAILABLE)
 
-    for router in (tables.router, query.router, uploads.router, sessions.router, media.router):
+    routers = (
+        tables.router,
+        rows.router,
+        query.router,
+        uploads.router,
+        sessions.router,
+        media.router,
+    )
+    for router in routers:
         app.include_router(router, dependencies=[requires(Role.READ)])
     return app
 

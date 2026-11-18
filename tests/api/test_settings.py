@@ -9,8 +9,10 @@ from api.settings import (
     CORS_ORIGINS_VARIABLE,
     DATA_DIRECTORY_VARIABLE,
     IMPORT_DIRECTORIES_VARIABLE,
+    INGEST_BATCH_ROWS_VARIABLE,
     LOCK_TIMEOUT_VARIABLE,
     LOG_LEVEL_VARIABLE,
+    MAX_INGEST_LINE_BYTES_VARIABLE,
     MAX_REQUEST_BYTES_VARIABLE,
     SERVICE_KEYS_VARIABLE,
     STATEMENT_TIMEOUT_VARIABLE,
@@ -30,6 +32,8 @@ def clean_environment(monkeypatch: pytest.MonkeyPatch) -> None:
         LOCK_TIMEOUT_VARIABLE,
         LOG_LEVEL_VARIABLE,
         MAX_REQUEST_BYTES_VARIABLE,
+        INGEST_BATCH_ROWS_VARIABLE,
+        MAX_INGEST_LINE_BYTES_VARIABLE,
         SERVICE_KEYS_VARIABLE,
         STATEMENT_TIMEOUT_VARIABLE,
     ):
@@ -88,10 +92,14 @@ def test_limits_and_log_level_come_from_the_environment(monkeypatch: pytest.Monk
     monkeypatch.setenv(CORS_ORIGINS_VARIABLE, ORIGINS)
     monkeypatch.setenv(STATEMENT_TIMEOUT_VARIABLE, "2.5")
     monkeypatch.setenv(MAX_REQUEST_BYTES_VARIABLE, "4096")
+    monkeypatch.setenv(INGEST_BATCH_ROWS_VARIABLE, "250")
+    monkeypatch.setenv(MAX_INGEST_LINE_BYTES_VARIABLE, "2048")
     monkeypatch.setenv(LOG_LEVEL_VARIABLE, "debug")
     settings = settings_from_environment()
     assert settings.config.statement_timeout_seconds == 2.5
     assert settings.config.max_request_bytes == 4096
+    assert settings.config.ingest_batch_rows == 250
+    assert settings.config.max_ingest_line_bytes == 2048
     assert settings.log_level == "DEBUG"
 
 

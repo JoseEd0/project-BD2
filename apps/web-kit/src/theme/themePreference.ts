@@ -1,17 +1,19 @@
 /**
- * Preferencia de tema del portal: la del sistema (por omisión), clara u oscura.
+ * Preferencia de tema de cada app: la del sistema (por omisión), clara u oscura.
  *
- * A diferencia de la consola del gestor, que alterna entre dos temas, el portal sigue al
- * sistema mientras el usuario no elija otra cosa, y sigue sus cambios en vivo. La misma
- * función que aplica la preferencia corre antes de pintar (Vite la incrusta en `index.html`
- * con `themeBootScript`) y después en cada cambio, así que solo hay una lógica.
+ * Sigue al sistema mientras el usuario no elija otra cosa, y sigue sus cambios en vivo,
+ * porque en el celular el tema cambia solo al anochecer. La misma función que aplica la
+ * preferencia corre antes de pintar (el plugin `themeBoot` de `@minigestor/web-kit/vite` la
+ * incrusta en `index.html`) y después en cada cambio, así que solo hay una lógica. Cómo se
+ * ve cada tema lo decide el CSS de cada app a partir de `data-theme`.
  */
 
 export const THEME_PREFERENCES = ["system", "light", "dark"] as const;
 
 export type ThemePreference = (typeof THEME_PREFERENCES)[number];
 
-export const THEME_STORAGE_KEY = "minigestor.portal.theme";
+/** Cada app vive en su propio origen (su puerto), así que la misma clave no se pisa. */
+export const THEME_STORAGE_KEY = "theme-preference";
 export const DARK_SCHEME_QUERY = "(prefers-color-scheme: dark)";
 const DEFAULT_THEME_PREFERENCE: ThemePreference = "system";
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parseServerTiming, stageBreakdown } from "../src/timing/serverTiming";
+import { parseServerTiming, stageBreakdown } from "../src/timing/serverTiming.ts";
 
 const ENGINE_HEADER = "parse;dur=0.412, plan;dur=0.130, exec;dur=3.201, txn;dur=0.050, serialize;dur=0.200, total;dur=4.500";
 

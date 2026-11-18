@@ -1,17 +1,16 @@
-import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ThemeSwitch } from "../src/components/ThemeSwitch";
 import {
   applyThemePreference,
   DARK_SCHEME_QUERY,
   rememberThemePreference,
   THEME_STORAGE_KEY,
-  themeBootScript,
   toThemePreference,
-} from "../src/theme/themePreference";
-import { installMatchMedia } from "./support/matchMedia";
+  useThemePreference,
+} from "../src/index.ts";
+import { installMatchMedia } from "../src/testing/index.ts";
+import { themeBootScript } from "../src/theme/themePreference.ts";
 
 const root = document.documentElement;
 
@@ -75,32 +74,30 @@ describe("themeBootScript", () => {
   });
 });
 
-describe("ThemeSwitch", () => {
+describe("useThemePreference", () => {
   it("starts from what the boot script applied", () => {
     root.dataset.themePreference = "dark";
-    render(<ThemeSwitch />);
-    expect(screen.getByRole("radio", { name: "Oscuro" })).toHaveProperty("checked", true);
+    const { result } = renderHook(() => useThemePreference());
+    expect(result.current.preference).toBe("dark");
   });
 
-  it("applies and remembers a choice", async () => {
-    const user = userEvent.setup();
+  it("applies and remembers a choice", () => {
     applyThemePreference(THEME_STORAGE_KEY, DARK_SCHEME_QUERY);
-    render(<ThemeSwitch />);
-    await user.click(screen.getByRole("radio", { name: "Oscuro" }));
-    expect(screen.getByRole("radio", { name: "Oscuro" })).toHaveProperty("checked", true);
+    const { result } = renderHook(() => useThemePreference());
+    act(() => result.current.choosePreference("dark"));
+    expect(result.current.preference).toBe("dark");
     expect(applied().theme).toBe("dark");
     expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBe("dark");
   });
 
-  it("follows the system live only while the preference is the system", async () => {
-    const user = userEvent.setup();
+  it("follows the system live only while the preference is the system", () => {
     const scheme = installMatchMedia(false);
     applyThemePreference(THEME_STORAGE_KEY, DARK_SCHEME_QUERY);
-    render(<ThemeSwitch />);
-    scheme.setMatches(true);
+    const { result } = renderHook(() => useThemePreference());
+    act(() => scheme.setMatches(true));
     expect(applied().theme).toBe("dark");
-    await user.click(screen.getByRole("radio", { name: "Claro" }));
-    scheme.setMatches(true);
+    act(() => result.current.choosePreference("light"));
+    act(() => scheme.setMatches(true));
     expect(applied().theme).toBe("light");
   });
 });

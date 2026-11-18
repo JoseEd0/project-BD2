@@ -1,7 +1,11 @@
 /**
- * Genera `src/api/generated/<servicio>.ts` desde cada `openapi/<servicio>.json`.
+ * Genera `<carpeta de tipos>/<servicio>.ts` desde cada `<carpeta de contratos>/<servicio>.json`.
+ * Cada interfaz lo corre sobre su propio contrato:
  *
- *     node scripts/generate-types.ts <carpeta de contratos> <carpeta de tipos>
+ *     node ../../web-kit/scripts/generate-types.ts openapi src/api/generated
+ *
+ * Usa el `openapi-typescript` del kit (`npm --prefix apps/web-kit ci`), así que todas las
+ * interfaces generan sus tipos con la misma versión.
  *
  * Borra los tipos de un contrato que ya no está, para que la carpeta generada sea siempre
  * la imagen exacta de los contratos versionados.

@@ -1,15 +1,25 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import { createHealthClient } from "../src/api/clients";
-import { healthFromFailure, healthFromResponse } from "../src/services/health";
-import { probeHealth } from "../src/services/probeHealth";
-import { jsonResponse } from "./support/fetch";
+import { createHealthClient, healthQuery, HEALTH_TIMEOUT_MS } from "../src/index.ts";
+import { healthFromFailure, healthFromResponse } from "../src/health/health.ts";
+import { probeHealth } from "../src/health/probeHealth.ts";
+import { jsonResponse } from "../src/testing/index.ts";
 
-const BASE_URL = "http://portal.test/api";
+const BASE_URL = "http://app.test/api";
 const TIMEOUT_MS = 50;
 
 function clientAnswering(respond: (request: Request) => Promise<Response>) {
   return createHealthClient({ baseUrl: BASE_URL, fetch: respond });
+}
+
+/** Un servicio que nunca contesta y que solo se rinde si le abortan la petición. */
+function hangingUntilAborted(request: Request): Promise<Response> {
+  return new Promise((_, reject) => request.signal.addEventListener("abort", () => reject(request.signal.reason)));
+}
+
+/** Un servicio que nunca contesta, ni siquiera cuando le abortan la petición. */
+function hangingForever(): Promise<Response> {
+  return new Promise(() => undefined);
 }
 
 describe("healthFromResponse", () => {
@@ -80,24 +90,48 @@ describe("probeHealth", () => {
     });
   });
 
-  it("gives up after the timeout", async () => {
-    const hanging = clientAnswering(
-      (request) =>
-        new Promise((_, reject) => request.signal.addEventListener("abort", () => reject(request.signal.reason))),
-    );
-    await expect(probeHealth(hanging, new AbortController().signal, TIMEOUT_MS)).resolves.toMatchObject({
-      reason: "timeout",
+  it.each([
+    ["aborts the request", hangingUntilAborted],
+    ["ignores the abort", hangingForever],
+  ])("gives up after the timeout when the service %s", async (_, respond) => {
+    vi.useFakeTimers();
+    let aborted = false;
+    const client = clientAnswering((request) => {
+      request.signal.addEventListener("abort", () => (aborted = true));
+      return respond(request);
     });
+    const probe = probeHealth(client, new AbortController().signal, TIMEOUT_MS);
+    await vi.advanceTimersByTimeAsync(TIMEOUT_MS);
+    await expect(probe).resolves.toMatchObject({ reason: "timeout" });
+    expect(aborted).toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it("rethrows when the caller cancels, so the query is dropped instead of marked down", async () => {
+    vi.useFakeTimers();
     const cancellation = new AbortController();
-    const hanging = clientAnswering(
-      (request) =>
-        new Promise((_, reject) => request.signal.addEventListener("abort", () => reject(request.signal.reason))),
-    );
-    const probe = probeHealth(hanging, cancellation.signal, TIMEOUT_MS * 100);
+    const probe = probeHealth(clientAnswering(hangingForever), cancellation.signal, TIMEOUT_MS);
+    cancellation.abort(new DOMException("left the page", "AbortError"));
+    await expect(probe).rejects.toMatchObject({ name: "AbortError" });
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("refuses to start once the caller already cancelled", async () => {
+    const cancellation = new AbortController();
     cancellation.abort();
-    await expect(probe).rejects.toBeDefined();
+    await expect(probeHealth(clientAnswering(hangingForever), cancellation.signal, TIMEOUT_MS)).rejects.toBeDefined();
+  });
+});
+
+describe("healthQuery", () => {
+  it("keys the query by service and probes with the platform timeout, without retries", async () => {
+    const client = clientAnswering(() => Promise.resolve(jsonResponse({ status: "ok", version: "2" })));
+    const query = healthQuery("shop", client);
+    expect(query).toMatchObject({ queryKey: ["health", "shop"], retry: false });
+    expect(query.refetchInterval).toBeGreaterThan(HEALTH_TIMEOUT_MS);
+    await expect(query.queryFn({ signal: new AbortController().signal })).resolves.toMatchObject({
+      state: "available",
+      version: "2",
+    });
   });
 });

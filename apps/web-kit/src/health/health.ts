@@ -1,9 +1,9 @@
 /**
- * Qué significa la respuesta de `/health` de un servicio para quien usa el portal.
+ * Qué significa la respuesta de `/health` de un servicio para la interfaz que lo usa.
  *
  * Todo servicio de la plataforma responde `{"status": "ok", ...}` en `/health`. Cualquier
  * otra cosa (sin red, un error HTTP, una página HTML que devolvió un servidor equivocado)
- * se muestra como no disponible, con el motivo.
+ * es «no disponible», con el motivo; cómo se dice cada motivo lo decide cada app.
  */
 
 const HEALTHY_STATUS = "ok";
@@ -27,7 +27,7 @@ const SYNTAX_ERROR = "SyntaxError";
 const SUCCESS_STATUS_MIN = 200;
 const SUCCESS_STATUS_MAX = 299;
 
-function unavailable(reason: UnavailableReason, httpStatus: number | null = null): ServiceHealth {
+export function unavailable(reason: UnavailableReason, httpStatus: number | null = null): ServiceHealth {
   return { state: "unavailable", reason, httpStatus };
 }
 
@@ -71,10 +71,3 @@ export function healthFromFailure(error: unknown): ServiceHealth {
   }
   return unavailable("unreachable");
 }
-
-export const UNAVAILABLE_MESSAGES: Record<UnavailableReason, string> = {
-  unreachable: "No hay respuesta: el servicio no está desplegado en este entorno o está caído.",
-  timeout: "El servicio tardó demasiado en responder.",
-  "http-error": "El servicio respondió con un error.",
-  "unexpected-body": "Quien respondió no es el servicio: no está desplegado detrás de esta dirección.",
-};

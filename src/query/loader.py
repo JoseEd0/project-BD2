@@ -5,7 +5,9 @@ Se recorre el archivo dos veces —una para deducir y otra para cargar— porque
 una muestra dejaría fuera el valor largo que aparece en la fila diez mil.
 
 Un punto geográfico se escribe en el CSV igual que en SQL, `POINT(-12.0464, -77.0428)`:
-latitud y luego longitud, separadas por una coma.
+latitud y luego longitud, separadas por una coma. Un vector, también como en SQL,
+`[0.12, -0.5, 3e-2]`, y la columna es `VECTOR(n)` si todas sus filas tienen la misma
+dimensión; si no, es texto.
 """
 
 from __future__ import annotations
@@ -36,6 +38,8 @@ BOOLEAN_WORDS = {"true": True, "false": False}
 POINT_PATTERN = re.compile(
     r"^POINT\s*\(\s*(?P<lat>[^,()]+?)\s*,\s*(?P<lon>[^,()]+?)\s*\)$", re.IGNORECASE
 )
+VECTOR_PATTERN = re.compile(r"^\[(?P<components>[^\[\]]+)\]$")
+VECTOR_SEPARATOR = ","
 
 
 class LoaderError(DomainError):
@@ -51,22 +55,39 @@ def infer_schema(path: Path, config: EngineConfig) -> Schema:
     names = read_header(path, config)
     seen: list[FieldType | None] = [None] * len(names)
     longest = [0] * len(names)
+    dimensions: list[set[int]] = [set() for _ in names]
     for row in _read_rows(path, config, len(names)):
         for position, raw in enumerate(row):
             seen[position] = _widen(seen[position], raw)
             longest[position] = max(longest[position], len(raw.encode(TEXT_ENCODING)))
-    kinds = [EMPTY_COLUMN_TYPE if kind is None else kind for kind in seen]
+            components = _vector_components(raw)
+            if components is not None:
+                dimensions[position].add(len(components))
+    kinds = [_settled(kind, dimensions[position]) for position, kind in enumerate(seen)]
     return Schema(
         [
-            _field(name, kind, longest[position], config)
+            _field(name, kind, longest[position], dimensions[position], config)
             for position, (name, kind) in enumerate(zip(names, kinds, strict=True))
         ]
     )
 
 
-def _field(name: str, kind: FieldType, longest: int, config: EngineConfig) -> Field:
+def _settled(kind: FieldType | None, dimensions: set[int]) -> FieldType:
+    """El tipo final de una columna: vectores de dimensiones distintas solo caben en texto."""
+    if kind is None:
+        return EMPTY_COLUMN_TYPE
+    if kind is FieldType.VECTOR and len(dimensions) > 1:
+        return FieldType.STRING
+    return kind
+
+
+def _field(
+    name: str, kind: FieldType, longest: int, dimensions: set[int], config: EngineConfig
+) -> Field:
     """Un texto que cabe en `inline_string_limit` va en la fila, con algo de margen para
     que una actualización algo más larga quepa; uno más largo va fuera, como TEXT."""
+    if kind is FieldType.VECTOR:
+        return Field(name, kind, next(iter(dimensions)))
     if kind is not FieldType.STRING:
         return Field(name, kind)
     if longest > config.inline_string_limit:
@@ -153,6 +174,8 @@ def _type_of(raw: str) -> FieldType:
         return FieldType.DATE
     if _coordinates(raw) is not None:
         return FieldType.POINT
+    if _vector_components(raw) is not None:
+        return FieldType.VECTOR
     return FieldType.STRING
 
 
@@ -175,6 +198,17 @@ def _coordinates(raw: str) -> tuple[float, float] | None:
     if matched is None or not _is_float(matched["lat"]) or not _is_float(matched["lon"]):
         return None
     return float(matched["lat"]), float(matched["lon"])
+
+
+def _vector_components(raw: str) -> tuple[float, ...] | None:
+    """Los componentes de un texto `[a, b, ...]`; `None` si no tiene esa forma."""
+    matched = VECTOR_PATTERN.match(raw.strip())
+    if matched is None:
+        return None
+    parts = matched["components"].split(VECTOR_SEPARATOR)
+    if not all(_is_float(part) for part in parts):
+        return None
+    return tuple(float(part) for part in parts)
 
 
 def _is_date(raw: str) -> bool:
@@ -202,6 +236,8 @@ def _convert(raw: str, kind: FieldType) -> Value:
         return date.fromisoformat(text)
     if kind is FieldType.POINT:
         return _parse_point(text)
+    if kind is FieldType.VECTOR:
+        return _parse_vector(text)
     return text
 
 
@@ -215,6 +251,19 @@ def _parse_boolean(text: str) -> bool:
     if value is None:
         raise LoaderError(f"'{text}' no es un booleano; se espera true o false")
     return value
+
+
+def _parse_vector(text: str) -> tuple[float, ...]:
+    """Vector escrito como `[a, b, ...]`. Que tenga la dimensión de la columna lo comprueba
+    la columna al guardarlo.
+
+    Raises:
+        LoaderError: si el texto no es un vector de números.
+    """
+    components = _vector_components(text)
+    if components is None:
+        raise LoaderError(f"'{text}' no es un vector; se espera [a, b, ...] con números")
+    return components
 
 
 def _parse_point(text: str) -> Point:

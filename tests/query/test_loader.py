@@ -1,4 +1,4 @@
-"""Inferencia de tipos al cargar un CSV: qué se reconoce como número, fecha o punto."""
+"""Inferencia de tipos al cargar un CSV: qué se reconoce como número, fecha, punto o vector."""
 
 from datetime import date
 from pathlib import Path
@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from config import EngineConfig
+from query.engine import Engine
 from query.loader import LoaderError, infer_schema, read_header, read_values
 from spatial.geometry import Point
 from storage.schema import Field, Schema
@@ -184,3 +185,41 @@ def test_a_value_that_does_not_fit_a_declared_type_is_reported(
     schema = Schema([Field("id", FieldType.INT), Field("valor", kind)])
     with pytest.raises(LoaderError, match=message):
         list(read_values(path, schema, config))
+
+
+def test_a_vector_column_takes_the_dimension_of_its_values(config: EngineConfig):
+    path = write_csv(config, 'id,emb\n1,"[0.5, -1, 2e-3]"\n2,"[1,0,0]"\n3,\n')
+    schema = infer_schema(path, config)
+
+    assert schema.field_of("emb") == Field("emb", FieldType.VECTOR, 3)
+    assert list(read_values(path, schema, config)) == [
+        (1, (0.5, -1.0, 0.002)),
+        (2, (1.0, 0.0, 0.0)),
+        (3, None),
+    ]
+
+
+@pytest.mark.parametrize("cell", ["[]", "[1, abc]", "[nan, 1]", "[1, 2", "[[1, 2]]", "1, 2"])
+def test_what_is_not_a_list_of_finite_numbers_is_not_a_vector(config: EngineConfig, cell: str):
+    assert types_of(config, f'id,emb\n1,"{cell}"\n')["emb"] is not FieldType.VECTOR
+
+
+def test_vectors_of_different_dimensions_are_text(config: EngineConfig):
+    assert types_of(config, 'id,emb\n1,"[1, 2]"\n2,"[1, 2, 3]"\n')["emb"] is FieldType.STRING
+
+
+def test_a_declared_vector_column_rejects_what_is_not_a_vector(config: EngineConfig):
+    path = write_csv(config, 'id,emb\n1,"[1, x]"\n')
+    schema = Schema([Field("id", FieldType.INT), Field("emb", FieldType.VECTOR, 2)])
+
+    with pytest.raises(LoaderError, match="no es un vector"):
+        list(read_values(path, schema, config))
+
+
+def test_a_csv_with_vectors_loads_into_a_table_with_a_vector_index(config: EngineConfig):
+    path = write_csv(config, 'id,emb\n1,"[1, 0]"\n2,"[0, 1]"\n3,"[0.9, 0.1]"\n')
+    with Engine(config) as engine:
+        engine.execute(f"CREATE TABLE puntos FROM FILE '{path}' USING INDEX HNSW (emb)")
+        found = engine.execute("SELECT id FROM puntos WHERE SIMILAR_TO(emb, [1, 0], k = 2)")
+
+    assert [row[0] for row in found.rows] == [1, 3]

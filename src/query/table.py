@@ -52,11 +52,23 @@ class TableError(StorageError):
     """Error de operación sobre una tabla."""
 
 
-class DuplicatePrimaryKeyError(TableError):
+class DuplicateError(TableError):
+    """Una fila repetiría un valor que no se puede repetir.
+
+    `position` es el lugar de esa fila entre las que se escribían, para que quien carga
+    un lote sepa cuál fue.
+    """
+
+    def __init__(self, message: str, position: int) -> None:
+        super().__init__(message)
+        self.position = position
+
+
+class DuplicatePrimaryKeyError(DuplicateError):
     """Ya existe una fila con esa clave primaria."""
 
 
-class DuplicateValueError(TableError):
+class DuplicateValueError(DuplicateError):
     """Ya existe una fila con ese valor en una columna declarada `UNIQUE`."""
 
 
@@ -85,12 +97,12 @@ class _UniqueColumn:
     Attributes:
         position: lugar de la columna en la fila.
         holds: dice si alguna fila de la tabla tiene ya ese valor.
-        duplicate: el error con que se rechaza un valor repetido.
+        duplicate: el error con que se rechaza un valor repetido por la fila de esa posición.
     """
 
     position: int
     holds: Callable[[Key], bool]
-    duplicate: Callable[[Key], TableError]
+    duplicate: Callable[[Key, int], TableError]
 
 
 def table_files(definition: TableDefinition, directory: Path) -> list[Path]:
@@ -202,9 +214,27 @@ class Table:
             DuplicateValueError: si lo que se repite es el valor de una columna `UNIQUE`.
             StorageError: si algún valor no corresponde a su columna.
         """
-        normalized = [self._rows.normalized(values) for values in rows]
-        self._reject_repeated_values(normalized)
-        for row in normalized:
+        self.insert_normalized([self.normalized(values) for values in rows], changes)
+
+    def normalized(self, values: Sequence[Value]) -> Record:
+        """La fila tal como quedaría guardada, sin escribir nada.
+
+        Raises:
+            StorageError: si algún valor no corresponde a su columna o falta uno que no
+                admite NULL.
+        """
+        return self._rows.normalized(values)
+
+    def insert_normalized(self, rows: Sequence[Record], changes: RowChanges) -> None:
+        """Como `insert_all`, con filas que ya pasaron por `normalized`: quien las valida
+        de una en una para saber cuál falla no paga dos veces la conversión.
+
+        Raises:
+            DuplicateError: si una clave o un valor `UNIQUE` ya existe o se repite entre
+                las filas; su `position` dice cuál.
+        """
+        self._reject_repeated_values(rows)
+        for row in rows:
             self._store(row)
             changes.inserted(row)
 
@@ -655,7 +685,7 @@ class Table:
             if value is None:
                 continue
             if value in claimed or (value not in vacated and column.holds(value)):
-                raise column.duplicate(value)
+                raise column.duplicate(value, position)
             claimed.add(value)
         return changing
 
@@ -673,9 +703,11 @@ class Table:
     def _unique_index_column(self, definition: IndexDefinition) -> _UniqueColumn:
         index = self._indexes[definition.name]
 
-        def duplicate(value: Key) -> TableError:
+        def duplicate(value: Key, position: int) -> TableError:
             return DuplicateValueError(
-                f"el valor {value!r} ya existe en '{self.name}.{definition.column}', que es UNIQUE"
+                f"el valor {value!r} ya existe en '{self.name}.{definition.column}', que es "
+                "UNIQUE",
+                position,
             )
 
         return _UniqueColumn(
@@ -688,8 +720,10 @@ class Table:
         key = self._definition.primary_key
         return key is not None and column.position == self.schema.position_of(key)
 
-    def _duplicate_key(self, key: Key) -> TableError:
-        return DuplicatePrimaryKeyError(f"la clave primaria {key!r} ya existe en '{self.name}'")
+    def _duplicate_key(self, key: Key, position: int) -> TableError:
+        return DuplicatePrimaryKeyError(
+            f"la clave primaria {key!r} ya existe en '{self.name}'", position
+        )
 
     def _has_key(self, key: Key) -> bool:
         return next(iter(self.addressed_by_primary_key([key])), None) is not None

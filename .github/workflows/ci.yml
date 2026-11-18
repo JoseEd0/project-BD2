@@ -35,8 +35,22 @@ jobs:
         run: uv run --no-sync ruff check
       - name: Mypy
         run: uv run --no-sync mypy
+      - name: Modelos de rostros en caché
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/faces-models
+          # Las URL y los SHA-256 de los modelos viven en ese archivo: si cambian, se bajan otra vez.
+          key: faces-models-${{ hashFiles('apps/faces/src/faces/models.py') }}
+      - name: Modelos de rostros
+        # Con la caché no baja nada: solo comprueba el SHA-256 de cada uno.
+        run: uv run --no-sync python -m faces models --salida "$FACES_MODELS_DIR"
+        env:
+          FACES_MODELS_DIR: ${{ runner.temp }}/faces-models
       - name: Pytest
+        # Con FACES_MODELS_DIR definida, un test de rostros sin sus modelos falla en vez de saltarse.
         run: uv run --no-sync python -m pytest -q
+        env:
+          FACES_MODELS_DIR: ${{ runner.temp }}/faces-models
 
   frontend:
     name: Frontend

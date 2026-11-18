@@ -62,7 +62,7 @@ def as_response(
     return QueryResponse(
         statements=outcomes,
         columns=list(last_query.columns),
-        rows=[[_as_json(value) for value in row] for row in last_query.rows[:max_rows]],
+        rows=[[as_json_value(value) for value in row] for row in last_query.rows[:max_rows]],
         total_rows=len(last_query.rows),
         plan=_as_plan(last_query.plan),
         message=last_query.message,
@@ -145,7 +145,7 @@ def _as_plan(node: PlanNode | None) -> PlanInfo | None:
     )
 
 
-def _as_json(value: Value) -> Any:
+def as_json_value(value: Value) -> Any:
     """Los tipos que JSON no conoce viajan como texto; un punto, como `{lat, lon}`."""
     if isinstance(value, bytes):
         return value.decode("utf-8", errors="replace")

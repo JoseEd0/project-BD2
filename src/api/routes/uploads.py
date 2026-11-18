@@ -23,7 +23,10 @@ from sql.nodes import CreateTableFromFileStatement, IndexSpec, IndexType
 FILE_UPLOAD_PATH = "/files/upload"
 TABLE_UPLOAD_PATH = "/tables/upload"
 MEDIA_UPLOAD_PATH = "/media/queries"
-UPLOAD_PATHS = frozenset({FILE_UPLOAD_PATH, TABLE_UPLOAD_PATH, MEDIA_UPLOAD_PATH})
+MEDIA_SEGMENTS_PATH = "/media/segments"
+UPLOAD_PATHS = frozenset(
+    {FILE_UPLOAD_PATH, TABLE_UPLOAD_PATH, MEDIA_UPLOAD_PATH, MEDIA_SEGMENTS_PATH}
+)
 # El límite es del archivo, pero Content-Length mide el cuerpo multipart entero: los
 # separadores, las cabeceras de cada parte y los campos de texto del formulario.
 MULTIPART_ALLOWANCE_BYTES = 64 * 1024

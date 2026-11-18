@@ -1,5 +1,6 @@
-"""Los archivos multimedia: subir el de una consulta `SIMILAR_TO` y servir los del
-resultado, como miniatura o tal cual (el audio, con `Range` para que el reproductor salte).
+"""Los archivos multimedia: subir el de una consulta `SIMILAR_TO`, consultar por segmentos
+un audio subido y servir los archivos del resultado, como miniatura o tal cual (el audio,
+con `Range` para que el reproductor salte).
 
 Solo se sirven imágenes y audios que estén dentro de los directorios que el motor ya puede
 leer —el de datos y los de `MINIGESTOR_IMPORT_DIRS`—, con el mismo control que
@@ -11,24 +12,46 @@ from __future__ import annotations
 
 import hashlib
 import mimetypes
+import shutil
 import uuid
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, File, Query, UploadFile
+from fastapi import APIRouter, File, Form, Query, UploadFile
 from fastapi.responses import FileResponse, Response
 
+from api.auth import CallerDependency
 from api.errors import as_http_error, invalid_request
-from api.routes.uploads import MEDIA_UPLOAD_PATH, copy_limited, path_for_sql, uploads_of
-from api.schemas import MediaUploadResponse
+from api.responses import as_json_value
+from api.routes.uploads import (
+    MEDIA_SEGMENTS_PATH,
+    MEDIA_UPLOAD_PATH,
+    copy_limited,
+    path_for_sql,
+    uploads_of,
+)
+from api.schemas import (
+    MediaUploadResponse,
+    SegmentInfo,
+    SegmentNeighbourInfo,
+    SegmentSearchResponse,
+    SegmentTimings,
+    TimeRangeInfo,
+)
 from api.service import Service, ServiceDependency
 from errors import DomainError
-from multimedia import MediaKind, media_kind_of
+from index.similarity import SimilarRow
+from multimedia import MediaKind, TemporalFragment, media_kind_of, split_fragment
 from multimedia.thumbnails import THUMBNAIL_EXTENSION, thumbnail
 from query.files import resolve_user_file
+from query.segment_search import SegmentRequest, SegmentSearch, search_segments
 from storage.atomic import write_atomically
 
 QUERY_DIRECTORY = "consultas"
+SEGMENTS_DIRECTORY = "segmentos"
+# Los vecinos de cada ventana si la petición no pide otro número: para alinear tramos
+# copiados basta con los pocos más parecidos.
+DEFAULT_SEGMENT_NEIGHBOURS = 5
 THUMBNAIL_DIRECTORY = ".miniaturas"
 PARTIAL_SUFFIX = ".partial"
 THUMBNAIL_MEDIA_TYPE = "image/jpeg"
@@ -72,11 +95,65 @@ def upload_query(
     )
 
 
+@router.post(MEDIA_SEGMENTS_PATH, response_model=SegmentSearchResponse)
+def segments(
+    service: ServiceDependency,
+    caller: CallerDependency,
+    file: Annotated[UploadFile, File(description="Audio que se consulta por segmentos")],
+    table: Annotated[str, Form(description="Tabla con la columna de rutas indexada")],
+    column: Annotated[
+        str | None, Form(description="Columna de las rutas; sin ella, la única indexada")
+    ] = None,
+    k: Annotated[int, Form(ge=1, description="Filas por ventana")] = DEFAULT_SEGMENT_NEIGHBOURS,
+    window: Annotated[
+        float | None, Form(gt=0, description="Segundos de cada ventana; por omisión, 10")
+    ] = None,
+    hop: Annotated[
+        float | None, Form(gt=0, description="Segundos entre ventanas; por omisión, 5")
+    ] = None,
+    session_id: Annotated[str | None, Form()] = None,
+) -> SegmentSearchResponse:
+    """Corta el audio subido en ventanas de `window` segundos cada `hop` y devuelve las `k`
+    filas más parecidas a cada una, con el índice HNSW o IVF de la columna de rutas.
+
+    El audio se decodifica una vez y las ventanas se buscan en un solo lote; cada una
+    recibe lo mismo que un `SIMILAR_TO('audio#t=inicio,fin', k)`. Un audio más corto que una
+    ventana es una sola ventana. El archivo solo vive mientras dura la petición. Lee con
+    bloqueo compartido sobre la tabla.
+    """
+    _require_audio(file.filename)
+    request = SegmentRequest(
+        column=column,
+        k=k,
+        window=window or service.config.segment_window_seconds,
+        hop=hop or service.config.segment_hop_seconds,
+    )
+    workspace = uploads_of(service) / SEGMENTS_DIRECTORY / uuid.uuid4().hex
+    workspace.mkdir(parents=True)
+    try:
+        audio = workspace / f"audio{Path(file.filename or '').suffix.lower()}"
+        copy_limited(file.file, audio, service.config.max_upload_bytes)
+        with service.session(caller.service, session_id) as session:
+            try:
+                found = session.inspect(
+                    [table],
+                    lambda: search_segments(
+                        service.engine.table(table), audio, request, service.config.max_result_rows
+                    ),
+                )
+            except DomainError as error:
+                raise as_http_error(error, session.in_transaction) from error
+        return _segments_response(found)
+    finally:
+        shutil.rmtree(workspace, ignore_errors=True)
+
+
 @router.get(MEDIA_FILE_PATH)
 def media_file(
     service: ServiceDependency, path: Annotated[str, Query(description="Ruta del archivo")]
 ) -> FileResponse:
-    """El archivo tal como está; con `Range`, solo el trozo pedido (`206`)."""
+    """El archivo tal como está; con `Range`, solo el trozo pedido (`206`). Un fragmento
+    `#t=` al final de la ruta se ignora: el tramo lo elige el reproductor."""
     located, _ = _media(path, service)
     media_type = mimetypes.guess_type(located.name)[0] or FALLBACK_MEDIA_TYPE
     return FileResponse(located, media_type=media_type, headers={"Cache-Control": CACHE_CONTROL})
@@ -108,17 +185,82 @@ def media_thumbnail(
 
 
 def _media(text: str, service: Service) -> tuple[Path, MediaKind]:
-    """La ruta resuelta y permitida de una imagen o un audio.
+    """La ruta resuelta y permitida de una imagen o un audio, sin su fragmento.
 
     Raises:
-        HTTPException: `400` si sale de los directorios permitidos, no existe o no es una
-            imagen ni un audio.
+        HTTPException: `400` si sale de los directorios permitidos, no existe, no es una
+            imagen ni un audio o su fragmento no se puede leer.
     """
     try:
-        located = resolve_user_file(text, service.config)
+        written, _ = split_fragment(text)
+        located = resolve_user_file(written, service.config)
         return located, media_kind_of(located)
     except DomainError as error:
         raise as_http_error(error) from error
+
+
+def _require_audio(filename: str | None) -> None:
+    try:
+        kind = media_kind_of(Path(f"consulta{Path(filename or '').suffix.lower()}"))
+    except DomainError as error:
+        raise as_http_error(error) from error
+    if kind is not MediaKind.AUDIO:
+        raise invalid_request(
+            f"'{filename}' es una imagen: la consulta por segmentos es de un audio"
+        )
+
+
+def _segments_response(found: SegmentSearch) -> SegmentSearchResponse:
+    result = found.result
+    columns = [field.name for field in found.table.schema.fields]
+    segments = [
+        SegmentInfo(
+            start=segment.window.start,
+            end=segment.window.end or result.duration,
+            neighbours=[_neighbour(found, columns, similar) for similar in segment.rows],
+        )
+        for segment in result.segments
+    ]
+    return SegmentSearchResponse(
+        table=found.table.name,
+        column=found.column,
+        index=found.index_name,
+        method=found.method.value,
+        metric=result.metric.value,
+        k=found.request.k,
+        window=found.request.window,
+        hop=found.request.hop,
+        duration=result.duration,
+        columns=columns,
+        segments=segments,
+        distance_computations=result.stats.distance_computations,
+        timings=SegmentTimings(
+            decode_ms=result.decode_ms,
+            extraction_ms=result.extraction_ms,
+            search_ms=result.search_ms,
+        ),
+    )
+
+
+def _neighbour(
+    found: SegmentSearch, columns: list[str], similar: SimilarRow
+) -> SegmentNeighbourInfo:
+    """La fila de un vecino con su archivo y su tramo, leídos de la columna de rutas, que
+    ya se validó al indexarla."""
+    values = found.rows[similar.record_id]
+    path, fragment = split_fragment(str(values[columns.index(found.column)]))
+    return SegmentNeighbourInfo(
+        row={name: as_json_value(value) for name, value in zip(columns, values, strict=True)},
+        path=path,
+        fragment=_time_range(fragment),
+        score=similar.score,
+    )
+
+
+def _time_range(fragment: TemporalFragment | None) -> TimeRangeInfo | None:
+    if fragment is None:
+        return None
+    return TimeRangeInfo(start=fragment.start, end=fragment.end)
 
 
 def _thumbnail_path(located: Path, service: Service) -> Path:

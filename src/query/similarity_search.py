@@ -372,7 +372,7 @@ def _searched_index(
     usable = [
         (source, index)
         for source, index in candidates
-        if _answers_similarity(index) and (method is None or index.method is method)
+        if answers_similarity(index) and (method is None or index.method is method)
     ]
     if len(usable) == 1:
         return usable[0]
@@ -393,7 +393,8 @@ def _searched_index(
     )
 
 
-def _answers_similarity(index: IndexDefinition) -> bool:
+def answers_similarity(index: IndexDefinition) -> bool:
+    """Si el índice es de un método que responde `SIMILAR_TO` (HNSW o IVF)."""
     method = method_named(index.method)
     return method is not None and method.supports(Capability.SIMILARITY)
 

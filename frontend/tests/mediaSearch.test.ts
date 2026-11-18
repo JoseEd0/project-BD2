@@ -90,9 +90,14 @@ function response(columns: string[], rows: QueryResponse["rows"]): QueryResponse
   };
 }
 
-test("only columns with an HNSW or IVF index are search targets", () => {
+test("only path columns with an HNSW or IVF index are search targets", () => {
+  const fragmentos: TableInfo = {
+    ...CLIENTES,
+    name: "fragmentos",
+    columns: [column("id", "INT", ["BTREE"]), column("embedding", "VECTOR", ["HNSW"])],
+  };
   assert.deepEqual(
-    mediaTargets([IMAGENES, CLIENTES, CANCIONES]).map((target) => [target.key, target.methods]),
+    mediaTargets([IMAGENES, CLIENTES, CANCIONES, fragmentos]).map((target) => [target.key, target.methods]),
     [
       ["imagenes.ruta", ["HNSW", "IVF"]],
       ["canciones.ruta", ["IVF"]],

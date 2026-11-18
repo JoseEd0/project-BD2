@@ -106,6 +106,8 @@ class IndexMethod:
         options: las opciones que admite en un `WITH (...)`.
         settings_of: el valor de cada opción con que queda un índice que pide esas: la
             pedida o, si no, la de omisión.
+        builds_in_bulk: si construirlo de una vez con todas las filas cuesta mucho menos
+            que insertarlas de una en una; un B+ y un hash no tienen esa construcción.
     """
 
     method: IndexType
@@ -115,6 +117,7 @@ class IndexMethod:
     files_of: Callable[[Path], list[Path]]
     options: frozenset[str] = frozenset()
     settings_of: SettingsRule = _no_settings
+    builds_in_bulk: bool = False
 
     def supports(self, capability: Capability) -> bool:
         return capability in self.capabilities
@@ -380,6 +383,7 @@ _METHODS: dict[IndexType, IndexMethod] = {
         opener=_without_options(SpatialIndex),
         refusal_for=_points_only,
         files_of=_single_file,
+        builds_in_bulk=True,
     ),
     IndexType.INVERTED: IndexMethod(
         method=IndexType.INVERTED,
@@ -389,6 +393,7 @@ _METHODS: dict[IndexType, IndexMethod] = {
         files_of=TextSearchIndex.files_of,
         options=frozenset({LANGUAGE_OPTION}),
         settings_of=_text_settings,
+        builds_in_bulk=True,
     ),
     IndexType.HNSW: IndexMethod(
         method=IndexType.HNSW,
@@ -398,6 +403,7 @@ _METHODS: dict[IndexType, IndexMethod] = {
         files_of=_similarity_files,
         options=HNSW_OPTIONS,
         settings_of=_similarity_settings(HNSW_KIND),
+        builds_in_bulk=True,
     ),
     IndexType.IVF: IndexMethod(
         method=IndexType.IVF,
@@ -407,5 +413,6 @@ _METHODS: dict[IndexType, IndexMethod] = {
         files_of=_similarity_files,
         options=IVF_OPTIONS,
         settings_of=_similarity_settings(IVF_KIND),
+        builds_in_bulk=True,
     ),
 }

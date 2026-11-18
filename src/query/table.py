@@ -161,6 +161,7 @@ class Table:
         self._directory = config.data_directory
         self._storage = self._open_storage()
         self._indexes: dict[str, SecondaryIndex] = {}
+        self._deferred: dict[str, SecondaryIndex] = {}
         self._text_values: VariableLengthFile | None = None
         try:
             self._text_values = self._open_text_values()
@@ -494,6 +495,34 @@ class Table:
         self._indexes[definition.name] = index
         return index
 
+    def defer_bulk_indexes(self) -> tuple[str, ...]:
+        """Deja de mantener fila a fila los índices que se construyen mejor de una vez —el
+        R-Tree con STR, el invertido con SPIMI, HNSW e IVF con todos sus vectores— y
+        devuelve sus nombres. Es para cargar una tabla vacía: `build_deferred_indexes` los
+        construye al final con todas las filas.
+
+        Los `UNIQUE`, el de la clave primaria incluido, siguen al día: son los que
+        comprueban que una fila nueva no repite un valor. Mientras haya índices diferidos la
+        tabla no puede responder consultas que los usen: quien los difiere la tiene
+        bloqueada en exclusiva.
+        """
+        for definition in self._definition.indexes:
+            method = method_named(definition.method)
+            if definition.unique or method is None or not method.builds_in_bulk:
+                continue
+            self._deferred[definition.name] = self._indexes.pop(definition.name)
+        return tuple(self._deferred)
+
+    def build_deferred_indexes(self) -> None:
+        """Construye con las filas que hay los índices que `defer_bulk_indexes` dejó de
+        mantener, y vuelve a mantenerlos. Un índice que no se pudo construir sigue diferido
+        y el error se propaga: devolverlo a medias respondería consultas con filas de menos.
+        """
+        for name in list(self._deferred):
+            index = self._deferred[name]
+            index.build(self._indexed_rows())
+            self._indexes[name] = self._deferred.pop(name)
+
     def drop_index(self, name: str) -> None:
         index = self._indexes.pop(name)
         index.close()
@@ -519,7 +548,7 @@ class Table:
         self._storage.close()
         if self._text_values is not None:
             self._text_values.close()
-        for index in self._indexes.values():
+        for index in [*self._indexes.values(), *self._deferred.values()]:
             index.close()
 
     def describe_structure(self) -> dict[str, Any]:

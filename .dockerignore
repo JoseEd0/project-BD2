@@ -16,5 +16,6 @@ docs
 tests
 benchmarks
 frontend
-apps/web
+apps/web-kit
+apps/*/web
 **/node_modules

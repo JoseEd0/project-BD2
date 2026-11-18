@@ -57,8 +57,8 @@ select = ["E", "F", "W", "I", "N", "UP", "B", "A", "C4", "SIM", "RET", "PTH", "R
 [tool.mypy]
 python_version = "3.11"
 mypy_path = "src"
-# Cada servicio de Python, por nombre: `apps/*/src` alcanzaría también `apps/web/src`, que es
-# TypeScript, y mypy falla en una carpeta sin archivos de Python.
+# Cada servicio de Python, por nombre: `apps/*/src` alcanzaría también `apps/web-kit/src`, que
+# es TypeScript, y mypy falla en una carpeta sin archivos de Python.
 files = ["src", "benchmarks", "demos", "tools", "apps/client/src", "apps/kit/src", "apps/shop/src"]
 strict = true
 warn_unreachable = true

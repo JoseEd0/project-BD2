@@ -60,9 +60,6 @@ node_modules/
 .yarn/
 frontend/dist/
 frontend/build/
-apps/web/dist/
-apps/web/test-results/
-apps/web/playwright-report/
 apps/**/dist/
 apps/**/test-results/
 apps/**/playwright-report/
@@ -132,8 +129,6 @@ config.local.*
 !README_assets/**
 # Las gráficas de los experimentos sí se versionan: son parte del informe.
 !benchmarks/figures/*.png
-# Los iconos del portal se generan desde su SVG (`npm run icons`) y se versionan.
-!apps/web/public/icons/*.png
 
 # --- Modelos y vectores precomputados ---
 *.npy

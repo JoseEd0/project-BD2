@@ -30,7 +30,7 @@ from storage.record import Record, RecordSerializer
 from storage.record_id import RecordId
 from storage.schema import Schema
 from storage.sequential import SequentialFile
-from storage.types import FieldType, Key, StorageError
+from storage.types import FieldType, Key, StorageError, Value
 from storage.varlen import VariableLengthFile
 
 HEAP_SUFFIX = ".heap"
@@ -337,6 +337,15 @@ class Table:
     def unpack(self, record: bytes) -> Record:
         """La fila lógica de un registro guardado, con cada TEXT leído de su archivo."""
         return self._rows.unpack(record)
+
+    def unpack_columns(self, record: bytes, positions: Iterable[int]) -> Record:
+        """La fila de un registro con solo las columnas de `positions` leídas; el resto,
+        NULL. Es lo que necesita un filtro que lee pocas columnas de una fila con un
+        `VECTOR` de cientos de componentes."""
+        values: list[Value] = [None] * len(self.schema)
+        for position in positions:
+            values[position] = self._rows.unpack_field(record, position)
+        return tuple(values)
 
     def sample_points(self, column: str, limit: int) -> list[Point]:
         """Hasta `limit` puntos de la columna, tomados a intervalos regulares de la tabla.

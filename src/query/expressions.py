@@ -687,6 +687,17 @@ def subexpressions(expression: Expression) -> tuple[Expression, ...]:
     return operands(expression)
 
 
+def column_references(expression: Expression) -> list[ColumnRef]:
+    """Las columnas que lee la expresión, en el orden en que aparecen."""
+    if isinstance(expression, ColumnRef):
+        return [expression]
+    return [
+        reference
+        for child in subexpressions(expression)
+        for reference in column_references(child)
+    ]
+
+
 def rewritten(
     expression: Expression, replace: Callable[[Expression], Expression | None]
 ) -> Expression:

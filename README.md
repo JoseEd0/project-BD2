@@ -134,7 +134,7 @@ demos/               generador del dataset, descarga de lugares reales y de mús
   samples/           los CSV del dataset de demostración; en esci/, la muestra real de Amazon
 apps/                servicios de la Parte 5, que usan el gestor solo por su API REST
   client/            cliente tipado del API del gestor
-  kit/               configuración, logs, salud y errores comunes a los servicios
+  kit/               configuración, logs, salud, errores y descargas verificadas
   web/               portal de las cuatro aplicaciones: React + TypeScript, instalable (PWA),
                      con los tipos generados del OpenAPI de cada servicio
 tools/               herramientas de desarrollo: exportar los contratos OpenAPI al portal

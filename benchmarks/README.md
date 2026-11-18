@@ -16,6 +16,7 @@ gráficas de [`figures/`](figures/) y todas las tablas de este documento.
     --sizes 1000 10000 100000 --repetitions 5
 .venv/bin/python -m benchmarks.multimedia_benchmark --images data/datasets/abo \
     --audio data/datasets/speech_commands --sizes 1000 10000 100000 --repetitions 3
+.venv/bin/python -m benchmarks.vector_benchmark --sizes 1000 10000 100000
 .venv/bin/python -m benchmarks.plot              # redibuja todas las gráficas
 ```
 
@@ -1074,6 +1075,159 @@ barrer los esfuerzos. Medir también la euclidiana por SQL suma dos `CREATE INDE
 tamaño y dataset. Con `--features-dir`, las características quedan en `data/` (unos 300 MB)
 y la siguiente ejecución las reutiliza: el JSON lo anota (`reutilizadas`). Sin `BENCH_POSTGRES_DSN` se omite pgvector, y sin `usearch` instalado, USearch.
 Todo corre también dentro del perfil `bench` de Docker, más lento.
+
+## 6. Columnas `VECTOR(n)` — HNSW e IVF por SQL
+
+`vector_benchmark.py` mide lo que pagará un servicio de la Parte 5 que guarde los
+embeddings de un modelo en una columna `VECTOR(384)` —la dimensión de
+multilingual-e5-small, el del RAG— y los busque con `SIMILAR_TO(emb, $1, k = 10)`, todo por
+SQL: analizar, planificar, buscar en el índice y leer las filas.
+
+**Los vectores son sintéticos, y se dice.** Vectores uniformes en 384 dimensiones están
+todos casi a la misma distancia de todos: ningún índice aproximado los separa y el recall
+medido sería el de un caso patológico, no el de embeddings. La colección sale de una
+**mezcla de gaussianas normalizada** ([`vectors/mixture.py`](vectors/mixture.py)), con
+semilla fija: 1 000 centros al azar en la esfera unitaria con pesos de una Dirichlet(1)
+(temas grandes y chicos), alrededor de cada uno una variación en un subespacio propio de 24
+direcciones (dispersión 1,0) más un ruido chico en todas (0,5), y cada vector normalizado a
+norma 1, como los de E5 o CLIP que se comparan con el coseno. El coseno medio entre dos
+vectores al azar es ~0 y el del décimo vecino de una consulta, ~0,6. **Las cifras de recall
+dependen de esa distribución**: con embeddings reales cambian, y el experimento se repite
+sobre ellos con `--clusters`, `--intrinsic-dimension`, `--spread` y `--noise` o, mejor, con
+los del servicio cuando existan. Los tamaños son subconjuntos anidados de la misma
+colección; las 500 consultas salen de la misma mezcla con otra semilla y no están en la
+tabla.
+
+**Qué se mide**, sobre `vectores (id INT PRIMARY KEY, parte INT, emb VECTOR(384))` con un
+índice hash en `parte`:
+
+- **Construcción**: `CREATE INDEX ... USING HNSW | IVF (emb) WITH (metric = 'cosine')` con
+  los parámetros por omisión (`M` 16, `ef_construction` 64, `ef_search` 40; IVF con √N
+  listas y √listas `probes`), y lo que ocupa el índice en disco. La tabla se carga antes,
+  fila a fila (`Table.insert`), y se reporta aparte.
+- **Consulta**: cada `SIMILAR_TO` se responde 3 veces y cuenta su mediana; de las 500 salen
+  la mediana (p50) y el percentil 95. **Recall@10** contra la búsqueda exacta calculada
+  aparte con numpy en `float64` (un vecino cuenta si su puntaje llega al décimo).
+- **Búsqueda exacta por SQL**: la misma consulta con `WITH METRIC = dot`, que el índice no
+  ordena y por eso compara contra todas las filas. Con vectores de norma 1 el producto punto
+  ordena igual que el coseno, así que su Recall@10 es 1. La primera consulta arma la búsqueda
+  exacta leyendo la tabla: es su «construcción».
+- **Con filtro**: `AND parte = p`, que deja el 10 % de las filas por el índice hash; el
+  filtro va dentro de la búsqueda (100 consultas).
+- **Curvas** de recall contra latencia con 100 000 vectores: `ef_search` de 10 a 320 y
+  `probes` de 1 a 128.
+
+**Dónde corrió.** Apple M4 Pro (12 núcleos), macOS, Python 3.12, FAISS 1.16.0, un hilo de
+FAISS (`--threads 1`), carga media de 2,9 a 3,5 durante la medida (en el JSON). Tardó 2 min
+34 s, casi todo en cargar la tabla.
+
+### Resultados medidos
+
+![HNSW e IVF sobre VECTOR(384) por SQL](figures/vectores-sql.png)
+
+Con 100 000 vectores de 384 dimensiones:
+
+| Técnica | Construcción | Disco | Consulta p50 | Consulta p95 | Recall@10 | Con filtro p50 | Recall@10 con filtro |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| búsqueda exacta (SQL) | 1,49 s (1.ª consulta) | — | 2,41 ms | 2,65 ms | 1,000 | — | — |
+| IVF (316 listas, 18 probes) | **2,20 s** | 149 MiB | 0,44 ms | 0,50 ms | **0,977** | 61,2 ms | **0,952** |
+| HNSW (`M` 16, `ef` 40) | 13,26 s | 161 MiB | **0,33 ms** | **0,34 ms** | 0,971 | 61,5 ms | 0,890 |
+
+| Vectores | Cargar la tabla | HNSW: construir · p50 · Recall@10 | IVF: construir · p50 · Recall@10 | Exacta: p50 |
+|---:|---:|---|---|---:|
+| 1 000 | 0,64 s | 0,07 s · 0,33 ms · 0,928 | 0,02 s · 0,30 ms · 0,514 | 0,31 ms |
+| 10 000 | 5,3 s | 0,94 s · 0,33 ms · 0,957 | 0,17 s · 0,32 ms · 0,897 | 0,50 ms |
+| 100 000 | 63,8 s | 13,3 s · 0,33 ms · 0,971 | 2,20 s · 0,44 ms · 0,977 | 2,41 ms |
+
+![Recall@10 contra la búsqueda exacta, por SQL](figures/vectores-recall.png)
+
+![Recall@10 contra latencia, por SQL](figures/vectores-curvas.png)
+
+| `ef_search` (HNSW) | 10 | 20 | **40** | 80 | 160 | 320 |
+|---|---:|---:|---:|---:|---:|---:|
+| p50 (ms) | 0,34 | 0,33 | 0,34 | 0,35 | 0,39 | 0,56 |
+| Recall@10 | 0,777 | 0,904 | 0,971 | 0,991 | 0,997 | 0,998 |
+
+| `probes` (IVF) | 1 | 2 | 4 | 8 | 16 | **18** | 32 | 64 | 128 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| p50 (ms) | 0,33 | 0,33 | 0,35 | 0,38 | 0,43 | 0,45 | 0,54 | 0,77 | 1,23 |
+| Recall@10 | 0,935 | 0,954 | 0,960 | 0,970 | 0,976 | 0,977 | 0,984 | 0,992 | 0,998 |
+
+### Antes de medir: el filtro costaba 185 ms
+
+La primera medida con 100 000 vectores daba **185 ms** por consulta con filtro (p95 195),
+75 veces la búsqueda exacta sin filtro. El perfil (`cProfile` y `EXPLAIN ANALYZE`) mostró
+que el filtro ya iba por el índice hash de `parte`, pero que de cada una de las 10 000
+candidatas `VectorSearchScan` decodificaba la fila entera para evaluar `parte = 3`, con sus
+384 componentes, y `VectorCodec.from_slots` los convertía uno a uno a `float` aunque `struct`
+ya los devuelve así: el 65 % del tiempo. Dos arreglos, cada uno en su commit:
+
+- `VectorCodec.from_slots` devuelve la tupla de `struct` tal cual;
+- el filtro previo lee de cada fila solo las columnas que nombra (`Table.unpack_columns`).
+
+Con 20 000 vectores la consulta con filtro pasó de 30 a 16 ms con el primero y a 7 ms con
+los dos; con 100 000, de **185 a 61 ms**. Lo que queda, medido con el perfil: el 57 % es
+leer las 10 000 filas de 10 000 páginas distintas del heap (dos filas de 1,5 KiB por página
+de 4 KiB, con un buffer pool de 2 048 páginas, así que casi todas vienen del sistema
+operativo) y el 20 % es volver a evaluar `parte = 3` en filas que el índice hash ya
+garantiza. Evitarlo pide un filtro que se responda **solo con el índice**, sin leer las
+filas, que es un cambio del planificador y queda fuera de esta medida. Con 10 000 vectores
+(1 000 filas en el filtro, la búsqueda exacta) la consulta con filtro tarda 3,9 ms.
+
+### Conclusiones
+
+- **Por SQL, una consulta cuesta lo mismo con 1 000 que con 100 000 vectores**: 0,33 ms con
+  HNSW. Analizar el SQL, planificar, convertir el parámetro JSON en vector y leer las 10
+  filas pesa más que la búsqueda en el grafo. La exacta sí crece con la tabla: 2,41 ms con
+  100 000, siete veces el HNSW, y crecería en proporción.
+- **IVF construye 6 veces más rápido** (2,2 frente a 13,3 s) y con estos vectores llega al
+  mismo recall (0,977 frente a 0,971): los grupos de la mezcla coinciden bien con sus listas.
+  Con 1 000 vectores y 25 listas, en cambio, su recall es 0,51: hay más temas (1 000) que
+  listas, y 5 `probes` no alcanzan. Con datos reales conviene medir antes de elegir.
+- **HNSW es más estable en la cola**: su p95 queda a 0,02 ms de su mediana; el de IVF
+  depende del tamaño de las listas que toque.
+- **Con un filtro del 10 % el recall baja** —0,95 IVF, 0,89 HNSW con 100 000—: FAISS filtra
+  durante la búsqueda con un `IDSelector`, y en HNSW el grafo se recorre por nodos que el
+  filtro descarta con el mismo `ef`. Subir `ef_search` en esas consultas lo compensa. Con
+  1 000 filas o menos en el filtro la búsqueda es exacta (`vector_exact_filter_rows`), y el
+  recall es 1.
+- **El índice ocupa lo que los vectores**: 161 MiB el HNSW y 149 MiB el IVF, frente a 146
+  MiB de 100 000 × 384 `float32`; el grafo suma un 10 %. Es un derivado: se reescribe al
+  cerrar, no en cada `COMMIT`.
+- **Cargar la tabla es lo lento** (64 s para 100 000 filas fila a fila, con su índice de
+  clave primaria y el hash): la carga masiva es del issue #69.
+
+### La Parte 4 después del cambio
+
+El índice de rutas de la Parte 4 y el de `VECTOR(n)` comparten ahora el mantenimiento del
+índice de vectores (`IndexedVectors`), así que el `SIMILAR_TO` por SQL de la sección 5 pasa
+por código nuevo. Se volvió a medir una parte representativa —10 000 objetos, coseno, con
+las características ya extraídas (`--features-dir`)— y se comparó con el JSON publicado:
+
+| 10 000 objetos, coseno | Publicado | Después del cambio |
+|---|---:|---:|
+| HNSW por SQL, imágenes: p50 · Recall@10 | 4,65 ms · 0,9728 | 4,62 ms · 0,9728 |
+| IVF por SQL, imágenes: p50 · Recall@10 | 4,58 ms · 0,9518 | 4,62 ms · 0,9518 |
+| HNSW por SQL, audio: p50 · Recall@10 | 1,23 ms · 0,9908 | 1,27 ms · 0,9906 |
+| IVF por SQL, audio: p50 · Recall@10 | 1,22 ms · 0,9780 | 1,21 ms · 0,9780 |
+| `CREATE INDEX` HNSW, imágenes · audio | 9,78 s · 8,75 s | 10,03 s · 8,62 s |
+| `CREATE INDEX` IVF, imágenes · audio | 9,47 s · 7,72 s | 9,46 s · 7,35 s |
+
+Mismas listas, `probes` y vectores cero (29 en imágenes) y el mismo recall; los tiempos
+quedan dentro de un 3 % arriba o abajo, lo que varía la medida en un equipo compartido. El
+0,9906 del HNSW de audio es el mismo que da el índice del gestor sin SQL en esa corrida: el
+grafo de FAISS no sale idéntico entre construcciones.
+
+### Reproducirlo
+
+```bash
+.venv/bin/python -m benchmarks.vector_benchmark --sizes 1000 10000 100000
+.venv/bin/python -m benchmarks.plot
+```
+
+Sin datasets que descargar ni PostgreSQL. `--dimension`, `--clusters`,
+`--intrinsic-dimension`, `--spread`, `--noise` y `--seed` cambian la colección;
+`--queries`, `--filter-queries`, `--repetitions`, `--ef-search` y `--probes`, la medida.
 
 ## Gráficas
 

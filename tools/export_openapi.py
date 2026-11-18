@@ -1,11 +1,13 @@
-"""Exporta el contrato OpenAPI de cada servicio, del que el portal genera sus tipos.
+"""Exporta el contrato OpenAPI de cada servicio junto a quien lo consume.
 
 Vive fuera de `apps/` porque construye la aplicación del gestor, y ningún archivo de
-`apps/` puede importar el motor (`tests/test_service_boundaries.py`). Cada contrato queda
-en `<salida>/<servicio>.json`; `npm --prefix apps/web run contracts` lo corre y genera los
-tipos, y la CI falla si el resultado no coincide con lo versionado.
+`apps/` puede importar el motor (`tests/test_service_boundaries.py`). Cada contrato se
+escribe en su ruta del registro, relativa a la raíz del repositorio: el del gestor junto a
+su cliente de Python (`apps/client/openapi/engine.json`) y el de cada aplicación junto a su
+interfaz (`apps/<app>/web/openapi/<app>.json`), que genera de él sus tipos. La CI lo corre y
+falla si el resultado no coincide con lo versionado.
 
-    uv run python -m tools.export_openapi --output apps/web/openapi
+    uv run python -m tools.export_openapi
 """
 
 from __future__ import annotations
@@ -15,6 +17,7 @@ import json
 import tempfile
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import AbstractContextManager, contextmanager
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -24,7 +27,7 @@ from api.main import create_app
 from config import EngineConfig
 
 JSON_INDENT = 2
-CONTRACT_SUFFIX = ".json"
+REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
 
 
 @contextmanager
@@ -41,9 +44,21 @@ def engine_app() -> Iterator[FastAPI]:
 
 AppFactory = Callable[[], AbstractContextManager[FastAPI]]
 
-# Un servicio nuevo de `apps/` se registra aquí con una fábrica que no abra conexiones: el
-# esquema sale de las rutas, no de arrancar el servicio.
-CONTRACTS: dict[str, AppFactory] = {"engine": engine_app}
+
+@dataclass(frozen=True)
+class Contract:
+    """Un servicio y dónde queda su contrato, relativo a la raíz del repositorio."""
+
+    factory: AppFactory
+    path: Path
+
+
+# Un servicio nuevo de `apps/` se registra aquí con una fábrica que no abra conexiones (el
+# esquema sale de las rutas, no de arrancar el servicio) y la ruta junto a su interfaz:
+# `apps/<app>/web/openapi/<app>.json`.
+CONTRACTS: dict[str, Contract] = {
+    "engine": Contract(engine_app, Path("apps/client/openapi/engine.json")),
+}
 
 
 def contract_text(schema: dict[str, Any]) -> str:
@@ -51,23 +66,28 @@ def contract_text(schema: dict[str, Any]) -> str:
     return json.dumps(schema, indent=JSON_INDENT, ensure_ascii=False) + "\n"
 
 
-def export_contracts(output: Path, contracts: dict[str, AppFactory] = CONTRACTS) -> list[Path]:
-    """Escribe un `<servicio>.json` por contrato en `output` y devuelve las rutas escritas."""
-    output.mkdir(parents=True, exist_ok=True)
+def export_contracts(root: Path, contracts: dict[str, Contract] = CONTRACTS) -> list[Path]:
+    """Escribe cada contrato en `root / contract.path` y devuelve las rutas escritas."""
     written = []
-    for name, factory in contracts.items():
-        with factory() as app:
-            path = output / f"{name}{CONTRACT_SUFFIX}"
+    for contract in contracts.values():
+        path = root / contract.path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with contract.factory() as app:
             path.write_text(contract_text(app.openapi()), encoding="utf-8")
-            written.append(path)
+        written.append(path)
     return written
 
 
 def main(arguments: Sequence[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0] if __doc__ else None)
-    parser.add_argument("--output", type=Path, required=True, help="carpeta de los contratos")
+    parser.add_argument(
+        "--root",
+        type=Path,
+        default=REPOSITORY_ROOT,
+        help="raíz bajo la que se escriben los contratos (por omisión, la del repositorio)",
+    )
     options = parser.parse_args(arguments)
-    for path in export_contracts(options.output):
+    for path in export_contracts(options.root):
         print(path)
 
 

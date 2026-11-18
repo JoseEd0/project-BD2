@@ -9,8 +9,11 @@ demo enseñe de un vistazo por qué existen las tres:
                                   │
     heap file · B+ agrupado · archivo secuencial · índices hash y B+ secundarios
 
-Y una sexta, `tiendas`, con la ubicación de cada local en Lima y un índice R-Tree, para
-las consultas espaciales: por radio, por cercanía y por distrito.
+Una sexta, `tiendas`, con la ubicación de cada local en Lima y un índice R-Tree, para
+las consultas espaciales: por radio, por cercanía y por distrito. Y una séptima,
+`fragmentos`, con un embedding `VECTOR(16)` por fila y un índice HNSW, para `SIMILAR_TO`
+con un vector: los vectores salen de una mezcla de gaussianas, un centro por tema, como los
+de un modelo que agrupa los textos de un mismo tema.
 
 Las tres últimas no se generan: `catalogo`, `consultas` y `juicios` se cargan de la muestra
 real de Amazon que vive en `demos/samples/esci/` (ver `demos/muestra_esci.py`), y
@@ -61,6 +64,7 @@ BASE_PRODUCTOS = 800
 BASE_PEDIDOS = 6000
 BASE_DETALLES = 18000
 BASE_TIENDAS = 3000
+BASE_FRAGMENTOS = 1200
 
 CIUDADES = [
     "Lima", "Arequipa", "Trujillo", "Cusco", "Piura",
@@ -87,6 +91,12 @@ RUBROS = [
     "ferretería", "librería", "electrónica", "panadería",
 ]
 COORDINATE_DECIMALS = 6
+TEMAS = ["deporte", "cocina", "tecnologia", "viajes", "musica", "salud"]
+EMBEDDING_DIMENSION = 16
+# Desvío de cada fragmento respecto del centro de su tema: los temas quedan separados, pero
+# no tanto como para que dos fragmentos de un mismo tema tengan el mismo vector.
+EMBEDDING_SPREAD = 0.35
+EMBEDDING_DECIMALS = 4
 
 
 @dataclass(frozen=True, slots=True)
@@ -250,6 +260,22 @@ SPECS: tuple[TableSpec, ...] = (
         description="heap file + índice R-Tree en 'ubicacion' (radio, k-NN, polígono)",
         after_load=("CREATE INDEX idx_tiendas_ubicacion ON tiendas USING RTREE (ubicacion)",),
     ),
+    TableSpec(
+        name="fragmentos",
+        ddl=(
+            "CREATE TABLE fragmentos ("
+            " id INT PRIMARY KEY,"
+            " tema VARCHAR(12),"
+            " titulo VARCHAR(32),"
+            f" embedding VECTOR({EMBEDDING_DIMENSION}) )"
+        ),
+        header=("id", "tema", "titulo", "embedding"),
+        description="heap file + HNSW coseno en 'embedding' (SIMILAR_TO con un vector)",
+        after_load=(
+            "CREATE INDEX idx_fragmentos_embedding ON fragmentos USING HNSW (embedding) "
+            "WITH (metric = 'cosine')",
+        ),
+    ),
 )
 
 
@@ -367,6 +393,7 @@ class Generator:
         self.pedidos = max(1, int(BASE_PEDIDOS * scale))
         self.detalles = max(1, int(BASE_DETALLES * scale))
         self.tiendas = max(1, int(BASE_TIENDAS * scale))
+        self.fragmentos = max(1, int(BASE_FRAGMENTOS * scale))
 
     def rows_of(self, table: str) -> Iterator[Sequence[object]]:
         producers: dict[str, Callable[[], Iterator[Sequence[object]]]] = {
@@ -376,6 +403,7 @@ class Generator:
             "pedidos": self._pedidos,
             "detalle_pedidos": self._detalle_pedidos,
             "tiendas": self._tiendas,
+            "fragmentos": self._fragmentos,
         }
         return producers[table]()
 
@@ -439,6 +467,23 @@ class Generator:
                 district.name,
                 f"POINT({point.lat:.{COORDINATE_DECIMALS}f}, {point.lon:.{COORDINATE_DECIMALS}f})",
             )
+
+    def _fragmentos(self) -> Iterator[Sequence[object]]:
+        centers = {tema: self._unit_vector(self._gaussian(1.0)) for tema in TEMAS}
+        for number in range(1, self.fragmentos + 1):
+            tema = self._pick(TEMAS)
+            noise = self._gaussian(EMBEDDING_SPREAD)
+            vector = self._unit_vector([c + n for c, n in zip(centers[tema], noise, strict=True)])
+            written = ", ".join(f"{component:.{EMBEDDING_DECIMALS}f}" for component in vector)
+            yield number, tema, f"Nota de {tema} {number}", f"[{written}]"
+
+    def _gaussian(self, deviation: float) -> list[float]:
+        return [self._random.gauss(0.0, deviation) for _ in range(EMBEDDING_DIMENSION)]
+
+    @staticmethod
+    def _unit_vector(components: list[float]) -> list[float]:
+        norm = sum(component * component for component in components) ** 0.5
+        return [component / norm for component in components]
 
     def _point_inside(self, outline: Polygon) -> Point:
         """Punto uniforme dentro del contorno: se sortea en su rectángulo hasta acertar."""
@@ -526,6 +571,11 @@ def suggest_queries() -> None:
         ("índice invertido: los 10 productos más relevantes con BM25",
          "SELECT titulo, marca, SCORE() AS relevancia FROM catalogo "
          "WHERE MATCH(texto, 'auriculares inalámbricos') USING BM25 LIMIT 10;"),
+        ("HNSW sobre VECTOR(16): los 5 fragmentos más parecidos al primero",
+         "SELECT id, tema, SIMILARITY_SCORE() AS score FROM fragmentos "
+         "WHERE SIMILAR_TO(embedding, [-0.1609, 0.0520, 0.3367, 0.1938, -0.1567, -0.1689, "
+         "-0.2687, 0.1202, -0.3311, -0.1660, -0.6301, -0.2525, -0.0808, 0.2113, -0.0956, "
+         "0.1500], k = 5);"),
         ("HNSW: las 10 fotos más parecidas a la primera (si se cargó ABO)",
          "SELECT titulo, categoria, SIMILARITY_SCORE() AS score FROM imagenes "
          "WHERE SIMILAR_TO('data/datasets/abo/imagenes/c8/c8fa4944.jpg', k=10) "

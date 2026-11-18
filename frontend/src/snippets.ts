@@ -20,6 +20,9 @@ export interface SnippetGroup {
  * Los del grupo «Texto» usan `catalogo`, `consultas` y `juicios`, la muestra real de Amazon
  * de `demos/samples/esci/`. Sus búsquedas son temas de esa muestra: auriculares, zapatillas,
  * mochilas, cafeteras, fundas y aceite de oliva.
+ *
+ * Los del grupo «Vectores» usan `fragmentos`, con un embedding VECTOR(16) por fila. Sus
+ * vectores de consulta son los de los fragmentos 1 y 2 de `demos/samples/fragmentos.csv`.
  */
 export const SNIPPET_GROUPS: SnippetGroup[] = [
   {
@@ -769,6 +772,69 @@ FROM imagenes
 WHERE SIMILAR_TO('data/datasets/abo/imagenes/c8/c8fa4944.jpg', k=10)
   AND id > 500
 USING HNSW;`,
+      },
+    ],
+  },
+  {
+    name: "Vectores",
+    snippets: [
+      {
+        label: "Embeddings: k-NN",
+        description:
+          "SIMILAR_TO con un vector sobre la columna VECTOR(16): los 5 fragmentos más parecidos, por HNSW y coseno",
+        sql: `SELECT id, tema, titulo, SIMILARITY_SCORE() AS score
+FROM fragmentos
+WHERE SIMILAR_TO(embedding, [-0.1609, 0.0520, 0.3367, 0.1938, -0.1567, -0.1689, -0.2687, 0.1202,
+  -0.3311, -0.1660, -0.6301, -0.2525, -0.0808, 0.2113, -0.0956, 0.1500], k = 5)
+USING HNSW;`,
+      },
+      {
+        label: "Embeddings + filtro",
+        description: "El resto del WHERE filtra antes de buscar: los 5 más parecidos que no son de su tema",
+        sql: `SELECT id, tema, SIMILARITY_SCORE() AS score
+FROM fragmentos
+WHERE SIMILAR_TO(embedding, [-0.1609, 0.0520, 0.3367, 0.1938, -0.1567, -0.1689, -0.2687, 0.1202,
+  -0.3311, -0.1660, -0.6301, -0.2525, -0.0808, 0.2113, -0.0956, 0.1500], k = 5)
+  AND tema <> 'musica'
+USING HNSW;`,
+      },
+      {
+        label: "IVF sobre VECTOR",
+        description: "Un IVF euclidiano en la misma columna; WITH probes elige cuántas listas recorre",
+        sql: `CREATE INDEX IF NOT EXISTS idx_fragmentos_ivf
+  ON fragmentos USING IVF (embedding) WITH (metric = 'euclidean');
+
+SELECT id, tema, SIMILARITY_SCORE() AS score
+FROM fragmentos
+WHERE SIMILAR_TO(embedding, [-0.2360, -0.2015, 0.1273, 0.2945, 0.0364, 0.0089, -0.1361, -0.3864,
+  -0.3605, -0.1686, 0.0572, 0.4468, -0.3861, 0.0190, -0.2874, -0.1958], k = 5)
+USING IVF WITH probes = 4;`,
+      },
+      {
+        label: "EXPLAIN de vectores",
+        description:
+          "VectorSearchScan sin extracción: con otra métrica que la del índice, compara contra todas las filas y lo dice",
+        sql: `EXPLAIN ANALYZE
+SELECT id, tema
+FROM fragmentos
+WHERE SIMILAR_TO(embedding, [-0.2360, -0.2015, 0.1273, 0.2945, 0.0364, 0.0089, -0.1361, -0.3864,
+  -0.3605, -0.1686, 0.0572, 0.4468, -0.3861, 0.0190, -0.2874, -0.1958], k = 5)
+USING HNSW WITH METRIC = dot;`,
+      },
+      {
+        label: "Tabla con VECTOR",
+        description:
+          "Columna VECTOR(3) con HNSW: INSERT, UPDATE y DELETE mantienen el índice; la dimensión se valida al insertar",
+        sql: `DROP TABLE IF EXISTS lecturas;
+
+CREATE TABLE lecturas (id INT PRIMARY KEY, emb VECTOR(3));
+CREATE INDEX idx_lecturas_emb ON lecturas USING HNSW (emb);
+INSERT INTO lecturas VALUES (1, [1, 0, 0]), (2, [0, 1, 0]), (3, [0.9, 0.1, 0]), (4, NULL);
+UPDATE lecturas SET emb = [0, 0.2, 1] WHERE id = 2;
+
+SELECT id, SIMILARITY_SCORE() AS score
+FROM lecturas
+WHERE SIMILAR_TO(emb, [1, 0, 0], k = 3);`,
       },
     ],
   },

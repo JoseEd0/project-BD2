@@ -75,7 +75,9 @@ def test_district_outlines_do_not_overlap(dataset: ModuleType):
             assert not inside, f"{first.name} entra en {second.name} por {inside}"
 
 
-@pytest.mark.parametrize("spec_name", ["categorias", "clientes", "productos", "pedidos", "detalle_pedidos", "tiendas"])
+@pytest.mark.parametrize(
+    "spec_name", ["categorias", "clientes", "productos", "pedidos", "detalle_pedidos", "tiendas", "fragmentos"]
+)
 def test_versioned_samples_are_what_the_generator_writes(
     dataset: ModuleType, tmp_path: Path, spec_name: str
 ):

@@ -1403,6 +1403,7 @@ dependencies = [
     { name = "fastapi" },
     { name = "minigestor-client" },
     { name = "pydantic-settings" },
+    { name = "uvicorn", extra = ["standard"] },
 ]
 
 [package.metadata]
@@ -1410,6 +1411,7 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.115" },
     { name = "minigestor-client", editable = "apps/client" },
     { name = "pydantic-settings", specifier = ">=2.4" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.30" },
 ]
 
 [[package]]

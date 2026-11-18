@@ -100,6 +100,36 @@ sin mirar a los demás.
 
 Una consulta de otro tipo que la columna (un audio contra fotos) es un `MixedMediaError`.
 
+### Tramos de audio
+
+Una ruta de audio puede pedir un tramo con la sintaxis temporal de W3C Media Fragments,
+`pista.mp3#t=10,20` (ver [`multimedia/fragments.py`](../../multimedia/fragments.py)): la fila
+es ese tramo, y su vector, el de sus MFCC. Así una canción se indexa por segmentos de 5 a
+10 s sin cortar archivos en disco, que es lo que pide la detección de copyright.
+
+- **Construir decodifica cada archivo una vez.** Las filas con tramos de un mismo archivo
+  se agrupan, en el orden en que aparece el archivo, y la extracción recorta todos sus
+  tramos de una sola decodificación; un lote de la extracción en paralelo nunca separa los
+  tramos de un archivo. La muestra del vocabulario elige archivos enteros, con todos sus
+  tramos, para que ninguno se decodifique en la muestra y otra vez después. Sin tramos,
+  cada fila es su propio grupo y todo queda como antes.
+- **`INSERT` y la consulta** decodifican solo su tramo (`offset` y duración).
+- Las muestras de los dos caminos son las mismas en WAV y FLAC; en MP3, libsndfile decodifica
+  distinto tras saltar a mitad del archivo (diferencias de 1e-7 en las muestras, 1e-4 en los
+  MFCC), que no cambió ningún vecino en la medida.
+
+### Consulta por segmentos
+
+`similar_segments(audio, window, hop, k)` corta un audio entero en las ventanas de `window`
+segundos cada `hop` que caben enteras (una sola si es más corto que una ventana), las
+describe todas de **una sola decodificación** y las busca en **un solo lote**
+(`IndexedVectors.search_many`, con la métrica del índice). Cada ventana recibe las mismas
+filas y puntajes que `similar` con su tramo, y el resultado dice lo que tardó cada etapa.
+Los límites son de la configuración: `max_segment_audio_seconds`, `min_segment_seconds` y
+`max_segments` (ver [`multimedia/segments.py`](../../multimedia/segments.py)). La sirve
+`POST /media/segments`; las medidas, en
+[`benchmarks/README.md`](../../../benchmarks/README.md#7-tramos-de-audio-y-consulta-por-segmentos).
+
 ## Columnas `VECTOR(n)`
 
 Es lo que pgvector agrega a PostgreSQL, para los servicios que guardan embeddings de un
@@ -144,6 +174,11 @@ Las medidas con 100 000 vectores de 384 dimensiones están en
 - [`tests/index/similarity/test_similarity_index.py`](../../../tests/index/similarity/test_similarity_index.py)
   y [`tests/query/test_similarity_search.py`](../../../tests/query/test_similarity_search.py):
   las columnas de rutas.
+- [`tests/index/similarity/test_media_fragments.py`](../../../tests/index/similarity/test_media_fragments.py):
+  los tramos —una decodificación por archivo al construir, también con una muestra parcial,
+  un tramo que se encuentra a sí mismo con HNSW e IVF, `INSERT` de un tramo, tramo fuera
+  del audio, mal escrito o en una foto— y la consulta por segmentos, que da en cada ventana
+  lo mismo que su tramo solo.
 - [`tests/index/similarity/test_vector_column_index.py`](../../../tests/index/similarity/test_vector_column_index.py):
   las columnas `VECTOR(n)`, contra la búsqueda por fuerza bruta con numpy: tabla vacía y de
   un vector, las tres métricas con HNSW e IVF, dimensión equivocada, vector cero y NULL,

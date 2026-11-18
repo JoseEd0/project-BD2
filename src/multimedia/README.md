@@ -32,26 +32,32 @@ que el resto del motor no ve su API.
 from pathlib import Path
 
 from config import EngineConfig
-from multimedia import extract_features, extract_in_parallel, ExtractedFeatures
+from multimedia import (
+    ExtractedFeatures, MediaReference, TemporalFragment, extract_features, extract_in_parallel,
+)
 
 config = EngineConfig()
 extract_features(Path("bolso.jpg"), config).shape     # (n, 128), n ≤ 500
 extract_features(Path("yes.wav"), config).shape       # (101, 39) para un clip de 1 s
+extract_features(Path("pista.mp3"), config, TemporalFragment(10, 20)).shape  # (1001, 39)
 
-for outcome in extract_in_parallel(paths, config, workers=8):
+references = [MediaReference(path) for path in paths]
+for outcome in extract_in_parallel(references, config, workers=8):
     if isinstance(outcome, ExtractedFeatures):
-        consume(outcome.path, outcome.descriptors)
+        consume(outcome.reference, outcome.descriptors)
     else:
-        report(outcome.path, outcome.error)
+        report(outcome.reference, outcome.error)
 ```
 
 | API | Qué da |
 |---|---|
-| `extract_features(path, config) -> Descriptors` | la matriz `(n, d)` en `float32` de un archivo; `n` puede ser 0 |
+| `extract_features(path, config, fragment=None) -> Descriptors` | la matriz `(n, d)` en `float32` de un archivo, o de un tramo de un audio; `n` puede ser 0 |
 | `descriptor_dimension(kind, config) -> int` | la `d` de un tipo de archivo, antes de extraer nada |
 | `media_kind_of(path) -> MediaKind` | `IMAGE` o `AUDIO` según la extensión, sin leer el archivo |
-| `extract_each(paths, config)` | un `ExtractedFeatures` o un `FailedExtraction` por archivo, en este proceso |
-| `extract_in_parallel(paths, config, workers)` | lo mismo, en el mismo orden, repartido en procesos |
+| `media_reference(texto, locate) -> MediaReference` | la ruta escrita, con su `#t=` si lo lleva, ya localizada |
+| `extract_each(references, config)` | un `ExtractedFeatures` o un `FailedExtraction` por archivo o tramo, en este proceso |
+| `extract_in_parallel(references, config, workers)` | lo mismo, en el mismo orden, repartido en procesos |
+| `decode_segments(path, window, hop, config)` | un audio decodificado una vez y sus ventanas (ver «Segmentos») |
 
 `Descriptors` es `numpy.typing.NDArray[np.float32]`, siempre contigua en C: una fila por
 punto clave o por ventana de audio.
@@ -65,6 +71,11 @@ motor.
 |---|---|
 | `UnsupportedMediaTypeError` | la extensión no está en `IMAGE_EXTENSIONS` ni en `AUDIO_EXTENSIONS` |
 | `UnreadableMediaError` | el archivo falta, no se puede leer o no se puede decodificar |
+| `MalformedFragmentError` | lo que sigue al `#` no es un `t=` NPT que se pueda leer |
+| `EmptyFragmentError` | el tramo empieza donde termina o después (`#t=20,10`) |
+| `FragmentOutOfRangeError` | el tramo empieza en el final del audio o después |
+| `FragmentOnImageError` | un `#t=` en la ruta de una imagen |
+| `SegmentLimitError` | la consulta por segmentos pasa de un límite de la configuración |
 
 Que de un archivo no salga ningún descriptor **no es un error**: una foto lisa o un audio
 vacío dan una matriz `(0, d)`, y la etapa siguiente les asigna un histograma de ceros.
@@ -87,12 +98,15 @@ todos los hilos) y en un proceso de la extracción en paralelo (con uno).
 
 ### Audio: MFCC (`audio.py`)
 
-1. libsndfile abre el archivo (WAV, FLAC, OGG y MP3). Abrirlo antes de dárselo a librosa
-   hace que un archivo dañado dé siempre el error de libsndfile, en vez de pasar al lector
-   de respaldo de librosa, que cambia entre versiones.
-2. librosa lee el **segmento** que empieza en `audio_offset_seconds` y dura
-   `audio_duration_seconds` (`None`, hasta el final), lo **mezcla a mono** y lo
-   **remuestrea** a `audio_sample_rate`. Un inicio después del final da un segmento vacío.
+1. libsndfile abre el archivo (WAV, FLAC, OGG y MP3). Leerlo con libsndfile, en vez de
+   dárselo a librosa, hace que un archivo dañado dé siempre el error de libsndfile, en vez
+   de pasar al lector de respaldo de librosa, que cambia entre versiones.
+2. Se lee solo el **segmento** que empieza en `audio_offset_seconds` y dura
+   `audio_duration_seconds` (`None`, hasta el final) —o el **tramo** que pide la ruta, ver
+   abajo—, se **mezcla a mono** y se **remuestrea** a `audio_sample_rate` con el mismo
+   `soxr_hq` de `librosa.load`: con el mismo cálculo de muestras, la matriz sale idéntica,
+   bit a bit, a la de `librosa.load` (comprobado sobre 20 pistas de FMA). Un inicio después
+   del final da un segmento vacío.
 3. `librosa.feature.mfcc` calcula `mfcc_coefficients` coeficientes por ventana de Hann de
    `mfcc_window_length` muestras, con una FFT de `mfcc_fft_length` y un salto de
    `mfcc_hop_length`. Las ventanas van centradas, así que un segmento de `s` muestras da
@@ -142,6 +156,9 @@ procesos:
   `extract_each`, el mismo código que el camino secuencial: el resultado es idéntico.
 - **Sin cortar.** Un archivo dañado da un `FailedExtraction` con su error y el flujo
   sigue. Cualquier otra excepción es un fallo del motor y se propaga.
+- **Una decodificación por archivo.** Los tramos seguidos de un mismo audio se recortan de
+  una sola decodificación (`decode_audio` y `describe_fragment`), y un lote cuenta archivos,
+  no filas: nunca separa los tramos de un archivo.
 - **`spawn`** en todos los sistemas, el método de macOS: hacer `fork` de un proceso con
   hilos (el API, los de OpenCV) puede heredar un candado tomado.
 - **Un hilo de OpenCV por proceso**, para no repartir los núcleos dos veces. Limitar
@@ -164,6 +181,55 @@ audio se acelera menos porque cada proceso paga al arrancar la importación de l
 carga de sus funciones compiladas con numba (el «arranque» de la tabla); en un lote de
 miles de archivos ese costo se reparte. La primera llamada a librosa tras instalarlo tarda
 unos 12 s más, porque numba compila y guarda esas funciones en disco.
+
+### Tramos de un audio ([`fragments.py`](fragments.py))
+
+Una ruta de audio puede pedir un tramo con la sintaxis temporal de **W3C Media Fragments
+URI 1.0** (§4.2.1): como en una URL, el primer `#` separa la ruta del fragmento. Se admite
+el formato NPT, segundos desde el inicio, el único que tiene sentido en un archivo:
+
+| Fragmento | Tramo |
+|---|---|
+| `pista.mp3#t=10,15` | del segundo 10 al 15 |
+| `pista.mp3#t=10` | del 10 al final |
+| `pista.mp3#t=,15` | del inicio al 15 |
+| `pista.mp3#t=npt:10,15` | igual, con el formato nombrado |
+| `pista.mp3#t=1:30,2:00.5` | `mm:ss` o `h:mm:ss`, con decimales |
+
+Se rechazan, cada uno con su error: SMPTE y `clock:` (fotogramas y fechas de reloj), las
+otras dimensiones (`xywh`, `track`, `id`), varias juntas con `&`, un tramo vacío y un `#t=`
+en la ruta de una imagen. Un tramo que termina después del final llega hasta el final, como
+pide la especificación; uno que empieza en el final o después es un error, porque no hay
+nada que describir. El tramo manda sobre `audio_offset_seconds` y `audio_duration_seconds`:
+sus tiempos son del archivo.
+
+Un tramo se describe de dos maneras con las mismas muestras: leyendo **solo ese tramo**
+(`extract_features` con `fragment`, lo que hacen un `INSERT` y una consulta) o recortándolo
+de un audio **decodificado entero una vez** (`decode_audio` y `describe_fragment`, lo que
+hace la construcción de un índice con muchos tramos del mismo archivo). En los dos se
+recorta en la frecuencia original, se mezcla a mono y solo entonces se remuestrea. En WAV y
+FLAC salen idénticas; en MP3, libsndfile decodifica con diferencias de 1e-7 tras saltar a
+mitad del archivo, 1e-4 en los MFCC.
+
+### Segmentos de un audio ([`segments.py`](segments.py))
+
+La consulta por segmentos corta un audio en ventanas de `window` segundos cada `hop`: la
+ventana `i` va de `i · hop` a `i · hop + window`, y entran las que caben enteras. Con 10 s
+y 5 s, una canción de 3 min da 35 ventanas, de 0-10 a 170-180. `decode_segments` comprueba
+los límites con la duración de la cabecera, **antes de decodificar**, decodifica el audio
+una vez y `describe_segments` recorta cada ventana de esas muestras.
+
+| Parámetro (`EngineConfig`) | Por omisión | Qué es |
+|---|---:|---|
+| `segment_window_seconds` | 10 | la ventana si la petición no dice otra |
+| `segment_hop_seconds` | 5 | el salto si la petición no dice otro: cada instante cae en dos ventanas |
+| `min_segment_seconds` | 1 | la ventana más corta y el audio más corto que se admiten |
+| `max_segment_audio_seconds` | 600 | el audio más largo; decodificado a mono en 48 kHz ocupa ~110 MiB |
+| `max_segments` | 256 | ventanas por consulta |
+
+Un audio más corto que una ventana —pero no que `min_segment_seconds`— es **una sola
+ventana**, del inicio al final: rechazarlo dejaría sin respuesta un fragmento corto, que es
+justo lo que se quiere identificar.
 
 ## Vocabulario ([`vocabulary.py`](vocabulary.py))
 

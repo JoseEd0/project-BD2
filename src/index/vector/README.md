@@ -52,6 +52,12 @@ esfuerzo final (listas sondeadas o `ef`), pasadas y si fue exacta.
   menos (1 000 por omisión), se comparan todas: cuesta lo mismo que las ~1 000 distancias
   que calcula un recorrido de HNSW, y es exacto. Qdrant y Weaviate hacen lo mismo con su
   umbral de búsqueda completa.
+- **En lote.** `search_many(consultas, k, effort=None)` busca todas las filas de una matriz
+  en una sola llamada a FAISS, que las reparte entre sus hilos, y devuelve un
+  `VectorBatchResult`: los vecinos de cada consulta, en su orden, y el costo del lote. Cada
+  consulta recibe lo mismo que con `search` sola y sin filtro; la que en la primera pasada
+  no encuentra k filas se repite sola con más esfuerzo. Es lo que usa la consulta por
+  segmentos de un audio, con una consulta por ventana.
 
 ## Persistencia
 

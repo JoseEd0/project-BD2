@@ -339,6 +339,7 @@ calculados, como los embeddings de un modelo (lo que pgvector agrega a PostgreSQ
 | `CREATE INDEX [nombre] ON t USING IVF (ruta) [WITH (...)]` | lo mismo con IVF; opciones `metric`, `lists`, `probes` y `vocabulary` |
 | `WHERE SIMILAR_TO('consulta.jpg', k = 10)` | las 10 filas cuyo archivo más se parece al de la consulta |
 | `WHERE SIMILAR_TO(ruta, 'consulta.jpg', k = 10)` | lo mismo nombrando la columna, si la tabla tiene varias con índice |
+| `WHERE SIMILAR_TO('pista.mp3#t=10,20', k = 5)` | las 5 filas más parecidas a ese tramo del audio, del segundo 10 al 20 |
 | `CREATE INDEX [nombre] ON t USING HNSW (emb) [WITH (...)]` | sobre una columna `VECTOR(n)`: un HNSW con los vectores de la tabla, sin vocabulario ni extracción; opciones `metric`, `m`, `ef_construction` y `ef_search` (`IVF`: `metric`, `lists` y `probes`) |
 | `WHERE SIMILAR_TO(emb, [0.1, 0.2, 0.3], k = 10)` | las 10 filas de vector más parecido, en una columna `VECTOR(3)` |
 | `WHERE SIMILAR_TO(emb, $1, k = 10)` | lo mismo con el vector como parámetro (una lista JSON de números) |
@@ -363,6 +364,28 @@ SELECT titulo, categoria, SIMILARITY_SCORE() AS score FROM imagenes
   que se compara contra todas las filas y el plan lo dice. Es lo que hace pgvector.
 - **El archivo de la consulta** se resuelve igual que el de `CREATE TABLE ... FROM FILE`:
   dentro del directorio de datos o de `MINIGESTOR_IMPORT_DIRS`.
+
+**Tramos de audio.** Una ruta de audio, en la columna o en la consulta, puede pedir un tramo
+con la sintaxis temporal de W3C Media Fragments: `pista.mp3#t=10,20` es del segundo 10 al
+20, `#t=10` del 10 al final, `#t=,20` del inicio al 20; `#t=npt:10,20` y los tiempos
+`mm:ss` o `h:mm:ss` también valen. Cada fila de una tabla de tramos es un vector, así que
+una canción se indexa por segmentos sin cortar archivos en disco:
+
+```sql
+CREATE TABLE tramos (id INT PRIMARY KEY, ruta VARCHAR(220));
+INSERT INTO tramos VALUES (1, 'pistas/132454.mp3#t=0,10'), (2, 'pistas/132454.mp3#t=10,20');
+CREATE INDEX ON tramos USING HNSW (ruta);
+
+SELECT id, SIMILARITY_SCORE() FROM tramos WHERE SIMILAR_TO('mezcla.mp3#t=42,52', k = 5);
+```
+
+Al construir el índice, los tramos de un mismo archivo salen de una sola decodificación. Un
+tramo que termina después del final llega hasta el final; uno que empieza en el final o
+después, uno vacío (`#t=20,10`), uno mal escrito (`#t=diez`), los formatos SMPTE y `clock:`,
+otras dimensiones (`#xywh=…`) y un `#t=` en la ruta de una imagen son errores. Consultar
+**todas las ventanas** de un audio a la vez no tiene forma SQL —el `FROM` solo nombra tablas
+y la respuesta es una lista de ventanas, no una relación—: lo hace `POST /media/segments`
+(ver [`api/README.md`](../api/README.md)).
 
 Sobre una columna `VECTOR(n)`:
 

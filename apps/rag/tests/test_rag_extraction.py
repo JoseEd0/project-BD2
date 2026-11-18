@@ -20,13 +20,13 @@ def write(tmp_path: Path, content: bytes, name: str = "paper.pdf") -> Path:
 
 def test_text_comes_out_per_page_cleaned(tmp_path: Path) -> None:
     pdf = pdf_bytes([["Database (systems) are", "use-", "ful for everyone."], ["Page two."]])
-    pages = extract_pages(write(tmp_path, pdf), SETTINGS)
+    pages = extract_pages(write(tmp_path, pdf), SETTINGS).pages
     assert pages == ["Database (systems) are useful for everyone.", "Page two."]
 
 
 def test_a_page_without_text_is_kept_empty(tmp_path: Path) -> None:
     pdf = pdf_bytes([["Words on the first page here."], [], ["And on the third page too."]])
-    pages = extract_pages(write(tmp_path, pdf), SETTINGS)
+    pages = extract_pages(write(tmp_path, pdf), SETTINGS).pages
     assert pages == ["Words on the first page here.", "", "And on the third page too."]
 
 

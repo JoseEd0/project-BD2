@@ -141,6 +141,9 @@ def test_the_corpus_keeps_licensed_readable_unique_papers(
     assert numbers["duplicate_papers"] == 1
     assert numbers["duplicate_chunks"] > 0
     assert numbers["papers"] == 4
+    hyphenation = manifest["hyphenation"]
+    assert isinstance(hyphenation, dict)
+    assert hyphenation["kept"] == hyphenation["joined"] == 0
     first = papers["2501.00001"]
     assert first["file_path"] == "pdf/2501.00001.pdf"
     assert first["license"] == "http://creativecommons.org/licenses/by/4.0/"

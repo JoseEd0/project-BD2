@@ -14,7 +14,7 @@ from pathlib import Path
 from pypdf import PdfReader
 from pypdf.errors import PyPdfError
 
-from .cleaning import clean_pages
+from .cleaning import CleanedDocument, clean_document
 from .errors import TextlessPdfError, UnreadablePdfError
 from .settings import CleaningSettings
 
@@ -48,19 +48,20 @@ def read_raw_pages(path: Path) -> list[str]:
     return [_page_text(reader, index, path) for index in range(page_count)]
 
 
-def extract_pages(path: Path, settings: CleaningSettings) -> list[str]:
-    """El texto limpio de cada página de `path` (la página `n` en la posición `n - 1`).
+def extract_pages(path: Path, settings: CleaningSettings) -> CleanedDocument:
+    """El texto limpio de cada página de `path` (la página `n` en la posición `n - 1`) y
+    lo que se hizo con sus guiones de fin de línea.
 
     Raises:
         UnreadablePdfError: si el PDF está dañado.
         TextlessPdfError: si tiene menos de `min_words_per_page` palabras por página.
     """
     raw_pages = read_raw_pages(path)
-    pages = clean_pages(raw_pages, settings)
-    words = sum(len(page.split()) for page in pages)
-    if not pages or words < settings.min_words_per_page * len(pages):
-        raise TextlessPdfError(f"{path.name}: {words} palabras en {len(pages)} páginas")
-    return pages
+    document = clean_document(raw_pages, settings)
+    words = sum(len(page.split()) for page in document.pages)
+    if not document.pages or words < settings.min_words_per_page * len(document.pages):
+        raise TextlessPdfError(f"{path.name}: {words} palabras en {len(document.pages)} páginas")
+    return document
 
 
 def _page_text(reader: PdfReader, index: int, path: Path) -> str:

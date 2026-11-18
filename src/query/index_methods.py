@@ -52,6 +52,8 @@ IndexOpener = Callable[
 ]
 OptionlessOpener = Callable[[Path, FieldReader, str, EngineConfig], SecondaryIndex]
 ColumnRule = Callable[[Field], str | None]
+IndexSettings = dict[str, OptionValue]
+SettingsRule = Callable[[IndexOptions, EngineConfig], IndexSettings]
 LANGUAGE_OPTION = "idioma"
 METRIC_OPTION = "metric"
 M_OPTION = "m"
@@ -72,6 +74,10 @@ TEXT_FIELD_TYPES = frozenset({FieldType.STRING, FieldType.TEXT})
 
 class IndexOptionError(DomainError):
     """Una opción del `WITH (...)` de un índice tiene un valor que el método no entiende."""
+
+
+def _no_settings(_: IndexOptions, __: EngineConfig) -> IndexSettings:
+    return {}
 
 
 @unique
@@ -98,6 +104,8 @@ class IndexMethod:
         refusal_for: por qué no sirve para esa columna, o `None` si sirve.
         files_of: los archivos que ocupa un índice guardado en esa ruta.
         options: las opciones que admite en un `WITH (...)`.
+        settings_of: el valor de cada opción con que queda un índice que pide esas: la
+            pedida o, si no, la de omisión.
     """
 
     method: IndexType
@@ -106,6 +114,7 @@ class IndexMethod:
     refusal_for: ColumnRule
     files_of: Callable[[Path], list[Path]]
     options: frozenset[str] = frozenset()
+    settings_of: SettingsRule = _no_settings
 
     def supports(self, capability: Capability) -> bool:
         return capability in self.capabilities
@@ -118,6 +127,21 @@ class IndexMethod:
 def method_named(method: IndexType) -> IndexMethod | None:
     """El método de índice secundario con ese nombre, o `None` si no lo es."""
     return _METHODS.get(method)
+
+
+def effective_options(
+    method: IndexType, options: IndexOptions, config: EngineConfig
+) -> IndexSettings:
+    """Las opciones con que queda de verdad un índice declarado con `options`: dos
+    declaraciones que solo difieren en escribir o no un valor por omisión son el mismo
+    índice. Es lo que compara `CREATE INDEX IF NOT EXISTS`.
+
+    Raises:
+        IndexOptionError: si alguna opción tiene un valor que el método no entiende.
+        UnknownVectorMetricError: si la métrica no existe.
+    """
+    known = method_named(method)
+    return {} if known is None else known.settings_of(options, config)
 
 
 def secondary_method_names() -> str:
@@ -251,17 +275,7 @@ def _similarity_opener(kind: str) -> IndexOpener:
         options: IndexOptions,
         table_rows: RowSource,
     ) -> SecondaryIndex:
-        named = {name.lower(): value for name, value in options.items()}
-        settings = VectorIndexSettings(
-            kind=kind,
-            metric=_metric_of(named),
-            m=_positive(named, M_OPTION, config.hnsw_m),
-            ef_construction=_positive(named, EF_CONSTRUCTION_OPTION, config.hnsw_ef_construction),
-            ef_search=_positive(named, EF_SEARCH_OPTION, config.hnsw_ef_search),
-            lists=_optional_positive(named, LISTS_OPTION),
-            probes=_optional_positive(named, PROBES_OPTION),
-            vocabulary_size=_optional_positive(named, VOCABULARY_OPTION),
-        )
+        settings = _vector_settings(kind, options, config)
         if rows.schema.field_of(column).type is FieldType.VECTOR:
             if settings.vocabulary_size is not None:
                 raise IndexOptionError(
@@ -274,6 +288,42 @@ def _similarity_opener(kind: str) -> IndexOpener:
         )
 
     return open_index
+
+
+def _text_settings(options: IndexOptions, _: EngineConfig) -> IndexSettings:
+    return {LANGUAGE_OPTION: _language_of(options)}
+
+
+def _vector_settings(
+    kind: str, options: IndexOptions, config: EngineConfig
+) -> VectorIndexSettings:
+    named = {name.lower(): value for name, value in options.items()}
+    return VectorIndexSettings(
+        kind=kind,
+        metric=_metric_of(named),
+        m=_positive(named, M_OPTION, config.hnsw_m),
+        ef_construction=_positive(named, EF_CONSTRUCTION_OPTION, config.hnsw_ef_construction),
+        ef_search=_positive(named, EF_SEARCH_OPTION, config.hnsw_ef_search),
+        lists=_optional_positive(named, LISTS_OPTION),
+        probes=_optional_positive(named, PROBES_OPTION),
+        vocabulary_size=_optional_positive(named, VOCABULARY_OPTION),
+    )
+
+
+def _similarity_settings(kind: str) -> SettingsRule:
+    def settings_of(options: IndexOptions, config: EngineConfig) -> IndexSettings:
+        settings = _vector_settings(kind, options, config)
+        return {
+            METRIC_OPTION: settings.metric.value,
+            M_OPTION: settings.m,
+            EF_CONSTRUCTION_OPTION: settings.ef_construction,
+            EF_SEARCH_OPTION: settings.ef_search,
+            LISTS_OPTION: settings.lists,
+            PROBES_OPTION: settings.probes,
+            VOCABULARY_OPTION: settings.vocabulary_size,
+        }
+
+    return settings_of
 
 
 def _metric_of(options: IndexOptions) -> VectorMetric:
@@ -338,6 +388,7 @@ _METHODS: dict[IndexType, IndexMethod] = {
         refusal_for=_text_only,
         files_of=TextSearchIndex.files_of,
         options=frozenset({LANGUAGE_OPTION}),
+        settings_of=_text_settings,
     ),
     IndexType.HNSW: IndexMethod(
         method=IndexType.HNSW,
@@ -346,6 +397,7 @@ _METHODS: dict[IndexType, IndexMethod] = {
         refusal_for=_similarity_columns(IndexType.HNSW),
         files_of=_similarity_files,
         options=HNSW_OPTIONS,
+        settings_of=_similarity_settings(HNSW_KIND),
     ),
     IndexType.IVF: IndexMethod(
         method=IndexType.IVF,
@@ -354,5 +406,6 @@ _METHODS: dict[IndexType, IndexMethod] = {
         refusal_for=_similarity_columns(IndexType.IVF),
         files_of=_similarity_files,
         options=IVF_OPTIONS,
+        settings_of=_similarity_settings(IVF_KIND),
     ),
 }

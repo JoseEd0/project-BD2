@@ -12,6 +12,7 @@ from config import EngineConfig
 from query.catalog import (
     CatalogError,
     CatalogFormatError,
+    DefinitionMismatchError,
     DuplicateIndexError,
     DuplicateTableError,
     UnknownIndexError,
@@ -57,8 +58,71 @@ def test_only_one_statement_at_a_time(tabla: Engine):
 def test_creating_a_table_twice(tabla: Engine):
     with pytest.raises(DuplicateTableError, match="la tabla 't' ya existe"):
         tabla.execute("CREATE TABLE t (id INT)")
-    assert "ya existía" in tabla.execute("CREATE TABLE IF NOT EXISTS t (id INT)").message
+    same = "CREATE TABLE IF NOT EXISTS t (id INT PRIMARY KEY, n INT, s VARCHAR(8), p POINT)"
+    assert "ya existía con esa definición" in tabla.execute(same).message
     assert tabla.execute("SELECT COUNT(*) FROM t").rows == ((3,),)
+
+
+@pytest.mark.parametrize(
+    ("columns", "difference"),
+    [
+        ("id INT", r"columnas: son \(id, n, s, p\) y se piden \(id\)"),
+        ("id INT PRIMARY KEY, n FLOAT, s VARCHAR(8), p POINT", "columna 'n': es INT y se pide FLOAT"),
+        ("id INT PRIMARY KEY, n INT, s VARCHAR(9), p POINT", r"es STRING\(8\) y se pide STRING\(9\)"),
+        ("id INT PRIMARY KEY INDEX SEQ, n INT, s VARCHAR(8), p POINT", "organización: es heap"),
+        ("id INT, n INT PRIMARY KEY, s VARCHAR(8), p POINT", "clave primaria: es id y se pide n"),
+        ("id INT PRIMARY KEY, n INT, s VARCHAR(8) UNIQUE, p POINT", "falta el índice HASH sobre 's'"),
+    ],
+)
+def test_if_not_exists_rejects_a_table_with_another_definition(
+    tabla: Engine, columns: str, difference: str
+):
+    """PostgreSQL omitiría la creación sin mirar; aquí una migración que cambió la tabla se
+    entera al correr, no al primer INSERT que no encaje."""
+    with pytest.raises(DefinitionMismatchError, match=difference):
+        tabla.execute(f"CREATE TABLE IF NOT EXISTS t ({columns})")
+    assert tabla.execute("SELECT COUNT(*) FROM t").rows == ((3,),)
+
+
+def test_if_not_exists_ignores_indexes_added_later_but_not_a_dropped_unique(engine: Engine):
+    schema = "id INT PRIMARY KEY, emb VECTOR(3), tag VARCHAR(8) UNIQUE"
+    engine.execute(f"CREATE TABLE v ({schema})")
+    engine.execute("CREATE INDEX ON v USING HNSW (emb)")
+    assert "ya existía" in engine.execute(f"CREATE TABLE IF NOT EXISTS v ({schema})").message
+    with pytest.raises(DefinitionMismatchError, match="'tag' es UNIQUE y no se pide así"):
+        engine.execute("CREATE TABLE IF NOT EXISTS v (id INT PRIMARY KEY, emb VECTOR(3), tag VARCHAR(8))")
+
+
+def test_create_index_if_not_exists_only_skips_the_same_index(tabla: Engine):
+    tabla.execute("CREATE TABLE u (id INT PRIMARY KEY, n INT)")
+    tabla.execute("CREATE INDEX por_n ON t USING BTREE (n)")
+    message = tabla.execute("CREATE INDEX IF NOT EXISTS por_n ON t USING BTREE (n)").message
+    assert "ya tenía un índice BTREE ('por_n') con esa definición" in message
+    mismatches = {
+        "CREATE INDEX IF NOT EXISTS por_n ON t USING HASH (n)": "método: es BTREE y se pide HASH",
+        "CREATE INDEX IF NOT EXISTS por_n ON t USING BTREE (s)": "columna: es 'n' y se pide 's'",
+        "CREATE INDEX IF NOT EXISTS por_n ON u USING BTREE (n)": "tabla: es 't' y se pide 'u'",
+    }
+    for sql, difference in mismatches.items():
+        with pytest.raises(DefinitionMismatchError, match=difference):
+            tabla.execute(sql)
+    assert "creado" in tabla.execute("CREATE INDEX IF NOT EXISTS por_s ON t USING HASH (s)").message
+    assert index_names(tabla) == ["pk_t", "por_n", "por_s"]
+
+
+def test_create_index_if_not_exists_compares_the_options(engine: Engine):
+    engine.execute("CREATE TABLE e (id INT PRIMARY KEY, emb VECTOR(2))")
+    cosine = "CREATE INDEX IF NOT EXISTS idx_e ON e USING HNSW (emb) WITH (metric = 'cosine')"
+    assert "creado" in engine.execute(cosine).message
+    assert "con esa definición" in engine.execute(cosine).message
+    with pytest.raises(
+        DefinitionMismatchError, match="opción metric: es 'cosine' y se pide 'euclidean'"
+    ):
+        engine.execute(cosine.replace("cosine", "euclidean"))
+    with pytest.raises(DefinitionMismatchError, match="opción m: es 16 y se pide 8"):
+        engine.execute("CREATE INDEX IF NOT EXISTS idx_e ON e USING HNSW (emb) WITH (m = 8)")
+    defaults = engine.execute("CREATE INDEX IF NOT EXISTS idx_e ON e USING HNSW (emb)")
+    assert "con esa definición" in defaults.message
 
 
 def test_dropping_a_table_that_does_not_exist(engine: Engine):

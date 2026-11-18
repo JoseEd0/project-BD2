@@ -21,11 +21,14 @@ from errors import DomainError
 from query.catalog import (
     Catalog,
     CatalogError,
+    DefinitionMismatchError,
     IndexDefinition,
     Organization,
     TableDefinition,
     field_from_column,
+    index_differences,
     organization_for,
+    table_differences,
 )
 from query.deadline import within_deadline
 from query.expressions import (
@@ -36,7 +39,12 @@ from query.expressions import (
     UnknownColumnError,
 )
 from query.files import DirectoryLock, resolve_user_file
-from query.index_methods import Capability, method_named, secondary_method_names
+from query.index_methods import (
+    Capability,
+    effective_options,
+    method_named,
+    secondary_method_names,
+)
 from query.journal import DiscardingJournal, Journal
 from query.loader import infer_schema, read_values
 from query.operators import UnsupportedQueryError
@@ -355,25 +363,47 @@ class Engine:
         )
 
     def _create_table(self, statement: CreateTableStatement) -> QueryResult:
+        definition = self._table_definition(statement)
         if statement.if_not_exists and self._catalog.has_table(statement.name):
-            return QueryResult(message=f"la tabla '{statement.name}' ya existía")
+            return self._unchanged_table(self._catalog.table(statement.name), definition)
+        self._register(definition)
+        return QueryResult(
+            message=f"tabla '{definition.name}' creada ({definition.organization.value})"
+        )
+
+    def _table_definition(self, statement: CreateTableStatement) -> TableDefinition:
         fields = [field_from_column(column, self.config) for column in statement.columns]
         primary_key = _primary_key_of(statement)
         if primary_key is not None:
             _require_orderable_key(Schema(fields).field_of(primary_key))
         key_method = _key_method_of(statement)
         organization = Organization.HEAP if key_method is None else organization_for(key_method)
-        definition = TableDefinition(
+        return TableDefinition(
             name=statement.name,
             schema=Schema(fields),
             organization=organization,
             primary_key=primary_key,
             indexes=self._declared_indexes(statement, organization, key_method),
         )
-        self._register(definition)
-        return QueryResult(
-            message=f"tabla '{definition.name}' creada ({organization.value})"
-        )
+
+    @staticmethod
+    def _unchanged_table(existing: TableDefinition, wanted: TableDefinition) -> QueryResult:
+        """`IF NOT EXISTS` omite la creación solo si la tabla que hay es la que se pide.
+
+        PostgreSQL la omite aunque sea otra; aquí se rechaza, porque una migración que
+        cambió una columna (un `VECTOR(384)` que pasa a `VECTOR(768)`) seguiría adelante
+        con la tabla vieja y fallaría después, lejos de la causa.
+
+        Raises:
+            DefinitionMismatchError: si la tabla existe con otra definición.
+        """
+        differences = table_differences(existing, wanted)
+        if differences:
+            raise DefinitionMismatchError(
+                f"la tabla '{existing.name}' ya existe con otra definición: "
+                f"{'; '.join(differences)}. Para cambiarla, DROP TABLE y CREATE TABLE"
+            )
+        return QueryResult(message=f"la tabla '{existing.name}' ya existía con esa definición")
 
     def _create_table_from_file(self, statement: CreateTableFromFileStatement) -> QueryResult:
         if statement.if_not_exists and self._catalog.has_table(statement.name):
@@ -420,13 +450,60 @@ class Engine:
             raise UnsupportedQueryError("todavía no hay índices sobre varias columnas")
         if not table.schema.has_field(column):
             raise CatalogError(f"la columna '{column}' no existe en '{table.name}'")
-        method = statement.spec.method
-        if statement.if_not_exists and table.definition.index_with(column, method) is not None:
-            return QueryResult(message=f"la columna '{column}' ya tenía un índice {method.value}")
+        if statement.if_not_exists:
+            existing = self._existing_index(table, statement)
+            if existing is not None:
+                return self._unchanged_index(existing, statement)
         definition = self._add_index(table, statement.spec, statement.name)
         return QueryResult(
             message=f"índice '{definition.name}' creado sobre {table.name}.{column} "
             f"({definition.method.value})"
+        )
+
+    def _existing_index(
+        self, table: Table, statement: CreateIndexStatement
+    ) -> tuple[str, IndexDefinition] | None:
+        """El índice con el que se compara el que pide el `CREATE INDEX`, y el nombre de su
+        tabla: el que se llama así, en cualquier tabla, o el del mismo método sobre la
+        columna."""
+        if statement.name is not None and self._catalog.has_index(statement.name):
+            owner, index = self._catalog.find_index(statement.name)
+            return owner.name, index
+        found = table.definition.index_with(statement.spec.columns[0], statement.spec.method)
+        return None if found is None else (table.name, found)
+
+    def _unchanged_index(
+        self, existing: tuple[str, IndexDefinition], statement: CreateIndexStatement
+    ) -> QueryResult:
+        """Como con las tablas, `IF NOT EXISTS` solo omite un índice igual al pedido. Las
+        opciones se comparan con sus valores por omisión puestos: `WITH (metric =
+        'cosine')` pide el mismo HNSW que no decir nada.
+
+        Raises:
+            DefinitionMismatchError: si el que existe es otro.
+        """
+        owner, index = existing
+        spec = statement.spec
+        present = replace(
+            index, options=effective_options(index.method, index.options, self.config)
+        )
+        wanted = IndexDefinition(
+            name=index.name,
+            column=spec.columns[0],
+            method=spec.method,
+            options=effective_options(spec.method, spec.options, self.config),
+        )
+        differences = index_differences(present, wanted)
+        if owner.lower() != statement.table.lower():
+            differences.insert(0, f"tabla: es '{owner}' y se pide '{statement.table}'")
+        if differences:
+            raise DefinitionMismatchError(
+                f"el índice '{index.name}' ya existe con otra definición: "
+                f"{'; '.join(differences)}. Para cambiarlo, DROP INDEX y CREATE INDEX"
+            )
+        return QueryResult(
+            message=f"la columna '{index.column}' ya tenía un índice {index.method.value} "
+            f"('{index.name}') con esa definición"
         )
 
     def _add_index(self, table: Table, spec: IndexSpec, name: str | None) -> IndexDefinition:

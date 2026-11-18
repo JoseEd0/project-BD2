@@ -23,7 +23,11 @@ RowSource = Callable[[], Iterator[tuple[bytes, RecordId]]]
 
 
 class SecondaryIndex(Protocol):
-    """Lo que el motor necesita de cualquier índice secundario."""
+    """Lo que el motor necesita de cualquier índice secundario.
+
+    Un `insert` que falla deja el índice como estaba: la tabla quita la fila de los demás
+    índices y del heap, y la escritura no deja rastro.
+    """
 
     def build(self, rows: Iterable[tuple[bytes, RecordId]]) -> None: ...
 

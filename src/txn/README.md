@@ -107,7 +107,13 @@ volver a encontrar esa fila en la tabla.
 Si una sentencia falla a mitad dentro de una transacción, la sesión **deshace solo lo que
 esa sentencia alcanzó a cambiar** y la transacción sigue abierta, con sus cambios
 anteriores intactos. Confirmar después no puede dejar escrito medio `INSERT`. En
-autocommit, la sentencia fallida se aborta entera.
+autocommit, la sentencia fallida se aborta entera: cada sentencia corre en una transacción
+implícita, así que es el mismo registro de deshacer en los dos casos.
+
+Vale también cuando lo que falla es un índice con la fila ya en el heap —un HNSW sobre
+rutas que no puede leer el archivo—: la tabla deja cada fila entera o no la deja, y solo
+avisa al registro las que quedaron enteras, así que deshacer encuentra todas y solo esas
+(ver [`query/`](../query/README.md#escrituras-todo-o-nada)).
 
 ## Sesión (`session.py`)
 

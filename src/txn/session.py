@@ -24,6 +24,7 @@ from typing import TypeVar
 
 from errors import DomainError
 from query.engine import Engine, QueryResult
+from query.ingest import LoadRowsStatement
 from query.table import Table
 from sql import parse_script
 from sql.nodes import (
@@ -48,7 +49,13 @@ from txn.transaction import (
     undo_statement,
 )
 
-WRITE_STATEMENTS = (InsertStatement, UpdateStatement, DeleteStatement, DefinitionStatement)
+WRITE_STATEMENTS = (
+    InsertStatement,
+    LoadRowsStatement,
+    UpdateStatement,
+    DeleteStatement,
+    DefinitionStatement,
+)
 Read = TypeVar("Read")
 
 
@@ -132,6 +139,37 @@ class Session:
         finally:
             if autocommit:
                 self._end(transaction, TransactionState.COMMITTED)
+
+    def lock_exclusively(self, table: str) -> None:
+        """Bloquea la tabla en exclusiva hasta que termine la transacción abierta, como el
+        `LOCK TABLE ... IN EXCLUSIVE MODE` de PostgreSQL.
+
+        Raises:
+            SessionError: si no hay ninguna transacción abierta.
+            LockError: si el bloqueo no llega; la transacción queda abortada.
+        """
+        transaction = self._require_transaction()
+        try:
+            self._locks.acquire(transaction.identifier, table.lower(), LockMode.EXCLUSIVE)
+        except LockError:
+            self._abort(transaction)
+            raise
+
+    def checkpoint(self) -> int:
+        """Confirma lo que lleva hecho la transacción abierta sin cerrarla: lo escribe en
+        disco y olvida cómo deshacerlo, pero conserva sus bloqueos, así que un ROLLBACK
+        posterior solo deshace lo que venga después. Es lo que deja confirmado cada lote de
+        una carga que retiene su tabla de principio a fin. Devuelve cuántos cambios confirmó.
+
+        Si la escritura falla, el registro de deshacer queda intacto.
+
+        Raises:
+            SessionError: si no hay ninguna transacción abierta.
+        """
+        transaction = self._require_transaction()
+        for table in self._tables_of(transaction).values():
+            table.flush()
+        return transaction.forget_changes()
 
     def close(self) -> None:
         """Aborta lo que quede abierto y suelta los bloqueos."""

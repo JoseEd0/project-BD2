@@ -13,6 +13,7 @@ from txn import (
     DeadlockError,
     DefinitionInTransactionError,
     LockManager,
+    LockTimeoutError,
     Session,
     SessionError,
     TransactionManager,
@@ -496,3 +497,50 @@ def test_a_new_table_is_on_disk_before_the_engine_closes(
         engine.execute("CREATE TABLE vacia (id INT PRIMARY KEY, v INT)")
         with Engine(disk_snapshot(quick_config, tmp_path / "copia")) as reader:
             assert reader.execute("SELECT * FROM vacia").rows == ()
+
+
+def test_lock_exclusively_needs_an_open_transaction(cuentas: Session):
+    with pytest.raises(SessionError, match="no hay ninguna transacción abierta"):
+        cuentas.lock_exclusively("cuentas")
+
+
+def test_lock_exclusively_holds_the_table_until_the_transaction_ends(
+    cuentas: Session, locks: LockManager, engine: Engine, manager: TransactionManager
+):
+    cuentas.execute("BEGIN")
+    cuentas.lock_exclusively("Cuentas")
+    with Session(engine, locks, manager) as other, pytest.raises(LockTimeoutError):
+        other.execute("SELECT * FROM cuentas")
+    cuentas.execute("COMMIT")
+    assert locks.holders_of("cuentas") == {}
+
+
+def test_a_lock_that_does_not_arrive_aborts_the_transaction(
+    cuentas: Session, locks: LockManager, engine: Engine, manager: TransactionManager
+):
+    with Session(engine, locks, manager) as other:
+        other.execute("BEGIN")
+        other.execute("SELECT * FROM cuentas")
+        cuentas.execute("BEGIN")
+        with pytest.raises(LockTimeoutError):
+            cuentas.lock_exclusively("cuentas")
+        assert not cuentas.in_transaction
+
+
+def test_a_checkpoint_writes_what_was_done_and_keeps_the_locks(
+    cuentas: Session, locks: LockManager, quick_config: EngineConfig, tmp_path: Path
+):
+    cuentas.execute("BEGIN")
+    cuentas.execute("INSERT INTO cuentas VALUES (3, 30)")
+    assert cuentas.checkpoint() == 1
+    assert locks.holders_of("cuentas")
+    with Engine(disk_snapshot(quick_config, tmp_path / "copia")) as copy:
+        assert copy.execute("SELECT COUNT(*) FROM cuentas").rows == ((3,),)
+    cuentas.execute("INSERT INTO cuentas VALUES (4, 40)")
+    cuentas.execute("ROLLBACK")
+    assert rows_of(cuentas, "SELECT id FROM cuentas ORDER BY id") == ((1,), (2,), (3,))
+
+
+def test_a_checkpoint_needs_an_open_transaction(cuentas: Session):
+    with pytest.raises(SessionError):
+        cuentas.checkpoint()

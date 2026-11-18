@@ -74,6 +74,13 @@ class Transaction:
     def record_update(self, table: str, before: Record, after: Record) -> None:
         self._append(Change(ChangeKind.UPDATE, table, before=before, after=after))
 
+    def forget_changes(self) -> int:
+        """Vacía el registro de deshacer: lo hecho hasta aquí ya no se deshace. Devuelve
+        cuántos cambios tenía."""
+        forgotten = len(self.changes)
+        self.changes.clear()
+        return forgotten
+
     def tables_touched(self) -> set[str]:
         return {change.table for change in self.changes}
 

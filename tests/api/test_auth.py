@@ -74,6 +74,16 @@ def test_a_script_is_authorized_as_a_whole_before_running_anything(client: TestC
     assert query(client, READER_KEY, "SELECT * FROM t").json()["rows"] == []
 
 
+def test_a_statement_with_parameters_is_authorized_by_what_it_does(client: TestClient):
+    def with_parameters(key: str, sql: str) -> httpx.Response:
+        return client.post("/query", json={"sql": sql, "params": [5]}, headers=bearer(key))
+
+    assert with_parameters(READER_KEY, "INSERT INTO t VALUES ($1)").status_code == 403
+    assert with_parameters(WRITER_KEY, "INSERT INTO t VALUES ($1)").status_code == 200
+    response = with_parameters(READER_KEY, "SELECT id FROM t WHERE id = $1")
+    assert response.json()["rows"] == [[5]]
+
+
 def test_emptying_the_database_and_loading_files_need_an_administrator(client: TestClient):
     files = {"file": ("datos.csv", CSV_CONTENT, "text/csv")}
     assert client.delete("/tables", headers=bearer(WRITER_KEY)).status_code == 403

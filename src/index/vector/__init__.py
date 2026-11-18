@@ -2,6 +2,7 @@
 
 from .base import (
     DuplicateVectorIdError,
+    VectorBatchResult,
     VectorHit,
     VectorIndex,
     VectorIndexFileError,
@@ -22,6 +23,7 @@ __all__ = [
     "FlatIndex",
     "InvalidVectorError",
     "UnknownVectorMetricError",
+    "VectorBatchResult",
     "VectorHit",
     "VectorIndex",
     "VectorIndexFileError",

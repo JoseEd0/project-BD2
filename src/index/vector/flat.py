@@ -50,12 +50,12 @@ class FlatIndex(VectorIndex):
         self._ids.difference_update(ids.tolist())
 
     def _approximate(
-        self, query: Vectors, k: int, effort: int, candidates: VectorIds | None
-    ) -> tuple[npt.NDArray[np.float32], VectorIds, int]:
+        self, queries: Vectors, k: int, effort: int, candidates: VectorIds | None
+    ) -> tuple[npt.NDArray[np.float32], npt.NDArray[np.int64], int]:
         selector = None if candidates is None else faiss.IDSelectorBatch(candidates)
-        raw, found = self._index.search(query, k, params=faiss.SearchParameters(sel=selector))
-        computed = self.count if candidates is None else len(candidates)
-        return raw[0], found[0], computed
+        raw, found = self._index.search(queries, k, params=faiss.SearchParameters(sel=selector))
+        compared = self.count if candidates is None else len(candidates)
+        return raw, found, compared * len(queries)
 
     def _vectors_of(self, ids: VectorIds) -> Vectors:
         return self._index.reconstruct_batch(ids)

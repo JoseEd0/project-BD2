@@ -123,10 +123,12 @@ class VectorSearchScan(TableOperator):
 
     def _executed(self, result: SimilarityResult) -> str:
         stats = result.stats
-        parts = [
-            f"consulta extraída en {result.extraction_ms:.1f} ms",
-            f"{stats.distance_computations} distancias calculadas",
-        ]
+        parts = (
+            []
+            if result.extraction_ms is None
+            else [f"consulta extraída en {result.extraction_ms:.1f} ms"]
+        )
+        parts.append(f"{stats.distance_computations} distancias calculadas")
         if self._candidates is not None:
             parts.append(f"{self._candidates} filas cumplen el filtro")
         if stats.rounds > 1:

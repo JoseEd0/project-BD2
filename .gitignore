@@ -63,6 +63,9 @@ frontend/build/
 apps/web/dist/
 apps/web/test-results/
 apps/web/playwright-report/
+apps/**/dist/
+apps/**/test-results/
+apps/**/playwright-report/
 .vite/
 *.tsbuildinfo
 .eslintcache

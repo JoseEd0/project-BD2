@@ -239,7 +239,11 @@ class MediaSimilarityIndex(SimilarityIndex):
         self._require_kind(media_kind_of(reference.path))
         descriptors = extract_features(reference.path, self._config, reference.fragment)
         self._store.add(record_id, descriptors)
-        self._vectors.add(vector_id_of(record_id), self._store.vectorize(descriptors))
+        try:
+            self._vectors.add(vector_id_of(record_id), self._store.vectorize(descriptors))
+        except Exception:
+            self._store.remove(record_id)
+            raise
 
     def _remove(self, value: Key, record_id: RecordId) -> bool:
         if not self._store.remove(record_id):

@@ -223,8 +223,10 @@ class Table:
         self._store(row)
 
     def insert_all(self, rows: Sequence[Record], changes: RowChanges) -> None:
-        """Inserta todas las filas o ninguna: los valores y las claves se comprueban antes
-        de escribir la primera.
+        """Inserta las filas. Los valores y las claves se comprueban antes de escribir la
+        primera. Cada fila entra en la tabla y en todos sus índices o en ninguno; si una
+        falla a mitad, las anteriores ya están avisadas en `changes`, y deshacerlas es de
+        quien lleva el registro.
 
         Raises:
             DuplicatePrimaryKeyError: si una clave ya existe o se repite entre las filas.
@@ -438,9 +440,11 @@ class Table:
     ) -> int:
         """Reemplaza las filas que cumplen el predicado y devuelve cuántas.
 
-        Cambia todas o ninguna: las filas nuevas se calculan y sus claves se comprueban
-        antes de escribir la primera, así que un valor inválido en la fila mil no deja
-        cambiadas las novecientas noventa y nueve anteriores.
+        Las filas nuevas se calculan y sus claves se comprueban antes de escribir la
+        primera: un valor inválido en la fila mil no deja cambiadas las novecientas noventa
+        y nueve anteriores. Si aun así un
+        índice rechaza una fila a mitad, esa fila queda como estaba y las anteriores ya
+        están avisadas en `changes`, como en `insert_all`.
 
         Las filas que conservan su clave se reescriben. Las que la cambian se quitan
         todas y después se insertan todas con la clave nueva: así `SET id = id + 1` o un
@@ -472,16 +476,33 @@ class Table:
     def _update_one(
         self, address: RecordId | None, old: bytes, before: Record, after: Record
     ) -> None:
-        """Reescribe la fila. Solo se tocan los índices cuya columna cambia, y quitan la fila
-        antes de reescribir sus TEXT: uno sobre un TEXT lee el texto viejo del archivo de
-        valores para saber qué quitar, y `repack` puede reemplazarlo en su sitio."""
+        """Reescribe la fila en la tabla y en sus índices, o no la cambia: si un índice
+        rechaza el valor nuevo, la fila vuelve a `before` en la tabla y en los índices.
+
+        Solo se tocan los índices cuya columna cambia, y quitan la fila antes de reescribir
+        sus TEXT: uno sobre un TEXT lee el texto viejo del archivo de valores para saber qué
+        quitar, y `repack` puede reemplazarlo en su sitio."""
         stale = [index for index in self._indexes.values() if index.changes(before, after)]
-        for index in stale:
-            index.delete(old, _located(address))
+        _unindex_row(stale, old, address)
+        try:
+            new = self._rewrite(address, old, before, after)
+        except Exception:
+            _index_row(stale, old, address)
+            raise
+        try:
+            _index_row(stale, new, address)
+        except Exception:
+            _index_row(stale, self._rewrite(address, new, after, before), address)
+            raise
+
+    def _rewrite(
+        self, address: RecordId | None, old: bytes, before: Record, after: Record
+    ) -> bytes:
+        """Cambia en la tabla la fila guardada en `old` de `before` a `after` y devuelve su
+        registro nuevo, sin tocar los índices."""
         new = self._rows.repack(old, before, after)
         self._storage.update(address, old, new)
-        for index in stale:
-            index.insert(new, _located(address))
+        return new
 
     def delete_first(self, target: Record) -> bool:
         """Borra una sola fila igual a `target`. Lo usa el deshacer de una inserción."""
@@ -668,17 +689,32 @@ class Table:
         return found
 
     def _store(self, row: Record) -> None:
+        """Guarda la fila en la tabla y en todos sus índices, o en ninguno: si un índice
+        la rechaza, sale de los que ya la tenían y de la tabla antes de propagar el error.
+        Así cada aviso al registro de deshacer es el de una fila completa."""
         record = self._rows.pack(row)
-        address = self._storage.insert(record)
-        for index in self._indexes.values():
-            index.insert(record, _located(address))
+        try:
+            address = self._storage.insert(record)
+        except Exception:
+            self._rows.release(record)
+            raise
+        try:
+            _index_row(self._indexes.values(), record, address)
+        except Exception:
+            self._storage.delete(address, record)
+            self._rows.release(record)
+            raise
 
     def _delete_one(self, address: RecordId | None, record: bytes) -> None:
-        """Quita la fila y libera en el acto sus TEXT: si una transacción la devuelve, el
-        deshacer la inserta otra vez, con sus textos, desde la fila lógica que guardó."""
-        for index in self._indexes.values():
-            index.delete(record, _located(address))
-        self._storage.delete(address, record)
+        """Quita la fila de sus índices y de la tabla, o de ninguno, y libera en el acto sus
+        TEXT: si una transacción la devuelve, el deshacer la inserta otra vez, con sus
+        textos, desde la fila lógica que guardó."""
+        _unindex_row(self._indexes.values(), record, address)
+        try:
+            self._storage.delete(address, record)
+        except Exception:
+            _index_row(self._indexes.values(), record, address)
+            raise
         self._rows.release(record)
 
     def _primary_key_index(self) -> IndexDefinition | None:
@@ -877,6 +913,35 @@ def _located(address: RecordId | None) -> RecordId:
     if address is None:
         raise TableError("falta la dirección de una fila indexada")
     return address
+
+
+def _index_row(indexes: Iterable[SecondaryIndex], record: bytes, address: RecordId | None) -> None:
+    """Añade la fila a todos los índices o a ninguno. Cuenta con que un índice cuya
+    inserción falla queda como estaba."""
+    added: list[SecondaryIndex] = []
+    try:
+        for index in indexes:
+            index.insert(record, _located(address))
+            added.append(index)
+    except Exception:
+        for index in reversed(added):
+            index.delete(record, _located(address))
+        raise
+
+
+def _unindex_row(
+    indexes: Iterable[SecondaryIndex], record: bytes, address: RecordId | None
+) -> None:
+    """Quita la fila de todos los índices o de ninguno."""
+    removed: list[SecondaryIndex] = []
+    try:
+        for index in indexes:
+            if index.delete(record, _located(address)):
+                removed.append(index)
+    except Exception:
+        for index in reversed(removed):
+            index.insert(record, _located(address))
+        raise
 
 
 def index_with_capability(

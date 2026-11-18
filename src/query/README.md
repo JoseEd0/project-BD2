@@ -123,6 +123,22 @@ Antes de tocar nada se comprueba que ninguna clave nueva choque con otra nueva n
 fila que la sentencia no mueve. Para el registro de deshacer, una fila que cambia de clave
 es un borrado más una inserción.
 
+Hay fallos que no se ven antes de escribir: un índice que rechaza la fila cuando ya está en
+el heap —un HNSW sobre rutas cuyo archivo no se puede describir, una página que no se puede
+escribir—. Para esos, la garantía tiene dos pisos:
+
+1. **Cada fila entra entera o no entra.** La tabla escribe el heap y después cada índice;
+   si uno falla, la quita de los índices que ya la tenían y del heap antes de propagar el
+   error (`_index_row`, `_store`). Un `UPDATE` que falla en un índice devuelve la fila a su
+   valor anterior en el heap y en los índices; un `DELETE`, la devuelve a los índices de
+   los que ya había salido. Cada índice cumple que un `insert` que falla lo deja como
+   estaba.
+2. **La sentencia, entera o nada.** Como cada fila se avisa al `Journal` solo cuando quedó
+   completa, el registro de deshacer de la sesión tiene exactamente las filas que la
+   sentencia alcanzó a cambiar, y las revierte: en autocommit abortando la transacción
+   implícita de la sentencia; dentro de `BEGIN`, deshaciendo solo esa sentencia (ver
+   [`txn/`](../txn/README.md#una-sentencia-que-falla-no-deja-nada)).
+
 ## Tipos en las condiciones (`comparison.py`)
 
 Solo se comparan valores de la misma familia: número con número, texto con texto, fecha
@@ -631,7 +647,13 @@ acelere no sirve de nada si cambia el resultado.
 sin índices, un heap con índices, un archivo secuencial y un B+ agrupado, para cada tipo
 de columna y de literal. `test_writes.py` comprueba que una escritura que falla no deja
 nada a medias, en las tres organizaciones, y que un `UPDATE` de la clave primaria o de una
-columna `UNIQUE` llega al estado final correcto.
+columna `UNIQUE` llega al estado final correcto. `test_atomic_writes.py` hace fallar a mitad
+de la sentencia cada índice de una tabla que los tiene todos —clave primaria, `UNIQUE`, B+,
+hash, R-Tree, invertido, HNSW e IVF— en un `INSERT` de varias filas, un `UPDATE`, un
+`UPDATE` de la clave y un `DELETE`, en autocommit y dentro de una transacción, y comprueba
+que las filas y la respuesta de cada índice quedan como estaban y coinciden con recorrer
+la tabla; `test_atomic_media_writes.py`, lo mismo con archivos de audio de verdad: uno que
+no existe, un tramo después del final y una extracción que falla.
 
 `test_constants.py` comprueba que una expresión constante llega al índice igual que un
 literal y que la que no se puede calcular se rechaza sobre una tabla vacía.

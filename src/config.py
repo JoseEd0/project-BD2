@@ -127,6 +127,13 @@ DEFAULT_STATEMENT_TIMEOUT_SECONDS = 30.0
 DEFAULT_MAX_REQUEST_BYTES = 8 * 1024 * 1024
 # Por debajo de los 10 s que Docker espera tras SIGTERM antes de matar el proceso.
 DEFAULT_SHUTDOWN_GRACE_SECONDS = 5.0
+# Filas por lote de la carga masiva: mil filas con un VECTOR(384) son unos 8 MiB de JSON, y
+# ver `benchmarks/ingest_benchmark.py` para lo que da un lote mayor o menor.
+DEFAULT_INGEST_BATCH_ROWS = 1_000
+# Una línea de la carga masiva es una fila: un vector de 384 componentes en JSON ocupa unos
+# 8 KiB y uno de 4 096, unos 90 KiB. Con 256 KiB por línea, un lote retiene como mucho
+# `ingest_batch_rows` veces eso.
+DEFAULT_MAX_INGEST_LINE_BYTES = 256 * 1024
 FALLBACK_DATA_DIRECTORY = "data"
 # Lo justo para la cabecera de un nodo y un par de entradas; con menos, ninguna estructura
 # cabe en una página.
@@ -255,6 +262,10 @@ class EngineConfig:
             subida de archivo.
         shutdown_grace_seconds: lo que el API espera, al apagarse, a que terminen las
             peticiones en curso después de cancelar sus sentencias.
+        ingest_batch_rows: filas de cada lote de la carga masiva, que entra entero o no
+            entra.
+        max_ingest_line_bytes: tamaño máximo de una línea (una fila) de la carga masiva;
+            esa ruta no tiene límite para el cuerpo entero, que nunca está en memoria.
         data_directory: raíz donde viven los archivos del gestor.
         import_directories: directorios, además de `data_directory`, de los que
             `CREATE TABLE ... FROM FILE` puede leer.
@@ -320,6 +331,8 @@ class EngineConfig:
     statement_timeout_seconds: float = DEFAULT_STATEMENT_TIMEOUT_SECONDS
     max_request_bytes: int = DEFAULT_MAX_REQUEST_BYTES
     shutdown_grace_seconds: float = DEFAULT_SHUTDOWN_GRACE_SECONDS
+    ingest_batch_rows: int = DEFAULT_INGEST_BATCH_ROWS
+    max_ingest_line_bytes: int = DEFAULT_MAX_INGEST_LINE_BYTES
     data_directory: Path = Path(FALLBACK_DATA_DIRECTORY)
     import_directories: tuple[Path, ...] = ()
 
@@ -355,6 +368,8 @@ class EngineConfig:
             "map_points",
             "max_result_rows",
             "max_request_bytes",
+            "ingest_batch_rows",
+            "max_ingest_line_bytes",
             "hnsw_m",
             "hnsw_ef_construction",
             "hnsw_ef_search",

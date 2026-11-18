@@ -5,7 +5,7 @@ Los roles se incluyen unos a otros, `read` < `write` < `admin`:
 | Rol | Qué permite |
 |---|---|
 | `read` | `SELECT`, `EXPLAIN`, transacciones, inspeccionar tablas, buscar por archivo |
-| `write` | además `INSERT`, `UPDATE` y `DELETE` |
+| `write` | además `INSERT`, `UPDATE`, `DELETE` y la carga masiva de filas |
 | `admin` | además `CREATE`, `DROP`, cargar CSV y vaciar la base |
 
 El servidor solo guarda el SHA-256 de cada clave. Basta con un hash rápido porque las

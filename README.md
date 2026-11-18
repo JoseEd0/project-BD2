@@ -398,6 +398,8 @@ están en [`.env.example`](.env.example); las de la interfaz, en
 | `MINIGESTOR_LOCK_TIMEOUT` | segundos que una transacción espera un bloqueo | `5` |
 | `MINIGESTOR_STATEMENT_TIMEOUT` | segundos que puede durar cada sentencia | `30` |
 | `MINIGESTOR_MAX_REQUEST_BYTES` | bytes del cuerpo de una petición sin archivo | `8388608` |
+| `MINIGESTOR_INGEST_BATCH_ROWS` | filas por lote de la carga masiva (`/tables/{name}/rows`) | `1000` |
+| `MINIGESTOR_MAX_INGEST_LINE_BYTES` | bytes de cada línea de la carga masiva | `262144` |
 | `MINIGESTOR_API_KEYS` | claves de los servicios, `servicio:rol:sha256` | ninguna: API abierto |
 | `MINIGESTOR_LOG_LEVEL` | nivel de los logs JSON | `INFO` |
 | `MINIGESTOR_CONSOLE_KEY` | con Docker, la clave que nginx añade a las peticiones de la interfaz | — |

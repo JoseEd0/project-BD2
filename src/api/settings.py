@@ -18,6 +18,8 @@ CORS_ORIGINS_VARIABLE = "MINIGESTOR_CORS_ORIGINS"
 LOCK_TIMEOUT_VARIABLE = "MINIGESTOR_LOCK_TIMEOUT"
 STATEMENT_TIMEOUT_VARIABLE = "MINIGESTOR_STATEMENT_TIMEOUT"
 MAX_REQUEST_BYTES_VARIABLE = "MINIGESTOR_MAX_REQUEST_BYTES"
+INGEST_BATCH_ROWS_VARIABLE = "MINIGESTOR_INGEST_BATCH_ROWS"
+MAX_INGEST_LINE_BYTES_VARIABLE = "MINIGESTOR_MAX_INGEST_LINE_BYTES"
 SERVICE_KEYS_VARIABLE = "MINIGESTOR_API_KEYS"
 LOG_LEVEL_VARIABLE = "MINIGESTOR_LOG_LEVEL"
 DEFAULT_LOG_LEVEL = "INFO"
@@ -62,6 +64,10 @@ def settings_from_environment() -> ApiSettings:
             STATEMENT_TIMEOUT_VARIABLE, defaults.statement_timeout_seconds
         ),
         max_request_bytes=_integer_or(MAX_REQUEST_BYTES_VARIABLE, defaults.max_request_bytes),
+        ingest_batch_rows=_integer_or(INGEST_BATCH_ROWS_VARIABLE, defaults.ingest_batch_rows),
+        max_ingest_line_bytes=_integer_or(
+            MAX_INGEST_LINE_BYTES_VARIABLE, defaults.max_ingest_line_bytes
+        ),
     )
     origins = _list_of(CORS_ORIGINS_VARIABLE)
     if not origins:

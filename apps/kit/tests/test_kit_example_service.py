@@ -1,10 +1,21 @@
-"""El servicio de ejemplo con un gestor de mentira: salud, preparación, errores uniformes y el
-`X-Request-ID` que pasa de la petición al gestor."""
+"""El servicio de ejemplo con un gestor de mentira: salud, preparación, errores uniformes, el
+`X-Request-ID` que pasa de la petición al gestor, su fábrica y su carga inicial."""
 
 from __future__ import annotations
 
 import pytest
-from apps.kit.tests.kit_example import BROKEN_SQL, NOTES_STAGE, VERSION, WRITE_NOTE
+from apps.kit.tests import kit_example
+from apps.kit.tests.kit_example import (
+    BROKEN_SQL,
+    NAME,
+    NOTES_STAGE,
+    SEED_NOTE_ID,
+    VERSION,
+    WRITE_NOTE,
+    ExampleSettings,
+    create_app,
+    seed,
+)
 from apps.kit.tests.kit_fakes import FakeEngine
 from fastapi.testclient import TestClient
 
@@ -92,3 +103,22 @@ def test_an_unreachable_engine_is_a_503(service: TestClient, engine: FakeEngine)
 
 def test_an_unexpected_failure_is_a_500(service: TestClient):
     assert error(service.get("/fallo")) == (500, "ServiceError")
+
+
+def test_the_factory_reads_its_settings_from_the_environment(
+    settings: ExampleSettings, monkeypatch: pytest.MonkeyPatch
+):
+    # configure_logging cambia el logging de todo el proceso; aquí solo importa que se llame.
+    levels: list[str] = []
+    monkeypatch.setattr(kit_example, "configure_logging", levels.append)
+    assert create_app().title == NAME
+    assert levels == [settings.log_level]
+
+
+@pytest.mark.anyio
+async def test_the_seed_writes_its_note_once(settings: ExampleSettings, engine: FakeEngine):
+    assert await seed(settings, engine.transport())
+    engine.rows[SEED_NOTE_ID] = [SEED_NOTE_ID, "ya estaba"]
+    assert not await seed(settings, engine.transport())
+    writes = [sql for sql, _ in engine.queries() if sql == WRITE_NOTE]
+    assert len(writes) == 1

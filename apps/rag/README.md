@@ -63,8 +63,8 @@ corta en cada encabezado.
    texto por página con pypdf; NFKC (ligaduras, letras matemáticas) y pares sustitutos
    unidos; se borran las líneas del borde de la página que se repiten en al menos la mitad
    de las páginas (encabezados, pies, números de página, comparados con los dígitos
-   igualados) y el sello lateral de arXiv; las palabras partidas con guion al final de una
-   línea se unen si la siguiente sigue en minúscula; los espacios se normalizan. **Un PDF
+   igualados) y el sello lateral de arXiv; cada guion de fin de línea se deja o se quita
+   según la evidencia del propio documento (ver abajo); los espacios se normalizan. **Un PDF
    dañado** (pypdf no puede leerlo) o **sin texto** (menos de 25 palabras por página: un
    escaneado) se registra en `fallas.jsonl` y se salta. El texto de cada documento se
    guarda en `paginas/<id>.json` con la huella del PDF y los parámetros de limpieza: solo se
@@ -81,6 +81,26 @@ corta en cada encabezado.
    aceptado no entra, y un fragmento cuyo texto ya está (mismo SHA-256) tampoco. Como la
    metadata y los fragmentos se reescriben enteros en cada corrida, volver a correr no
    duplica nada.
+
+**Guiones de fin de línea** (`hyphenation.py`). Un paper de bases de datos está lleno de
+compuestos que el PDF parte en el guion (`data-` / `driven`, `k-` / `nearest`), y también
+de palabras partidas en sílabas (`exam-` / `ple`). Quitar siempre el guion convierte
+`data-driven` en `datadriven`, que ni BM25 ni una cita encuentran; dejarlo siempre deja
+`exam-ple`. Sin diccionario, la evidencia es el documento: las palabras que escribe
+**enteras** en alguna línea (las que una línea parte no cuentan). Ante `X-` al final de
+una línea y `Y` al empezar la siguiente, sin mayúsculas y en este orden:
+
+1. si `X-Y` aparece entera en el documento, se deja el guion;
+2. si `XY` aparece entera, se une;
+3. si `X` e `Y` aparecen sueltas, con al menos 3 letras cada una, se deja el guion
+   (`XY` no apareció: lo descartó la regla anterior). El mínimo evita que un prefijo que
+   también es palabra (`in-` / `formation`, `de-` / `sign`) pase por compuesto;
+4. si no hay evidencia, se deja el guion cuando `X` tiene dígitos (`2-dimensional`, un
+   rango `10-20`), es una sola letra (`k-nearest`), es una sigla en mayúsculas (`B-tree`),
+   ya traía un guion (`end-to-` / `end`) o `Y` no empieza en minúscula (`Smith-Jones`); si
+   no, se une.
+
+La decisión es determinista y la cuenta de cada regla queda en el manifiesto.
 
 **Página de una cita.** Un fragmento guarda `page_start`, la página donde empieza su
 primera oración, y `page_end`, la página donde termina la última. La cita abre el PDF en
@@ -162,16 +182,25 @@ son las del manifiesto, versionado en
 | documentos del curso | 2 |
 | **documentos en el corpus** | **1 495** |
 | páginas (y sin texto) | 26 365 (19) |
-| palabras | 15 842 056 |
-| **fragmentos** | **98 633** |
+| palabras | 15 833 823 |
+| **fragmentos** | **98 585** |
 | fragmentos repetidos, descartados | 34 |
-| «oraciones» de más de 300 palabras partidas | 1 452 |
+| «oraciones» de más de 300 palabras partidas | 1 447 |
 
 Licencias de los 11 502 papers en las dos categorías: CC BY 5 044, arXiv no exclusiva
 4 679, CC BY-NC-ND 782, CC BY-NC-SA 579, CC BY-SA 339, CC0 78 y uno sin licencia. Entre
 los 1 493 elegidos quedan 1 401 CC BY, 81 CC BY-SA y 11 CC0. Como se eligen del más
 reciente hacia atrás, los de cs.DB se enviaron entre octubre de 2025 y noviembre de 2026, y
 los de cs.IR (más numerosos), entre julio y noviembre de 2026.
+
+**Guiones de fin de línea** en los 1 495 documentos: 181 059. Se unieron 154 441 (85 %):
+121 863 porque la palabra entera aparece en el documento y 32 578 por la regla sin
+evidencia. Se dejaron 26 618 (15 %): 17 365 porque el compuesto aparece entero, 5 980
+porque sus dos partes aparecen como palabras y 3 273 por la regla sin evidencia (números,
+letras sueltas, siglas, nombres). En una muestra de 40 papers los errores que quedan son
+del tipo `per-formed` (la regla 3 con un prefijo de 3 letras) o `Textto` (la regla sin
+evidencia ante `Text-` / `to`), raros frente a los miles de compuestos que antes perdían
+el guion.
 
 Un paper tiene una mediana de 14 páginas (el más largo, 256) y 60 fragmentos (el que más,
 402). En disco: 2,8 GB de PDF, 168 MB de `fragmentos.jsonl` y 3 MB de `papers.jsonl`.
@@ -184,7 +213,7 @@ una oración larga, típicamente una tabla.
 
 **Tiempos** (Apple M4 Pro, 12 núcleos): la cosecha, 1,5 min; la descarga, 90 min
 (1 494 peticiones, 3,6 s cada una: los 3 s de pausa más la transferencia); la extracción,
-70 s en 12 procesos; la fragmentación, 3 s. Una segunda corrida sobre el mismo directorio
+67 s en 12 procesos; la fragmentación, 3 s. Una segunda corrida sobre el mismo directorio
 tarda 26 s: no baja ni extrae nada (solo vuelve a pedir los 7 PDF que faltan) y deja
 `papers.jsonl` y `fragmentos.jsonl` iguales.
 

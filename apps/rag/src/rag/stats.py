@@ -6,7 +6,7 @@ import math
 from collections.abc import Sequence
 
 PERCENTILES = (50, 95)
-HISTOGRAM_BIN_WORDS = 20
+HISTOGRAM_BIN_WORDS = 10
 PERCENT = 100
 
 

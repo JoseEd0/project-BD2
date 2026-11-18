@@ -31,7 +31,7 @@ dev = ["pytest>=8.0", "ruff>=0.6", "mypy>=1.11", "httpx>=0.27"]
 # El gestor es la raíz del espacio de trabajo y cada servicio de la Parte 5 un miembro con su
 # propio pyproject. Un solo uv.lock fija las versiones de todos.
 [tool.uv.workspace]
-members = ["apps/client", "apps/kit", "apps/shop"]
+members = ["apps/client", "apps/kit", "apps/shop", "apps/faces"]
 
 [tool.hatch.build.targets.wheel]
 sources = ["src"]
@@ -59,7 +59,10 @@ python_version = "3.11"
 mypy_path = "src"
 # Cada servicio de Python, por nombre: `apps/*/src` alcanzaría también `apps/web-kit/src`, que
 # es TypeScript, y mypy falla en una carpeta sin archivos de Python.
-files = ["src", "benchmarks", "demos", "tools", "apps/client/src", "apps/kit/src", "apps/shop/src"]
+files = [
+    "src", "benchmarks", "demos", "tools",
+    "apps/client/src", "apps/kit/src", "apps/shop/src", "apps/faces/src",
+]
 strict = true
 warn_unreachable = true
 

@@ -1,0 +1,23 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "minigestor-faces"
+version = "0.1.0"
+description = "Reconocimiento facial en vivo: detección, alineación y embedding de rostros"
+requires-python = ">=3.11"
+dependencies = [
+    "minigestor-kit",
+    "numpy>=1.26",
+    # FaceDetectorYN lee YuNet 2023mar desde OpenCV 4.8; la misma cota que el gestor.
+    "opencv-python-headless>=4.10",
+    # Decodifica sabiendo el tamaño antes de reservar memoria y aplica la orientación EXIF.
+    "pillow>=10.4",
+]
+
+[tool.uv.sources]
+minigestor-kit = { workspace = true }
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/faces"]

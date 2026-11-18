@@ -71,6 +71,21 @@ INSERT INTO resenas VALUES
 SELECT * FROM resenas WHERE producto_id = 10;`,
       },
       {
+        label: "Migración repetible",
+        description:
+          "IF NOT EXISTS omite la tabla y el índice solo si ya existen con esa definición; si no, dice en qué difieren",
+        sql: `CREATE TABLE IF NOT EXISTS documentos (
+  id INT PRIMARY KEY,
+  titulo VARCHAR(60) NOT NULL,
+  emb VECTOR(3)
+);
+
+CREATE INDEX IF NOT EXISTS idx_documentos_emb
+  ON documentos USING HNSW (emb) WITH (metric = 'cosine');
+
+SELECT * FROM documentos;`,
+      },
+      {
         label: "Columna TEXT",
         description:
           "Un TEXT no tiene longitud máxima: la fila guarda su dirección y el texto vive en notas.text",

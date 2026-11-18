@@ -354,7 +354,7 @@ Los CSV del dataset están en [`demos/samples/`](demos/samples/):
 
 Después, el atajo **Carga → Índices tras cargar CSV** crea los dos índices secundarios del
 e-commerce, **Espacial → Crear R-Tree**, el de `tiendas.ubicacion`, y **Texto → Índice
-invertido**, el de `catalogo.texto`. Con eso los 77 atajos del editor quedan listos para
+invertido**, el de `catalogo.texto`. Con eso los 78 atajos del editor quedan listos para
 usarse; los 8 del grupo **Multimedia** necesitan además las tablas `imagenes` y `canciones`
 de la demo.
 

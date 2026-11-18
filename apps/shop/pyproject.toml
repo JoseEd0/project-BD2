@@ -1,0 +1,16 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "minigestor-shop"
+version = "0.1.0"
+description = "Tienda con recomendaciones de la Parte 5 (opción B): dataset, catálogo y recomendador"
+requires-python = ">=3.11"
+dependencies = ["minigestor-kit", "pillow>=11"]
+
+[tool.uv.sources]
+minigestor-kit = { workspace = true }
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/shop"]

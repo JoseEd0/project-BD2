@@ -12,6 +12,7 @@ members = [
     "minigestor-bd2",
     "minigestor-client",
     "minigestor-kit",
+    "minigestor-shop",
 ]
 
 [[package]]
@@ -1366,6 +1367,21 @@ source = { editable = "apps/client" }
 name = "minigestor-kit"
 version = "0.1.0"
 source = { editable = "apps/kit" }
+
+[[package]]
+name = "minigestor-shop"
+version = "0.1.0"
+source = { editable = "apps/shop" }
+dependencies = [
+    { name = "minigestor-kit" },
+    { name = "pillow" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "minigestor-kit", editable = "apps/kit" },
+    { name = "pillow", specifier = ">=11" },
+]
 
 [[package]]
 name = "msgpack"

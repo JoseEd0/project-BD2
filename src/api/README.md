@@ -58,8 +58,9 @@ Ninguna ruta ni puerto está escrito en el código.
 | `GET` | `/tables/{name}/points` | panel de mapa: los puntos de una columna `POINT` |
 | `DELETE` | `/tables` | borra todas las tablas y sus archivos (dejar la BD vacía) |
 | `POST` | `/media/queries` | guarda la imagen o el audio de una consulta y devuelve la ruta que va en `SIMILAR_TO` |
+| `POST` | `/media/segments` | corta un audio subido en ventanas y devuelve las `k` filas más parecidas a cada una |
 | `GET` | `/media/thumbnail?path=…` | miniatura en JPEG de una imagen, con caché en disco |
-| `GET` | `/media/file?path=…` | el archivo tal cual; con `Range`, solo el trozo pedido (`206`), para el reproductor de audio |
+| `GET` | `/media/file?path=…` | el archivo tal cual; con `Range`, solo el trozo pedido (`206`), para el reproductor de audio; un `#t=` al final de la ruta se ignora |
 | `POST` | `/sessions/{id}/close` | cierra una sesión y aborta lo que tuviera abierto; es `POST` para que el navegador lo envíe con `sendBeacon` al cerrar la pestaña |
 
 ### Sesiones y transacciones
@@ -253,13 +254,47 @@ La página «Multimedia» los usa para el resultado de un `SIMILAR_TO`:
   `.miniaturas/` del directorio de datos, con el tamaño y la fecha del original en la clave:
   pedirla de nuevo no decodifica nada, y si el original cambia se rehace.
 - **`GET /media/file`** sirve el archivo con `Range`, que es lo que necesita un `<audio>`
-  para saltar a otro segundo.
+  para saltar a otro segundo. Una ruta con tramo (`pista.mp3#t=10,20`) sirve el archivo
+  entero: el tramo lo pone el reproductor, que lo lee al final de la dirección.
 
 Las dos lecturas pasan por el mismo control que `FROM FILE` y que el archivo de un
 `SIMILAR_TO`: el archivo tiene que estar en el directorio de datos o en
 `MINIGESTOR_IMPORT_DIRS`, y ser una imagen o un audio. Quien puede escribir
 `SIMILAR_TO('ruta')` ya puede hacer que el motor lea esa ruta, así que servirla no abre
 nada nuevo; un CSV o un archivo fuera de esos directorios da `400`.
+
+#### Consulta por segmentos: `POST /media/segments`
+
+Es la de la detección de copyright: ¿qué tramos del catálogo suenan como cada parte de esta
+canción? Recibe el audio (*multipart*, campo `file`, con el límite de `max_upload_bytes`) y
+en el formulario:
+
+| Campo | Por omisión | Qué es |
+|---|---|---|
+| `table` | — | la tabla con la columna de rutas indexada con HNSW o IVF |
+| `column` | la única indexada | la columna de las rutas, si hay varias |
+| `k` | 5 | filas por ventana |
+| `window` | `segment_window_seconds` (10 s) | segundos de cada ventana |
+| `hop` | `segment_hop_seconds` (5 s) | segundos entre el inicio de una ventana y el de la siguiente |
+| `session_id` | — | para leer dentro de una transacción de la sesión |
+
+El audio se decodifica **una vez**, se corta en las ventanas `[i·hop, i·hop + window]` que
+caben enteras y todas se buscan en **un solo lote** del índice. Cada ventana recibe las
+mismas filas y puntajes que `SIMILAR_TO('audio#t=inicio,fin', k = k)`. La respuesta trae,
+por ventana, `start`, `end` y sus `neighbours`: la fila entera (`row`), la ruta del archivo
+sin fragmento (`path`), el tramo que pide la fila (`fragment`, `{start, end}` o `null`) y el
+`score`; además la duración del audio, las columnas de la tabla, las distancias calculadas
+y lo que tardó cada etapa (`decode_ms`, `extraction_ms`, `search_ms`). El archivo subido solo
+vive mientras dura la petición, que lee con bloqueo compartido sobre la tabla y con rol
+`read`.
+
+Responde `400` si el archivo no es un audio, si dura más que `max_segment_audio_seconds`
+(600 s) o menos que `min_segment_seconds` (1 s), si la ventana es más corta que eso, si
+salen más de `max_segments` ventanas (256), si ventanas por `k` pasan de `max_result_rows`
+o si la tabla no tiene un único índice de similitud sobre rutas. Un audio más corto que una
+ventana es **una sola ventana**, del inicio al final. No hay forma SQL: el `FROM` del
+dialecto solo nombra tablas, y la respuesta es una lista de ventanas con sus vecinos, no una
+relación (ver [`query/segment_search.py`](../query/segment_search.py)).
 
 Una consulta con `SIMILAR_TO` trae en `similarity` la tabla, la columna de las rutas, el
 índice, el método, la métrica, `k`, la ruta de la consulta y si son imágenes o audios: con

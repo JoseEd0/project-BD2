@@ -514,6 +514,7 @@ reconocer el `ORDER BY` del puntaje— vive una sola vez en `scored_search.py`:
 | `scored_search.py` | lo común a `MATCH` y `SIMILAR_TO`: la condición, el puntaje y su orden |
 | `similarity_search.py` | reconoce el `SIMILAR_TO` del `WHERE`, elige el índice y la métrica, resuelve el archivo o comprueba la dimensión del vector y rechaza lo que no se puede responder |
 | `similarity_operators.py` | `VectorSearchScan`, el camino de acceso que entrega las k filas más parecidas con su puntaje |
+| `segment_search.py` | la consulta por segmentos de un audio: elige el índice de rutas de la tabla y lee las filas de los vecinos de cada ventana; no es SQL, la sirve `POST /media/segments` |
 
 ```sql
 SELECT titulo, SIMILARITY_SCORE() AS score FROM imagenes

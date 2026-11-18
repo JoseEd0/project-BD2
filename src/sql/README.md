@@ -107,6 +107,24 @@ parameter    ::= '$' digit+
 
 `END TRANSACTION` y `COMMIT` producen el mismo nodo: confirmar la transacción.
 
+### `IF NOT EXISTS`: migraciones repetibles
+
+Cada servicio crea sus tablas con un guion que se puede correr en cada arranque. Por eso
+`IF NOT EXISTS` omite la creación **solo si lo que existe es lo que se pide**; si es otra
+cosa, falla con `DefinitionMismatchError` y dice en qué se diferencia:
+
+| Sentencia | Igual si coinciden | No cuenta |
+|---|---|---|
+| `CREATE TABLE` | columnas (nombre, tipo, longitud, `NOT NULL`), organización, clave primaria, índices declarados y restricciones `UNIQUE` | índices añadidos después con `CREATE INDEX` |
+| `CREATE INDEX` | tabla, columna, método y opciones del `WITH`, con sus valores por omisión puestos | que el existente sea `UNIQUE` |
+| `CREATE TABLE ... FROM FILE` | solo el nombre: comparar pediría leer el archivo | — |
+
+PostgreSQL omite la creación aunque la tabla sea otra y solo emite un aviso. Aquí se
+rechaza porque el aviso no detiene la migración: una columna que pasó de `VECTOR(384)` a
+`VECTOR(768)` seguiría con la tabla vieja y fallaría después, en la primera carga, lejos de
+la causa. `CREATE INDEX IF NOT EXISTS` compara con el índice que se llama así, en cualquier
+tabla, o si no hay ninguno (o no se nombró), con el del mismo método sobre la columna.
+
 ### Tipos de columna
 
 `INT`/`INTEGER`, `BIGINT`, `FLOAT`/`REAL`, `DOUBLE`, `BOOL`/`BOOLEAN`, `CHAR(n)`, `VARCHAR(n)`,

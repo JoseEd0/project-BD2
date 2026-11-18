@@ -66,6 +66,10 @@ class CatalogFormatError(CatalogError):
     """El catálogo en disco es de otra versión del formato."""
 
 
+class DefinitionMismatchError(CatalogError):
+    """Un `CREATE ... IF NOT EXISTS` encontró el objeto con otra definición que la pedida."""
+
+
 @unique
 class Organization(Enum):
     """Cómo se guardan físicamente las filas de una tabla."""
@@ -190,6 +194,83 @@ class TableDefinition:
             primary_key=None if raw["primary_key"] is None else str(raw["primary_key"]),
             indexes=tuple(IndexDefinition.from_json(item) for item in raw["indexes"]),
         )
+
+
+def table_differences(existing: TableDefinition, wanted: TableDefinition) -> list[str]:
+    """Lo que separa la tabla que existe de la que pide un `CREATE TABLE`: columnas,
+    organización, clave primaria, índices declarados y restricciones `UNIQUE`. Los demás
+    índices que la tabla tenga de más no cuentan: una migración los añade después con su
+    propio `CREATE INDEX`."""
+    differences = _column_differences(existing.schema, wanted.schema)
+    if existing.organization is not wanted.organization:
+        differences.append(
+            f"organización: es {existing.organization.value} y se pide "
+            f"{wanted.organization.value}"
+        )
+    if _folded(existing.primary_key) != _folded(wanted.primary_key):
+        differences.append(
+            f"clave primaria: es {existing.primary_key} y se pide {wanted.primary_key}"
+        )
+    for index in wanted.indexes:
+        if not any(_same_index(present, index) for present in existing.indexes):
+            differences.append(f"falta el índice {index.method.value} sobre '{index.column}'")
+    for index in existing.indexes:
+        if index.unique and not any(_same_index(index, asked) for asked in wanted.indexes):
+            differences.append(f"'{index.column}' es UNIQUE y no se pide así")
+    return differences
+
+
+def index_differences(existing: IndexDefinition, wanted: IndexDefinition) -> list[str]:
+    """Lo que separa el índice que existe del que pide un `CREATE INDEX`. Que el existente
+    sea `UNIQUE` no cuenta: un `CREATE INDEX` no lo declara, y uno único también sirve."""
+    differences = []
+    if existing.column.lower() != wanted.column.lower():
+        differences.append(f"columna: es '{existing.column}' y se pide '{wanted.column}'")
+    if existing.method is not wanted.method:
+        differences.append(f"método: es {existing.method.value} y se pide {wanted.method.value}")
+    present, asked = _folded_options(existing.options), _folded_options(wanted.options)
+    for option in sorted(present.keys() | asked.keys()):
+        if present.get(option) != asked.get(option):
+            differences.append(
+                f"opción {option}: es {_shown(present.get(option))} y se pide "
+                f"{_shown(asked.get(option))}"
+            )
+    return differences
+
+
+def _column_differences(existing: Schema, wanted: Schema) -> list[str]:
+    if [name.lower() for name in existing.names] != [name.lower() for name in wanted.names]:
+        return [
+            f"columnas: son ({', '.join(existing.names)}) y se piden ({', '.join(wanted.names)})"
+        ]
+    return [
+        f"columna '{present.name}': es {_described_field(present)} y se pide "
+        f"{_described_field(asked)}"
+        for present, asked in zip(existing, wanted, strict=True)
+        if (present.type, present.length, present.nullable)
+        != (asked.type, asked.length, asked.nullable)
+    ]
+
+
+def _same_index(present: IndexDefinition, wanted: IndexDefinition) -> bool:
+    return present.unique == wanted.unique and not index_differences(present, wanted)
+
+
+def _described_field(item: Field) -> str:
+    sized = item.type.value if item.length is None else f"{item.type.value}({item.length})"
+    return sized if item.nullable else f"{sized} NOT NULL"
+
+
+def _folded(name: str | None) -> str | None:
+    return None if name is None else name.lower()
+
+
+def _folded_options(options: Mapping[str, OptionValue]) -> dict[str, OptionValue]:
+    return {name.lower(): value for name, value in options.items()}
+
+
+def _shown(value: OptionValue | None) -> str:
+    return "sin fijar" if value is None else repr(value)
 
 
 @dataclass

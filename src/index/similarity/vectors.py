@@ -108,6 +108,14 @@ class VectorSearchOutcome:
     exact_reason: str | None
 
 
+@dataclass(frozen=True, slots=True)
+class VectorBatchOutcome:
+    """Las filas que encontró cada consulta de un lote, en su orden, y lo que costó."""
+
+    hits: tuple[tuple[VectorHit, ...], ...]
+    stats: VectorSearchStats
+
+
 class IndexedVectors:
     """El índice de vectores de una columna, derivado de `source`.
 
@@ -217,6 +225,17 @@ class IndexedVectors:
         found = self._require_index().search(query, k, allowed=allowed, effort=effort)
         hits = self._with_zeros(found.hits, query, k, allowed, metric)
         return VectorSearchOutcome(hits, found.stats, None)
+
+    def search_many(self, queries: Vectors, k: int) -> VectorBatchOutcome:
+        """Los `k` vectores más parecidos a cada fila de `queries`, en una sola búsqueda del
+        índice con su métrica: a cada una le toca lo mismo que con `search` sin filtro."""
+        found = self._require_index().search_many(queries, k)
+        metric = self._settings.metric
+        hits = tuple(
+            self._with_zeros(query_hits, query, k, None, metric)
+            for query_hits, query in zip(found.hits, queries, strict=True)
+        )
+        return VectorBatchOutcome(hits, found.stats)
 
     def describe(self) -> dict[str, Any]:
         described = self._index.describe() if self._index is not None else {}

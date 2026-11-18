@@ -7,7 +7,7 @@ coherentes con los datos: si una fila entra o sale, todos sus índices se entera
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Iterator, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from itertools import tee
 from math import ceil
 from pathlib import Path
@@ -24,6 +24,7 @@ from query.index_methods import Capability, method_named
 from query.row_store import AddressedRecord, HeapStore, KeyedStore, RowStore
 from spatial.geometry import Point, Polygon
 from spatial.metrics import Metric
+from storage.atomic import mark_durably, remove_durably
 from storage.heap import HeapFile
 from storage.out_of_row import OutOfRowSerializer, out_of_row_positions
 from storage.record import Record, RecordSerializer
@@ -38,6 +39,9 @@ SEQUENTIAL_SUFFIX = ".seq"
 CLUSTERED_SUFFIX = ".bpt"
 INDEX_SUFFIX = ".idx"
 TEXT_VALUES_SUFFIX = ".text"
+# Marca de un índice que una carga dejó de mantener y aún no reconstruyó (ver
+# `defer_bulk_indexes`).
+STALE_SUFFIX = ".obsoleto"
 _STORAGE_SUFFIXES = {
     Organization.HEAP: HEAP_SUFFIX,
     Organization.SEQUENTIAL: SEQUENTIAL_SUFFIX,
@@ -114,8 +118,9 @@ def table_files(definition: TableDefinition, directory: Path) -> list[Path]:
     files = _storage_files(definition, directory)
     for index in definition.indexes:
         method = method_named(index.method)
+        path = index_path(directory, definition.name, index.name)
         if method is not None:
-            files.extend(method.files_of(index_path(directory, definition.name, index.name)))
+            files.extend([*method.files_of(path), stale_marker(path)])
     return files
 
 
@@ -127,6 +132,11 @@ def discard_table_files(definition: TableDefinition, directory: Path) -> None:
 
 def index_path(directory: Path, table: str, index: str) -> Path:
     return directory / f"{table}.{index}{INDEX_SUFFIX}"
+
+
+def stale_marker(path: Path) -> Path:
+    """La marca de que el índice guardado en `path` no tiene todas las filas de la tabla."""
+    return path.with_name(path.name + STALE_SUFFIX)
 
 
 def _storage_path(definition: TableDefinition, directory: Path) -> Path:
@@ -174,7 +184,13 @@ class Table:
 
     @property
     def definition(self) -> TableDefinition:
-        return self._definition
+        """La definición con los índices que pueden responder ahora: un índice diferido
+        por una carga no aparece, así que nadie que planifique con ella lo elige."""
+        if not self._deferred:
+            return self._definition
+        indexes = self._definition.indexes
+        live = tuple(index for index in indexes if index.name not in self._deferred)
+        return replace(self._definition, indexes=live)
 
     @property
     def name(self) -> str:
@@ -502,15 +518,18 @@ class Table:
         construye al final con todas las filas.
 
         Los `UNIQUE`, el de la clave primaria incluido, siguen al día: son los que
-        comprueban que una fila nueva no repite un valor. Mientras haya índices diferidos la
-        tabla no puede responder consultas que los usen: quien los difiere la tiene
-        bloqueada en exclusiva.
+        comprueban que una fila nueva no repite un valor. Mientras haya índices diferidos
+        `definition` no los muestra, así que ninguna consulta los usa; además, quien los
+        difiere tiene la tabla bloqueada en exclusiva.
+
+        Antes de dejar de mantener un índice se deja en el disco la marca de que está
+        viejo: si el proceso termina antes de `build_deferred_indexes`, al abrir la tabla
+        el índice se reconstruye con sus filas en vez de responder con filas de menos.
         """
         for definition in self._definition.indexes:
-            method = method_named(definition.method)
-            if definition.unique or method is None or not method.builds_in_bulk:
-                continue
-            self._deferred[definition.name] = self._indexes.pop(definition.name)
+            if self._defers(definition):
+                mark_durably(stale_marker(self._index_path(definition.name)))
+                self._deferred[definition.name] = self._indexes.pop(definition.name)
         return tuple(self._deferred)
 
     def build_deferred_indexes(self) -> None:
@@ -519,14 +538,14 @@ class Table:
         y el error se propaga: devolverlo a medias respondería consultas con filas de menos.
         """
         for name in list(self._deferred):
-            index = self._deferred[name]
-            index.build(self._indexed_rows())
+            self._build_from_rows(self._deferred[name], name)
             self._indexes[name] = self._deferred.pop(name)
 
     def drop_index(self, name: str) -> None:
         index = self._indexes.pop(name)
         index.close()
         self.discard_index_files(self._definition.index_on_name(name))
+        stale_marker(self._index_path(name)).unlink(missing_ok=True)
 
     def discard_index_files(self, definition: IndexDefinition) -> None:
         """Borra los archivos del índice, sean los que sean según su método."""
@@ -787,11 +806,39 @@ class Table:
         return KeyedStore(clustered, key_of)
 
     def _reopened_index(self, definition: IndexDefinition) -> SecondaryIndex:
-        """Un índice de la tabla al abrirla; el que perdió su archivo, reconstruido."""
+        """Un índice de la tabla al abrirla; el que perdió su archivo o quedó marcado como
+        viejo por una carga que no terminó, reconstruido con las filas de la tabla."""
+        if stale_marker(self._index_path(definition.name)).exists():
+            return self._rebuilt_index(definition)
         index = self._open_index(definition)
         if isinstance(index, RebuildableIndex) and index.needs_rows:
             index.build(self._indexed_rows())
         return index
+
+    def _rebuilt_index(self, definition: IndexDefinition) -> SecondaryIndex:
+        """El índice desde cero. La marca se borra solo después de escribirlo: un corte a
+        mitad de la reconstrucción la deja, y la próxima apertura vuelve a empezar."""
+        self.discard_index_files(definition)
+        index = self._open_index(definition)
+        try:
+            self._build_from_rows(index, definition.name)
+        except Exception:
+            index.close()
+            raise
+        return index
+
+    def _build_from_rows(self, index: SecondaryIndex, name: str) -> None:
+        """Llena el índice vacío con las filas de la tabla, lo escribe en el disco y solo
+        entonces quita su marca de viejo."""
+        index.build(self._indexed_rows())
+        index.flush()
+        remove_durably(stale_marker(self._index_path(name)))
+
+    def _defers(self, definition: IndexDefinition) -> bool:
+        method = method_named(definition.method)
+        if definition.unique or method is None:
+            return False
+        return method.builds_in_bulk(self.schema.field_of(definition.column))
 
     def _indexed_rows(self) -> Iterator[tuple[bytes, RecordId]]:
         """Las filas guardadas con la dirección que recibe un índice secundario."""

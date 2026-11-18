@@ -479,7 +479,8 @@ class Engine:
         if statement.name is not None and self._catalog.has_index(statement.name):
             owner, index = self._catalog.find_index(statement.name)
             return owner.name, index
-        found = table.definition.index_with(statement.spec.columns[0], statement.spec.method)
+        registered = self._catalog.table(table.name)
+        found = registered.index_with(statement.spec.columns[0], statement.spec.method)
         return None if found is None else (table.name, found)
 
     def _unchanged_index(

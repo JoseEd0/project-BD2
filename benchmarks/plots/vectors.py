@@ -1,0 +1,111 @@
+"""Figuras del experimento de columnas VECTOR(n): HNSW e IVF por SQL contra la búsqueda
+exacta, sobre embeddings sintéticos de 384 dimensiones."""
+
+from __future__ import annotations
+
+from benchmarks.plots.model import (
+    DISK_SPACE,
+    READING_GUIDE,
+    TOTAL_TIME,
+    BarFigure,
+    BarGroup,
+    BarPanel,
+    CurveFigure,
+    CurvePanel,
+    Figure,
+    Measure,
+    Style,
+    Technique,
+    compare,
+)
+from benchmarks.plots.style import AQUA, BLUE, MUTED_INK, ORANGE
+from benchmarks.vectors.names import (
+    BUILD,
+    CURVE,
+    FILTERED_QUERY,
+    LOAD,
+    QUERY,
+    REPORT,
+    SPACE,
+    SQL_EXACT,
+    SQL_HNSW,
+    SQL_IVF,
+    TABLE_LOAD,
+)
+
+EXACT = Technique(SQL_EXACT, Style(MUTED_INK, "x", dashed=True), "búsqueda exacta")
+IVF = Technique(SQL_IVF, Style(BLUE, "o"), "IVF")
+HNSW = Technique(SQL_HNSW, Style(ORANGE, "s"), "HNSW")
+TABLE = Technique(TABLE_LOAD, Style(AQUA, "^"), "cargar la tabla")
+INDEXES = (IVF, HNSW)
+WITH_EXACT = (EXACT, *INDEXES)
+VECTORS = "número de vectores de la tabla"
+SIZES_LABEL = "vectores"
+QUERY_MEDIAN = Measure("mediana por consulta (ms)", "ms")
+QUERY_TAIL = Measure("percentil 95 por consulta (ms)", "ms")
+
+
+FIGURES: tuple[Figure | BarFigure | CurveFigure, ...] = (
+    Figure(
+        filename="vectores-sql",
+        report=REPORT,
+        title="HNSW e IVF sobre una columna VECTOR(384), por SQL",
+        subtitle=(
+            "SIMILAR_TO(emb, $1, k = 10) con el esfuerzo por omisión; la exacta es la misma "
+            "consulta con otra métrica.\n"
+            f"{READING_GUIDE}"
+        ),
+        rows_label=VECTORS,
+        columns=3,
+        panels=(
+            compare(
+                BUILD,
+                "Construcción",
+                TOTAL_TIME,
+                WITH_EXACT,
+                note="La exacta se arma en\nsu primera consulta.",
+            ),
+            compare(LOAD, "Cargar la tabla", TOTAL_TIME, (TABLE,)),
+            compare(SPACE, "Espacio del índice en disco", DISK_SPACE, INDEXES, field="kib"),
+            compare(QUERY, "Consulta (p50)", QUERY_MEDIAN, WITH_EXACT),
+            compare(QUERY, "Consulta (p95)", QUERY_TAIL, WITH_EXACT, field="p95_ms"),
+            compare(FILTERED_QUERY, "Filtro del 10 % (p50)", QUERY_MEDIAN, INDEXES),
+        ),
+    ),
+    BarFigure(
+        filename="vectores-recall",
+        report=REPORT,
+        title="Recall@10 contra la búsqueda exacta, por SQL",
+        subtitle=(
+            "Media de 500 consultas (100 con filtro) con el esfuerzo por omisión. 1 es "
+            "encontrar los mismos 10 vecinos que la búsqueda exacta."
+        ),
+        sizes_label=SIZES_LABEL,
+        panels=(
+            BarPanel(
+                "Recall@{k}",
+                "Recall@10",
+                "recall_en_k",
+                (BarGroup("sin filtro", QUERY), BarGroup("filtro del 10 %", FILTERED_QUERY)),
+                WITH_EXACT,
+            ),
+        ),
+    ),
+    CurveFigure(
+        filename="vectores-curvas",
+        report=REPORT,
+        title="Recall@10 contra latencia por SQL, barriendo el esfuerzo",
+        subtitle=(
+            "IVF: probes de 1 a 128; HNSW: ef_search de 10 a 320. El anillo marca el esfuerzo "
+            "por omisión.\nArriba a la izquierda es mejor: más recall en menos tiempo."
+        ),
+        columns=1,
+        x_axis="mediana por consulta (ms)",
+        y_axis="Recall@10",
+        field="recall_en_k",
+        order_field="esfuerzo",
+        default_field="por_omision",
+        sizes_label=SIZES_LABEL,
+        panels=(CurvePanel("Coseno · 384 dimensiones", CURVE, INDEXES),),
+    ),
+)

@@ -23,6 +23,7 @@ from errors import DomainError
 from query.functions import POINT
 from sql.nodes import Expression, FunctionCall, Literal
 from sql.tokens import PARAMETER_PREFIX
+from storage.types import are_finite_floats
 
 LATITUDE_KEY = "lat"
 LONGITUDE_KEY = "lon"
@@ -66,6 +67,8 @@ def expression_of_json(value: object, name: str) -> Expression:
 def _vector_of(components: list[object], name: str) -> tuple[float, ...]:
     if not components:
         raise ParameterValueError(f"{name} es un vector sin componentes")
+    if are_finite_floats(components):
+        return tuple(components)
     return tuple(_component(component, name) for component in components)
 
 

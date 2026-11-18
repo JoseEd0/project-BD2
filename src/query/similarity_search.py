@@ -1,14 +1,16 @@
 """Reconocimiento de la búsqueda por similitud dentro de un SELECT: `SIMILAR_TO`,
 `SIMILARITY_SCORE()`, `USING` y `WITH`.
 
-Aquí se decide si una consulta busca imágenes o audios parecidos, en qué columna, con qué
-índice y con qué métrica, y se rechaza antes de leer ninguna fila la que no se puede
+Aquí se decide si una consulta busca imágenes, audios o vectores parecidos, en qué columna,
+con qué índice y con qué métrica, y se rechaza antes de leer ninguna fila la que no se puede
 responder.
 
 | Forma en SQL | Qué es |
 |---|---|
 | `WHERE SIMILAR_TO('consulta.jpg', k = 10)` | las 10 filas más parecidas al archivo |
 | `WHERE SIMILAR_TO(ruta, 'consulta.jpg', k = 10)` | lo mismo, nombrando la columna |
+| `WHERE SIMILAR_TO(emb, [0.1, 0.2, 0.3], k = 10)` | lo mismo sobre una columna `VECTOR(3)` |
+| `WHERE SIMILAR_TO(emb, $1, k = 10)` | lo mismo, con el vector como parámetro |
 | `USING HNSW` / `USING IVF` | el índice; sin `USING`, el único que tenga la tabla |
 | `WITH METRIC = cosine` | la métrica (`euclidean`, `dot` o `cosine`); sin ella, la del índice |
 | `WITH ef_search = 100` / `WITH probes = 20` | el esfuerzo de HNSW o de IVF en esta consulta |
@@ -23,14 +25,14 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from pathlib import Path
 
 from config import EngineConfig
 from errors import DomainError
-from index.similarity import HNSW_KIND
+from index.similarity import HNSW_KIND, SimilarityQuery
 from index.vector import VectorMetric, vector_metric_named
 from multimedia import MediaKind, media_kind_of
 from query.catalog import IndexDefinition
+from query.comparison import describe_value
 from query.expressions import constant_value, describe_expression, subexpressions
 from query.files import resolve_user_file
 from query.functions import MATCH, SIMILAR_TO, SIMILARITY_SCORE
@@ -56,7 +58,8 @@ from sql.nodes import (
     SelectStatement,
     TableRef,
 )
-from storage.types import is_number
+from storage.schema import Field
+from storage.types import FieldType, is_number
 
 # Como el puntaje de `MATCH`: el paréntesis impide escribir la columna en SQL sin comillas.
 SIMILARITY_COLUMN = "similarity_score()"
@@ -68,6 +71,8 @@ PROBES_OPTION = "probes"
 QUERY_ONLY = 1
 SIMILARITY_METHODS = (IndexType.HNSW, IndexType.IVF)
 COLUMN_AND_QUERY = 2
+# Componentes de un vector de consulta que se muestran en el plan: uno de 384 no se lee.
+SHOWN_VECTOR_COMPONENTS = 4
 
 
 class SimilaritySearchError(DomainError):
@@ -87,12 +92,12 @@ class SimilaritySearch:
     Attributes:
         table: la tabla en la que se busca.
         reference: el nombre o alias con que la consulta nombra esa tabla.
-        column: la columna con las rutas, tal como la declara la tabla.
+        column: la columna con las rutas o los vectores, tal como la declara la tabla.
         index_name: su índice de similitud.
         method: HNSW o IVF.
-        query: la ruta de la consulta tal como se escribió.
-        query_path: el archivo de la consulta, ya resuelto y permitido.
-        media: si la consulta es una imagen o un audio.
+        query: el archivo de la consulta, ya resuelto y permitido, o su vector.
+        written: la ruta de la consulta tal como se escribió, o el vector abreviado.
+        media: si la consulta es una imagen o un audio; `None` si es un vector.
         k: cuántas filas devuelve.
         metric: la métrica con que se puntúa.
         effort: `ef_search` (HNSW) o `probes` (IVF) de esta consulta; `None`, el del índice.
@@ -104,13 +109,20 @@ class SimilaritySearch:
     column: str
     index_name: str
     method: IndexType
-    query: str
-    query_path: Path
-    media: MediaKind
+    query: SimilarityQuery
+    written: str
+    media: MediaKind | None
     k: int
     metric: VectorMetric
     effort: int | None
     condition: FunctionCall
+
+    @property
+    def described_query(self) -> str:
+        """La consulta como se escribe en SQL, con un vector largo abreviado."""
+        if self.media is None:
+            return self.written
+        return describe_value(self.written)
 
 
 @dataclass(frozen=True, slots=True)
@@ -140,8 +152,9 @@ class SimilarityView:
 
 
 def similarity_view(search: SimilaritySearch | None) -> SimilarityView | None:
-    """La vista de un `SIMILAR_TO` ya resuelto por el planificador; `None` si no hubo."""
-    if search is None:
+    """La vista de un `SIMILAR_TO` ya resuelto por el planificador; `None` si no hubo o si
+    buscó con un vector, que no tiene archivos que mostrar."""
+    if search is None or search.media is None:
         return None
     return SimilarityView(
         table=search.table.name,
@@ -150,7 +163,7 @@ def similarity_view(search: SimilaritySearch | None) -> SimilarityView | None:
         method=search.method,
         metric=search.metric,
         k=search.k,
-        query=search.query,
+        query=search.written,
         media=search.media,
     )
 
@@ -166,6 +179,8 @@ def similarity_search(
             un `k` entero positivo, si no hay un índice de similitud que la responda, si el
             `USING` no es HNSW ni IVF o si el `WITH` pide algo que no es una métrica o el
             esfuerzo del índice; también si hay un `SIMILARITY_SCORE()` sin `SIMILAR_TO`.
+            También si un vector consulta una columna de rutas, un archivo una columna de
+            vectores o el vector no tiene la dimensión de la columna.
         UnknownVectorMetricError: si la métrica no existe.
         LoaderError: si el archivo de la consulta no existe o sale de los directorios
             permitidos.
@@ -187,16 +202,24 @@ def similarity_search(
     table = tables[source.name.lower()]
     settings = table.similarity_index(index.name).settings
     options = {name.lower(): value for name, value in statement.options.items()}
-    query_path = resolve_user_file(query, config)
+    field = table.schema.field_of(index.column)
+    if field.type is FieldType.VECTOR:
+        vector = _vector_query(query, field)
+        resolved: SimilarityQuery = vector
+        written = _abbreviated(vector)
+        media = None
+    else:
+        path = resolve_user_file(_file_query(query, field), config)
+        resolved, written, media = path, str(query), media_kind_of(path)
     return SimilaritySearch(
         table=table,
         reference=source.reference,
         column=index.column,
         index_name=index.name,
         method=index.method,
-        query=query,
-        query_path=query_path,
-        media=media_kind_of(query_path),
+        query=resolved,
+        written=written,
+        media=media,
         k=k,
         metric=_metric(options, settings.metric),
         effort=_effort(options, settings.kind),
@@ -243,35 +266,70 @@ def _single_condition(statement: SelectStatement, found: list[FunctionCall]) -> 
     return condition
 
 
-def _arguments(condition: FunctionCall) -> tuple[ColumnRef | None, str, int]:
-    """La columna (si se nombra), la ruta de la consulta y `k`."""
+def _arguments(condition: FunctionCall) -> tuple[ColumnRef | None, str | tuple[float, ...], int]:
+    """La columna (si se nombra), la consulta —la ruta de un archivo o un vector— y `k`."""
     arguments = condition.arguments
     keywords = {name.lower(): value for name, value in condition.keyword_arguments.items()}
     unknown = sorted(set(keywords) - {K_ARGUMENT})
     shape_is_wrong = len(arguments) not in (QUERY_ONLY, COLUMN_AND_QUERY)
     if shape_is_wrong or unknown or K_ARGUMENT not in keywords:
         raise SimilaritySearchError(
-            "SIMILAR_TO recibe el archivo de la consulta y cuántas filas devolver: "
-            "SIMILAR_TO('foto.jpg', k = 10), o SIMILAR_TO(ruta, 'foto.jpg', k = 10)"
+            "SIMILAR_TO recibe la consulta —un archivo o un vector— y cuántas filas devolver: "
+            "SIMILAR_TO('foto.jpg', k = 10), SIMILAR_TO(ruta, 'foto.jpg', k = 10) o "
+            "SIMILAR_TO(emb, [0.1, 0.2], k = 10)"
         )
     column = None
     if len(arguments) == COLUMN_AND_QUERY:
         if not isinstance(arguments[0], ColumnRef):
             raise SimilaritySearchError(
-                f"el primer de dos argumentos de SIMILAR_TO es la columna de las rutas, no "
-                f"'{describe_expression(arguments[0])}'"
+                "el primer de dos argumentos de SIMILAR_TO es la columna de las rutas o de los "
+                f"vectores, no '{describe_expression(arguments[0])}'"
             )
         column = arguments[0]
     query = constant_value(arguments[-1])
-    if not isinstance(query, str):
+    if not isinstance(query, str | tuple):
         raise SimilaritySearchError(
-            "la consulta de SIMILAR_TO es la ruta de un archivo, como 'foto.jpg', y es "
-            f"'{describe_expression(arguments[-1])}'"
+            "la consulta de SIMILAR_TO es la ruta de un archivo, como 'foto.jpg', o un vector, "
+            f"como [0.1, 0.2], y es '{describe_expression(arguments[-1])}'"
         )
     k = constant_value(keywords[K_ARGUMENT])
     if not is_number(k) or isinstance(k, bool) or k != int(k) or k < 1:
         raise SimilaritySearchError(f"k es cuántas filas devolver, un entero positivo, y es {k!r}")
     return column, query, int(k)
+
+
+def _vector_query(query: str | tuple[float, ...], field: Field) -> tuple[float, ...]:
+    """El vector con que se consulta una columna `VECTOR(n)`, de su misma dimensión."""
+    if not isinstance(query, tuple):
+        raise SimilaritySearchError(
+            f"la columna '{field.name}' es VECTOR({field.length}): SIMILAR_TO se consulta con "
+            f"un vector, como SIMILAR_TO({field.name}, [0.1, 0.2], k = 10) o con un parámetro "
+            "$1, no con un archivo"
+        )
+    if len(query) != field.length:
+        raise SimilaritySearchError(
+            f"el vector de la consulta tiene dimensión {len(query)} y la columna "
+            f"'{field.name}' es VECTOR({field.length})"
+        )
+    return query
+
+
+def _file_query(query: str | tuple[float, ...], field: Field) -> str:
+    """La ruta con que se consulta una columna de rutas de archivos."""
+    if not isinstance(query, str):
+        raise SimilaritySearchError(
+            f"la columna '{field.name}' guarda la ruta de cada imagen o audio: SIMILAR_TO se "
+            "consulta con la ruta de otro archivo, como 'foto.jpg', no con un vector"
+        )
+    return query
+
+
+def _abbreviated(vector: tuple[float, ...]) -> str:
+    """El vector en SQL con sus primeros componentes, y su dimensión si no caben todos."""
+    if len(vector) <= SHOWN_VECTOR_COMPONENTS:
+        return describe_value(vector)
+    shown = ", ".join(map(repr, vector[:SHOWN_VECTOR_COMPONENTS]))
+    return f"[{shown}, …] ({len(vector)} dimensiones)"
 
 
 def _index_method(chosen: SearchMethod | None) -> IndexType | None:
@@ -317,7 +375,8 @@ def _searched_index(
         table = statement.source.name
         raise SimilaritySearchError(
             f"no hay un índice{asked} de similitud que responda este SIMILAR_TO; créalo sobre "
-            f"la columna de las rutas, como CREATE INDEX ON {table} USING HNSW (ruta)"
+            f"la columna de las rutas o de los vectores, como CREATE INDEX ON {table} USING "
+            "HNSW (columna)"
         )
     names = ", ".join(
         f"{index.name} ({index.method.value} en {index.column})" for _, index in usable

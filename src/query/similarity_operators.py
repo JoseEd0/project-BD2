@@ -1,8 +1,9 @@
 """El camino de acceso de una búsqueda por similitud: `VectorSearchScan`.
 
-Sustituye al recorrido cuando el WHERE tiene un `SIMILAR_TO`. Extrae y cuantiza el archivo
-de la consulta, busca en el índice HNSW o IVF y entrega las k filas más parecidas con su
-puntaje como una columna más, virtual, que `SIMILARITY_SCORE()` lee, de mayor a menor.
+Sustituye al recorrido cuando el WHERE tiene un `SIMILAR_TO`. Lleva la consulta a un vector
+—extrae y cuantiza el archivo, o toma el vector tal cual—, busca en el índice HNSW o IVF y
+entrega las k filas más parecidas con su puntaje como una columna más, virtual, que
+`SIMILARITY_SCORE()` lee, de mayor a menor.
 
 Si el resto del WHERE filtra la misma tabla, el filtro va **antes**: sus filas son las
 únicas que la búsqueda puede devolver, así que la consulta da las k más parecidas que lo
@@ -17,7 +18,6 @@ from collections.abc import Iterator
 from itertools import tee
 
 from index.similarity import SimilarityIndex, SimilarityResult
-from query.comparison import describe_value
 from query.expressions import ColumnSlot, ExpressionEvaluator, RowLayout, describe_expression
 from query.operators import TableOperator, internal_schema
 from query.plan import PlanNode
@@ -35,8 +35,8 @@ EFFORT_NAMES = {IndexType.HNSW: "ef_search", IndexType.IVF: "probes"}
 
 
 class VectorSearchScan(TableOperator):
-    """Las k filas más parecidas al archivo de la consulta, de mayor a menor puntaje, cada
-    una con su puntaje al final.
+    """Las k filas más parecidas a la consulta, de mayor a menor puntaje, cada una con su
+    puntaje al final.
 
     `prefilter` es el acceso y la condición del resto del WHERE sobre esta tabla, si la
     hay: la búsqueda solo puede devolver sus filas.
@@ -76,7 +76,7 @@ class VectorSearchScan(TableOperator):
     def _found(self) -> SimilarityResult:
         search = self._search
         self._result = self._index().similar(
-            search.query_path, search.k, search.metric, self._allowed(), search.effort
+            search.query, search.k, search.metric, self._allowed(), search.effort
         )
         return self._result
 
@@ -108,7 +108,7 @@ class VectorSearchScan(TableOperator):
         effort = EFFORT_NAMES[search.method]
         chosen = "el del índice" if search.effort is None else str(search.effort)
         detail = (
-            f"{self._table.name}.{search.column} SIMILAR_TO {describe_value(search.query)} · "
+            f"{self._table.name}.{search.column} SIMILAR_TO {search.described_query} · "
             f"k={search.k} · {search.method.value} {search.metric.value} · {effort} {chosen} "
             f"(índice {search.index_name})"
         )

@@ -103,9 +103,7 @@ def material(tmp_path: Path) -> Path:
 def build(
     paths: CorpusPaths, settings: CorpusSettings, network: Network, material: Path
 ) -> dict[str, object]:
-    return build_corpus(
-        paths, settings, [material], network.harvest_client(), network.pdf_client()
-    )
+    return build_corpus(paths, settings, [material], network.harvest_client(), network.pdf_client())
 
 
 def rows(path: Path) -> list[dict[str, object]]:

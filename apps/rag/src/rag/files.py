@@ -1,6 +1,7 @@
-"""Escritura atómica y huella de los archivos del corpus.
+"""Escritura atómica de los archivos del corpus y huella de un texto.
 
-Todo se escribe primero en `<nombre>.parcial` y se renombra al terminar: una corrida
+Todo se escribe primero en `<nombre>.parcial` (el sufijo de `appkit.download`) y se
+renombra al terminar: una corrida
 cortada deja el archivo anterior o ninguno, nunca uno a medias que la siguiente tome por
 completo.
 """
@@ -12,9 +13,9 @@ import json
 from collections.abc import Iterable, Iterator
 from pathlib import Path
 
-PARTIAL_SUFFIX = ".parcial"
+from appkit.download import PARTIAL_SUFFIX
+
 ENCODING = "utf-8"
-HASH_BLOCK_BYTES = 1024 * 1024
 
 
 def write_bytes_atomically(path: Path, content: bytes) -> None:
@@ -43,14 +44,6 @@ def read_jsonl(path: Path) -> Iterator[dict[str, object]]:
         for line in lines:
             if line.strip():
                 yield json.loads(line)
-
-
-def sha256_of_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as content:
-        for block in iter(lambda: content.read(HASH_BLOCK_BYTES), b""):
-            digest.update(block)
-    return digest.hexdigest()
 
 
 def sha256_of_text(text: str) -> str:

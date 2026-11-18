@@ -9,7 +9,7 @@ propio puerto y con su propia identidad visual.
 ```
 apps/
   client/          minigestor_client: cliente tipado del API del gestor; openapi/engine.json
-  kit/             appkit: configuración, logs, salud, errores y descargas verificadas
+  kit/             appkit: configuración, logs, trazas, salud, errores, migraciones y descargas
   shop/            tienda con recomendaciones (opción B): por ahora, su dataset
   faces/           rostros (opción D): detección con YuNet, alineación y embedding con SFace
   web-kit/         @minigestor/web-kit: lógica sin estilos que comparten las interfaces
@@ -29,6 +29,20 @@ apps/
 Las interfaces comparten lógica (cliente tipado, salud, `Server-Timing`, tema, PWA) a través
 del [kit web](web-kit/README.md), nunca apariencia. Son proyectos npm propios, fuera del
 espacio de trabajo de uv.
+
+## Hablar con el gestor
+
+Un servicio usa el gestor como una app usa PostgreSQL: con un driver y una clave.
+
+- [`client/`](client/README.md) (`minigestor_client`) es ese driver: síncrono y asíncrono,
+  con parámetros `$n`, vectores y puntos, transacciones, carga masiva por NDJSON, consultas
+  multimedia, errores tipados y reintentos solo de lo que no escribe. Lo prueban tests de
+  contrato contra el API real del gestor (`tests/client/`) y contra su contrato versionado.
+- [`kit/`](kit/README.md) (`appkit`) arma la aplicación FastAPI del servicio con
+  `create_service_app`: configuración del entorno que falla al arrancar si falta algo, logs
+  JSON con la forma de los del gestor, `X-Request-ID` de punta a punta y `Server-Timing`,
+  errores uniformes, `/health` y `/ready`, y migraciones `CREATE … IF NOT EXISTS` al arrancar
+  con su propia clave `admin`.
 
 ## Reglas
 

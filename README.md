@@ -89,6 +89,7 @@ operador lleva las filas que entregó y el tiempo que tardó.
 | Bag of visual/audio words con TF-IDF | vocabulario con k-means de FAISS sobre una muestra de reservorio; TF-IDF de Sivic y Zisserman; conteos por fila en un heap file con hash extendible | [`multimedia`](src/multimedia/README.md#vocabulario-vocabularypy) |
 | Índices IVF y HNSW, tres métricas | FAISS (`IndexIVFFlat`, `IndexHNSWFlat`), con lápidas y reconstrucción al 30 %, filtros dentro de la búsqueda y búsqueda iterativa que no devuelve menos de k | [`index/vector`](src/index/vector/README.md), [`index/ivf`](src/index/ivf/README.md), [`index/hnsw`](src/index/hnsw/README.md) |
 | `SIMILAR_TO` en SQL | índice sobre la columna de las rutas, `VectorSearchScan` con el resto del WHERE como filtro previo, búsqueda exacta si la métrica no es la del índice | [`index/similarity`](src/index/similarity/README.md), [`sql`](src/sql/README.md#búsqueda-por-similitud) |
+| Columnas `VECTOR(n)` con HNSW e IVF | embeddings calculados fuera del gestor, como pgvector: `SIMILAR_TO(emb, $1, k = 10)`, mantenidos por `INSERT`, `UPDATE`, `DELETE` y `ROLLBACK`, y cargados desde CSV | [`index/similarity`](src/index/similarity/README.md#columnas-vectorn), [`sql`](src/sql/README.md#búsqueda-por-similitud) |
 | Interfaz, panel de mapa, páginas de texto y multimedia | cuatro paneles visibles a la vez; mapa con Leaflet; TF-IDF y BM25 lado a lado con los términos resaltados; dos `SIMILAR_TO` lado a lado con su galería | [`frontend`](frontend/README.md) |
 | Comparación experimental | tres experimentos medidos, con resultados crudos y gráficas | [`benchmarks`](benchmarks/README.md) |
 
@@ -111,7 +112,7 @@ src/                 raíz de importación: un paquete por módulo del motor
     vector/          métricas, búsqueda exacta y lo común a los índices de vectores
     ivf/             IVF sobre FAISS
     hnsw/            HNSW sobre FAISS
-    similarity/      HNSW o IVF sobre la columna de las rutas: lo que responde SIMILAR_TO
+    similarity/      HNSW o IVF sobre rutas o VECTOR(n): lo que responde SIMILAR_TO
   external/          algoritmos externos: sort/, hash/ y loop/
   spatial/           geometría y métricas de distancia; no depende de ningún otro paquete
   text/              analizador de texto de documentos y consultas; stopwords en stopwords/
@@ -167,7 +168,7 @@ proyecto:
 | [`src/index/vector/`](src/index/vector/) | métricas, búsqueda exacta, filtros y persistencia de los índices de vectores | [README](src/index/vector/README.md) |
 | [`src/index/ivf/`](src/index/ivf/) | IVF sobre FAISS | [README](src/index/ivf/README.md) |
 | [`src/index/hnsw/`](src/index/hnsw/) | HNSW sobre FAISS | [README](src/index/hnsw/README.md) |
-| [`src/index/similarity/`](src/index/similarity/) | el índice que crea `CREATE INDEX ... USING HNSW` o `USING IVF` sobre la ruta | [README](src/index/similarity/README.md) |
+| [`src/index/similarity/`](src/index/similarity/) | el índice que crea `CREATE INDEX ... USING HNSW` o `USING IVF` sobre la ruta o sobre una columna `VECTOR(n)` | [README](src/index/similarity/README.md) |
 | [`src/multimedia/`](src/multimedia/) | `ExtractFeatures` (SIFT y MFCC), vocabulario, TF-IDF y almacén de características | [README](src/multimedia/README.md) |
 | [`src/external/`](src/external/) | ordenamiento, hashing y bucles anidados externos | [README](src/external/README.md) |
 | [`src/query/`](src/query/) | catálogo, planificador, ejecutor | [README](src/query/README.md) |
@@ -286,7 +287,7 @@ npm --prefix frontend run dev
 npm --prefix apps/web run dev
 ```
 
-El dataset carga unas 33 000 filas en nueve tablas, **cada una con una organización física
+El dataset carga unas 34 000 filas en diez tablas, **cada una con una organización física
 o un índice distinto**, para que las diferencias entre estructuras se vean en la interfaz.
 Los detalles están en [`demos/README.md`](demos/README.md).
 
@@ -447,6 +448,9 @@ BENCH_POSTGRES_DSN="host=127.0.0.1 port=55432 dbname=minigestor_bench user=postg
     .venv/bin/python -m benchmarks.multimedia_benchmark --images data/datasets/abo \
     --audio data/datasets/speech_commands --sizes 1000 10000 100000
 
+# columnas VECTOR(384): HNSW e IVF por SQL (ver benchmarks/README.md §6)
+.venv/bin/python -m benchmarks.vector_benchmark --sizes 1000 10000 100000
+
 # velocidad del analizador de texto, sobre texto real en español
 .venv/bin/python -m benchmarks.text_analyzer_benchmark --repetitions 5 \
     --input Proyecto_Integrador_BD2.md docs/latex/informe/*.tex
@@ -579,6 +583,23 @@ En la interfaz, la página **Multimedia** recibe el archivo de la consulta (arra
 una fila de la tabla) y pone dos `SIMILAR_TO` lado a lado —HNSW contra IVF, o coseno contra
 euclidiana—, cada uno con su SQL, su plan y una galería con miniaturas o reproductores
 ([`frontend/README.md`](frontend/README.md#multimedia)).
+
+### Columnas `VECTOR(n)`: embeddings
+
+```sql
+CREATE TABLE fragmentos (id INT PRIMARY KEY, tema VARCHAR(12), embedding VECTOR(384));
+CREATE INDEX idx_emb ON fragmentos USING HNSW (embedding) WITH (metric = 'cosine');
+
+-- el vector como parámetro ($1, una lista JSON en POST /query) o como literal [0.1, ...]
+SELECT id, tema, SIMILARITY_SCORE() AS score FROM fragmentos
+    WHERE SIMILAR_TO(embedding, $1, k = 10) AND tema <> 'deporte';
+```
+
+Es lo que pgvector agrega a PostgreSQL: los vectores de la columna son la fuente de verdad,
+sin vocabulario ni extracción, y la consulta es el mismo `VectorSearchScan`. La demo trae la
+tabla `fragmentos` con un `VECTOR(16)` y los atajos del grupo *Vectores*; las medidas con
+100 000 vectores de 384 dimensiones están en
+[`benchmarks/README.md`](benchmarks/README.md#6-columnas-vectorn--hnsw-e-ivf-por-sql).
 
 ### Desde Python
 

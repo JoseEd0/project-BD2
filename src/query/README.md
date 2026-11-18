@@ -512,7 +512,7 @@ reconocer el `ORDER BY` del puntaje— vive una sola vez en `scored_search.py`:
 | Archivo | Qué hace |
 |---|---|
 | `scored_search.py` | lo común a `MATCH` y `SIMILAR_TO`: la condición, el puntaje y su orden |
-| `similarity_search.py` | reconoce el `SIMILAR_TO` del `WHERE`, elige el índice y la métrica, resuelve el archivo y rechaza lo que no se puede responder |
+| `similarity_search.py` | reconoce el `SIMILAR_TO` del `WHERE`, elige el índice y la métrica, resuelve el archivo o comprueba la dimensión del vector y rechaza lo que no se puede responder |
 | `similarity_operators.py` | `VectorSearchScan`, el camino de acceso que entrega las k filas más parecidas con su puntaje |
 
 ```sql
@@ -530,16 +530,25 @@ SELECT titulo, SIMILARITY_SCORE() AS score FROM imagenes
   lo hay), y la búsqueda solo puede devolver esas filas: la consulta da las k más parecidas
   que lo cumplen, no k menos las que un filtro descarta después. El plan muestra ese acceso
   como hijo. Con un `JOIN`, o con una condición sobre el puntaje, se aplican después.
+  De cada fila candidata se decodifican solo las columnas que el filtro nombra: con un
+  `VECTOR(384)` en la fila, decodificarla entera era casi todo el costo (ver
+  [`benchmarks/README.md`](../../benchmarks/README.md#antes-de-medir-el-filtro-costaba-185-ms)).
+  Las filas se siguen leyendo del heap aunque un índice ya garantice el filtro.
 - **Métrica distinta a la del índice:** el índice se construyó para ordenar con la suya, así
   que se compara contra todas las filas y el plan lo dice. pgvector hace lo mismo.
 - **No hay búsqueda sin índice.** Extraer las características de cada fila en cada consulta
   sería absurdo; sin índice, el error dice el `CREATE INDEX` que falta.
 - `ORDER BY score DESC` no reordena: es el orden en que el acceso ya entrega las filas.
+- **Sobre una columna `VECTOR(n)`** la consulta es un vector, literal o parámetro:
+  `SIMILAR_TO(emb, $1, k = 10)`. Tiene que tener la dimensión de la columna, y un archivo
+  ahí, o un vector sobre una columna de rutas, es un error antes de leer filas. El plan lo
+  muestra abreviado (`[0.1, 0.2, 0.3, 0.4, …] (384 dimensiones)`) y no hay extracción.
 
-Tras ejecutarse, el plan dice cuánto tardó extraer la consulta, cuántas distancias se
+Tras ejecutarse, el plan dice cuánto tardó extraer la consulta (si era un archivo), cuántas distancias se
 calcularon, cuántas filas dejó el filtro y, si las hubo, las pasadas extra o la búsqueda
 exacta y por qué. La respuesta lleva en `similarity` la tabla, la columna, el índice, la
-métrica y `k`, para que la interfaz pinte la galería.
+métrica y `k`, para que la interfaz pinte la galería; con un vector no hay archivos que
+pintar y `similarity` va vacío.
 
 ## Motor (`engine.py`)
 
@@ -549,9 +558,10 @@ Ejecuta `CREATE`/`DROP TABLE`, `CREATE`/`DROP INDEX`, `INSERT`, `UPDATE`, `DELET
 `EXPLAIN`, también la parte de ese tiempo que se fue en planificar (`planning_ms`).
 
 Al cargar un CSV (`loader.py`) el tipo de cada columna se deduce de todos sus valores:
-entero, real, fecha ISO, booleano (`true`/`false`), punto (`POINT(lat, lon)`) o texto, y
-una celda vacía es NULL. Una columna toma el tipo que admite todo lo que trae; si mezcla
-tipos que no conviven, es texto. Una columna de texto cuyo valor más largo cabe en
+entero, real, fecha ISO, booleano (`true`/`false`), punto (`POINT(lat, lon)`), vector
+(`[0.1, -0.2, 3e-2]`, que da una `VECTOR(n)` si todas las filas tienen la misma dimensión)
+o texto, y una celda vacía es NULL. Una columna toma el tipo que admite todo lo que trae; si
+mezcla tipos que no conviven, o vectores de dimensiones distintas, es texto. Una columna de texto cuyo valor más largo cabe en
 `inline_string_limit` bytes (256 por omisión, en `EngineConfig`) es un `VARCHAR` con un
 poco de margen; si alguno pasa de ahí, es `TEXT`. Ningún valor se recorta.
 

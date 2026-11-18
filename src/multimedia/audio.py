@@ -101,6 +101,20 @@ def audio_duration(path: Path) -> float:
         raise _unreadable(path, error) from error
 
 
+def check_audio(path: Path, config: EngineConfig, fragment: TemporalFragment | None) -> None:
+    """Lo que `extract_mfcc` rechazaría del audio de `path`, leyendo solo su cabecera.
+
+    Raises:
+        UnreadableMediaError: si el archivo no se puede leer o no es un audio.
+        FragmentOutOfRangeError: si `fragment` empieza después del final del audio.
+    """
+    try:
+        with soundfile.SoundFile(path) as sound:
+            _frame_range(fragment, config, sound.samplerate, sound.frames, path.name)
+    except (soundfile.SoundFileError, OSError) as error:
+        raise _unreadable(path, error) from error
+
+
 def describe_fragment(
     audio: DecodedAudio, fragment: TemporalFragment | None, config: EngineConfig
 ) -> Descriptors:

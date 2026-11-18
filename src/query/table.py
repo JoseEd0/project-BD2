@@ -6,7 +6,7 @@ coherentes con los datos: si una fila entra o sale, todos sus índices se entera
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence, Set
 from dataclasses import dataclass, replace
 from itertools import tee
 from math import ceil
@@ -223,10 +223,10 @@ class Table:
         self._store(row)
 
     def insert_all(self, rows: Sequence[Record], changes: RowChanges) -> None:
-        """Inserta las filas. Los valores y las claves se comprueban antes de escribir la
-        primera. Cada fila entra en la tabla y en todos sus índices o en ninguno; si una
-        falla a mitad, las anteriores ya están avisadas en `changes`, y deshacerlas es de
-        quien lleva el registro.
+        """Inserta las filas. Los valores, las claves y lo que los índices pueden rechazar
+        de antemano se comprueban antes de escribir la primera. Cada fila entra en la tabla
+        y en todos sus índices o en ninguno; si una falla a mitad, las anteriores ya están
+        avisadas en `changes`, y deshacerlas es de quien lleva el registro.
 
         Raises:
             DuplicatePrimaryKeyError: si una clave ya existe o se repite entre las filas.
@@ -253,6 +253,7 @@ class Table:
                 las filas; su `position` dice cuál.
         """
         self._reject_repeated_values(rows)
+        self._check_new_rows(rows)
         for row in rows:
             self._store(row)
             changes.inserted(row)
@@ -440,9 +441,9 @@ class Table:
     ) -> int:
         """Reemplaza las filas que cumplen el predicado y devuelve cuántas.
 
-        Las filas nuevas se calculan y sus claves se comprueban antes de escribir la
-        primera: un valor inválido en la fila mil no deja cambiadas las novecientas noventa
-        y nueve anteriores. Si aun así un
+        Las filas nuevas se calculan, y sus claves y lo que los índices pueden rechazar de
+        antemano se comprueban, antes de escribir la primera: un valor inválido en la fila
+        mil no deja cambiadas las novecientas noventa y nueve anteriores. Si aun así un
         índice rechaza una fila a mitad, esa fila queda como estaba y las anteriores ya
         están avisadas en `changes`, como en `insert_all`.
 
@@ -460,6 +461,7 @@ class Table:
         victims = self._matching(candidates, matches)
         replacements = [self._rows.normalized(transform(row)) for _, _, row in victims]
         moving = self._rows_changing_key([row for _, _, row in victims], replacements)
+        self._check_replacements([row for _, _, row in victims], replacements, set(moving))
         for position, (address, record, row) in enumerate(victims):
             if position not in moving:
                 self._update_one(address, record, row, replacements[position])
@@ -729,6 +731,22 @@ class Table:
         for column in self._unique_columns():
             incoming = [row[column.position] for row in rows]
             self._changing(column, [_NO_ROW] * len(rows), incoming)
+
+    def _check_new_rows(self, rows: Sequence[Record]) -> None:
+        """Lo que algún índice rechazaría de unas filas nuevas, antes de escribir ninguna."""
+        for row in rows:
+            for index in self._indexes.values():
+                index.check(row)
+
+    def _check_replacements(
+        self, current: Sequence[Record], replacements: Sequence[Record], moving: Set[int]
+    ) -> None:
+        """Lo mismo para las filas que reescribe un UPDATE: cada índice mira solo las que le
+        llegan, las que cambian su columna o su clave primaria."""
+        for position, (before, after) in enumerate(zip(current, replacements, strict=True)):
+            for index in self._indexes.values():
+                if position in moving or index.changes(before, after):
+                    index.check(after)
 
     def _rows_changing_key(
         self, current: Sequence[Record], replacements: Sequence[Record]

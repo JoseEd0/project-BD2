@@ -139,6 +139,12 @@ escribir—. Para esos, la garantía tiene dos pisos:
    implícita de la sentencia; dentro de `BEGIN`, deshaciendo solo esa sentencia (ver
    [`txn/`](../txn/README.md#una-sentencia-que-falla-no-deja-nada)).
 
+Lo que un índice puede saber sin escribir se comprueba antes, con los valores y las
+claves: `SecondaryIndex.check` recibe cada fila nueva (en un `UPDATE`, las que cambian su
+columna o su clave). Hoy solo el índice de similitud sobre rutas comprueba algo —que el
+archivo exista y que el tramo `#t=` empiece antes del final—, y así lo común no se escribe
+para deshacerse después.
+
 ## Tipos en las condiciones (`comparison.py`)
 
 Solo se comparan valores de la misma familia: número con número, texto con texto, fecha

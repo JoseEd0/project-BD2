@@ -25,7 +25,7 @@ from .errors import (
     UnreadableMediaError,
     UnsupportedMediaTypeError,
 )
-from .extraction import descriptor_dimension, extract_features
+from .extraction import check_media, descriptor_dimension, extract_features
 from .feature_store import FeatureStore, FeatureStoreBuild, FeatureStoreError
 from .fragments import MediaReference, TemporalFragment, parse_fragment, split_fragment
 from .image import SIFT_DESCRIPTOR_DIMENSION
@@ -83,6 +83,7 @@ __all__ = [
     "UnsupportedMediaTypeError",
     "Vocabulary",
     "audio_duration",
+    "check_media",
     "decode_audio",
     "decode_segments",
     "describe_fragment",

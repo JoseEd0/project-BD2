@@ -1,7 +1,9 @@
 """Una escritura sobre una columna de rutas con índice HNSW no deja nada si un archivo falla.
 
 Es el caso de la issue #115: un `INSERT` en autocommit con una ruta que no existe devolvía
-el error y dejaba la fila: el índice fallaba con la fila ya en el heap, y nadie la quitaba.
+el error y dejaba la fila. Lo que se sabe sin decodificar —que el archivo exista y que el
+tramo `#t=` empiece antes del final— se rechaza antes de escribir; lo que solo se sabe al
+extraer, deshaciendo lo escrito.
 """
 
 from collections.abc import Iterator
@@ -147,3 +149,14 @@ def test_an_update_whose_new_file_fails_keeps_the_old_paths(
     statement = f"UPDATE c SET ruta = '{clips[3]}' WHERE id >= 1"
 
     assert_failure_leaves_nothing(session, clips, statement, InjectedError, in_transaction)
+
+
+def test_an_unreadable_path_is_rejected_before_writing_even_without_a_session(
+    engine: Engine, clips: list[Path], media: Path
+):
+    before = state(engine, clips)
+
+    with pytest.raises(LoaderError):
+        engine.execute(f"INSERT INTO c VALUES (10, '{clips[3]}'), (11, '{media}/no-existe.wav')")
+
+    assert state(engine, clips) == before

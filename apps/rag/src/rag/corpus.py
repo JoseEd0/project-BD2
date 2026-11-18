@@ -21,6 +21,8 @@ import os
 from dataclasses import replace
 from pathlib import Path
 
+from appkit.download import DownloadError
+
 from .errors import CorpusError
 from .fetch import PoliteClient
 from .files import read_json
@@ -45,7 +47,7 @@ def main(arguments: list[str] | None = None) -> None:
     logging.getLogger(PYPDF_LOGGER).setLevel(logging.ERROR)
     try:
         options.run(options)
-    except CorpusError as error:
+    except (CorpusError, DownloadError) as error:
         parser.exit(1, f"error: {error}\n")
 
 

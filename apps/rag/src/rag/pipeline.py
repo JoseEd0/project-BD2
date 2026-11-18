@@ -26,6 +26,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TypeVar
 
+from appkit.download import DownloadError, sha256_of
+
 from .arxiv import ArxivRecord, harvest, in_scope, oai_set, pdf_url, select_papers
 from .chunking import chunk_pages
 from .course import (
@@ -37,13 +39,12 @@ from .course import (
     is_supported,
     markdown_sections,
 )
-from .errors import CorpusError, DownloadError, TextlessPdfError, UnreadablePdfError
+from .errors import CorpusError, TextlessPdfError, UnreadablePdfError
 from .extraction import extract_pages
 from .fetch import PoliteClient
 from .files import (
     ENCODING,
     read_json,
-    sha256_of_file,
     sha256_of_text,
     write_bytes_atomically,
     write_json,
@@ -332,7 +333,7 @@ def _copy_materials(materials: Sequence[Path], paths: CorpusPaths) -> list[Sourc
     for material in materials:
         description = _describe_material(material)
         target = paths.course_directory / material.name
-        if not target.exists() or sha256_of_file(target) != sha256_of_file(material):
+        if not target.exists() or sha256_of(target) != sha256_of(material):
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(material, target)
         documents.append(_course_document(description, target))
@@ -366,7 +367,7 @@ def _extract_all(
     settings: CorpusSettings,
     report: BuildReport,
 ) -> dict[str, Extracted]:
-    fingerprints = {document.paper_id: sha256_of_file(document.path) for document in documents}
+    fingerprints = {document.paper_id: sha256_of(document.path) for document in documents}
     cleaning = {"version": EXTRACTION_VERSION, **asdict(settings.cleaning)}
     outcomes: dict[str, dict[str, object]] = {}
     pending = []

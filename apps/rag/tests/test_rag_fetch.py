@@ -7,7 +7,7 @@ import urllib.request
 
 import pytest
 
-from rag.errors import DownloadError
+from appkit.download import DownloadError
 from rag.fetch import PoliteClient
 from rag.settings import HttpSettings
 

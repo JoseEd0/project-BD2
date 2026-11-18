@@ -7,7 +7,6 @@ que diga `Retry-After` y se reintenta. Un corte de la red también se reintenta;
 
 from __future__ import annotations
 
-import http.client
 import logging
 import time
 import urllib.error
@@ -16,13 +15,13 @@ from collections.abc import Callable
 from http import HTTPStatus
 from typing import Protocol
 
-from .errors import DownloadError
+from appkit.download import TRANSIENT_ERRORS, DownloadError
+
 from .settings import HttpSettings
 
 logger = logging.getLogger(__name__)
 
 RETRY_STATUSES = frozenset({HTTPStatus.TOO_MANY_REQUESTS, HTTPStatus.SERVICE_UNAVAILABLE})
-TRANSIENT_ERRORS = (urllib.error.URLError, http.client.HTTPException, ConnectionError, TimeoutError)
 
 
 class Response(Protocol):

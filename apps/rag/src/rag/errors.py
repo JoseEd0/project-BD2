@@ -9,10 +9,6 @@ class HarvestError(CorpusError):
     """El servidor OAI-PMH de arXiv respondió algo que no es una lista de registros."""
 
 
-class DownloadError(CorpusError):
-    """Una petición HTTP no entregó lo que se pidió, ni después de reintentar."""
-
-
 class UnreadablePdfError(CorpusError):
     """El PDF está dañado: pypdf no puede leer su estructura."""
 

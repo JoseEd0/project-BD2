@@ -1,0 +1,514 @@
+{
+  "name": "ingesta",
+  "parameters": {
+    "tamanos": [
+      1000,
+      10000,
+      50000
+    ],
+    "filas_por_lote": 1000,
+    "una_fila_por_peticion_hasta": 10000,
+    "repeticiones": 1,
+    "hilos_faiss": 1,
+    "servidor": "uvicorn en otro proceso, cliente httpx con conexión persistente",
+    "dimension": 384,
+    "mezcla": {
+      "grupos": 1000,
+      "dimension_intrinseca": 24,
+      "dispersion": 1.0,
+      "ruido": 0.5,
+      "semilla": 20261118
+    },
+    "hnsw": "WITH (metric = 'cosine')",
+    "puntos": "uniformes en el recuadro de Lima, R-Tree sobre la columna POINT",
+    "semilla_filas": 20261118,
+    "versiones": {
+      "httpx": "0.28.1",
+      "numpy": "2.5.5"
+    },
+    "maquina": {
+      "procesador": "Apple M4 Pro",
+      "nucleos": 12,
+      "sistema": "macOS-27.0.1-arm64-arm-64bit",
+      "python": "3.12.11",
+      "carga_media_1_min": 6.89
+    },
+    "carga_media_al_terminar": 2.98
+  },
+  "measurements": [
+    {
+      "technique": "INSERT con parámetros, una fila por petición",
+      "operation": "sin vector",
+      "dataset_size": 1000,
+      "milliseconds": 1465.9,
+      "extra": {
+        "filas_por_segundo": 682.2,
+        "peticiones": 1000
+      }
+    },
+    {
+      "technique": "INSERT con parámetros, una fila por petición",
+      "operation": "VECTOR(384), sin índice",
+      "dataset_size": 1000,
+      "milliseconds": 1677.7,
+      "extra": {
+        "filas_por_segundo": 596.1,
+        "peticiones": 1000
+      }
+    },
+    {
+      "technique": "INSERT con parámetros, una fila por petición",
+      "operation": "VECTOR(384), HNSW creado antes, tabla vacía",
+      "dataset_size": 1000,
+      "milliseconds": 1794.8,
+      "extra": {
+        "filas_por_segundo": 557.2,
+        "peticiones": 1000
+      }
+    },
+    {
+      "technique": "INSERT con parámetros, un lote por petición",
+      "operation": "sin vector",
+      "dataset_size": 1000,
+      "milliseconds": 226.8,
+      "extra": {
+        "filas_por_segundo": 4410.0,
+        "peticiones": 1
+      }
+    },
+    {
+      "technique": "INSERT con parámetros, un lote por petición",
+      "operation": "VECTOR(384), sin índice",
+      "dataset_size": 1000,
+      "milliseconds": 473.1,
+      "extra": {
+        "filas_por_segundo": 2113.9,
+        "peticiones": 1
+      }
+    },
+    {
+      "technique": "INSERT con parámetros, un lote por petición",
+      "operation": "VECTOR(384), HNSW creado antes, tabla vacía",
+      "dataset_size": 1000,
+      "milliseconds": 531.0,
+      "extra": {
+        "filas_por_segundo": 1883.4,
+        "peticiones": 1
+      }
+    },
+    {
+      "technique": "NDJSON por lotes (/tables/{name}/rows)",
+      "operation": "sin vector",
+      "dataset_size": 1000,
+      "milliseconds": 196.0,
+      "extra": {
+        "filas_por_segundo": 5103.0,
+        "peticiones": 1,
+        "lotes": 1,
+        "servidor_ms": 194.6,
+        "indices_diferidos": 0
+      }
+    },
+    {
+      "technique": "NDJSON por lotes (/tables/{name}/rows)",
+      "operation": "VECTOR(384), sin índice",
+      "dataset_size": 1000,
+      "milliseconds": 407.4,
+      "extra": {
+        "filas_por_segundo": 2454.7,
+        "peticiones": 1,
+        "lotes": 1,
+        "servidor_ms": 406.1,
+        "indices_diferidos": 0
+      }
+    },
+    {
+      "technique": "NDJSON por lotes (/tables/{name}/rows)",
+      "operation": "VECTOR(384), HNSW creado antes, tabla vacía",
+      "dataset_size": 1000,
+      "milliseconds": 462.8,
+      "extra": {
+        "filas_por_segundo": 2160.8,
+        "peticiones": 1,
+        "lotes": 1,
+        "servidor_ms": 461.3,
+        "indices_diferidos": 1
+      }
+    },
+    {
+      "technique": "NDJSON por lotes (/tables/{name}/rows)",
+      "operation": "VECTOR(384), HNSW creado antes, tabla con filas",
+      "dataset_size": 1000,
+      "milliseconds": 473.7,
+      "extra": {
+        "filas_por_segundo": 2111.1,
+        "peticiones": 1,
+        "lotes": 1,
+        "servidor_ms": 472.5,
+        "indices_diferidos": 0
+      }
+    },
+    {
+      "technique": "NDJSON por lotes (/tables/{name}/rows)",
+      "operation": "VECTOR(384), HNSW creado después",
+      "dataset_size": 1000,
+      "milliseconds": 460.5,
+      "extra": {
+        "filas_por_segundo": 2171.4,
+        "carga_ms": 405.0,
+        "indice_ms": 55.5,
+        "peticiones": 1,
+        "lotes": 1,
+        "servidor_ms": 403.7,
+        "indices_diferidos": 0
+      }
+    },
+    {
+      "technique": "NDJSON por lotes (/tables/{name}/rows)",
+      "operation": "POINT, R-Tree creado antes, tabla vacía",
+      "dataset_size": 1000,
+      "milliseconds": 207.2,
+      "extra": {
+        "filas_por_segundo": 4827.1,
+        "peticiones": 1,
+        "lotes": 1,
+        "servidor_ms": 206.0,
+        "indices_diferidos": 1
+      }
+    },
+    {
+      "technique": "NDJSON por lotes (/tables/{name}/rows)",
+      "operation": "POINT, R-Tree creado antes, tabla con filas",
+      "dataset_size": 1000,
+      "milliseconds": 358.5,
+      "extra": {
+        "filas_por_segundo": 2789.6,
+        "peticiones": 1,
+        "lotes": 1,
+        "servidor_ms": 357.4,
+        "indices_diferidos": 0
+      }
+    },
+    {
+      "technique": "NDJSON por lotes (/tables/{name}/rows)",
+      "operation": "POINT, R-Tree creado después",
+      "dataset_size": 1000,
+      "milliseconds": 221.5,
+      "extra": {
+        "filas_por_segundo": 4513.7,
+        "carga_ms": 216.7,
+        "indice_ms": 4.9,
+        "peticiones": 1,
+        "lotes": 1,
+        "servidor_ms": 215.5,
+        "indices_diferidos": 0
+      }
+    },
+    {
+      "technique": "INSERT con parámetros, una fila por petición",
+      "operation": "sin vector",
+      "dataset_size": 10000,
+      "milliseconds": 15386.4,
+      "extra": {
+        "filas_por_segundo": 649.9,
+        "peticiones": 10000
+      }
+    },
+    {
+      "technique": "INSERT con parámetros, una fila por petición",
+      "operation": "VECTOR(384), sin índice",
+      "dataset_size": 10000,
+      "milliseconds": 18498.3,
+      "extra": {
+        "filas_por_segundo": 540.6,
+        "peticiones": 10000
+      }
+    },
+    {
+      "technique": "INSERT con parámetros, una fila por petición",
+      "operation": "VECTOR(384), HNSW creado antes, tabla vacía",
+      "dataset_size": 10000,
+      "milliseconds": 20858.1,
+      "extra": {
+        "filas_por_segundo": 479.4,
+        "peticiones": 10000
+      }
+    },
+    {
+      "technique": "INSERT con parámetros, un lote por petición",
+      "operation": "sin vector",
+      "dataset_size": 10000,
+      "milliseconds": 3693.1,
+      "extra": {
+        "filas_por_segundo": 2707.8,
+        "peticiones": 10
+      }
+    },
+    {
+      "technique": "INSERT con parámetros, un lote por petición",
+      "operation": "VECTOR(384), sin índice",
+      "dataset_size": 10000,
+      "milliseconds": 6062.2,
+      "extra": {
+        "filas_por_segundo": 1649.6,
+        "peticiones": 10
+      }
+    },
+    {
+      "technique": "INSERT con parámetros, un lote por petición",
+      "operation": "VECTOR(384), HNSW creado antes, tabla vacía",
+      "dataset_size": 10000,
+      "milliseconds": 7430.7,
+      "extra": {
+        "filas_por_segundo": 1345.8,
+        "peticiones": 10
+      }
+    },
+    {
+      "technique": "NDJSON por lotes (/tables/{name}/rows)",
+      "operation": "sin vector",
+      "dataset_size": 10000,
+      "milliseconds": 3398.7,
+      "extra": {
+        "filas_por_segundo": 2942.3,
+        "peticiones": 1,
+        "lotes": 10,
+        "servidor_ms": 3397.4,
+        "indices_diferidos": 0
+      }
+    },
+    {
+      "technique": "NDJSON por lotes (/tables/{name}/rows)",
+      "operation": "VECTOR(384), sin índice",
+      "dataset_size": 10000,
+      "milliseconds": 4553.6,
+      "extra": {
+        "filas_por_segundo": 2196.1,
+        "peticiones": 1,
+        "lotes": 10,
+        "servidor_ms": 4552.4,
+        "indices_diferidos": 0
+      }
+    },
+    {
+      "technique": "NDJSON por lotes (/tables/{name}/rows)",
+      "operation": "VECTOR(384), HNSW creado antes, tabla vacía",
+      "dataset_size": 10000,
+      "milliseconds": 5453.7,
+      "extra": {
+        "filas_por_segundo": 1833.6,
+        "peticiones": 1,
+        "lotes": 10,
+        "servidor_ms": 5452.4,
+        "indices_diferidos": 1
+      }
+    },
+    {
+      "technique": "NDJSON por lotes (/tables/{name}/rows)",
+      "operation": "VECTOR(384), HNSW creado antes, tabla con filas",
+      "dataset_size": 10000,
+      "milliseconds": 5700.1,
+      "extra": {
+        "filas_por_segundo": 1754.4,
+        "peticiones": 1,
+        "lotes": 10,
+        "servidor_ms": 5698.9,
+        "indices_diferidos": 0
+      }
+    },
+    {
+      "technique": "NDJSON por lotes (/tables/{name}/rows)",
+      "operation": "VECTOR(384), HNSW creado después",
+      "dataset_size": 10000,
+      "milliseconds": 5403.0,
+      "extra": {
+        "filas_por_segundo": 1850.8,
+        "carga_ms": 4475.0,
+        "indice_ms": 928.0,
+        "peticiones": 1,
+        "lotes": 10,
+        "servidor_ms": 4473.5,
+        "indices_diferidos": 0
+      }
+    },
+    {
+      "technique": "NDJSON por lotes (/tables/{name}/rows)",
+      "operation": "POINT, R-Tree creado antes, tabla vacía",
+      "dataset_size": 10000,
+      "milliseconds": 3524.3,
+      "extra": {
+        "filas_por_segundo": 2837.4,
+        "peticiones": 1,
+        "lotes": 10,
+        "servidor_ms": 3523.0,
+        "indices_diferidos": 1
+      }
+    },
+    {
+      "technique": "NDJSON por lotes (/tables/{name}/rows)",
+      "operation": "POINT, R-Tree creado antes, tabla con filas",
+      "dataset_size": 10000,
+      "milliseconds": 5441.6,
+      "extra": {
+        "filas_por_segundo": 1837.7,
+        "peticiones": 1,
+        "lotes": 10,
+        "servidor_ms": 5440.3,
+        "indices_diferidos": 0
+      }
+    },
+    {
+      "technique": "NDJSON por lotes (/tables/{name}/rows)",
+      "operation": "POINT, R-Tree creado después",
+      "dataset_size": 10000,
+      "milliseconds": 3472.7,
+      "extra": {
+        "filas_por_segundo": 2879.6,
+        "carga_ms": 3430.4,
+        "indice_ms": 42.3,
+        "peticiones": 1,
+        "lotes": 10,
+        "servidor_ms": 3429.2,
+        "indices_diferidos": 0
+      }
+    },
+    {
+      "technique": "INSERT con parámetros, un lote por petición",
+      "operation": "sin vector",
+      "dataset_size": 50000,
+      "milliseconds": 21887.0,
+      "extra": {
+        "filas_por_segundo": 2284.5,
+        "peticiones": 50
+      }
+    },
+    {
+      "technique": "INSERT con parámetros, un lote por petición",
+      "operation": "VECTOR(384), sin índice",
+      "dataset_size": 50000,
+      "milliseconds": 34723.2,
+      "extra": {
+        "filas_por_segundo": 1440.0,
+        "peticiones": 50
+      }
+    },
+    {
+      "technique": "INSERT con parámetros, un lote por petición",
+      "operation": "VECTOR(384), HNSW creado antes, tabla vacía",
+      "dataset_size": 50000,
+      "milliseconds": 42003.7,
+      "extra": {
+        "filas_por_segundo": 1190.4,
+        "peticiones": 50
+      }
+    },
+    {
+      "technique": "NDJSON por lotes (/tables/{name}/rows)",
+      "operation": "sin vector",
+      "dataset_size": 50000,
+      "milliseconds": 20343.9,
+      "extra": {
+        "filas_por_segundo": 2457.7,
+        "peticiones": 1,
+        "lotes": 50,
+        "servidor_ms": 20342.8,
+        "indices_diferidos": 0
+      }
+    },
+    {
+      "technique": "NDJSON por lotes (/tables/{name}/rows)",
+      "operation": "VECTOR(384), sin índice",
+      "dataset_size": 50000,
+      "milliseconds": 26898.1,
+      "extra": {
+        "filas_por_segundo": 1858.9,
+        "peticiones": 1,
+        "lotes": 50,
+        "servidor_ms": 26897.0,
+        "indices_diferidos": 0
+      }
+    },
+    {
+      "technique": "NDJSON por lotes (/tables/{name}/rows)",
+      "operation": "VECTOR(384), HNSW creado antes, tabla vacía",
+      "dataset_size": 50000,
+      "milliseconds": 32690.3,
+      "extra": {
+        "filas_por_segundo": 1529.5,
+        "peticiones": 1,
+        "lotes": 50,
+        "servidor_ms": 32689.1,
+        "indices_diferidos": 1
+      }
+    },
+    {
+      "technique": "NDJSON por lotes (/tables/{name}/rows)",
+      "operation": "VECTOR(384), HNSW creado antes, tabla con filas",
+      "dataset_size": 50000,
+      "milliseconds": 34188.5,
+      "extra": {
+        "filas_por_segundo": 1462.5,
+        "peticiones": 1,
+        "lotes": 50,
+        "servidor_ms": 34187.3,
+        "indices_diferidos": 0
+      }
+    },
+    {
+      "technique": "NDJSON por lotes (/tables/{name}/rows)",
+      "operation": "VECTOR(384), HNSW creado después",
+      "dataset_size": 50000,
+      "milliseconds": 32827.2,
+      "extra": {
+        "filas_por_segundo": 1523.1,
+        "carga_ms": 26869.9,
+        "indice_ms": 5957.3,
+        "peticiones": 1,
+        "lotes": 50,
+        "servidor_ms": 26868.5,
+        "indices_diferidos": 0
+      }
+    },
+    {
+      "technique": "NDJSON por lotes (/tables/{name}/rows)",
+      "operation": "POINT, R-Tree creado antes, tabla vacía",
+      "dataset_size": 50000,
+      "milliseconds": 22061.0,
+      "extra": {
+        "filas_por_segundo": 2266.4,
+        "peticiones": 1,
+        "lotes": 50,
+        "servidor_ms": 22059.8,
+        "indices_diferidos": 1
+      }
+    },
+    {
+      "technique": "NDJSON por lotes (/tables/{name}/rows)",
+      "operation": "POINT, R-Tree creado antes, tabla con filas",
+      "dataset_size": 50000,
+      "milliseconds": 33135.4,
+      "extra": {
+        "filas_por_segundo": 1509.0,
+        "peticiones": 1,
+        "lotes": 50,
+        "servidor_ms": 33134.3,
+        "indices_diferidos": 0
+      }
+    },
+    {
+      "technique": "NDJSON por lotes (/tables/{name}/rows)",
+      "operation": "POINT, R-Tree creado después",
+      "dataset_size": 50000,
+      "milliseconds": 22040.2,
+      "extra": {
+        "filas_por_segundo": 2268.6,
+        "carga_ms": 21753.5,
+        "indice_ms": 286.8,
+        "peticiones": 1,
+        "lotes": 50,
+        "servidor_ms": 21752.3,
+        "indices_diferidos": 0
+      }
+    }
+  ]
+}

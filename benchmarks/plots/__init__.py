@@ -7,6 +7,7 @@ un experimento nuevo solo añade su módulo y lo suma aquí.
 from benchmarks.plots import (
     faces,
     indexes,
+    ingest,
     multimedia,
     segments,
     spatial,
@@ -25,4 +26,5 @@ FIGURES: tuple[Figure | BarFigure | CurveFigure | GalleryFigure, ...] = (
     *vectors.FIGURES,
     *faces.FIGURES,
     *segments.FIGURES,
+    *ingest.FIGURES,
 )

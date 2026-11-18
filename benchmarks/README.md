@@ -17,6 +17,8 @@ gráficas de [`figures/`](figures/) y todas las tablas de este documento.
 .venv/bin/python -m benchmarks.multimedia_benchmark --images data/datasets/abo \
     --audio data/datasets/speech_commands --sizes 1000 10000 100000 --repetitions 3
 .venv/bin/python -m benchmarks.vector_benchmark --sizes 1000 10000 100000
+.venv/bin/python -m benchmarks.faces_benchmark --lfw data/datasets/lfw/lfw \
+    --models data/models/faces --sides 500 1000 2000 4000 --sample 500 --threads 1
 .venv/bin/python -m benchmarks.plot              # redibuja todas las gráficas
 ```
 
@@ -106,6 +108,7 @@ docker compose --profile bench down       # apaga PostgreSQL
 | [3. Datos espaciales](#3-datos-espaciales--búsqueda-secuencial-vs-r-tree-vs-gist) | búsqueda secuencial vs R-Tree vs GiST de PostgreSQL | [radio](figures/espacial-radio.png), [k-NN](figures/espacial-knn.png), [índice](figures/espacial-indice.png), [nodos](figures/espacial-nodos.png) |
 | [4. Búsqueda de texto](#4-búsqueda-de-texto--tf-idf--coseno-vs-bm25-vs-gin) | TF-IDF + coseno vs BM25 vs GIN de PostgreSQL | [consultas](figures/texto-consultas.png), [relevancia](figures/texto-relevancia.png), [índice](figures/texto-indice.png) |
 | [5. Búsqueda por similitud](#5-búsqueda-por-similitud--ivf-vs-hnsw-y-euclidiana-vs-coseno) | IVF vs HNSW y euclidiana vs coseno, con FAISS, USearch y pgvector | [consultas](figures/multimedia-consulta.png), [curvas](figures/multimedia-curvas.png), [recall](figures/multimedia-recall.png), [clase](figures/multimedia-categoria.png), [características](figures/multimedia-caracteristicas.png), [índice](figures/multimedia-indice.png), [capas](figures/multimedia-capas.png), galerías de [imágenes](figures/multimedia-galeria-imagenes.png) y [audio](figures/multimedia-galeria-audio.png) |
+| [7. Reconocimiento facial](#7-reconocimiento-facial--latencia-del-pipeline-y-cobertura-en-lfw) | decodificar, detectar (YuNet) y embeber (SFace) según el tamaño de la foto; cobertura del detector en LFW | [latencia](figures/rostros-latencia.png) |
 
 **Cómo leer las gráficas.** Cada una es una fila de paneles, uno por operación, con el
 número de filas en horizontal y una línea por técnica. Los dos ejes son logarítmicos: los
@@ -1228,6 +1231,77 @@ grafo de FAISS no sale idéntico entre construcciones.
 Sin datasets que descargar ni PostgreSQL. `--dimension`, `--clusters`,
 `--intrinsic-dimension`, `--spread`, `--noise` y `--seed` cambian la colección;
 `--queries`, `--filter-queries`, `--repetitions`, `--ef-search` y `--probes`, la medida.
+
+## 7. Reconocimiento facial — latencia del pipeline y cobertura en LFW
+
+El servicio de rostros ([`apps/faces`](../apps/faces/README.md)) convierte cada foto en
+embeddings en tres etapas: **decodificar** (Pillow, con la orientación EXIF y los canales),
+**detectar** (llevar la foto a un lado de 320 a 640 px y correr YuNet) y **alinear y
+embeber** el rostro de mayor área (`alignCrop` y SFace). Se mide cada etapa por separado,
+foto por foto, con un hilo de OpenCV:
+
+- las **13 233 fotos de LFW** en su tamaño (250 x 250 px), que dan también la cobertura;
+- **500 de ellas** elegidas al azar (semilla 20261118), ampliadas a 500, 1 000, 2 000 y
+  4 000 px de lado y vueltas a codificar en JPEG de calidad 92, para ver el costo de una foto
+  de cámara. Ampliar y codificar no entra en el tiempo.
+
+![Rostros: tiempo de cada etapa por foto](figures/rostros-latencia.png)
+
+| Lado mayor | Fotos | Decodificar p50 / p95 | Detectar p50 / p95 | Alinear y embeber p50 / p95 | Total p50 / p95 |
+|---:|---:|---:|---:|---:|---:|
+| 250 px | 13 233 | 0,41 / 0,46 ms | 3,63 / 3,72 ms | 12,99 / 13,27 ms | 17,03 / 17,36 ms |
+| 500 px | 500 | 1,19 / 1,27 ms | 9,14 / 9,28 ms | 13,07 / 13,46 ms | 23,40 / 23,88 ms |
+| 1 000 px | 500 | 3,82 / 4,02 ms | 23,27 / 23,59 ms | 13,11 / 13,39 ms | 40,20 / 40,66 ms |
+| 2 000 px | 500 | 14,38 / 14,95 ms | 21,87 / 22,16 ms | 13,20 / 13,45 ms | 49,42 / 50,17 ms |
+| 4 000 px | 500 | 55,52 / 58,06 ms | 26,87 / 27,37 ms | 13,23 / 13,54 ms | 95,61 / 98,44 ms |
+
+| Cobertura de YuNet en LFW | Fotos |
+|---|---:|
+| con al menos un rostro | 13 221 (99,91 %) |
+| sin ningún rostro | 12 |
+| con más de un rostro | 1 033 (7,8 %) |
+
+### Conclusiones
+
+- **Embeber cuesta lo mismo con cualquier foto** (13,0 a 13,2 ms): SFace siempre recibe el
+  recorte alineado de 112 x 112. Con un rostro por foto es el piso del pipeline.
+- **Detectar deja de crecer pasados los 640 px**, porque YuNet ve siempre la foto reducida a
+  ese lado; de 500 a 1 000 px sube de 9 a 23 ms porque la red pasa de 500 a 640 px y se
+  suma la reducción. La primera versión reducía de una vez con `INTER_AREA`, que con un
+  factor fraccionario cae al camino lento de OpenCV: detectar en una foto de 4 000 px
+  tardaba 93,0 ms y en una de 2 000, 39,2. Reducir primero por el mayor factor entero y
+  después el resto lo dejó en 26,9 y 21,9 ms (el total de 4 000 px, de 161,9 a 95,6 ms),
+  con una diferencia media de un nivel de gris en la imagen reducida.
+- **Con fotos de 12 MP domina decodificar** (55 de 96 ms). Los cuadros de cámara del uso en
+  vivo son de 500 a 1 000 px: 23 a 40 ms por foto, por debajo de la meta de 100 ms del epic
+  antes de buscar en el índice.
+- **La dispersión es mínima:** el p95 queda a menos de un 5 % de la mediana al detectar, al
+  embeber y en el total, porque cada red hace siempre el mismo trabajo para un mismo tamaño
+  de entrada; decodificar varía algo más (12 % en las fotos de 250 px, que tardan menos de
+  medio milisegundo).
+- **YuNet encuentra rostro en el 99,91 % de LFW** con el umbral de confianza de OpenCV Zoo
+  (0,9). En el 7,8 % encuentra más de uno: son fotos de prensa con otras personas detrás.
+  La verificación de LFW tendrá que elegir el rostro del centro, no el de mayor área a
+  ciegas ni exigir uno solo.
+
+**Lo que esta medida no dice.** Es un hilo de un Apple M4 Pro (carga media 6,3 al empezar,
+con otros procesos en el equipo); con más hilos OpenCV reparte la red, y en el servidor de
+Docker la cifra será otra. Las fotos ampliadas no tienen más detalle que la original de
+250 px: miden el costo de su tamaño, no la precisión con fotos grandes. La exactitud de la
+verificación con los pares de LFW y el umbral del conjunto abierto se miden aparte (#92).
+
+### Reproducirlo
+
+```bash
+.venv/bin/python -m faces lfw --salida data/datasets/lfw       # 172 MiB, con su SHA-256
+.venv/bin/python -m faces models --salida data/models/faces    # YuNet y SFace, 37 MiB
+.venv/bin/python -m benchmarks.faces_benchmark --lfw data/datasets/lfw/lfw \
+    --models data/models/faces --sides 500 1000 2000 4000 --sample 500 --threads 1
+.venv/bin/python -m benchmarks.plot
+```
+
+La medida publicada tardó 6 min 30 s, casi 4 de ellos en las 13 233 fotos de LFW. `--warmup`
+cambia cuántas fotos de cada tamaño se procesan antes de medir (20) y `--seed`, la muestra.
 
 ## Gráficas
 

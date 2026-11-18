@@ -11,6 +11,7 @@ apps/
   client/          minigestor_client: cliente tipado del API del gestor; openapi/engine.json
   kit/             appkit: configuración, logs, salud, errores y descargas verificadas
   shop/            tienda con recomendaciones (opción B): por ahora, su dataset
+  faces/           rostros (opción D): detección con YuNet, alineación y embedding con SFace
   web-kit/         @minigestor/web-kit: lógica sin estilos que comparten las interfaces
     template/      plantilla de la interfaz de una app: Vite, React, Docker y nginx
   <app>/           el API de la aplicación (FastAPI), miembro del espacio de trabajo de uv
@@ -69,3 +70,6 @@ uv run pytest apps -q           # solo los tests de los servicios
 
 Los datos de cada servicio se bajan con su propio comando a la carpeta de datasets, que
 nunca se versiona; el de la tienda está en [`shop/README.md`](shop/README.md).
+
+Los tests de [`faces/`](faces/README.md) que corren los modelos los buscan en
+`FACES_MODELS_DIR`; sin la variable se saltan, y la CI la define y los baja antes.

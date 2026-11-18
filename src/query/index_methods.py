@@ -11,8 +11,10 @@ método es añadir una entrada aquí: ninguna otra pieza enumera los métodos qu
 | `HASH` | igualdad | las que caben en una clave, salvo POINT | — |
 | `RTREE` | espacial y un punto exacto | POINT | — |
 | `INVERTED` | búsqueda de texto (`MATCH`) | VARCHAR y TEXT | `idioma` |
-| `HNSW` | similitud (`SIMILAR_TO`) | rutas de archivos | `metric`, `m`, `ef_*`, `vocabulary` |
-| `IVF` | similitud (`SIMILAR_TO`) | rutas de archivos | `metric`, `lists`, `probes`, `vocabulary` |
+| `HNSW` | similitud | rutas y `VECTOR(n)` | `metric`, `m`, `ef_*`, `vocabulary` |
+| `IVF` | similitud | rutas y `VECTOR(n)` | `metric`, `lists`, `probes`, `vocabulary` |
+
+`vocabulary` solo vale sobre rutas: una columna `VECTOR(n)` ya guarda sus vectores.
 """
 
 from __future__ import annotations
@@ -28,8 +30,14 @@ from index.bplustree import UnclusteredBPlusIndex
 from index.hash import HashSecondaryIndex
 from index.inverted import TextSearchIndex
 from index.rtree import SpatialIndex
-from index.secondary import SecondaryIndex
-from index.similarity import HNSW_KIND, IVF_KIND, MediaSimilarityIndex, VectorIndexSettings
+from index.secondary import RowSource, SecondaryIndex
+from index.similarity import (
+    HNSW_KIND,
+    IVF_KIND,
+    MediaSimilarityIndex,
+    VectorColumnIndex,
+    VectorIndexSettings,
+)
 from index.vector import VectorMetric, vector_metric_named
 from query.files import resolve_user_file
 from sql.nodes import IndexType, OptionValue
@@ -39,7 +47,9 @@ from storage.types import OUT_OF_ROW_FIELD_TYPES, UNORDERED_FIELD_TYPES, FieldTy
 from text import DEFAULT_LANGUAGE
 
 IndexOptions = Mapping[str, OptionValue]
-IndexOpener = Callable[[Path, FieldReader, str, EngineConfig, IndexOptions], SecondaryIndex]
+IndexOpener = Callable[
+    [Path, FieldReader, str, EngineConfig, IndexOptions, RowSource], SecondaryIndex
+]
 OptionlessOpener = Callable[[Path, FieldReader, str, EngineConfig], SecondaryIndex]
 ColumnRule = Callable[[Field], str | None]
 LANGUAGE_OPTION = "idioma"
@@ -83,7 +93,8 @@ class IndexMethod:
         method: el nombre con que se declara en SQL.
         capabilities: las condiciones que sabe responder.
         opener: abre o crea el índice sobre una columna de una tabla, con las opciones de
-            su `WITH (...)`, ya validadas por nombre.
+            su `WITH (...)`, ya validadas por nombre, y las filas de la tabla, que lee un
+            índice derivado de ellas.
         refusal_for: por qué no sirve para esa columna, o `None` si sirve.
         files_of: los archivos que ocupa un índice guardado en esa ruta.
         options: las opciones que admite en un `WITH (...)`.
@@ -152,13 +163,13 @@ def _text_only(field: Field) -> str | None:
     )
 
 
-def _media_paths_only(method: IndexType) -> ColumnRule:
+def _similarity_columns(method: IndexType) -> ColumnRule:
     def refusal_for(field: Field) -> str | None:
-        if field.type in TEXT_FIELD_TYPES:
+        if field.type in TEXT_FIELD_TYPES or field.type is FieldType.VECTOR:
             return None
         return (
             f"un índice {method.value} va sobre la columna con la ruta de cada imagen o audio "
-            f"(VARCHAR o TEXT) y '{field.name}' es {field.type.value}"
+            f"(VARCHAR o TEXT) o sobre una VECTOR(n), y '{field.name}' es {field.type.value}"
         )
 
     return refusal_for
@@ -181,11 +192,23 @@ def _single_file(path: Path) -> list[Path]:
     return [path]
 
 
+def _similarity_files(path: Path) -> list[Path]:
+    """Los archivos de un índice de similitud, sea sobre rutas o sobre vectores."""
+    return list(
+        dict.fromkeys([*MediaSimilarityIndex.files_of(path), *VectorColumnIndex.files_of(path)])
+    )
+
+
 def _without_options(opener: OptionlessOpener) -> IndexOpener:
     """El opener de un método que no tiene opciones: un `WITH` suyo ya se rechazó."""
 
     def open_index(
-        path: Path, rows: FieldReader, column: str, config: EngineConfig, _: IndexOptions
+        path: Path,
+        rows: FieldReader,
+        column: str,
+        config: EngineConfig,
+        _: IndexOptions,
+        __: RowSource,
     ) -> SecondaryIndex:
         return opener(path, rows, column, config)
 
@@ -193,7 +216,12 @@ def _without_options(opener: OptionlessOpener) -> IndexOpener:
 
 
 def _open_text_search(
-    path: Path, rows: FieldReader, column: str, config: EngineConfig, options: IndexOptions
+    path: Path,
+    rows: FieldReader,
+    column: str,
+    config: EngineConfig,
+    options: IndexOptions,
+    _: RowSource,
 ) -> SecondaryIndex:
     return TextSearchIndex(path, rows, column, config, _language_of(options))
 
@@ -216,7 +244,12 @@ def _language_of(options: IndexOptions) -> str:
 
 def _similarity_opener(kind: str) -> IndexOpener:
     def open_index(
-        path: Path, rows: FieldReader, column: str, config: EngineConfig, options: IndexOptions
+        path: Path,
+        rows: FieldReader,
+        column: str,
+        config: EngineConfig,
+        options: IndexOptions,
+        table_rows: RowSource,
     ) -> SecondaryIndex:
         named = {name.lower(): value for name, value in options.items()}
         settings = VectorIndexSettings(
@@ -229,6 +262,13 @@ def _similarity_opener(kind: str) -> IndexOpener:
             probes=_optional_positive(named, PROBES_OPTION),
             vocabulary_size=_optional_positive(named, VOCABULARY_OPTION),
         )
+        if rows.schema.field_of(column).type is FieldType.VECTOR:
+            if settings.vocabulary_size is not None:
+                raise IndexOptionError(
+                    f"la opción {VOCABULARY_OPTION} es del vocabulario de un índice sobre rutas "
+                    f"de archivos, y '{column}' ya guarda sus vectores"
+                )
+            return VectorColumnIndex(path, rows, column, config, settings, table_rows)
         return MediaSimilarityIndex(
             path, rows, column, config, settings, lambda text: resolve_user_file(text, config)
         )
@@ -303,16 +343,16 @@ _METHODS: dict[IndexType, IndexMethod] = {
         method=IndexType.HNSW,
         capabilities=frozenset({Capability.SIMILARITY}),
         opener=_similarity_opener(HNSW_KIND),
-        refusal_for=_media_paths_only(IndexType.HNSW),
-        files_of=MediaSimilarityIndex.files_of,
+        refusal_for=_similarity_columns(IndexType.HNSW),
+        files_of=_similarity_files,
         options=HNSW_OPTIONS,
     ),
     IndexType.IVF: IndexMethod(
         method=IndexType.IVF,
         capabilities=frozenset({Capability.SIMILARITY}),
         opener=_similarity_opener(IVF_KIND),
-        refusal_for=_media_paths_only(IndexType.IVF),
-        files_of=MediaSimilarityIndex.files_of,
+        refusal_for=_similarity_columns(IndexType.IVF),
+        files_of=_similarity_files,
         options=IVF_OPTIONS,
     ),
 }

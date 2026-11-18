@@ -135,6 +135,8 @@ demos/               generador del dataset, descarga de lugares reales y de mús
 apps/                servicios de la Parte 5, que usan el gestor solo por su API REST
   client/            cliente tipado del API del gestor
   kit/               configuración, logs, salud, errores y descargas verificadas
+  shop/              tienda con recomendaciones (opción B): dataset de Amazon Reviews 2023
+                     con tiendas de Lima
   web/               portal de las cuatro aplicaciones: React + TypeScript, instalable (PWA),
                      con los tipos generados del OpenAPI de cada servicio
 tools/               herramientas de desarrollo: exportar los contratos OpenAPI al portal
@@ -176,6 +178,7 @@ proyecto:
 | [`src/api/`](src/api/) | API REST | [README](src/api/README.md) |
 | [`frontend/`](frontend/) | consola SQL de 4 paneles con panel de mapa, y páginas de búsqueda de texto y multimedia | [README](frontend/README.md) |
 | [`apps/`](apps/) | servicios de la Parte 5 y su portal | [README](apps/README.md) |
+| [`apps/shop/`](apps/shop/) | tienda con recomendaciones: dataset de compras reales, fotos, tiendas de Lima e inventario | [README](apps/shop/README.md) |
 | [`apps/web/`](apps/web/) | portal de las aplicaciones: rutas, salud de cada servicio, PWA, contratos y tiempos por etapa | [README](apps/web/README.md) |
 | [`benchmarks/`](benchmarks/) | comparación experimental, con resultados y gráficas | [README](benchmarks/README.md) |
 | [`demos/`](demos/) | datasets de demostración y simulación de concurrencia | [README](demos/README.md) |
@@ -356,6 +359,15 @@ caen en un rectángulo; para Lima, unos 26 600:
     --recuadro -12.52 -77.20 -11.57 -76.62
 ```
 
+**Dataset de la tienda (Parte 5).** Con `lugares_lima.csv` ya descargado, un comando baja
+las compras reales de Amazon Reviews 2023 (instrumentos musicales), sus fichas y fotos, y
+prepara las tiendas de Lima con su inventario (1,5 GB y unos 16 minutos; detalles en
+[`apps/shop/README.md`](apps/shop/README.md)):
+
+```bash
+uv run python -m shop.dataset prepare --data-dir data/datasets
+```
+
 ### 3.6 Variables de entorno
 
 Ninguna ruta, puerto ni credencial está escrita en el código. Las del API y los experimentos
@@ -378,6 +390,7 @@ están en [`.env.example`](.env.example); las de la interfaz, en
 | `BENCH_POSTGRES_DSN` | conexión al PostgreSQL contra el que se mide GiST | — |
 | `MINIGESTOR_WEB_PORT` | puerto de la interfaz con Docker | `8080` |
 | `MINIGESTOR_API_PORT` | puerto del API con Docker | `8000` |
+| `SHOP_DATA_DIR` | carpeta de datasets de `python -m shop.dataset` si no se da `--data-dir` | — |
 | `MINIGESTOR_DATASETS_DIR` | carpeta de datos que el perfil `bench` monta como `data/datasets/` | `./data/datasets` |
 
 Las dos obligatorias no tienen un valor por omisión a propósito: sin `MINIGESTOR_CORS_ORIGINS`

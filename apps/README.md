@@ -8,6 +8,7 @@ una red interna; cada servicio es otro contenedor, sin estado, que escala con r�
 apps/
   client/      minigestor_client: cliente tipado del API del gestor
   kit/         appkit: configuración, logs, salud, errores y descargas verificadas
+  shop/        tienda con recomendaciones (opción B): por ahora, su dataset
   web/         portal de las cuatro aplicaciones: React + TypeScript, instalable (PWA)
 ```
 
@@ -51,3 +52,6 @@ SHA-256 y su tamaño en un `appkit.download.RemoteFile` y lo baja con `fetch_ver
 uv sync --all-packages          # gestor, servicios y herramientas de desarrollo
 uv run pytest apps -q           # solo los tests de los servicios
 ```
+
+Los datos de cada servicio se bajan con su propio comando a la carpeta de datasets, que
+nunca se versiona; el de la tienda está en [`shop/README.md`](shop/README.md).

@@ -80,6 +80,14 @@ class VectorSearchResult:
     stats: VectorSearchStats = field(default_factory=VectorSearchStats)
 
 
+@dataclass(frozen=True, slots=True)
+class VectorBatchResult:
+    """Los vecinos de cada consulta de un lote, en su orden, y lo que costó el lote entero."""
+
+    hits: tuple[tuple[VectorHit, ...], ...]
+    stats: VectorSearchStats = field(default_factory=VectorSearchStats)
+
+
 class VectorIndex(ABC):
     """Un índice de vectores de dimensión fija con una métrica.
 
@@ -164,10 +172,7 @@ class VectorIndex(ABC):
         Raises:
             InvalidVectorError: si la consulta no tiene la dimensión o no es finita.
         """
-        if k < 1:
-            raise ValueError(f"k tiene que ser positivo, no {k}")
-        if effort is not None and effort < 1:
-            raise ValueError(f"el esfuerzo de búsqueda tiene que ser positivo, no {effort}")
+        _require_search_arguments(k, effort)
         prepared = self._metric.prepare(query, self._dimension)
         candidates = None if allowed is None else self._live_among(allowed)
         if candidates is not None and len(candidates) <= self._exact_filter_rows:
@@ -176,6 +181,39 @@ class VectorIndex(ABC):
         if wanted == 0:
             return VectorSearchResult(hits=())
         return self._iterative(prepared, k, wanted, candidates, effort or self._default_effort())
+
+    def search_many(
+        self, queries: npt.ArrayLike, k: int, *, effort: int | None = None
+    ) -> VectorBatchResult:
+        """Los `k` vecinos de cada fila de `queries`, en una sola búsqueda de FAISS.
+
+        Cada consulta recibe lo mismo que le daría `search` sola y sin filtro: FAISS
+        responde cada fila del lote por su cuenta, y la que en la primera pasada no
+        encuentra k filas se repite sola con más esfuerzo, como en `search`.
+
+        Raises:
+            InvalidVectorError: si las consultas no tienen la dimensión o no son finitas.
+        """
+        _require_search_arguments(k, effort)
+        prepared = self._metric.prepare(queries, self._dimension)
+        wanted = min(k, self.count)
+        if wanted == 0 or not len(prepared):
+            return VectorBatchResult(hits=tuple(() for _ in prepared))
+        first_effort = effort or self._default_effort()
+        raw, found, computed = self._approximate(prepared, k, first_effort, None)
+        stats = VectorSearchStats(distance_computations=computed, effort=first_effort, rounds=1)
+        hits = []
+        for position in range(len(prepared)):
+            present = found[position] >= 0
+            if present.sum() >= wanted:
+                scores = self._metric.scores_from_faiss(raw[position][present])
+                hits.append(_hits(found[position][present], scores))
+                continue
+            alone = prepared[position : position + 1]
+            retried = self._iterative(alone, k, wanted, None, first_effort)
+            hits.append(retried.hits)
+            _absorb(stats, retried.stats)
+        return VectorBatchResult(tuple(hits), stats)
 
     def save(self, path: Path) -> None:
         """Guarda el índice en `path`, reemplazando de una vez lo que hubiera."""
@@ -234,7 +272,8 @@ class VectorIndex(ABC):
         stats = VectorSearchStats()
         limit = max(self._max_effort(), effort)
         while True:
-            raw, found, computed = self._approximate(query, k, effort, candidates)
+            raw_batch, found_batch, computed = self._approximate(query, k, effort, candidates)
+            raw, found = raw_batch[0], found_batch[0]
             stats.rounds += 1
             stats.distance_computations += computed
             stats.effort = effort
@@ -267,10 +306,11 @@ class VectorIndex(ABC):
 
     @abstractmethod
     def _approximate(
-        self, query: Vectors, k: int, effort: int, candidates: VectorIds | None
-    ) -> tuple[npt.NDArray[np.float32], VectorIds, int]:
-        """Una pasada de búsqueda: lo que devuelve FAISS (con `MISSING_ID` donde no hubo
-        vecino), los identificadores y cuántas distancias calculó."""
+        self, queries: Vectors, k: int, effort: int, candidates: VectorIds | None
+    ) -> tuple[npt.NDArray[np.float32], npt.NDArray[np.int64], int]:
+        """Una pasada de búsqueda de una o varias consultas: lo que devuelve FAISS y los
+        identificadores, una fila por consulta (con `MISSING_ID` donde no hubo vecino), y
+        cuántas distancias calculó entre todas."""
 
     @abstractmethod
     def _vectors_of(self, ids: VectorIds) -> Vectors:
@@ -308,6 +348,21 @@ class VectorIndex(ABC):
 
     @abstractmethod
     def _describe(self) -> dict[str, Any]: ...
+
+
+def _require_search_arguments(k: int, effort: int | None) -> None:
+    if k < 1:
+        raise ValueError(f"k tiene que ser positivo, no {k}")
+    if effort is not None and effort < 1:
+        raise ValueError(f"el esfuerzo de búsqueda tiene que ser positivo, no {effort}")
+
+
+def _absorb(total: VectorSearchStats, retried: VectorSearchStats) -> None:
+    """Suma al lote lo que costó repetir una consulta sola."""
+    total.distance_computations += retried.distance_computations
+    total.rounds = max(total.rounds, retried.rounds)
+    total.effort = max(total.effort, retried.effort)
+    total.exact = total.exact or retried.exact
 
 
 def _as_ids(ids: npt.ArrayLike) -> VectorIds:

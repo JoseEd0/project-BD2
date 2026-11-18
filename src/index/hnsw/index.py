@@ -113,20 +113,20 @@ class HNSWIndex(VectorIndex):
         self._forget_tombstone_selector()
 
     def _approximate(
-        self, query: Vectors, k: int, effort: int, candidates: VectorIds | None
-    ) -> tuple[npt.NDArray[np.float32], VectorIds, int]:
+        self, queries: Vectors, k: int, effort: int, candidates: VectorIds | None
+    ) -> tuple[npt.NDArray[np.float32], npt.NDArray[np.int64], int]:
         if candidates is None:
             selector = self._tombstone_selector()
         else:
             selector = faiss.IDSelectorBatch(self._nodes_of(candidates))
         parameters = faiss.SearchParametersHNSW(efSearch=effort, sel=selector)
         faiss.cvar.hnsw_stats.reset()
-        raw, nodes = self._index.search(query, k, params=parameters)
+        raw, nodes = self._index.search(queries, k, params=parameters)
         computed = int(faiss.cvar.hnsw_stats.ndis)
-        present = nodes[0] >= 0
-        rows = np.full(k, MISSING_ID, dtype=ID_DTYPE)
-        rows[present] = [self._row_of_node[node] for node in nodes[0][present].tolist()]
-        return raw[0], rows, computed
+        present = nodes >= 0
+        rows = np.full(nodes.shape, MISSING_ID, dtype=ID_DTYPE)
+        rows[present] = [self._row_of_node[node] for node in nodes[present].tolist()]
+        return raw, rows, computed
 
     def _tombstone_selector(self) -> Any:
         """Excluye los nodos con lápida; se rehace solo cuando cambian."""

@@ -124,14 +124,14 @@ class IVFIndex(VectorIndex):
         self._ids.difference_update(ids.tolist())
 
     def _approximate(
-        self, query: Vectors, k: int, effort: int, candidates: VectorIds | None
-    ) -> tuple[npt.NDArray[np.float32], VectorIds, int]:
+        self, queries: Vectors, k: int, effort: int, candidates: VectorIds | None
+    ) -> tuple[npt.NDArray[np.float32], npt.NDArray[np.int64], int]:
         selector = None if candidates is None else faiss.IDSelectorBatch(candidates)
         parameters = faiss.SearchParametersIVF(nprobe=min(effort, self.lists), sel=selector)
         faiss.cvar.indexIVF_stats.reset()
-        raw, found = self._index.search(query, k, params=parameters)
-        computed = int(faiss.cvar.indexIVF_stats.ndis) + self.lists
-        return raw[0], found[0], computed
+        raw, found = self._index.search(queries, k, params=parameters)
+        computed = int(faiss.cvar.indexIVF_stats.ndis) + self.lists * len(queries)
+        return raw, found, computed
 
     def _vectors_of(self, ids: VectorIds) -> Vectors:
         return np.stack([self._index.reconstruct(vector_id) for vector_id in ids.tolist()])

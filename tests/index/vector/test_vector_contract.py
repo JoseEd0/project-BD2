@@ -22,6 +22,8 @@ K = 10
 QUERIES = 20
 MIN_RECALL = 0.9
 ID_STRIDE = 7
+# Con 600 vectores en 120 listas, ninguna llega a los k = 10 de una consulta.
+SHORT_LISTS = 120
 
 IndexFactory = Callable[..., VectorIndex]
 FACTORIES: dict[str, IndexFactory] = {"flat": FlatIndex, "ivf": IVFIndex, "hnsw": HNSWIndex}
@@ -232,3 +234,57 @@ def test_describe_reports_the_common_shape(filled, metric):
     assert shape["metric"] == metric.value
     assert shape["dimension"] == DIMENSION
     assert shape["vectors"] == ROWS
+
+
+def same_hits(batch_hits, alone_hits):
+    assert [hit.vector_id for hit in batch_hits] == [hit.vector_id for hit in alone_hits]
+    assert [hit.score for hit in batch_hits] == pytest.approx(
+        [hit.score for hit in alone_hits], rel=1e-6, abs=1e-6
+    )
+
+
+def test_a_batch_gives_each_query_what_it_gets_alone(filled, clustered_vectors):
+    queries = clustered_vectors(QUERIES, DIMENSION, 5)
+
+    batch = filled.search_many(queries, K)
+
+    assert len(batch.hits) == QUERIES
+    for hits, query in zip(batch.hits, queries, strict=True):
+        same_hits(hits, filled.search(query, K).hits)
+    assert batch.stats.distance_computations > 0
+
+
+def test_a_batch_skips_removed_vectors_like_a_single_search(filled, rows, clustered_vectors):
+    filled.remove(rows[0][::3].tolist())
+    queries = clustered_vectors(QUERIES, DIMENSION, 6)
+
+    batch = filled.search_many(queries, K)
+
+    for hits, query in zip(batch.hits, queries, strict=True):
+        same_hits(hits, filled.search(query, K).hits)
+
+
+def test_a_query_short_of_k_in_a_batch_is_retried_alone(metric, rows, clustered_vectors):
+    """Con muchas listas y una sola sondeada, ninguna lista tiene k vectores: cada consulta
+    del lote vuelve a buscar sola con más listas, como lo haría `search`."""
+    index = IVFIndex(DIMENSION, metric, lists=SHORT_LISTS, probes=1)
+    index.add(*rows)
+    queries = clustered_vectors(QUERIES, DIMENSION, 7)
+
+    batch = index.search_many(queries, K)
+
+    assert batch.stats.rounds > 1
+    for hits, query in zip(batch.hits, queries, strict=True):
+        assert len(hits) == K
+        same_hits(hits, index.search(query, K).hits)
+
+
+def test_a_batch_on_an_empty_index_finds_nothing(factory, metric):
+    index = factory(DIMENSION, metric)
+
+    assert index.search_many(np.ones((3, DIMENSION)), K).hits == ((), (), ())
+
+
+def test_a_batch_with_the_wrong_dimension_is_rejected(filled):
+    with pytest.raises(InvalidVectorError):
+        filled.search_many(np.ones((2, DIMENSION + 1)), K)

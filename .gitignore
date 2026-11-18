@@ -129,6 +129,8 @@ config.local.*
 !README_assets/**
 # Las gráficas de los experimentos sí se versionan: son parte del informe.
 !benchmarks/figures/*.png
+# Tres fotos de dominio público (NASA) para los tests de rostros; licencia en su README.
+!apps/faces/tests/fixtures/*.jpg
 
 # --- Modelos y vectores precomputados ---
 *.npy

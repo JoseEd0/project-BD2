@@ -127,6 +127,58 @@ class MediaUploadResponse(BaseModel):
     name: str = Field(description="El nombre con que se subió")
 
 
+class TimeRangeInfo(BaseModel):
+    """Un tramo de un audio, en segundos desde su inicio; sin `end`, hasta el final."""
+
+    start: float
+    end: float | None = None
+
+
+class SegmentNeighbourInfo(BaseModel):
+    """Una fila parecida a una ventana: la fila entera, su archivo, su tramo y su puntaje."""
+
+    row: dict[str, JsonValue] = Field(description="Los valores de la fila, por columna")
+    path: str = Field(description="La ruta del archivo de la fila, sin el fragmento")
+    fragment: TimeRangeInfo | None = Field(
+        default=None, description="El tramo que la fila pide con #t=; null si es el archivo entero"
+    )
+    score: float = Field(description="Mayor es más parecido, con la métrica del índice")
+
+
+class SegmentInfo(BaseModel):
+    """Una ventana del audio subido y sus vecinos, de mayor a menor puntaje."""
+
+    start: float
+    end: float
+    neighbours: list[SegmentNeighbourInfo]
+
+
+class SegmentTimings(BaseModel):
+    """Lo que costó cada etapa, en milisegundos."""
+
+    decode_ms: float = Field(description="Decodificar el audio, una vez")
+    extraction_ms: float = Field(description="MFCC, palabras y TF-IDF de todas las ventanas")
+    search_ms: float = Field(description="Buscar todas las ventanas en el índice, en un lote")
+
+
+class SegmentSearchResponse(BaseModel):
+    """Las filas más parecidas a cada ventana de un audio subido."""
+
+    table: str
+    column: str = Field(description="La columna con las rutas de los audios")
+    index: str
+    method: str = Field(description="HNSW o IVF")
+    metric: Literal["euclidean", "dot", "cosine"]
+    k: int
+    window: float = Field(description="Segundos de cada ventana")
+    hop: float = Field(description="Segundos entre el inicio de una ventana y el de la siguiente")
+    duration: float = Field(description="Segundos del audio subido")
+    columns: list[str] = Field(description="Las columnas de la tabla, en orden")
+    segments: list[SegmentInfo]
+    distance_computations: int
+    timings: SegmentTimings
+
+
 class TablePoints(BaseModel):
     """Puntos de una tabla para pintarla en el mapa; una muestra si la tabla es grande."""
 

@@ -470,13 +470,55 @@
         }
       }
     },
+    "/media/segments": {
+      "post": {
+        "tags": [
+          "multimedia"
+        ],
+        "summary": "Segments",
+        "description": "Corta el audio subido en ventanas de `window` segundos cada `hop` y devuelve las `k`\nfilas más parecidas a cada una, con el índice HNSW o IVF de la columna de rutas.\n\nEl audio se decodifica una vez y las ventanas se buscan en un solo lote; cada una\nrecibe lo mismo que un `SIMILAR_TO('audio#t=inicio,fin', k)`. Un audio más corto que una\nventana es una sola ventana. El archivo solo vive mientras dura la petición. Lee con\nbloqueo compartido sobre la tabla.",
+        "operationId": "segments_media_segments_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_segments_media_segments_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SegmentSearchResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/media/file": {
       "get": {
         "tags": [
           "multimedia"
         ],
         "summary": "Media File",
-        "description": "El archivo tal como está; con `Range`, solo el trozo pedido (`206`).",
+        "description": "El archivo tal como está; con `Range`, solo el trozo pedido (`206`). Un fragmento\n`#t=` al final de la ruta se ignora: el tramo lo elige el reproductor.",
         "operationId": "media_file_media_file_get",
         "parameters": [
           {
@@ -559,6 +601,83 @@
   },
   "components": {
     "schemas": {
+      "Body_segments_media_segments_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "description": "Audio que se consulta por segmentos"
+          },
+          "table": {
+            "type": "string",
+            "title": "Table",
+            "description": "Tabla con la columna de rutas indexada"
+          },
+          "column": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Column",
+            "description": "Columna de las rutas; sin ella, la única indexada"
+          },
+          "k": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "K",
+            "description": "Filas por ventana",
+            "default": 5
+          },
+          "window": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Window",
+            "description": "Segundos de cada ventana; por omisión, 10"
+          },
+          "hop": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hop",
+            "description": "Segundos entre ventanas; por omisión, 5"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file",
+          "table"
+        ],
+        "title": "Body_segments_media_segments_post"
+      },
       "Body_upload_file_files_upload_post": {
         "properties": {
           "file": {
@@ -1026,6 +1145,191 @@
         "title": "QueryResponse",
         "description": "Resultado de un script. Las filas y el plan son los de la última consulta."
       },
+      "SegmentInfo": {
+        "properties": {
+          "start": {
+            "type": "number",
+            "title": "Start"
+          },
+          "end": {
+            "type": "number",
+            "title": "End"
+          },
+          "neighbours": {
+            "items": {
+              "$ref": "#/components/schemas/SegmentNeighbourInfo"
+            },
+            "type": "array",
+            "title": "Neighbours"
+          }
+        },
+        "type": "object",
+        "required": [
+          "start",
+          "end",
+          "neighbours"
+        ],
+        "title": "SegmentInfo",
+        "description": "Una ventana del audio subido y sus vecinos, de mayor a menor puntaje."
+      },
+      "SegmentNeighbourInfo": {
+        "properties": {
+          "row": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Row",
+            "description": "Los valores de la fila, por columna"
+          },
+          "path": {
+            "type": "string",
+            "title": "Path",
+            "description": "La ruta del archivo de la fila, sin el fragmento"
+          },
+          "fragment": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TimeRangeInfo"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "El tramo que la fila pide con #t=; null si es el archivo entero"
+          },
+          "score": {
+            "type": "number",
+            "title": "Score",
+            "description": "Mayor es más parecido, con la métrica del índice"
+          }
+        },
+        "type": "object",
+        "required": [
+          "row",
+          "path",
+          "score"
+        ],
+        "title": "SegmentNeighbourInfo",
+        "description": "Una fila parecida a una ventana: la fila entera, su archivo, su tramo y su puntaje."
+      },
+      "SegmentSearchResponse": {
+        "properties": {
+          "table": {
+            "type": "string",
+            "title": "Table"
+          },
+          "column": {
+            "type": "string",
+            "title": "Column",
+            "description": "La columna con las rutas de los audios"
+          },
+          "index": {
+            "type": "string",
+            "title": "Index"
+          },
+          "method": {
+            "type": "string",
+            "title": "Method",
+            "description": "HNSW o IVF"
+          },
+          "metric": {
+            "type": "string",
+            "enum": [
+              "euclidean",
+              "dot",
+              "cosine"
+            ],
+            "title": "Metric"
+          },
+          "k": {
+            "type": "integer",
+            "title": "K"
+          },
+          "window": {
+            "type": "number",
+            "title": "Window",
+            "description": "Segundos de cada ventana"
+          },
+          "hop": {
+            "type": "number",
+            "title": "Hop",
+            "description": "Segundos entre el inicio de una ventana y el de la siguiente"
+          },
+          "duration": {
+            "type": "number",
+            "title": "Duration",
+            "description": "Segundos del audio subido"
+          },
+          "columns": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Columns",
+            "description": "Las columnas de la tabla, en orden"
+          },
+          "segments": {
+            "items": {
+              "$ref": "#/components/schemas/SegmentInfo"
+            },
+            "type": "array",
+            "title": "Segments"
+          },
+          "distance_computations": {
+            "type": "integer",
+            "title": "Distance Computations"
+          },
+          "timings": {
+            "$ref": "#/components/schemas/SegmentTimings"
+          }
+        },
+        "type": "object",
+        "required": [
+          "table",
+          "column",
+          "index",
+          "method",
+          "metric",
+          "k",
+          "window",
+          "hop",
+          "duration",
+          "columns",
+          "segments",
+          "distance_computations",
+          "timings"
+        ],
+        "title": "SegmentSearchResponse",
+        "description": "Las filas más parecidas a cada ventana de un audio subido."
+      },
+      "SegmentTimings": {
+        "properties": {
+          "decode_ms": {
+            "type": "number",
+            "title": "Decode Ms",
+            "description": "Decodificar el audio, una vez"
+          },
+          "extraction_ms": {
+            "type": "number",
+            "title": "Extraction Ms",
+            "description": "MFCC, palabras y TF-IDF de todas las ventanas"
+          },
+          "search_ms": {
+            "type": "number",
+            "title": "Search Ms",
+            "description": "Buscar todas las ventanas en el índice, en un lote"
+          }
+        },
+        "type": "object",
+        "required": [
+          "decode_ms",
+          "extraction_ms",
+          "search_ms"
+        ],
+        "title": "SegmentTimings",
+        "description": "Lo que costó cada etapa, en milisegundos."
+      },
       "SimilarityInfo": {
         "properties": {
           "table": {
@@ -1308,6 +1612,31 @@
         ],
         "title": "TextSearchInfo",
         "description": "Dónde buscó el `MATCH` de la consulta y con qué términos, para resaltarlos."
+      },
+      "TimeRangeInfo": {
+        "properties": {
+          "start": {
+            "type": "number",
+            "title": "Start"
+          },
+          "end": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End"
+          }
+        },
+        "type": "object",
+        "required": [
+          "start"
+        ],
+        "title": "TimeRangeInfo",
+        "description": "Un tramo de un audio, en segundos desde su inicio; sin `end`, hasta el final."
       },
       "ValidationError": {
         "properties": {

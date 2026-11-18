@@ -11,6 +11,7 @@ apps/
   client/          minigestor_client: cliente tipado del API del gestor; openapi/engine.json
   kit/             appkit: configuración, logs, trazas, salud, errores, migraciones y descargas
   shop/            tienda con recomendaciones (opción B): por ahora, su dataset
+  rag/             RAG sobre papers (opción A): por ahora, el corpus de arXiv y sus fragmentos
   faces/           rostros (opción D): detección con YuNet, alineación y embedding con SFace
   web-kit/         @minigestor/web-kit: lógica sin estilos que comparten las interfaces
     template/      plantilla de la interfaz de una app: Vite, React, Docker y nginx

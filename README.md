@@ -137,6 +137,7 @@ apps/                servicios de la Parte 5, que usan el gestor solo por su API
   kit/               configuración, logs, salud, errores y descargas verificadas
   shop/              tienda con recomendaciones (opción B): dataset de Amazon Reviews 2023
                      con tiendas de Lima
+  rag/               RAG sobre papers (opción A): corpus de arXiv con texto por página
   faces/             reconocimiento facial: YuNet, alineación con cinco puntos, SFace y LFW
   web-kit/           lógica sin estilos que comparten las interfaces de las aplicaciones
     template/        plantilla de la interfaz de cada app: React + TypeScript, Docker y nginx
@@ -182,6 +183,7 @@ proyecto:
 | [`frontend/`](frontend/) | consola SQL de 4 paneles con panel de mapa, y páginas de búsqueda de texto y multimedia | [README](frontend/README.md) |
 | [`apps/`](apps/) | aplicaciones de la Parte 5: su API y su interfaz | [README](apps/README.md) |
 | [`apps/shop/`](apps/shop/) | tienda con recomendaciones: dataset de compras reales, fotos, tiendas de Lima e inventario | [README](apps/shop/README.md) |
+| [`apps/rag/`](apps/rag/) | RAG sobre papers: cosecha de arXiv por licencia, texto por página, fragmentos | [README](apps/rag/README.md) |
 | [`apps/faces/`](apps/faces/) | rostros: decodificación segura, detección con YuNet, embedding con SFace, descarga de modelos y de LFW | [README](apps/faces/README.md) |
 | [`apps/web-kit/`](apps/web-kit/) | kit de las interfaces: cliente tipado, salud, tiempos por etapa, tema, PWA y la plantilla de cada app | [README](apps/web-kit/README.md) |
 | [`benchmarks/`](benchmarks/) | comparación experimental, con resultados y gráficas | [README](benchmarks/README.md) |
@@ -410,6 +412,7 @@ están en [`.env.example`](.env.example); las de la interfaz, en
 | `MINIGESTOR_API_PORT` | puerto del API con Docker | `8000` |
 | `SHOP_DATA_DIR` | carpeta de datasets de `python -m shop.dataset` si no se da `--data-dir` | — |
 | `MINIGESTOR_DATASETS_DIR` | carpeta de datos que el perfil `bench` monta como `data/datasets/` | `./data/datasets` |
+| `RAG_DATA_DIR` | carpeta donde el corpus del RAG deja `rag_papers/` sin `--data-dir` | — |
 
 Las dos obligatorias no tienen un valor por omisión a propósito: sin `MINIGESTOR_CORS_ORIGINS`
 el API no arranca y dice por qué; sin `VITE_API_URL` la interfaz lo avisa en el panel de
@@ -484,6 +487,13 @@ BENCH_POSTGRES_DSN="host=127.0.0.1 port=55432 dbname=minigestor_bench user=postg
 
 # columnas VECTOR(384): HNSW e IVF por SQL (ver benchmarks/README.md §6)
 .venv/bin/python -m benchmarks.vector_benchmark --sizes 1000 10000 100000
+
+# corpus del RAG (Parte 5): 1 500 papers de arXiv con licencia abierta, hora y media al ritmo de
+# arXiv; el histograma de los fragmentos sale del manifiesto versionado
+uv run python -m rag.corpus build --data-dir data/datasets \
+    --material Proyecto_Integrador_BD2.md --material docs/informe.pdf
+uv run python -m rag.corpus figure --manifest benchmarks/results/rag_corpus.json \
+    --output benchmarks/figures/rag-fragmentos.png
 
 # velocidad del analizador de texto, sobre texto real en español
 .venv/bin/python -m benchmarks.text_analyzer_benchmark --repetitions 5 \

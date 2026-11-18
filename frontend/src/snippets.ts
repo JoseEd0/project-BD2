@@ -713,6 +713,29 @@ USING IVF WITH METRIC=euclidean
 ORDER BY score DESC;`,
       },
       {
+        label: "Tramos de canciones",
+        description:
+          "Rutas con #t=inicio,fin (W3C Media Fragments): cada fila es un tramo de 10 s y el índice decodifica cada pista una vez",
+        sql: `DROP TABLE IF EXISTS tramos;
+
+CREATE TABLE tramos (id INT PRIMARY KEY, ruta VARCHAR(220), inicio INT);
+
+INSERT INTO tramos VALUES
+  (1, 'data/datasets/fma_small/pistas/132/132454.mp3#t=0,10', 0),
+  (2, 'data/datasets/fma_small/pistas/132/132454.mp3#t=10,20', 10),
+  (3, 'data/datasets/fma_small/pistas/132/132454.mp3#t=20,30', 20),
+  (4, 'data/datasets/fma_small/pistas/069/069561.mp3#t=0,10', 0),
+  (5, 'data/datasets/fma_small/pistas/069/069561.mp3#t=10,20', 10),
+  (6, 'data/datasets/fma_small/pistas/069/069561.mp3#t=20,30', 20);
+
+CREATE INDEX idx_tramos ON tramos USING HNSW (ruta) WITH (METRIC = euclidean);
+
+SELECT id, ruta, inicio, SIMILARITY_SCORE() AS score
+FROM tramos
+WHERE SIMILAR_TO('data/datasets/fma_small/pistas/132/132454.mp3#t=12,22', k = 3)
+ORDER BY score DESC;`,
+      },
+      {
         label: "Similitud + filtro",
         description:
           "El resto del WHERE filtra antes de buscar: las 10 más parecidas que no son fundas de celular",

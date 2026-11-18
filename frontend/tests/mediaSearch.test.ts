@@ -7,6 +7,7 @@ import {
   defaultSettings,
   effortValue,
   mediaCards,
+  mediaFilePath,
   mediaKindOf,
   mediaTargets,
   queryFromCard,
@@ -16,6 +17,7 @@ import {
   sharedFailure,
   similarityShare,
   similaritySql,
+  splitMediaFragment,
 } from "../src/lib/mediaSearch.ts";
 import type { MediaRequest, PanelOutcome } from "../src/lib/mediaSearch.ts";
 import type { ColumnInfo, QueryResponse, TableInfo } from "../src/types.ts";
@@ -244,4 +246,19 @@ test("k stays between one and the maximum", () => {
   assert.equal(clampK(500), 100);
   assert.equal(clampK(7.4), 7);
   assert.equal(clampK(Number.NaN), 10);
+});
+
+test("a temporal fragment is split from its path", () => {
+  assert.deepEqual(splitMediaFragment("pistas/1.mp3#t=10,20"), { file: "pistas/1.mp3", fragment: "t=10,20" });
+  assert.deepEqual(splitMediaFragment("pistas/1.mp3"), { file: "pistas/1.mp3", fragment: null });
+});
+
+test("a fragment path is still an audio", () => {
+  assert.equal(mediaKindOf("pistas/1.mp3#t=10,20"), "audio");
+  assert.equal(mediaKindOf("fotos/1.jpg"), "image");
+});
+
+test("the media file address carries the fragment for the player", () => {
+  assert.equal(mediaFilePath("pistas/1.mp3#t=10,20"), "/media/file?path=pistas%2F1.mp3#t=10,20");
+  assert.equal(mediaFilePath("pistas/1.mp3"), "/media/file?path=pistas%2F1.mp3");
 });

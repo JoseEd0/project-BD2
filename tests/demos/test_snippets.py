@@ -37,11 +37,13 @@ SNIPPET_SCALE = 0.2
 GROUP_PATTERN = re.compile(r'name: "([^"]+)",\s*snippets: \[(.*?)\n    \],', re.S)
 SNIPPET_PATTERN = re.compile(r'label: "([^"]+)",.*?sql: (?:`(.*?)`|"((?:[^"\\]|\\.)*)")', re.S)
 ENDS_A_TRANSACTION = re.compile(r"^\s*(COMMIT|ROLLBACK)\b", re.I)
-MEDIA_PATH = re.compile(r"'(data/datasets/[^']+\.(?:jpg|mp3))'")
+MEDIA_PATH = re.compile(r"'(data/datasets/[^'#]+\.(?:jpg|mp3))(#[^']*)?'")
 FILLER_FILES = 12
 STAND_IN_CATEGORIES = ("CELLULAR_PHONE_CASE", "SHOES", "HOME")
 STAND_IN_GENRES = ("Folk", "Rock", "Electronic")
 CLIP_SECONDS = 1.0
+# Las pistas de las que un atajo pide tramos duran lo que una de FMA.
+FRAGMENTED_CLIP_SECONDS = 30.0
 # Unas pocas fotos y pistas no dan descriptores para las 256 palabras por omisión.
 STAND_IN_VOCABULARY = 16
 
@@ -94,7 +96,9 @@ def client(
 def write_stand_in_datasets(root: Path, dataset: ModuleType) -> None:
     """Las fotos y pistas que nombran los atajos, más algunas de relleno, y el CSV de cada
     tabla multimedia de la demo apuntando a ellas."""
-    named = {path for _, _, sql in snippets() for path in MEDIA_PATH.findall(sql)}
+    found = [match for _, _, sql in snippets() for match in MEDIA_PATH.findall(sql)]
+    named = {path for path, _ in found}
+    fragmented = {path for path, fragment in found if fragment}
     images = sorted(path for path in named if path.endswith(".jpg"))
     tracks = sorted(path for path in named if path.endswith(".mp3"))
     images += [f"data/datasets/abo/imagenes/relleno/{number}.jpg" for number in range(FILLER_FILES)]
@@ -106,7 +110,8 @@ def write_stand_in_datasets(root: Path, dataset: ModuleType) -> None:
     for seed, relative in enumerate(tracks):
         target = root / relative
         target.parent.mkdir(parents=True, exist_ok=True)
-        write_audio(target, np.roll(chirp(CLIP_SECONDS), seed * 1000))
+        seconds = FRAGMENTED_CLIP_SECONDS if relative in fragmented else CLIP_SECONDS
+        write_audio(target, np.roll(chirp(seconds), seed * 1000))
     images_table, songs_table = dataset.MEDIA_TABLES
     write_rows(
         root / dataset.DATASETS_DIRECTORY / images_table.file_name,

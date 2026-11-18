@@ -1,0 +1,1354 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Minigestor de Base de Datos Multimodal",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Health",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Health Health Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ready": {
+      "get": {
+        "summary": "Ready",
+        "operationId": "ready_ready_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tables": {
+      "get": {
+        "summary": "Tables",
+        "operationId": "tables_tables_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TableInfo"
+                  },
+                  "title": "Response Tables Tables Get"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Drop All Tables",
+        "description": "Borra todas las tablas y sus archivos. Deja la base de datos vacía.\n\nExiste para poder empezar una demostración desde cero sin tocar el disco a mano.",
+        "operationId": "drop_all_tables_tables_delete",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Sesión del cliente, para leer dentro de su transacción",
+              "title": "Session Id"
+            },
+            "description": "Sesión del cliente, para leer dentro de su transacción"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QueryResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tables/{name}/structure": {
+      "get": {
+        "summary": "Table Structure",
+        "description": "Organización física de la tabla y forma real de sus índices: niveles del B+,\nprofundidad global y cubetas del hash. Lee con bloqueo compartido sobre la tabla.",
+        "operationId": "table_structure_tables__name__structure_get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          },
+          {
+            "name": "session_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Sesión del cliente, para leer dentro de su transacción",
+              "title": "Session Id"
+            },
+            "description": "Sesión del cliente, para leer dentro de su transacción"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Table Structure Tables  Name  Structure Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tables/{name}/points": {
+      "get": {
+        "summary": "Table Points",
+        "description": "Puntos de una columna POINT para el panel de mapa; sin `column`, la primera.\n\nCon más filas que `limit` devuelve una muestra tomada a intervalos regulares, para\nque el mapa siga siendo fluido y la muestra no se concentre en una zona. Lee con\nbloqueo compartido sobre la tabla.",
+        "operationId": "table_points_tables__name__points_get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          },
+          {
+            "name": "column",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Columna POINT",
+              "title": "Column"
+            },
+            "description": "Columna POINT"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Máximo de puntos",
+              "title": "Limit"
+            },
+            "description": "Máximo de puntos"
+          },
+          {
+            "name": "session_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Sesión del cliente, para leer dentro de su transacción",
+              "title": "Session Id"
+            },
+            "description": "Sesión del cliente, para leer dentro de su transacción"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TablePoints"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/query": {
+      "post": {
+        "summary": "Query",
+        "description": "Ejecuta el script del editor y devuelve las filas y el plan de la última consulta.\n\nLas sentencias corren en orden y el script se detiene en la primera que falle: las\nanteriores ya quedaron aplicadas, igual que en cualquier gestor fuera de una\ntransacción. Un `BEGIN` necesita `session_id`: sin sesión no habría dónde guardar la\ntransacción entre una petición y la siguiente. `params` lleva los valores de `$1`, `$2`,\n…, y entonces `sql` tiene que ser una sola sentencia. El rol de quien llama tiene que\nalcanzar para todo el script antes de ejecutar la primera sentencia.",
+        "operationId": "query_query_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QueryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QueryResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/files/upload": {
+      "post": {
+        "summary": "Upload File",
+        "description": "Solo guarda el archivo, sin crear tabla; si ya había uno con ese nombre, lo reemplaza.\n\nDevuelve la ruta y las columnas para que la tabla se cree a mano con\n`CREATE TABLE ... FROM FILE`, eligiendo la organización en el propio SQL.",
+        "operationId": "upload_file_files_upload_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_file_files_upload_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileUploadResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tables/upload": {
+      "post": {
+        "summary": "Upload",
+        "description": "Crea una tabla a partir de un CSV subido, deduciendo el esquema del archivo.\n\nEl CSV solo hace falta mientras se carga: va a un directorio propio de la petición y se\nborra al terminar, haya salido bien o no.",
+        "operationId": "upload_tables_upload_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_tables_upload_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QueryResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sessions/{identifier}/close": {
+      "post": {
+        "summary": "Close Session",
+        "description": "Cierra la sesión de quien llama y aborta lo que tuviera abierto; la de otro servicio\ncon el mismo identificador no se toca.\n\nEs `POST` y no `DELETE` porque la llama `navigator.sendBeacon` al cerrar la pestaña: es\nla única petición que el navegador garantiza enviar mientras descarga la página, y\nsolo sabe hacer `POST`.",
+        "operationId": "close_session_sessions__identifier__close_post",
+        "parameters": [
+          {
+            "name": "identifier",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Identifier"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "boolean"
+                  },
+                  "title": "Response Close Session Sessions  Identifier  Close Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/media/queries": {
+      "post": {
+        "tags": [
+          "multimedia"
+        ],
+        "summary": "Upload Query",
+        "description": "Guarda el archivo de una consulta y devuelve la ruta que va en `SIMILAR_TO`.\n\nSe guarda con un nombre nuevo, así que dos consultas con el mismo nombre de archivo no\nse pisan; las más viejas se borran al pasar de `max_query_uploads`.",
+        "operationId": "upload_query_media_queries_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_query_media_queries_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaUploadResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/media/file": {
+      "get": {
+        "tags": [
+          "multimedia"
+        ],
+        "summary": "Media File",
+        "description": "El archivo tal como está; con `Range`, solo el trozo pedido (`206`).",
+        "operationId": "media_file_media_file_get",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Ruta del archivo",
+              "title": "Path"
+            },
+            "description": "Ruta del archivo"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/media/thumbnail": {
+      "get": {
+        "tags": [
+          "multimedia"
+        ],
+        "summary": "Media Thumbnail",
+        "description": "La imagen reducida a `thumbnail_side` píxeles de lado mayor, en JPEG.\n\nSe guarda en el directorio de datos con el tamaño y la fecha del original en el nombre:\npedirla de nuevo no vuelve a decodificar la imagen, y si el original cambia se rehace.",
+        "operationId": "media_thumbnail_media_thumbnail_get",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Ruta de la imagen",
+              "title": "Path"
+            },
+            "description": "Ruta de la imagen"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Body_upload_file_files_upload_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "description": "CSV con cabecera"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file",
+          "name"
+        ],
+        "title": "Body_upload_file_files_upload_post"
+      },
+      "Body_upload_query_media_queries_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "description": "Imagen o audio"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_query_media_queries_post"
+      },
+      "Body_upload_tables_upload_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "description": "CSV con cabecera"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "organization": {
+            "type": "string",
+            "title": "Organization",
+            "default": "heap"
+          },
+          "key_column": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key Column"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file",
+          "name"
+        ],
+        "title": "Body_upload_tables_upload_post"
+      },
+      "ColumnInfo": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "type": {
+            "type": "string",
+            "title": "Type"
+          },
+          "length": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Length"
+          },
+          "nullable": {
+            "type": "boolean",
+            "title": "Nullable",
+            "default": true
+          },
+          "primary_key": {
+            "type": "boolean",
+            "title": "Primary Key",
+            "default": false
+          },
+          "indexed_with": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Indexed With"
+          },
+          "unique": {
+            "type": "boolean",
+            "title": "Unique",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "type"
+        ],
+        "title": "ColumnInfo",
+        "description": "Una columna, tal como la muestra el panel de archivos."
+      },
+      "FileUploadResponse": {
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "Path",
+            "description": "Ruta para usar en CREATE TABLE ... FROM FILE"
+          },
+          "columns": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Columns"
+          }
+        },
+        "type": "object",
+        "required": [
+          "path"
+        ],
+        "title": "FileUploadResponse",
+        "description": "Archivo guardado sin crear tabla: la tabla se crea después con SQL."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "JsonValue": {},
+      "MediaUploadResponse": {
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "Path",
+            "description": "La ruta que va en SIMILAR_TO('...')"
+          },
+          "media": {
+            "type": "string",
+            "enum": [
+              "image",
+              "audio"
+            ],
+            "title": "Media"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "El nombre con que se subió"
+          }
+        },
+        "type": "object",
+        "required": [
+          "path",
+          "media",
+          "name"
+        ],
+        "title": "MediaUploadResponse",
+        "description": "El archivo de una consulta, guardado para usarlo en `SIMILAR_TO`."
+      },
+      "OverlayInfo": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "radius",
+              "nearest",
+              "polygon"
+            ],
+            "title": "Kind"
+          },
+          "center": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PointInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "radius": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Radius"
+          },
+          "metric": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metric"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          },
+          "vertices": {
+            "items": {
+              "$ref": "#/components/schemas/PointInfo"
+            },
+            "type": "array",
+            "title": "Vertices"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind"
+        ],
+        "title": "OverlayInfo",
+        "description": "Una figura de la consulta que el panel de mapa dibuja sobre los puntos.\n\n`radius` lleva centro, radio y métrica; `nearest`, el punto de referencia de un\n`ORDER BY distancia(…)`; `polygon`, sus vértices."
+      },
+      "PlanInfo": {
+        "properties": {
+          "operation": {
+            "type": "string",
+            "title": "Operation"
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail"
+          },
+          "children": {
+            "items": {
+              "$ref": "#/components/schemas/PlanInfo"
+            },
+            "type": "array",
+            "title": "Children"
+          },
+          "actual_rows": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actual Rows"
+          },
+          "actual_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actual Ms"
+          }
+        },
+        "type": "object",
+        "required": [
+          "operation",
+          "detail"
+        ],
+        "title": "PlanInfo",
+        "description": "Un paso del plan de ejecución."
+      },
+      "PointInfo": {
+        "properties": {
+          "lat": {
+            "type": "number",
+            "title": "Lat"
+          },
+          "lon": {
+            "type": "number",
+            "title": "Lon"
+          }
+        },
+        "type": "object",
+        "required": [
+          "lat",
+          "lon"
+        ],
+        "title": "PointInfo",
+        "description": "Un punto geográfico en grados decimales."
+      },
+      "QueryRequest": {
+        "properties": {
+          "sql": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Sql",
+            "description": "Sentencia SQL a ejecutar"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id",
+            "description": "Identificador de sesión; sin él la sentencia va en autocommit"
+          },
+          "params": {
+            "items": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "array",
+            "title": "Params",
+            "description": "Valores de $1, $2, …: número, texto, booleano, null, lista de números (VECTOR) u objeto {\"lat\", \"lon\"} (POINT); solo con una sentencia en `sql`"
+          }
+        },
+        "type": "object",
+        "required": [
+          "sql"
+        ],
+        "title": "QueryRequest",
+        "description": "Una consulta enviada por el editor del frontend."
+      },
+      "QueryResponse": {
+        "properties": {
+          "statements": {
+            "items": {
+              "$ref": "#/components/schemas/StatementOutcome"
+            },
+            "type": "array",
+            "title": "Statements"
+          },
+          "columns": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Columns"
+          },
+          "rows": {
+            "items": {
+              "items": {},
+              "type": "array"
+            },
+            "type": "array",
+            "title": "Rows"
+          },
+          "total_rows": {
+            "type": "integer",
+            "title": "Total Rows",
+            "description": "Filas del resultado; puede haber más que las que trae `rows`",
+            "default": 0
+          },
+          "plan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlanInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": ""
+          },
+          "affected_rows": {
+            "type": "integer",
+            "title": "Affected Rows",
+            "default": 0
+          },
+          "elapsed_ms": {
+            "type": "number",
+            "title": "Elapsed Ms",
+            "default": 0.0
+          },
+          "in_transaction": {
+            "type": "boolean",
+            "title": "In Transaction",
+            "default": false
+          },
+          "spatial": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SpatialInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "text": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TextSearchInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "similarity": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SimilarityInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "title": "QueryResponse",
+        "description": "Resultado de un script. Las filas y el plan son los de la última consulta."
+      },
+      "SimilarityInfo": {
+        "properties": {
+          "table": {
+            "type": "string",
+            "title": "Table"
+          },
+          "column": {
+            "type": "string",
+            "title": "Column",
+            "description": "La columna con las rutas de los archivos"
+          },
+          "index": {
+            "type": "string",
+            "title": "Index"
+          },
+          "method": {
+            "type": "string",
+            "title": "Method",
+            "description": "HNSW o IVF"
+          },
+          "metric": {
+            "type": "string",
+            "enum": [
+              "euclidean",
+              "dot",
+              "cosine"
+            ],
+            "title": "Metric"
+          },
+          "k": {
+            "type": "integer",
+            "title": "K"
+          },
+          "query": {
+            "type": "string",
+            "title": "Query",
+            "description": "La ruta de la consulta tal como se escribió"
+          },
+          "media": {
+            "type": "string",
+            "enum": [
+              "image",
+              "audio"
+            ],
+            "title": "Media"
+          }
+        },
+        "type": "object",
+        "required": [
+          "table",
+          "column",
+          "index",
+          "method",
+          "metric",
+          "k",
+          "query",
+          "media"
+        ],
+        "title": "SimilarityInfo",
+        "description": "Qué buscó el `SIMILAR_TO` de la consulta y en qué columna están los archivos, para\nmostrarlos como galería."
+      },
+      "SpatialInfo": {
+        "properties": {
+          "table": {
+            "type": "string",
+            "title": "Table"
+          },
+          "column": {
+            "type": "string",
+            "title": "Column"
+          },
+          "overlays": {
+            "items": {
+              "$ref": "#/components/schemas/OverlayInfo"
+            },
+            "type": "array",
+            "title": "Overlays"
+          }
+        },
+        "type": "object",
+        "required": [
+          "table",
+          "column"
+        ],
+        "title": "SpatialInfo",
+        "description": "Qué tabla y qué columna POINT toca la consulta, y sus figuras."
+      },
+      "StatementOutcome": {
+        "properties": {
+          "sql": {
+            "type": "string",
+            "title": "Sql"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": ""
+          },
+          "affected_rows": {
+            "type": "integer",
+            "title": "Affected Rows",
+            "default": 0
+          },
+          "elapsed_ms": {
+            "type": "number",
+            "title": "Elapsed Ms",
+            "default": 0.0
+          },
+          "returned_rows": {
+            "type": "integer",
+            "title": "Returned Rows",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "sql"
+        ],
+        "title": "StatementOutcome",
+        "description": "Qué pasó con una de las sentencias de un script."
+      },
+      "TableInfo": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "organization": {
+            "type": "string",
+            "title": "Organization"
+          },
+          "primary_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Primary Key"
+          },
+          "row_count": {
+            "type": "integer",
+            "title": "Row Count"
+          },
+          "columns": {
+            "items": {
+              "$ref": "#/components/schemas/ColumnInfo"
+            },
+            "type": "array",
+            "title": "Columns"
+          },
+          "indexes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Indexes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "organization",
+          "primary_key",
+          "row_count",
+          "columns",
+          "indexes"
+        ],
+        "title": "TableInfo",
+        "description": "Estructura de una tabla para el panel de archivos."
+      },
+      "TablePoints": {
+        "properties": {
+          "table": {
+            "type": "string",
+            "title": "Table"
+          },
+          "column": {
+            "type": "string",
+            "title": "Column"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "description": "Filas de la tabla"
+          },
+          "points": {
+            "items": {
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array",
+              "maxItems": 2,
+              "minItems": 2
+            },
+            "type": "array",
+            "title": "Points",
+            "description": "Pares (latitud, longitud)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "table",
+          "column",
+          "total",
+          "points"
+        ],
+        "title": "TablePoints",
+        "description": "Puntos de una tabla para pintarla en el mapa; una muestra si la tabla es grande."
+      },
+      "TextSearchInfo": {
+        "properties": {
+          "table": {
+            "type": "string",
+            "title": "Table"
+          },
+          "column": {
+            "type": "string",
+            "title": "Column"
+          },
+          "query": {
+            "type": "string",
+            "title": "Query",
+            "description": "La consulta tal como se escribió"
+          },
+          "method": {
+            "type": "string",
+            "enum": [
+              "TF_IDF",
+              "BM25"
+            ],
+            "title": "Method"
+          },
+          "terms": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Terms",
+            "description": "Términos ya analizados: plegados, sin stopwords y reducidos a su raíz; de una consulta booleana, solo los positivos"
+          },
+          "k1": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "K1",
+            "description": "El k1 con que puntuó BM25"
+          },
+          "b": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "B",
+            "description": "El b con que puntuó BM25"
+          }
+        },
+        "type": "object",
+        "required": [
+          "table",
+          "column",
+          "query",
+          "method"
+        ],
+        "title": "TextSearchInfo",
+        "description": "Dónde buscó el `MATCH` de la consulta y con qué términos, para resaltarlos."
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}

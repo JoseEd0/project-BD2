@@ -304,10 +304,20 @@ el que se estaba juntando se descarta y el servidor deja una línea `WARNING` en
 lo que quedó. Si el servidor se apaga, el lote en curso se deshace y la respuesta lo dice
 en `interrupted`; `last_line` es la última línea resuelta, la carga se reanuda en la
 siguiente. En los dos casos, si había índices diferidos, se construyen con las filas
-confirmadas antes de soltar la tabla. Lo que no cubre: si el **proceso muere** a mitad de
-una carga con índices diferidos, las filas confirmadas están en la tabla pero no en esos
-índices (el gestor no tiene un log de escritura anticipada); `DROP INDEX` y `CREATE INDEX`
-los rehacen.
+confirmadas antes de soltar la tabla.
+
+**Si el proceso muere** a mitad de una carga con índices diferidos, las filas confirmadas
+están en la tabla y esos índices no las tienen. Para que eso nunca sea una respuesta con
+filas de menos, antes de dejar de mantener un índice la carga deja junto a él una marca
+`.obsoleto` (escrita con `fsync`, también del directorio), y solo la borra cuando el índice
+construido al final ya está en el disco. Al abrir la tabla, un índice con esa marca se
+descarta y se construye de nuevo con las filas de la tabla; si el proceso vuelve a caer a
+mitad, la marca sigue ahí y la próxima apertura empieza otra vez. Mientras un índice está
+diferido, además, la tabla no lo muestra al planificador: una condición espacial se
+respondería recorriendo la tabla, y `MATCH` o `SIMILAR_TO` sin su índice se rechazan, nunca
+con filas de menos (y otra sesión ni llega a leer: la tabla está bloqueada). Un HNSW o un
+IVF sobre rutas de archivos no se difiere: reconstruirlo extraería y entrenaría su
+vocabulario otra vez.
 
 ### Archivos multimedia
 

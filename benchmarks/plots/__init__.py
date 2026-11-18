@@ -4,7 +4,16 @@
 un experimento nuevo solo añade su módulo y lo suma aquí.
 """
 
-from benchmarks.plots import faces, indexes, multimedia, spatial, storage, text_search, vectors
+from benchmarks.plots import (
+    faces,
+    indexes,
+    multimedia,
+    segments,
+    spatial,
+    storage,
+    text_search,
+    vectors,
+)
 from benchmarks.plots.model import BarFigure, CurveFigure, Figure, GalleryFigure
 
 FIGURES: tuple[Figure | BarFigure | CurveFigure | GalleryFigure, ...] = (
@@ -15,4 +24,5 @@ FIGURES: tuple[Figure | BarFigure | CurveFigure | GalleryFigure, ...] = (
     *multimedia.FIGURES,
     *vectors.FIGURES,
     *faces.FIGURES,
+    *segments.FIGURES,
 )

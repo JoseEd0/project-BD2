@@ -133,13 +133,15 @@ demos/               generador del dataset, descarga de lugares reales y de mús
                      y simulación de concurrencia
   samples/           los CSV del dataset de demostración; en esci/, la muestra real de Amazon
 apps/                servicios de la Parte 5, que usan el gestor solo por su API REST
-  client/            cliente tipado del API del gestor
+  client/            cliente tipado del API del gestor, con su contrato OpenAPI
   kit/               configuración, logs, salud, errores y descargas verificadas
   shop/              tienda con recomendaciones (opción B): dataset de Amazon Reviews 2023
                      con tiendas de Lima
-  web/               portal de las cuatro aplicaciones: React + TypeScript, instalable (PWA),
-                     con los tipos generados del OpenAPI de cada servicio
-tools/               herramientas de desarrollo: exportar los contratos OpenAPI al portal
+  web-kit/           lógica sin estilos que comparten las interfaces de las aplicaciones
+    template/        plantilla de la interfaz de cada app: React + TypeScript, Docker y nginx
+  <app>/web/         la interfaz de cada aplicación, con su propio puerto y diseño
+tools/               herramientas de desarrollo: exportar cada contrato OpenAPI junto a quien
+                     lo consume
 docs/                informe.pdf y su fuente LaTeX
 Dockerfile           imagen del motor con su API
 compose.yaml         la aplicación completa en contenedores: api, web y la carga de la demo;
@@ -177,9 +179,9 @@ proyecto:
 | [`src/txn/`](src/txn/) | transacciones y concurrencia | [README](src/txn/README.md) |
 | [`src/api/`](src/api/) | API REST | [README](src/api/README.md) |
 | [`frontend/`](frontend/) | consola SQL de 4 paneles con panel de mapa, y páginas de búsqueda de texto y multimedia | [README](frontend/README.md) |
-| [`apps/`](apps/) | servicios de la Parte 5 y su portal | [README](apps/README.md) |
+| [`apps/`](apps/) | aplicaciones de la Parte 5: su API y su interfaz | [README](apps/README.md) |
 | [`apps/shop/`](apps/shop/) | tienda con recomendaciones: dataset de compras reales, fotos, tiendas de Lima e inventario | [README](apps/shop/README.md) |
-| [`apps/web/`](apps/web/) | portal de las aplicaciones: rutas, salud de cada servicio, PWA, contratos y tiempos por etapa | [README](apps/web/README.md) |
+| [`apps/web-kit/`](apps/web-kit/) | kit de las interfaces: cliente tipado, salud, tiempos por etapa, tema, PWA y la plantilla de cada app | [README](apps/web-kit/README.md) |
 | [`benchmarks/`](benchmarks/) | comparación experimental, con resultados y gráficas | [README](benchmarks/README.md) |
 | [`demos/`](demos/) | datasets de demostración y simulación de concurrencia | [README](demos/README.md) |
 
@@ -246,7 +248,7 @@ en local, como sigue.
 |---|---|
 | el motor, el API y los servicios | Python 3.11 o posterior y [uv](https://docs.astral.sh/uv/) 0.10 o posterior |
 | la interfaz | Node.js 18 o posterior; 22.18 para `npm test` |
-| el portal de aplicaciones | Node.js 22.18 o posterior |
+| las interfaces de las aplicaciones | Node.js 22.18 o posterior |
 | redibujar las gráficas (opcional) | `matplotlib`, que se instala con el extra `plots` (`uv sync --all-packages --extra plots`) |
 | medir contra GiST y GIN (opcional) | PostgreSQL con la extensión PostGIS y el extra `postgres`, o Docker (perfil `bench`) |
 | medir contra pgvector y USearch (opcional) | PostgreSQL con la extensión pgvector y los extras `postgres` y `usearch`, o Docker (perfil `bench`) |
@@ -265,9 +267,9 @@ uv sync --all-packages
 npm --prefix frontend install
 cp frontend/.env.example frontend/.env
 
-# portal de las aplicaciones (Parte 5)
-npm --prefix apps/web ci
-cp apps/web/.env.example apps/web/.env
+# kit de las interfaces de las aplicaciones (Parte 5) y su plantilla
+npm --prefix apps/web-kit ci
+npm --prefix apps/web-kit/template ci
 
 # variables del API: directorio de datos, orígenes del frontend, de dónde se puede cargar
 cp .env.example .env
@@ -286,8 +288,9 @@ cp .env.example .env
 # 3. interfaz, en http://localhost:5173
 npm --prefix frontend run dev
 
-# 4. (opcional) portal de las aplicaciones; con la interfaz en marcha, Vite elige el 5174
-npm --prefix apps/web run dev
+# 4. (opcional) la plantilla de las interfaces de las aplicaciones; con la interfaz en
+#    marcha, Vite elige el 5174
+npm --prefix apps/web-kit/template run dev
 ```
 
 El dataset carga unas 34 000 filas en diez tablas, **cada una con una organización física
@@ -372,8 +375,8 @@ uv run python -m shop.dataset prepare --data-dir data/datasets
 
 Ninguna ruta, puerto ni credencial está escrita en el código. Las del API y los experimentos
 están en [`.env.example`](.env.example); las de la interfaz, en
-[`frontend/.env.example`](frontend/.env.example); las del portal, en
-[`apps/web/.env.example`](apps/web/.env.example) (ver [su README](apps/web/README.md)).
+[`frontend/.env.example`](frontend/.env.example); las de cada interfaz de aplicación, en su
+`.env.example` (el de la plantilla: [`apps/web-kit/template/.env.example`](apps/web-kit/template/.env.example)).
 
 | Variable | Para qué | Por defecto |
 |---|---|---|
@@ -418,9 +421,10 @@ petición sin que entre en el bundle. Cómo crearlas, qué permite cada rol, los
 .venv/bin/python -m pytest -q                 # tests
 npm --prefix frontend run build               # tipos y bundle de la interfaz
 npm --prefix frontend test                    # resaltado y SQL de la página de texto
-npm --prefix apps/web run build               # tipos, bundle y service worker del portal
-npm --prefix apps/web test                    # lógica y rutas del portal
-npm --prefix apps/web run contracts           # contratos OpenAPI y tipos al día (sin diff)
+npm --prefix apps/web-kit test                # kit de las interfaces de las aplicaciones
+npm --prefix apps/web-kit/template run build  # tipos, bundle y service worker de la plantilla
+npm --prefix apps/web-kit/template test       # sus rutas y su estado del servicio
+uv run python -m tools.export_openapi         # contratos OpenAPI al día (sin diff)
 ```
 
 Lo mismo corre en GitHub Actions ([`.github/workflows/ci.yml`](.github/workflows/ci.yml))
@@ -429,9 +433,11 @@ necesitan PostgreSQL o los extras de gráficas se saltan solos cuando no están.
 levanta además la aplicación con `docker compose`: construye las dos imágenes, espera a que
 la demo se cargue y el API y la interfaz estén sanos, y hace una búsqueda de texto a través
 de nginx.
-Otro trabajo vuelve a exportar los contratos OpenAPI y a generar los tipos del portal, y
-falla si no coinciden con los versionados; después construye el portal, corre sus tests y
-su recorrido de Playwright en Chromium.
+Otro trabajo, el de las interfaces de las aplicaciones, vuelve a exportar los contratos
+OpenAPI y a generar los tipos de cada interfaz, y falla si no coinciden con los versionados;
+después prueba el kit y, para la plantilla y cada `apps/*/web`, construye, corre sus tests y
+su recorrido de Playwright en Chromium; por último construye la imagen de la plantilla y
+comprueba su nginx.
 
 Los tests siguen la estructura de `src/`, así que se pueden ejecutar por módulo:
 

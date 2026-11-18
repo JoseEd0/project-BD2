@@ -11,6 +11,7 @@ resolution-markers = [
 members = [
     "minigestor-bd2",
     "minigestor-client",
+    "minigestor-faces",
     "minigestor-kit",
     "minigestor-shop",
 ]
@@ -1362,6 +1363,26 @@ dev = [
 name = "minigestor-client"
 version = "0.1.0"
 source = { editable = "apps/client" }
+
+[[package]]
+name = "minigestor-faces"
+version = "0.1.0"
+source = { editable = "apps/faces" }
+dependencies = [
+    { name = "minigestor-kit" },
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
+    { name = "numpy", version = "2.5.5", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+    { name = "opencv-python-headless" },
+    { name = "pillow" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "minigestor-kit", editable = "apps/kit" },
+    { name = "numpy", specifier = ">=1.26" },
+    { name = "opencv-python-headless", specifier = ">=4.10" },
+    { name = "pillow", specifier = ">=10.4" },
+]
 
 [[package]]
 name = "minigestor-kit"

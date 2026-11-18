@@ -51,18 +51,26 @@ function ListBars({ sizes }: { sizes: number[] }) {
   );
 }
 
-/** La forma física de un índice HNSW o IVF y de su almacén de características. */
+/**
+ * La forma física de un índice HNSW o IVF: sobre rutas, con su almacén de características;
+ * sobre una columna VECTOR(n), solo el índice de vectores.
+ */
 export default function SimilarityIndexView({ index }: { index: SimilarityStructure }) {
   const features = index.features;
   return (
     <div className="indexview">
       <div className="stats">
         <Stat label="vectores" value={index.vectors ?? 0} />
-        <Stat label="dimensión (palabras)" value={index.dimension ?? 0} />
+        <Stat label={features ? "dimensión (palabras)" : "dimensión"} value={index.dimension ?? 0} />
         <Stat label="métrica" value={index.metric} />
-        {index.media !== null && <Stat label="archivos" value={MEDIA_LABEL[index.media]} />}
-        {features.words_in_use !== undefined && <Stat label="palabras en uso" value={features.words_in_use} />}
-        {features.pages !== undefined && <Stat label="páginas del almacén" value={features.pages} />}
+        {index.media ? (
+          <Stat label="archivos" value={MEDIA_LABEL[index.media]} />
+        ) : (
+          !features && <Stat label="columna" value={`VECTOR(${index.dimension ?? 0})`} />
+        )}
+        {index.zero_vectors !== undefined && <Stat label="vectores cero (fuera)" value={index.zero_vectors} />}
+        {features?.words_in_use !== undefined && <Stat label="palabras en uso" value={features.words_in_use} />}
+        {features?.pages !== undefined && <Stat label="páginas del almacén" value={features.pages} />}
       </div>
       {index.kind === "hnsw" ? (
         <>

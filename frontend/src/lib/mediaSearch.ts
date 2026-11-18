@@ -18,6 +18,7 @@ export type VectorMetric = "cosine" | "euclidean" | "dot";
 export type MediaKind = "image" | "audio";
 
 export const VECTOR_METHODS: readonly VectorMethod[] = ["HNSW", "IVF"];
+const VECTOR_TYPE = "VECTOR";
 export const VECTOR_METRICS: readonly VectorMetric[] = ["cosine", "euclidean", "dot"];
 export const METRIC_LABEL: Record<VectorMetric, string> = {
   cosine: "coseno",
@@ -109,12 +110,15 @@ function firstColumn(table: TableInfo, names: readonly string[], except: string)
   return null;
 }
 
-/** Las columnas con índice HNSW o IVF de todas las tablas, con los métodos de cada una. */
+/**
+ * Las columnas de rutas con índice HNSW o IVF de todas las tablas, con los métodos de cada una.
+ * Una columna VECTOR también puede tenerlo, pero guarda embeddings, no archivos que mostrar.
+ */
 export function mediaTargets(tables: readonly TableInfo[]): MediaTarget[] {
   return tables.flatMap((table) =>
     table.columns.flatMap((column) => {
       const methods = VECTOR_METHODS.filter((method) => column.indexed_with.includes(method));
-      if (methods.length === 0) {
+      if (methods.length === 0 || column.type === VECTOR_TYPE) {
         return [];
       }
       return [

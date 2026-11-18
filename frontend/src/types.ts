@@ -237,12 +237,14 @@ export interface FeatureStoreStructure {
   pages?: number;
 }
 
+/** Un índice sobre rutas trae `media` y `features`; uno sobre una columna VECTOR(n), no. */
 interface SimilarityCommon {
   metric: "euclidean" | "dot" | "cosine";
   dimension?: number;
   vectors?: number;
-  media: "image" | "audio" | null;
-  features: FeatureStoreStructure;
+  zero_vectors?: number;
+  media?: "image" | "audio" | null;
+  features?: FeatureStoreStructure;
 }
 
 export interface HnswStructure extends SimilarityCommon {

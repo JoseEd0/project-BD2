@@ -52,6 +52,7 @@ IndexOpener = Callable[
 ]
 OptionlessOpener = Callable[[Path, FieldReader, str, EngineConfig], SecondaryIndex]
 ColumnRule = Callable[[Field], str | None]
+ColumnTest = Callable[[Field], bool]
 IndexSettings = dict[str, OptionValue]
 SettingsRule = Callable[[IndexOptions, EngineConfig], IndexSettings]
 LANGUAGE_OPTION = "idioma"
@@ -80,6 +81,18 @@ def _no_settings(_: IndexOptions, __: EngineConfig) -> IndexSettings:
     return {}
 
 
+def _never(_: Field) -> bool:
+    return False
+
+
+def _always(_: Field) -> bool:
+    return True
+
+
+def _vector_column(field: Field) -> bool:
+    return field.type is FieldType.VECTOR
+
+
 @unique
 class Capability(Enum):
     """Lo que un índice sabe responder sin recorrer la tabla."""
@@ -106,8 +119,10 @@ class IndexMethod:
         options: las opciones que admite en un `WITH (...)`.
         settings_of: el valor de cada opción con que queda un índice que pide esas: la
             pedida o, si no, la de omisión.
-        builds_in_bulk: si construirlo de una vez con todas las filas cuesta mucho menos
-            que insertarlas de una en una; un B+ y un hash no tienen esa construcción.
+        builds_in_bulk: si sobre esa columna construirlo de una vez con todas las filas
+            cuesta mucho menos que insertarlas de una en una. Un B+ y un hash no tienen esa
+            construcción, y uno de similitud sobre rutas extraería y entrenaría su
+            vocabulario de nuevo.
     """
 
     method: IndexType
@@ -117,7 +132,7 @@ class IndexMethod:
     files_of: Callable[[Path], list[Path]]
     options: frozenset[str] = frozenset()
     settings_of: SettingsRule = _no_settings
-    builds_in_bulk: bool = False
+    builds_in_bulk: ColumnTest = _never
 
     def supports(self, capability: Capability) -> bool:
         return capability in self.capabilities
@@ -383,7 +398,7 @@ _METHODS: dict[IndexType, IndexMethod] = {
         opener=_without_options(SpatialIndex),
         refusal_for=_points_only,
         files_of=_single_file,
-        builds_in_bulk=True,
+        builds_in_bulk=_always,
     ),
     IndexType.INVERTED: IndexMethod(
         method=IndexType.INVERTED,
@@ -393,7 +408,7 @@ _METHODS: dict[IndexType, IndexMethod] = {
         files_of=TextSearchIndex.files_of,
         options=frozenset({LANGUAGE_OPTION}),
         settings_of=_text_settings,
-        builds_in_bulk=True,
+        builds_in_bulk=_always,
     ),
     IndexType.HNSW: IndexMethod(
         method=IndexType.HNSW,
@@ -403,7 +418,7 @@ _METHODS: dict[IndexType, IndexMethod] = {
         files_of=_similarity_files,
         options=HNSW_OPTIONS,
         settings_of=_similarity_settings(HNSW_KIND),
-        builds_in_bulk=True,
+        builds_in_bulk=_vector_column,
     ),
     IndexType.IVF: IndexMethod(
         method=IndexType.IVF,
@@ -413,6 +428,6 @@ _METHODS: dict[IndexType, IndexMethod] = {
         files_of=_similarity_files,
         options=IVF_OPTIONS,
         settings_of=_similarity_settings(IVF_KIND),
-        builds_in_bulk=True,
+        builds_in_bulk=_vector_column,
     ),
 }

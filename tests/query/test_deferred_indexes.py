@@ -9,7 +9,14 @@ import pytest
 
 from config import EngineConfig
 from query.engine import Engine
+from query.index_methods import method_named
 from query.ingest import JsonRow, LoadRowsStatement
+from query.similarity_search import SimilaritySearchError
+from query.table import STALE_SUFFIX
+from query.text_search import TextSearchError
+from sql.nodes import IndexType
+from storage.schema import Field
+from storage.types import FieldType
 
 SCHEMA = (
     "id INT PRIMARY KEY, grupo INT INDEX HASH, codigo VARCHAR(8) UNIQUE, emb VECTOR(4), "
@@ -118,3 +125,49 @@ def test_deferred_indexes_survive_reopening(make_engine, tmp_path: Path, config:
     directory = tmp_path / "reabierta"
     with Engine(EngineConfig(data_directory=directory, page_size=config.page_size)) as reopened:
         assert answers(reopened) == expected
+
+
+def stale_markers(engine: Engine) -> list[str]:
+    return sorted(path.name for path in engine.config.data_directory.glob(f"*{STALE_SUFFIX}"))
+
+
+def test_a_deferred_index_is_marked_stale_on_disk_until_it_is_built(make_engine):
+    engine = make_engine("marcas")
+    table = engine.table("t")
+    table.defer_bulk_indexes()
+    assert stale_markers(engine) == [f"t.{name}.idx{STALE_SUFFIX}" for name in BULK_INDEXES]
+    engine.run(LoadRowsStatement("t", tuple(rows(BATCH_ROWS))))
+    table.build_deferred_indexes()
+    assert stale_markers(engine) == []
+
+
+def test_the_planner_never_uses_a_deferred_index(make_engine):
+    """Con los índices diferidos, una condición espacial se responde recorriendo la tabla
+    —con todas sus filas—, y MATCH y SIMILAR_TO, que no tienen recorrido, se niegan."""
+    engine = make_engine("planificador")
+    table = engine.table("t")
+    table.defer_bulk_indexes()
+    engine.run(LoadRowsStatement("t", tuple(rows(ROWS))))
+    radius = "SELECT id FROM t WHERE distancia(lugar, POINT(-12.0, -77.0)) < 40000 ORDER BY id"
+    plan = str(engine.execute(f"EXPLAIN {radius}").plan.to_dict())
+    assert "SpatialRangeScan" not in plan
+    scanned = engine.execute(radius).rows
+    assert scanned
+    with pytest.raises(TextSearchError, match="no tiene índice invertido"):
+        engine.execute("SELECT id FROM t WHERE MATCH(texto, 'mesa')")
+    with pytest.raises(SimilaritySearchError):
+        engine.execute("SELECT id FROM t WHERE SIMILAR_TO(emb, [1, 0, 0, 0], k = 3)")
+    table.build_deferred_indexes()
+    assert "SpatialRangeScan" in str(engine.execute(f"EXPLAIN {radius}").plan.to_dict())
+    assert engine.execute(radius).rows == scanned
+
+
+def test_a_similarity_index_over_file_paths_is_not_deferred():
+    """Construirlo de nuevo extraería y entrenaría su vocabulario: no se difiere."""
+    paths = Field("ruta", FieldType.STRING, 40)
+    vectors = Field("emb", FieldType.VECTOR, 4)
+    for method in (IndexType.HNSW, IndexType.IVF):
+        known = method_named(method)
+        assert known is not None
+        assert not known.builds_in_bulk(paths)
+        assert known.builds_in_bulk(vectors)

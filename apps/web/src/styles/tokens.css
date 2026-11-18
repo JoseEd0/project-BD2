@@ -1,0 +1,93 @@
+/*
+ * Tokens del portal. El tema lo fija `data-theme` en <html> antes de pintar
+ * (ver src/theme/themePreference.ts); cada aplicación tiene su color, que tiñe su símbolo
+ * y su tramo en la franja del gestor.
+ */
+:root {
+  --font: "Bricolage Grotesque Variable", ui-sans-serif, system-ui, sans-serif;
+
+  --step--1: 0.875rem;
+  --step-0: 1.0625rem;
+  --step-1: 1.3125rem;
+  --step-2: 1.625rem;
+  --step-3: 2.0625rem;
+  --step-hero: clamp(2.25rem, 1.4rem + 4.2vw, 3.75rem);
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+  --space-8: 4.5rem;
+
+  --gutter: 16px;
+  --page-width: 68rem;
+  --text-width: 62ch;
+  --radius-small: 6px;
+  --radius-large: 14px;
+  --bottom-nav-height: 4.25rem;
+
+  --ground: #f1f0f7;
+  --surface: #ffffff;
+  --surface-sunk: #e7e5f1;
+  --ink: #1d1a3a;
+  --ink-soft: #4b4769;
+  --line: #d5d2e6;
+  --focus: #2f5bff;
+
+  --app-copyright: #c2255c;
+  --app-shop: #0b7a5e;
+  --app-papers: #a5620c;
+  --app-faces: #4c4cc4;
+  --app-engine: var(--ink);
+
+  --status-available: #0f7a4f;
+  --status-unavailable: #b42318;
+  --status-checking: #6b6787;
+
+  --stage-1: #4c4cc4;
+  --stage-2: #0b7a5e;
+  --stage-3: #c2255c;
+  --stage-4: #a5620c;
+  --stage-5: #2f7fb8;
+  --stage-6: #7a4fb0;
+  --stage-rest: #b9b5cf;
+
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --ground: #15132a;
+  --surface: #1f1c38;
+  --surface-sunk: #110f22;
+  --ink: #eceaf8;
+  --ink-soft: #aeaacb;
+  --line: #34305a;
+  --focus: #8ab4ff;
+
+  --app-copyright: #f06595;
+  --app-shop: #38c9a0;
+  --app-papers: #e3a64a;
+  --app-faces: #8d8cf5;
+
+  --status-available: #4ade9a;
+  --status-unavailable: #ff8a7a;
+  --status-checking: #8f8aad;
+
+  --stage-1: #8d8cf5;
+  --stage-2: #38c9a0;
+  --stage-3: #f06595;
+  --stage-4: #e3a64a;
+  --stage-5: #5fb3ec;
+  --stage-6: #b48cf0;
+  --stage-rest: #4a4570;
+
+  color-scheme: dark;
+}
+
+[data-app="copyright"] { --accent: var(--app-copyright); }
+[data-app="shop"] { --accent: var(--app-shop); }
+[data-app="papers"] { --accent: var(--app-papers); }
+[data-app="faces"] { --accent: var(--app-faces); }

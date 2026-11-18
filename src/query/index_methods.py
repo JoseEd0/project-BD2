@@ -29,7 +29,7 @@ from index.hash import HashSecondaryIndex
 from index.inverted import TextSearchIndex
 from index.rtree import SpatialIndex
 from index.secondary import SecondaryIndex
-from index.similarity import HNSW_KIND, IVF_KIND, SimilarityIndex, VectorIndexSettings
+from index.similarity import HNSW_KIND, IVF_KIND, MediaSimilarityIndex, VectorIndexSettings
 from index.vector import VectorMetric, vector_metric_named
 from query.files import resolve_user_file
 from sql.nodes import IndexType, OptionValue
@@ -229,7 +229,7 @@ def _similarity_opener(kind: str) -> IndexOpener:
             probes=_optional_positive(named, PROBES_OPTION),
             vocabulary_size=_optional_positive(named, VOCABULARY_OPTION),
         )
-        return SimilarityIndex(
+        return MediaSimilarityIndex(
             path, rows, column, config, settings, lambda text: resolve_user_file(text, config)
         )
 
@@ -304,7 +304,7 @@ _METHODS: dict[IndexType, IndexMethod] = {
         capabilities=frozenset({Capability.SIMILARITY}),
         opener=_similarity_opener(HNSW_KIND),
         refusal_for=_media_paths_only(IndexType.HNSW),
-        files_of=SimilarityIndex.files_of,
+        files_of=MediaSimilarityIndex.files_of,
         options=HNSW_OPTIONS,
     ),
     IndexType.IVF: IndexMethod(
@@ -312,7 +312,7 @@ _METHODS: dict[IndexType, IndexMethod] = {
         capabilities=frozenset({Capability.SIMILARITY}),
         opener=_similarity_opener(IVF_KIND),
         refusal_for=_media_paths_only(IndexType.IVF),
-        files_of=SimilarityIndex.files_of,
+        files_of=MediaSimilarityIndex.files_of,
         options=IVF_OPTIONS,
     ),
 }

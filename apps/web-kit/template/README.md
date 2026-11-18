@@ -1,7 +1,7 @@
 # Interfaz de una aplicación
 
 Plantilla de la interfaz de una aplicación de la Parte 5, creada con el kit
-([`apps/web-kit`](../README.md)). Al copiarla a `apps/<app>/web`, este README pasa a ser el de
+([`apps/web-kit`](../../web-kit/README.md)). Al copiarla a `apps/<app>/web`, este README pasa a ser el de
 esa interfaz: se reemplaza por lo que la app hace, su `PRODUCT.md` y su `DESIGN.md`.
 
 | Archivo | Qué es |

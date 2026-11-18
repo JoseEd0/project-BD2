@@ -1,20 +1,33 @@
 # Servicios de la Parte 5
 
-Cada aplicación del Anexo A es un servicio aparte que usa el gestor como lo haría con
+Cada aplicación del Anexo A es un producto aparte que usa el gestor como lo haría con
 cualquier base de datos: **solo por su API REST**. El gestor es un contenedor con estado en
-una red interna; cada servicio es otro contenedor, sin estado, que escala con réplicas.
+una red interna; cada aplicación tiene su API (otro contenedor, sin estado, que escala con
+réplicas) y su interfaz (un nginx que la sirve y reenvía `/api` solo a esa API), en su
+propio puerto y con su propia identidad visual.
 
 ```
 apps/
-  client/      minigestor_client: cliente tipado del API del gestor
-  kit/         appkit: configuración, logs, salud, errores y descargas verificadas
-  shop/        tienda con recomendaciones (opción B): por ahora, su dataset
-  web/         portal de las cuatro aplicaciones: React + TypeScript, instalable (PWA)
+  client/          minigestor_client: cliente tipado del API del gestor; openapi/engine.json
+  kit/             appkit: configuración, logs, salud, errores y descargas verificadas
+  shop/            tienda con recomendaciones (opción B): por ahora, su dataset
+  web-kit/         @minigestor/web-kit: lógica sin estilos que comparten las interfaces
+    template/      plantilla de la interfaz de una app: Vite, React, Docker y nginx
+  <app>/           el API de la aplicación (FastAPI), miembro del espacio de trabajo de uv
+    web/           su interfaz, creada desde la plantilla, con su contrato en openapi/
+    compose.yaml   su API y su interfaz, incluidos desde el compose raíz (#72)
 ```
 
-El portal ([`web/`](web/README.md)) no es un servicio de Python sino la web que los usa: un
-proyecto npm propio, fuera del espacio de trabajo de uv, que consulta el `/health` de cada
-servicio y genera sus tipos del OpenAPI que cada uno publica.
+| Aplicación | Carpeta | Puerto de su interfaz |
+|---|---|---|
+| Copyright en audio | `apps/copyright/` | 8101 |
+| Tienda con recomendaciones | `apps/shop/` | 8102 |
+| Preguntas a papers (RAG) | `apps/rag/` | 8103 |
+| Reconocimiento de rostros | `apps/faces/` | 8104 |
+
+Las interfaces comparten lógica (cliente tipado, salud, `Server-Timing`, tema, PWA) a través
+del [kit web](web-kit/README.md), nunca apariencia. Son proyectos npm propios, fuera del
+espacio de trabajo de uv.
 
 ## Reglas
 
@@ -28,11 +41,12 @@ servicio y genera sus tipos del OpenAPI que cada uno publica.
   su nombre, así que dos servicios no pueden tener un `test_api.py` cada uno.
 - `ruff` y `mypy --strict` cubren `apps/*/src` igual que el gestor. A mypy cada servicio
   se le añade por nombre en `files` de `[tool.mypy]`, como en `[tool.uv.workspace]`: un
-  patrón alcanzaría `apps/web/src`, que es TypeScript.
+  patrón alcanzaría `apps/web-kit/src`, que es TypeScript.
 - Cada servicio registra su contrato en
-  [`tools/export_openapi.py`](../tools/export_openapi.py) y lo exporta con
-  `npm --prefix apps/web run contracts`, que también genera los tipos del portal; la CI
-  falla si el contrato versionado no coincide con el del código.
+  [`tools/export_openapi.py`](../tools/export_openapi.py) con la ruta junto a su interfaz
+  (`apps/<app>/web/openapi/<app>.json`) y lo exporta con
+  `npm --prefix apps/<app>/web run contracts`, que también genera los tipos de la interfaz;
+  la CI falla si un contrato versionado o sus tipos no coinciden con el código.
 
 ## Descargas de modelos y datasets
 

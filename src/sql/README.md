@@ -330,7 +330,8 @@ El planificador y sus decisiones están en
 
 Las de la Parte 4. Como `MATCH`, `SIMILAR_TO` y `SIMILARITY_SCORE()` se escriben como
 llamadas a función pero las resuelve un índice: el `HNSW` o el `IVF` de la columna que
-guarda la ruta de cada imagen o audio.
+guarda la ruta de cada imagen o audio, o el de una columna `VECTOR(n)` con vectores ya
+calculados, como los embeddings de un modelo (lo que pgvector agrega a PostgreSQL).
 
 | Forma | Qué es |
 |---|---|
@@ -338,6 +339,9 @@ guarda la ruta de cada imagen o audio.
 | `CREATE INDEX [nombre] ON t USING IVF (ruta) [WITH (...)]` | lo mismo con IVF; opciones `metric`, `lists`, `probes` y `vocabulary` |
 | `WHERE SIMILAR_TO('consulta.jpg', k = 10)` | las 10 filas cuyo archivo más se parece al de la consulta |
 | `WHERE SIMILAR_TO(ruta, 'consulta.jpg', k = 10)` | lo mismo nombrando la columna, si la tabla tiene varias con índice |
+| `CREATE INDEX [nombre] ON t USING HNSW (emb) [WITH (...)]` | sobre una columna `VECTOR(n)`: un HNSW con los vectores de la tabla, sin vocabulario ni extracción; opciones `metric`, `m`, `ef_construction` y `ef_search` (`IVF`: `metric`, `lists` y `probes`) |
+| `WHERE SIMILAR_TO(emb, [0.1, 0.2, 0.3], k = 10)` | las 10 filas de vector más parecido, en una columna `VECTOR(3)` |
+| `WHERE SIMILAR_TO(emb, $1, k = 10)` | lo mismo con el vector como parámetro (una lista JSON de números) |
 | `USING HNSW` / `USING IVF` | el índice; sin `USING`, el único índice de similitud que tenga la tabla |
 | `WITH METRIC = cosine` | `euclidean`, `dot` o `cosine` (también `euclidiana`, `producto_punto`, `coseno`); sin ella, la del índice |
 | `WITH ef_search = 100` / `WITH probes = 20` | el esfuerzo de esta consulta en HNSW o en IVF |
@@ -360,11 +364,30 @@ SELECT titulo, categoria, SIMILARITY_SCORE() AS score FROM imagenes
 - **El archivo de la consulta** se resuelve igual que el de `CREATE TABLE ... FROM FILE`:
   dentro del directorio de datos o de `MINIGESTOR_IMPORT_DIRS`.
 
+Sobre una columna `VECTOR(n)`:
+
+```sql
+CREATE TABLE fragmentos (id INT PRIMARY KEY, tema VARCHAR(12), embedding VECTOR(384));
+CREATE INDEX idx_emb ON fragmentos USING HNSW (embedding) WITH (metric = 'cosine');
+
+SELECT id, tema, SIMILARITY_SCORE() AS score FROM fragmentos
+    WHERE SIMILAR_TO(embedding, $1, k = 10) AND tema <> 'deporte';
+```
+
+- `INSERT`, `UPDATE`, `DELETE` y `ROLLBACK` mantienen el índice; un vector de otra dimensión
+  se rechaza al insertarlo, como en cualquier columna `VECTOR(n)`.
+- Las filas con `NULL` no entran al índice. Las de vector cero tampoco, como en las columnas
+  de rutas: con el coseno no tienen dirección; salen con su puntaje exacto (0 con el coseno y
+  el producto punto, `1 / (1 + ‖q‖)` con la euclidiana).
+- `vocabulary` no vale: la columna ya guarda sus vectores.
+
 Lo que el motor exige, con un error antes de leer ninguna fila:
 
 - `SIMILAR_TO('archivo', k = n)` o `SIMILAR_TO(columna, 'archivo', k = n)`: un archivo que
   exista, sea una imagen o un audio (por su extensión) y sea del tipo de la columna, y un `k`
   entero positivo;
+- sobre una columna `VECTOR(n)`, un vector (literal o parámetro) de dimensión `n`, nunca un
+  archivo; y sobre una de rutas, un archivo, nunca un vector;
 - va en el `WHERE` de un `SELECT`, unida al resto con `AND`, una sola por consulta y no junto
   a un `MATCH`;
 - un índice de similitud que la responda: si no hay, el error dice el `CREATE INDEX` que

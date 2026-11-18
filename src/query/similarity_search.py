@@ -383,7 +383,7 @@ def _searched_index(
     )
     raise SimilaritySearchError(
         f"hay varios índices{asked} de similitud ({names}): elige uno con USING o nombra la "
-        "columna, como SIMILAR_TO(ruta, 'foto.jpg', k = 10)"
+        "columna, como SIMILAR_TO(columna, consulta, k = 10)"
     )
 
 

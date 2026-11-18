@@ -201,6 +201,21 @@ def test_a_vector_component_has_to_fit_in_32_bits():
         codec_for(FieldType.VECTOR, 2).to_slots((1e40, 0.0))
 
 
-def test_a_vector_component_has_to_be_finite():
+@pytest.mark.parametrize(
+    "value", [(float("nan"), 0.0), (float("inf"), 0.0), (float("inf"), float("-inf"))]
+)
+def test_a_vector_component_has_to_be_finite(value: tuple[float, float]):
     with pytest.raises(InvalidValueError, match="finito"):
-        codec_for(FieldType.VECTOR, 2).to_slots((float("nan"), 0.0))
+        codec_for(FieldType.VECTOR, 2).to_slots(value)
+
+
+@pytest.mark.parametrize(
+    ("value", "stored"), [((1, 2.5), (1.0, 2.5)), ((0.25, -3.0), (0.25, -3.0))]
+)
+def test_a_vector_of_floats_is_stored_as_is_and_integers_become_reals(
+    value: tuple[float, ...], stored: tuple[float, ...]
+):
+    codec = codec_for(FieldType.VECTOR, 2)
+    slots = codec.to_slots(value)
+    assert slots == stored
+    assert all(type(component) is float for component in slots)

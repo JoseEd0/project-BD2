@@ -1,0 +1,16 @@
+"""Nombres de técnicas y escenarios del experimento de la carga masiva: los usa el
+experimento al guardar sus medidas y `benchmarks.plots.ingest` al dibujarlas."""
+
+REPORT = "ingesta"
+INSERT_ROW = "INSERT con parámetros, una fila por petición"
+INSERT_BATCH = "INSERT con parámetros, un lote por petición"
+NDJSON = "NDJSON por lotes (/tables/{name}/rows)"
+PLAIN = "sin vector"
+VECTOR = "VECTOR(384), sin índice"
+HNSW_EMPTY = "VECTOR(384), HNSW creado antes, tabla vacía"
+HNSW_ROWS = "VECTOR(384), HNSW creado antes, tabla con filas"
+HNSW_AFTER = "VECTOR(384), HNSW creado después"
+RTREE_EMPTY = "POINT, R-Tree creado antes, tabla vacía"
+RTREE_ROWS = "POINT, R-Tree creado antes, tabla con filas"
+RTREE_AFTER = "POINT, R-Tree creado después"
+THROUGHPUT_FIELD = "filas_por_segundo"

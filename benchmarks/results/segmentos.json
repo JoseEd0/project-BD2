@@ -1,0 +1,362 @@
+{
+  "name": "segmentos",
+  "parameters": {
+    "pistas": "las primeras 200 de pistas, por ruta",
+    "catalogos": [
+      50,
+      100,
+      200
+    ],
+    "canciones_s": [
+      30,
+      60,
+      120,
+      180
+    ],
+    "cancion": "pistas del catálogo pegadas, mono, 44100 Hz, MP3",
+    "ventana_s": 10.0,
+    "salto_s": 5.0,
+    "k": 5,
+    "indice": "HNSW con los parámetros por omisión (coseno)",
+    "vocabulario": 256,
+    "repeticiones": 3,
+    "procesos_de_extraccion": 1,
+    "versiones": {
+      "librosa": "1.0.1",
+      "soundfile": "0.14.0"
+    },
+    "maquina": {
+      "procesador": "Apple M4 Pro",
+      "nucleos": 12,
+      "sistema": "macOS-27.0.1-arm64-arm-64bit",
+      "python": "3.12.11",
+      "carga_media_1_min": 18.12
+    }
+  },
+  "measurements": [
+    {
+      "technique": "pistas enteras",
+      "operation": "CREATE INDEX",
+      "dataset_size": 50,
+      "milliseconds": 3204.7477499581873,
+      "extra": {
+        "filas": 50,
+        "decodificaciones": 50
+      }
+    },
+    {
+      "technique": "tramos (una decodificación por pista)",
+      "operation": "CREATE INDEX",
+      "dataset_size": 50,
+      "milliseconds": 3502.3532909690402,
+      "extra": {
+        "filas": 218,
+        "decodificaciones": 50
+      }
+    },
+    {
+      "technique": "tramos (cada fila lee su tramo)",
+      "operation": "extracción",
+      "dataset_size": 50,
+      "milliseconds": 2493.183417012915,
+      "extra": {
+        "filas": 218,
+        "lecturas": 218
+      }
+    },
+    {
+      "technique": "tramos (una decodificación por pista)",
+      "operation": "extracción",
+      "dataset_size": 50,
+      "milliseconds": 1901.3033749652095,
+      "extra": {
+        "filas": 218,
+        "lecturas": 50
+      }
+    },
+    {
+      "technique": "pistas enteras",
+      "operation": "CREATE INDEX",
+      "dataset_size": 100,
+      "milliseconds": 4851.064249989577,
+      "extra": {
+        "filas": 100,
+        "decodificaciones": 100
+      }
+    },
+    {
+      "technique": "tramos (una decodificación por pista)",
+      "operation": "CREATE INDEX",
+      "dataset_size": 100,
+      "milliseconds": 5510.511500004213,
+      "extra": {
+        "filas": 445,
+        "decodificaciones": 100
+      }
+    },
+    {
+      "technique": "tramos (cada fila lee su tramo)",
+      "operation": "extracción",
+      "dataset_size": 100,
+      "milliseconds": 5033.986833004747,
+      "extra": {
+        "filas": 445,
+        "lecturas": 445
+      }
+    },
+    {
+      "technique": "tramos (una decodificación por pista)",
+      "operation": "extracción",
+      "dataset_size": 100,
+      "milliseconds": 3774.438166990876,
+      "extra": {
+        "filas": 445,
+        "lecturas": 100
+      }
+    },
+    {
+      "technique": "pistas enteras",
+      "operation": "CREATE INDEX",
+      "dataset_size": 200,
+      "milliseconds": 8067.020666028839,
+      "extra": {
+        "filas": 200,
+        "decodificaciones": 200
+      }
+    },
+    {
+      "technique": "tramos (una decodificación por pista)",
+      "operation": "CREATE INDEX",
+      "dataset_size": 200,
+      "milliseconds": 9565.028832992539,
+      "extra": {
+        "filas": 898,
+        "decodificaciones": 200
+      }
+    },
+    {
+      "technique": "tramos (cada fila lee su tramo)",
+      "operation": "extracción",
+      "dataset_size": 200,
+      "milliseconds": 9866.219332965557,
+      "extra": {
+        "filas": 898,
+        "lecturas": 898
+      }
+    },
+    {
+      "technique": "tramos (una decodificación por pista)",
+      "operation": "extracción",
+      "dataset_size": 200,
+      "milliseconds": 7396.065625012852,
+      "extra": {
+        "filas": 898,
+        "lecturas": 200
+      }
+    },
+    {
+      "technique": "POST /media/segments",
+      "operation": "consulta de una canción",
+      "dataset_size": 30,
+      "milliseconds": 30.86433297721669,
+      "extra": {
+        "ventanas": 5,
+        "peticiones": 1,
+        "ms_por_ventana": 6.17,
+        "ventanas_con_los_mismos_vecinos": 5,
+        "maxima_diferencia_de_puntaje": 0.0
+      }
+    },
+    {
+      "technique": "un SIMILAR_TO por ventana",
+      "operation": "consulta de una canción",
+      "dataset_size": 30,
+      "milliseconds": 48.42537496006116,
+      "extra": {
+        "ventanas": 5,
+        "peticiones": 6,
+        "ms_por_ventana": 9.69
+      }
+    },
+    {
+      "technique": "decodificar (una vez)",
+      "operation": "etapas de /media/segments",
+      "dataset_size": 30,
+      "milliseconds": 9.092582971788943,
+      "extra": {
+        "ventanas": 5
+      }
+    },
+    {
+      "technique": "MFCC y TF-IDF de las ventanas",
+      "operation": "etapas de /media/segments",
+      "dataset_size": 30,
+      "milliseconds": 18.157666025217623,
+      "extra": {
+        "ventanas": 5
+      }
+    },
+    {
+      "technique": "búsqueda en lote",
+      "operation": "etapas de /media/segments",
+      "dataset_size": 30,
+      "milliseconds": 0.25516696041449904,
+      "extra": {
+        "ventanas": 5
+      }
+    },
+    {
+      "technique": "POST /media/segments",
+      "operation": "consulta de una canción",
+      "dataset_size": 60,
+      "milliseconds": 59.470999985933304,
+      "extra": {
+        "ventanas": 11,
+        "peticiones": 1,
+        "ms_por_ventana": 5.41,
+        "ventanas_con_los_mismos_vecinos": 11,
+        "maxima_diferencia_de_puntaje": 0.0
+      }
+    },
+    {
+      "technique": "un SIMILAR_TO por ventana",
+      "operation": "consulta de una canción",
+      "dataset_size": 60,
+      "milliseconds": 105.5784160271287,
+      "extra": {
+        "ventanas": 11,
+        "peticiones": 12,
+        "ms_por_ventana": 9.6
+      }
+    },
+    {
+      "technique": "decodificar (una vez)",
+      "operation": "etapas de /media/segments",
+      "dataset_size": 60,
+      "milliseconds": 17.424208985175937,
+      "extra": {
+        "ventanas": 11
+      }
+    },
+    {
+      "technique": "MFCC y TF-IDF de las ventanas",
+      "operation": "etapas de /media/segments",
+      "dataset_size": 60,
+      "milliseconds": 38.78858400275931,
+      "extra": {
+        "ventanas": 11
+      }
+    },
+    {
+      "technique": "búsqueda en lote",
+      "operation": "etapas de /media/segments",
+      "dataset_size": 60,
+      "milliseconds": 0.33191597322002053,
+      "extra": {
+        "ventanas": 11
+      }
+    },
+    {
+      "technique": "POST /media/segments",
+      "operation": "consulta de una canción",
+      "dataset_size": 120,
+      "milliseconds": 122.49829102074727,
+      "extra": {
+        "ventanas": 23,
+        "peticiones": 1,
+        "ms_por_ventana": 5.33,
+        "ventanas_con_los_mismos_vecinos": 23,
+        "maxima_diferencia_de_puntaje": 0.0
+      }
+    },
+    {
+      "technique": "un SIMILAR_TO por ventana",
+      "operation": "consulta de una canción",
+      "dataset_size": 120,
+      "milliseconds": 240.2579170302488,
+      "extra": {
+        "ventanas": 23,
+        "peticiones": 24,
+        "ms_por_ventana": 10.45
+      }
+    },
+    {
+      "technique": "decodificar (una vez)",
+      "operation": "etapas de /media/segments",
+      "dataset_size": 120,
+      "milliseconds": 35.76433297712356,
+      "extra": {
+        "ventanas": 23
+      }
+    },
+    {
+      "technique": "MFCC y TF-IDF de las ventanas",
+      "operation": "etapas de /media/segments",
+      "dataset_size": 120,
+      "milliseconds": 80.73129103286192,
+      "extra": {
+        "ventanas": 23
+      }
+    },
+    {
+      "technique": "búsqueda en lote",
+      "operation": "etapas de /media/segments",
+      "dataset_size": 120,
+      "milliseconds": 0.39883394492790103,
+      "extra": {
+        "ventanas": 23
+      }
+    },
+    {
+      "technique": "POST /media/segments",
+      "operation": "consulta de una canción",
+      "dataset_size": 180,
+      "milliseconds": 180.16012496082112,
+      "extra": {
+        "ventanas": 35,
+        "peticiones": 1,
+        "ms_por_ventana": 5.15,
+        "ventanas_con_los_mismos_vecinos": 35,
+        "maxima_diferencia_de_puntaje": 0.0
+      }
+    },
+    {
+      "technique": "un SIMILAR_TO por ventana",
+      "operation": "consulta de una canción",
+      "dataset_size": 180,
+      "milliseconds": 392.410833039321,
+      "extra": {
+        "ventanas": 35,
+        "peticiones": 36,
+        "ms_por_ventana": 11.21
+      }
+    },
+    {
+      "technique": "decodificar (una vez)",
+      "operation": "etapas de /media/segments",
+      "dataset_size": 180,
+      "milliseconds": 53.277041006367654,
+      "extra": {
+        "ventanas": 35
+      }
+    },
+    {
+      "technique": "MFCC y TF-IDF de las ventanas",
+      "operation": "etapas de /media/segments",
+      "dataset_size": 180,
+      "milliseconds": 120.98254199372604,
+      "extra": {
+        "ventanas": 35
+      }
+    },
+    {
+      "technique": "búsqueda en lote",
+      "operation": "etapas de /media/segments",
+      "dataset_size": 180,
+      "milliseconds": 0.505667005199939,
+      "extra": {
+        "ventanas": 35
+      }
+    }
+  ]
+}

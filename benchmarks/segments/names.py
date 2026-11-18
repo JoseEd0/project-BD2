@@ -1,0 +1,17 @@
+"""Nombres de técnicas y operaciones del experimento de segmentos: los usa el experimento al
+guardar sus medidas y `benchmarks.plots.segments` al dibujarlas."""
+
+REPORT = "segmentos"
+SEGMENTS = "POST /media/segments"
+SEPARATE = "un SIMILAR_TO por ventana"
+SEGMENT_QUERY = "consulta de una canción"
+DECODE = "decodificar (una vez)"
+EXTRACT = "MFCC y TF-IDF de las ventanas"
+SEARCH = "búsqueda en lote"
+SEGMENT_STAGES = "etapas de /media/segments"
+WHOLE_FILES = "pistas enteras"
+FRAGMENTS = "tramos (una decodificación por pista)"
+PER_ROW = "tramos (cada fila lee su tramo)"
+GROUPED = "tramos (una decodificación por pista)"
+INDEX_BUILD = "CREATE INDEX"
+EXTRACTION = "extracción"

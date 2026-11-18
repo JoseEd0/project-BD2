@@ -19,6 +19,7 @@ gráficas de [`figures/`](figures/) y todas las tablas de este documento.
 .venv/bin/python -m benchmarks.vector_benchmark --sizes 1000 10000 100000
 .venv/bin/python -m benchmarks.faces_benchmark --lfw data/datasets/lfw/lfw \
     --models data/models/faces --sides 500 1000 2000 4000 --sample 500 --threads 1
+.venv/bin/python -m benchmarks.segments_benchmark --tracks-directory data/datasets/fma_small/pistas
 .venv/bin/python -m benchmarks.plot              # redibuja todas las gráficas
 ```
 
@@ -1290,6 +1291,85 @@ Docker la cifra será otra. Las fotos ampliadas no tienen más detalle que la or
 250 px: miden el costo de su tamaño, no la precisión con fotos grandes. La exactitud de la
 verificación con los pares de LFW y el umbral del conjunto abierto se miden aparte (#92).
 
+## 8. Tramos de audio y consulta por segmentos
+
+`segments_benchmark.py` mide lo que añade el issue #74 para la detección de copyright
+(Parte 5, opción C): filas que son **tramos** de una pista (`pista.mp3#t=10,20`, W3C Media
+Fragments) y la **consulta por segmentos** de una canción subida (`POST /media/segments`).
+Todo corre por el motor real, sobre las primeras 200 pistas de FMA (`fma_small`, MP3 de
+30 s) por ruta, con ventanas de 10 s cada 5 s, `k` = 5 y el HNSW por omisión (coseno).
+
+**Qué se compara.**
+
+- **Consultar una canción.** `POST /media/segments` sube la canción una vez, la decodifica
+  una vez, describe cada ventana y las busca todas en un solo lote de FAISS. Sin él, un
+  cliente subiría la canción con `POST /media/queries` y lanzaría un
+  `SIMILAR_TO('cancion#t=a,b', k = 5)` por ventana: una petición, una decodificación de su
+  tramo y una búsqueda por ventana. Las canciones son pistas del catálogo pegadas hasta durar
+  30, 60, 120 y 180 s, en MP3 a 44,1 kHz; se consultan contra una tabla de 898 tramos (las
+  ventanas de 10 s cada 5 s que caben en cada una de las 200 pistas). Mediana de 3; el tiempo
+  es el del cliente, con HTTP (`TestClient`) incluido.
+- **Indexar tramos.** `CREATE INDEX ... USING HNSW` sobre las pistas enteras frente a la
+  misma colección cortada en tramos, con un proceso de extracción; y la extracción sola de
+  esos tramos, en un proceso, leyendo cada uno su rango frente a una decodificación por
+  pista (lo que hace el índice).
+
+**Dónde corrió.** Apple M4 Pro (12 núcleos), macOS, Python 3.12; la carga media al empezar
+era de 18 (terminaba otra medida) y bajó durante la corrida. Una corrida anterior con la
+máquina libre dio las mismas cifras a ±4 %.
+
+### Resultados medidos
+
+![Consultar una canción por segmentos](figures/segmentos-consulta.png)
+
+| Canción | Ventanas | `/media/segments` | por ventana | un `SIMILAR_TO` por ventana | por ventana | Más rápido | Mismos vecinos |
+|---:|---:|---:|---:|---:|---:|---:|---:|
+| 30 s | 5 | 30,9 ms | 6,2 ms | 48,4 ms | 9,7 ms | 1,6× | 5/5 |
+| 60 s | 11 | 59,5 ms | 5,4 ms | 105,6 ms | 9,6 ms | 1,8× | 11/11 |
+| 120 s | 23 | 122,5 ms | 5,3 ms | 240,3 ms | 10,4 ms | 2,0× | 23/23 |
+| 180 s | 35 | **180,2 ms** | 5,2 ms | 392,4 ms | 11,2 ms | **2,2×** | 35/35 |
+
+Dónde se va el tiempo de `/media/segments` (lo que mide el servidor):
+
+| Canción | Decodificar (una vez) | MFCC y TF-IDF de las ventanas | Búsqueda en lote | Resto (HTTP, filas) |
+|---:|---:|---:|---:|---:|
+| 30 s | 9,1 ms | 18,2 ms | 0,3 ms | 3,4 ms |
+| 60 s | 17,4 ms | 38,8 ms | 0,3 ms | 2,9 ms |
+| 120 s | 35,8 ms | 80,7 ms | 0,4 ms | 5,6 ms |
+| 180 s | 53,3 ms | 121,0 ms | 0,5 ms | 5,4 ms |
+
+![Indexar tramos de pistas](figures/segmentos-indice.png)
+
+| Pistas | Tramos | `CREATE INDEX` pistas enteras | `CREATE INDEX` tramos | Extraer: cada tramo lee su rango | Extraer: una decodificación por pista | Ahorro |
+|---:|---:|---:|---:|---:|---:|---:|
+| 50 | 218 | 3,20 s | 3,50 s | 2,49 s | 1,90 s | 24 % |
+| 100 | 445 | 4,85 s | 5,51 s | 5,03 s | 3,77 s | 25 % |
+| 200 | 898 | 8,07 s | 9,57 s | 9,87 s | 7,40 s | 25 % |
+
+### Conclusiones
+
+- **Una canción de 3 min se consulta en 180 ms**, 2,2 veces más rápido que ventana por
+  ventana (392 ms), y la ventaja crece con la canción: cada `SIMILAR_TO` suelto paga su
+  petición, su análisis y planificación SQL, su lectura del tramo y su búsqueda, unos
+  11 ms; dentro de `/media/segments` una ventana cuesta 5,2 ms.
+- **Las dos respuestas son la misma.** En las 74 ventanas medidas, los vecinos coinciden en
+  orden y la mayor diferencia de puntaje es 0: el recorte de un audio decodificado entero y
+  la lectura de solo el tramo dan las mismas muestras hasta la palabra auditiva (en MP3,
+  libsndfile difiere en 1e-7 tras saltar, y no cambió ninguna).
+- **Lo que queda es el MFCC, no la decodificación ni la búsqueda.** De los 180 ms, decodificar
+  la canción una vez son 53 ms, describir las 35 ventanas 121 ms y buscarlas todas en lote
+  0,5 ms. Con ventanas que se solapan a la mitad, cada instante se describe dos veces;
+  calcular los MFCC una vez para toda la canción y recortar los cuadros ahorraría casi la
+  mitad, pero los bordes de cada ventana (cuadros centrados y derivadas) dejarían de ser los
+  de su tramo, y la consulta ya no daría lo mismo que `SIMILAR_TO('…#t=a,b')`. Se prefirió
+  la equivalencia exacta.
+- **Indexar por tramos cuesta poco más que por pistas**: 4,5 veces más filas (898 frente a
+  200) por un 19 % más de tiempo, porque cada pista se decodifica una vez y los tramos solo
+  repiten los MFCC de la mitad solapada.
+- **Decodificar una vez por pista ahorra un 25 %** de la extracción frente a que cada fila
+  lea su tramo (898 lecturas con salto en el MP3 frente a 200 decodificaciones), constante
+  en los tres tamaños. Es lo que hace `CREATE INDEX` al agrupar los tramos de cada archivo.
+
 ### Reproducirlo
 
 ```bash
@@ -1302,6 +1382,37 @@ verificación con los pares de LFW y el umbral del conjunto abierto se miden apa
 
 La medida publicada tardó 6 min 30 s, casi 4 de ellos en las 13 233 fotos de LFW. `--warmup`
 cambia cuántas fotos de cada tamaño se procesan antes de medir (20) y `--seed`, la muestra.
+.venv/bin/python -m benchmarks.segments_benchmark --tracks-directory data/datasets/fma_small/pistas
+.venv/bin/python -m benchmarks.plot
+```
+
+Las pistas se bajan con [`demos/descargar_fma.py`](../demos/README.md#6-música-para-la-demo--descargar_fmapy).
+`--catalogue-sizes`, `--song-seconds`, `--window`, `--hop`, `--k`, `--repetitions` y
+`--workers` cambian la medida.
+
+### La Parte 4 después del cambio
+
+El issue toca código que mide la sección 5: la lectura del audio (ahora con libsndfile y el
+mismo remuestreo de `librosa.load`, para poder leer un tramo), los lotes de la extracción en
+paralelo y la búsqueda de FAISS (que ahora acepta varias consultas). Se volvió a correr la
+sección 5 con 10 000 objetos, coseno, **extrayendo de nuevo** las características:
+
+| 10 000 objetos, coseno | Publicado | Después del cambio |
+|---|---:|---:|
+| Descriptores extraídos, imágenes · audio | 1 683 943 · 991 200 | 1 683 943 · 991 200 |
+| Extracción, imágenes · audio | 6,94 s · 3,21 s | 7,24 s · 3,29 s |
+| HNSW por SQL, imágenes: p50 · Recall@10 | 4,65 ms · 0,9728 | 4,56 ms · 0,9728 |
+| IVF por SQL, imágenes: p50 · Recall@10 | 4,58 ms · 0,9518 | 4,59 ms · 0,9518 |
+| HNSW por SQL, audio: p50 · Recall@10 | 1,23 ms · 0,9908 | 1,25 ms · 0,9906 |
+| IVF por SQL, audio: p50 · Recall@10 | 1,22 ms · 0,9780 | 1,19 ms · 0,9780 |
+| `CREATE INDEX` HNSW, imágenes · audio | 9,78 s · 8,75 s | 9,80 s · 7,99 s |
+| `CREATE INDEX` IVF, imágenes · audio | 9,47 s · 7,72 s | 9,78 s · 7,63 s |
+
+Los mismos descriptores y el mismo recall (el 0,9906 del HNSW de audio es el grafo de FAISS,
+que no sale idéntico entre construcciones, como se vio en la sección 6); los tiempos quedan
+dentro de un ±5 %, lo que varía la medida en un equipo compartido, salvo el `CREATE INDEX`
+HNSW de audio, que bajó un 9 %. Además, sobre 20 pistas de
+FMA, los MFCC de la lectura nueva son idénticos bit a bit a los de `librosa.load`.
 
 ## Gráficas
 

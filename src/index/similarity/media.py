@@ -11,6 +11,10 @@ secundario, y él mantiene dos cosas:
 Construirlo extrae los descriptores de todas las filas (en paralelo), entrena el
 vocabulario con una muestra, cuantiza cada fila y llena el índice de vectores. Si al abrir
 el índice de vectores falta o está dañado, se reconstruye desde el almacén.
+
+Una ruta de audio puede llevar un tramo, `pista.mp3#t=10,20` (ver
+`multimedia/fragments.py`): la fila es ese tramo. Al construir, las filas con tramos de un
+mismo archivo se extraen juntas, de una sola decodificación del archivo.
 """
 
 from __future__ import annotations
@@ -28,11 +32,13 @@ from multimedia import (
     FailedExtraction,
     FeatureStore,
     MediaKind,
+    MediaReference,
     descriptor_dimension,
     extract_each,
     extract_features,
     extract_in_parallel,
     media_kind_of,
+    media_reference,
     training_positions,
     training_sample,
 )
@@ -49,6 +55,7 @@ FEATURES_SUFFIX = ".features"
 SECONDS_TO_MILLISECONDS = 1000
 
 MediaResolver = Callable[[str], Path]
+IndexedFile = tuple[RecordId, MediaReference]
 
 
 class MediaSimilarityIndex(SimilarityIndex):
@@ -96,24 +103,32 @@ class MediaSimilarityIndex(SimilarityIndex):
     def build(self, rows: Iterable[tuple[bytes, RecordId]]) -> None:
         """Extrae, entrena el vocabulario, cuantiza y llena el índice de vectores.
 
+        Las filas con tramos de un mismo archivo se guardan juntas, en el orden en que
+        aparece el archivo por primera vez, y salen de una sola decodificación; las demás
+        siguen el orden de la tabla.
+
         Raises:
             NotEnoughDescriptorsError: si las filas no dan descriptores para el vocabulario,
                 también si la tabla está vacía.
             MixedMediaError: si la columna mezcla imágenes y audios.
-            MediaError: si un archivo no se puede leer o no es una imagen ni un audio.
+            MediaError: si un archivo no se puede leer, no es una imagen ni un audio o su
+                tramo no se puede describir.
             LoaderError: si una ruta sale de los directorios permitidos.
         """
-        files = [
-            (record_id, self._resolve(value))
-            for record, record_id in rows
-            if isinstance(value := self._value_of(record), str)
-        ]
+        groups = _grouped_by_file(
+            [
+                (record_id, media_reference(value, self._resolve))
+                for record, record_id in rows
+                if isinstance(value := self._value_of(record), str)
+            ]
+        )
+        files = [item for group in groups for item in group]
         _require_one_kind(files)
         with DescriptorSpill(self._path) as spill:
             training = training_sample(
                 (
                     spill.keep(record_id, descriptors)
-                    for record_id, descriptors in self._extracted(self._training_files(files))
+                    for record_id, descriptors in self._extracted(self._training_files(groups))
                 ),
                 self._config.vocabulary_size * self._config.kmeans_samples_per_word,
                 self._config.kmeans_seed,
@@ -138,10 +153,10 @@ class MediaSimilarityIndex(SimilarityIndex):
         super().close()
 
     def _add(self, value: Key, record_id: RecordId) -> None:
-        path = self._resolve(self._path_text(value))
+        reference = media_reference(self._path_text(value), self._resolve)
         self._require_built()
-        self._require_kind(media_kind_of(path))
-        descriptors = extract_features(path, self._config)
+        self._require_kind(media_kind_of(reference.path))
+        descriptors = extract_features(reference.path, self._config, reference.fragment)
         self._store.add(record_id, descriptors)
         self._vectors.add(vector_id_of(record_id), self._store.vectorize(descriptors))
 
@@ -152,17 +167,17 @@ class MediaSimilarityIndex(SimilarityIndex):
         return True
 
     def _query_vector(self, query: SimilarityQuery) -> QueryVector:
-        if not isinstance(query, Path):
+        if not isinstance(query, MediaReference):
             raise SimilarityIndexError(
                 f"la columna '{self.column}' guarda la ruta de un archivo: SIMILAR_TO se "
                 "consulta con otro archivo, como 'foto.jpg', no con un vector"
             )
         self._require_built()
-        self._require_kind(media_kind_of(query))
+        self._require_kind(media_kind_of(query.path))
         started = time.perf_counter()
-        vector = self._store.vectorize(extract_features(query, self._config))
-        extraction_ms = (time.perf_counter() - started) * SECONDS_TO_MILLISECONDS
-        return QueryVector(vector, extraction_ms)
+        descriptors = extract_features(query.path, self._config, query.fragment)
+        vector = self._store.vectorize(descriptors)
+        return QueryVector(vector, _milliseconds(started, time.perf_counter()))
 
     def _all_vectors(self) -> VectorBatches:
         return self._store.vectors()
@@ -190,16 +205,22 @@ class MediaSimilarityIndex(SimilarityIndex):
             )
         return value
 
-    def _training_files(self, files: list[tuple[RecordId, Path]]) -> list[tuple[RecordId, Path]]:
-        """Los archivos cuyos descriptores entrenan el vocabulario: una muestra al azar,
-        fija por la semilla, de `vocabulary_training_objects` filas."""
-        positions = training_positions(
-            len(files), self._config.vocabulary_training_objects, self._config.kmeans_seed
-        )
-        return [files[position] for position in positions]
+    def _training_files(self, groups: list[list[IndexedFile]]) -> list[IndexedFile]:
+        """Las filas cuyos descriptores entrenan el vocabulario: una muestra al azar, fija
+        por la semilla, de unas `vocabulary_training_objects` filas.
+
+        Se eligen archivos enteros, con todos sus tramos, para que ninguno se decodifique
+        en la muestra y otra vez después; sin tramos, cada archivo es una fila y la muestra
+        es la de siempre.
+        """
+        rows = sum(len(group) for group in groups)
+        objects = self._config.vocabulary_training_objects
+        wanted = max(1, round(objects * len(groups) / rows)) if rows else 0
+        positions = training_positions(len(groups), wanted, self._config.kmeans_seed)
+        return [item for position in positions for item in groups[position]]
 
     def _reusing(
-        self, spill: DescriptorSpill, files: list[tuple[RecordId, Path]]
+        self, spill: DescriptorSpill, files: list[IndexedFile]
     ) -> Iterator[tuple[RecordId, Descriptors]]:
         """Los descriptores de todas las filas en el orden de la tabla: los de la muestra,
         del archivo temporal; los demás, extraídos. El orden es el mismo que sin la muestra
@@ -211,22 +232,20 @@ class MediaSimilarityIndex(SimilarityIndex):
             else:
                 yield next(pending)
 
-    def _extracted(
-        self, files: list[tuple[RecordId, Path]]
-    ) -> Iterator[tuple[RecordId, Descriptors]]:
-        """Los descriptores de cada archivo, en orden; en paralelo si hay al menos un lote
-        por proceso.
+    def _extracted(self, files: list[IndexedFile]) -> Iterator[tuple[RecordId, Descriptors]]:
+        """Los descriptores de cada archivo o tramo, en orden; en paralelo si hay al menos
+        un lote por proceso.
 
         Raises:
             MediaError: el del primer archivo que no se pudo describir.
         """
-        paths = [path for _, path in files]
+        references = [reference for _, reference in files]
         config = self._config
-        parallel = len(paths) > config.feature_chunk_files * config.feature_workers
+        parallel = len(references) > config.feature_chunk_files * config.feature_workers
         outcomes = (
-            extract_in_parallel(paths, config, config.feature_workers)
+            extract_in_parallel(references, config, config.feature_workers)
             if parallel
-            else extract_each(paths, config)
+            else extract_each(references, config)
         )
         for (record_id, _), outcome in zip(files, outcomes, strict=True):
             if isinstance(outcome, FailedExtraction):
@@ -242,8 +261,22 @@ def features_path(path: Path) -> Path:
     return path.with_name(path.name + FEATURES_SUFFIX)
 
 
-def _require_one_kind(files: list[tuple[RecordId, Path]]) -> None:
-    kinds = {media_kind_of(path) for _, path in files}
+def _grouped_by_file(files: list[IndexedFile]) -> list[list[IndexedFile]]:
+    """Las filas en grupos que se extraen juntos: todas las que piden un tramo del mismo
+    archivo, en el orden en que aparece ese archivo; cada fila sin tramo, sola."""
+    groups: dict[Path | int, list[IndexedFile]] = {}
+    for position, (record_id, reference) in enumerate(files):
+        key = position if reference.fragment is None else reference.path
+        groups.setdefault(key, []).append((record_id, reference))
+    return list(groups.values())
+
+
+def _milliseconds(started: float, finished: float) -> float:
+    return (finished - started) * SECONDS_TO_MILLISECONDS
+
+
+def _require_one_kind(files: list[IndexedFile]) -> None:
+    kinds = {media_kind_of(reference.path) for _, reference in files}
     if len(kinds) > 1:
         raise MixedMediaError(
             "una columna con índice de similitud guarda solo imágenes o solo audios, y esta "

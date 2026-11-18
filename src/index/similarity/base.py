@@ -19,6 +19,7 @@ from config import EngineConfig
 from index.secondary import ColumnIndex
 from index.vector import VectorMetric, VectorSearchStats, record_id_of, vector_id_of
 from index.vector.metrics import Vectors
+from multimedia import MediaReference
 from storage.record import FieldReader
 from storage.record_id import RecordId
 from storage.types import Key
@@ -26,8 +27,9 @@ from storage.types import Key
 from .errors import SimilarityEqualityError
 from .vectors import IndexedVectors, VectorBatches, VectorIndexSettings
 
-# La consulta de un `SIMILAR_TO`: el archivo de una imagen o un audio, o un vector.
-SimilarityQuery: TypeAlias = Path | tuple[float, ...]
+# La consulta de un `SIMILAR_TO`: el archivo de una imagen o un audio (o un tramo del audio),
+# o un vector.
+SimilarityQuery: TypeAlias = MediaReference | tuple[float, ...]
 
 
 @dataclass(frozen=True, slots=True)

@@ -22,6 +22,7 @@ from index.secondary import RowSource
 from index.vector import vector_id_of
 from index.vector.base import ID_DTYPE, VectorIds
 from index.vector.metrics import VECTOR_DTYPE, Vectors
+from multimedia import MediaReference
 from storage.record import FieldReader
 from storage.record_id import RecordId
 from storage.types import FieldType, Key
@@ -83,7 +84,7 @@ class VectorColumnIndex(SimilarityIndex):
         return self._vectors.remove(vector_id_of(record_id))
 
     def _query_vector(self, query: SimilarityQuery) -> QueryVector:
-        if isinstance(query, Path):
+        if isinstance(query, MediaReference):
             raise SimilarityIndexError(
                 f"la columna '{self.column}' es VECTOR({self._dimension}): SIMILAR_TO se "
                 "consulta con un vector, no con un archivo"

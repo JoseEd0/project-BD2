@@ -6,13 +6,30 @@ palabras visuales o auditivas, el TF-IDF las pesa y el almacén de característi
 el histograma de cada fila. No conoce el SQL ni el API.
 """
 
-from .audio import MFCC_DELTA_ORDERS, mfcc_dimension
+from .audio import (
+    MFCC_DELTA_ORDERS,
+    DecodedAudio,
+    audio_duration,
+    decode_audio,
+    describe_fragment,
+    mfcc_dimension,
+)
 from .descriptors import Descriptors
-from .errors import MediaError, UnreadableMediaError, UnsupportedMediaTypeError
+from .errors import (
+    EmptyFragmentError,
+    FragmentOnImageError,
+    FragmentOutOfRangeError,
+    MalformedFragmentError,
+    MediaError,
+    MediaFragmentError,
+    UnreadableMediaError,
+    UnsupportedMediaTypeError,
+)
 from .extraction import descriptor_dimension, extract_features
 from .feature_store import FeatureStore, FeatureStoreBuild, FeatureStoreError
+from .fragments import MediaReference, TemporalFragment, parse_fragment, split_fragment
 from .image import SIFT_DESCRIPTOR_DIMENSION
-from .media import AUDIO_EXTENSIONS, IMAGE_EXTENSIONS, MediaKind, media_kind_of
+from .media import AUDIO_EXTENSIONS, IMAGE_EXTENSIONS, MediaKind, media_kind_of, media_reference
 from .parallel import (
     IN_FLIGHT_CHUNKS_PER_WORKER,
     ExtractedFeatures,
@@ -35,26 +52,40 @@ __all__ = [
     "IN_FLIGHT_CHUNKS_PER_WORKER",
     "MFCC_DELTA_ORDERS",
     "SIFT_DESCRIPTOR_DIMENSION",
+    "DecodedAudio",
     "Descriptors",
+    "EmptyFragmentError",
     "ExtractedFeatures",
     "ExtractionOutcome",
     "FailedExtraction",
     "FeatureStore",
     "FeatureStoreBuild",
     "FeatureStoreError",
+    "FragmentOnImageError",
+    "FragmentOutOfRangeError",
+    "MalformedFragmentError",
     "MediaError",
+    "MediaFragmentError",
     "MediaKind",
+    "MediaReference",
     "NotEnoughDescriptorsError",
+    "TemporalFragment",
     "UnreadableMediaError",
     "UnsupportedMediaTypeError",
     "Vocabulary",
+    "audio_duration",
+    "decode_audio",
+    "describe_fragment",
     "descriptor_dimension",
     "extract_each",
     "extract_features",
     "extract_in_parallel",
     "inverse_document_frequencies",
     "media_kind_of",
+    "media_reference",
     "mfcc_dimension",
+    "parse_fragment",
+    "split_fragment",
     "tf_idf",
     "training_positions",
     "training_sample",

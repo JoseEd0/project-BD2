@@ -9,6 +9,7 @@ responder.
 |---|---|
 | `WHERE SIMILAR_TO('consulta.jpg', k = 10)` | las 10 filas más parecidas al archivo |
 | `WHERE SIMILAR_TO(ruta, 'consulta.jpg', k = 10)` | lo mismo, nombrando la columna |
+| `WHERE SIMILAR_TO('pista.mp3#t=10,20', k = 5)` | las 5 filas más parecidas a ese tramo del audio |
 | `WHERE SIMILAR_TO(emb, [0.1, 0.2, 0.3], k = 10)` | lo mismo sobre una columna `VECTOR(3)` |
 | `WHERE SIMILAR_TO(emb, $1, k = 10)` | lo mismo, con el vector como parámetro |
 | `USING HNSW` / `USING IVF` | el índice; sin `USING`, el único que tenga la tabla |
@@ -30,7 +31,7 @@ from config import EngineConfig
 from errors import DomainError
 from index.similarity import HNSW_KIND, SimilarityQuery
 from index.vector import VectorMetric, vector_metric_named
-from multimedia import MediaKind, media_kind_of
+from multimedia import MediaKind, media_kind_of, media_reference
 from query.catalog import IndexDefinition
 from query.comparison import describe_value
 from query.expressions import constant_value, describe_expression, subexpressions
@@ -95,7 +96,8 @@ class SimilaritySearch:
         column: la columna con las rutas o los vectores, tal como la declara la tabla.
         index_name: su índice de similitud.
         method: HNSW o IVF.
-        query: el archivo de la consulta, ya resuelto y permitido, o su vector.
+        query: el archivo de la consulta (con su tramo, si lo pide), ya resuelto y
+            permitido, o su vector.
         written: la ruta de la consulta tal como se escribió, o el vector abreviado.
         media: si la consulta es una imagen o un audio; `None` si es un vector.
         k: cuántas filas devuelve.
@@ -185,6 +187,8 @@ def similarity_search(
         LoaderError: si el archivo de la consulta no existe o sale de los directorios
             permitidos.
         UnsupportedMediaTypeError: si el archivo no es una imagen ni un audio.
+        MediaFragmentError: si el `#t=` de la consulta no se puede leer, está vacío o va en
+            la ruta de una imagen.
         ExpressionError: si la columna nombrada no existe o es ambigua.
     """
     found = calls_to(SIMILAR_TO, statement.where)
@@ -209,8 +213,10 @@ def similarity_search(
         written = _abbreviated(vector)
         media = None
     else:
-        path = resolve_user_file(_file_query(query, field), config)
-        resolved, written, media = path, str(query), media_kind_of(path)
+        reference = media_reference(
+            _file_query(query, field), lambda text: resolve_user_file(text, config)
+        )
+        resolved, written, media = reference, str(query), media_kind_of(reference.path)
     return SimilaritySearch(
         table=table,
         reference=source.reference,

@@ -11,8 +11,14 @@ from tests.multimedia.media_support import SAMPLE_RATE, chirp, tone, write_audio
 from config import EngineConfig
 from multimedia import (
     MFCC_DELTA_ORDERS,
+    FragmentOnImageError,
+    FragmentOutOfRangeError,
     MediaKind,
+    TemporalFragment,
     UnreadableMediaError,
+    audio_duration,
+    decode_audio,
+    describe_fragment,
     descriptor_dimension,
     extract_features,
     mfcc_dimension,
@@ -145,3 +151,80 @@ def test_a_corrupt_audio_is_a_domain_error(corrupt_file: Callable[[str], Path], 
 def test_a_missing_audio_is_a_domain_error(tmp_path: Path):
     with pytest.raises(UnreadableMediaError):
         extract_features(tmp_path / "no-existe.mp3", EngineConfig())
+
+
+def test_a_fragment_is_described_like_the_cut_file(tmp_path: Path):
+    samples = chirp(CHIRP_SECONDS)
+    whole = write_audio(tmp_path / "barrido.wav", samples)
+    start = round(SEGMENT_OFFSET_SECONDS * SAMPLE_RATE)
+    end = start + round(SEGMENT_SECONDS * SAMPLE_RATE)
+    cut = write_audio(tmp_path / "recorte.wav", samples[start:end])
+    fragment = TemporalFragment(SEGMENT_OFFSET_SECONDS, SEGMENT_OFFSET_SECONDS + SEGMENT_SECONDS)
+
+    assert np.array_equal(
+        extract_features(whole, EngineConfig(), fragment), extract_features(cut, EngineConfig())
+    )
+
+
+def test_a_fragment_overrides_the_configured_segment(tmp_path: Path):
+    whole = write_audio(tmp_path / "barrido.wav", chirp(CHIRP_SECONDS))
+    fragment = TemporalFragment(0.0, SEGMENT_SECONDS)
+    shifted = EngineConfig(audio_offset_seconds=SEGMENT_OFFSET_SECONDS)
+
+    assert np.array_equal(
+        extract_features(whole, shifted, fragment), extract_features(whole, EngineConfig(), fragment)
+    )
+
+
+def test_a_fragment_that_ends_past_the_end_stops_at_the_end(one_second_tone: Path):
+    config = EngineConfig()
+
+    assert np.array_equal(
+        extract_features(one_second_tone, config, TemporalFragment(0.5, CHIRP_SECONDS)),
+        extract_features(one_second_tone, config, TemporalFragment(0.5, None)),
+    )
+
+
+@pytest.mark.parametrize("start", [1.0, CHIRP_SECONDS])
+def test_a_fragment_that_starts_at_or_past_the_end_is_an_error(one_second_tone: Path, start: float):
+    with pytest.raises(FragmentOutOfRangeError, match="después del final"):
+        extract_features(one_second_tone, EngineConfig(), TemporalFragment(start, start + 1.0))
+
+
+def test_an_image_has_no_fragment(tmp_path: Path):
+    image = tmp_path / "foto.png"
+    image.write_bytes(b"")
+
+    with pytest.raises(FragmentOnImageError):
+        extract_features(image, EngineConfig(), TemporalFragment(0.0, 1.0))
+
+
+@pytest.mark.parametrize("extension", [".wav", ".flac"])
+def test_a_fragment_cut_from_a_decoded_audio_matches_reading_it(tmp_path: Path, extension: str):
+    """Estéreo a otra frecuencia: el recorte, la mezcla y el remuestreo siguen el mismo
+    orden en los dos caminos, así que dan las mismas muestras."""
+    samples = chirp(CHIRP_SECONDS, CD_SAMPLE_RATE)
+    stereo = write_audio(
+        tmp_path / f"estereo{extension}", np.stack([samples, samples[::-1]], axis=1), CD_SAMPLE_RATE
+    )
+    config = EngineConfig()
+    audio = decode_audio(stereo)
+
+    for fragment in (None, TemporalFragment(0.25, 1.25), TemporalFragment(1.5, None)):
+        assert np.array_equal(
+            describe_fragment(audio, fragment, config), extract_features(stereo, config, fragment)
+        )
+
+
+def test_the_duration_is_read_without_decoding(tmp_path: Path):
+    path = write_audio(tmp_path / "barrido.wav", chirp(CHIRP_SECONDS))
+
+    assert audio_duration(path) == pytest.approx(CHIRP_SECONDS)
+    assert decode_audio(path).duration == pytest.approx(CHIRP_SECONDS)
+
+
+def test_a_missing_audio_cannot_be_decoded(tmp_path: Path):
+    with pytest.raises(UnreadableMediaError):
+        decode_audio(tmp_path / "no-existe.wav")
+    with pytest.raises(UnreadableMediaError):
+        audio_duration(tmp_path / "no-existe.wav")

@@ -134,6 +134,9 @@ demos/               generador del dataset, descarga de lugares reales y de mús
 apps/                servicios de la Parte 5, que usan el gestor solo por su API REST
   client/            cliente tipado del API del gestor
   kit/               configuración, logs, salud y errores comunes a los servicios
+  web/               portal de las cuatro aplicaciones: React + TypeScript, instalable (PWA),
+                     con los tipos generados del OpenAPI de cada servicio
+tools/               herramientas de desarrollo: exportar los contratos OpenAPI al portal
 docs/                informe.pdf y su fuente LaTeX
 Dockerfile           imagen del motor con su API
 compose.yaml         la aplicación completa en contenedores: api, web y la carga de la demo;
@@ -171,6 +174,8 @@ proyecto:
 | [`src/txn/`](src/txn/) | transacciones y concurrencia | [README](src/txn/README.md) |
 | [`src/api/`](src/api/) | API REST | [README](src/api/README.md) |
 | [`frontend/`](frontend/) | consola SQL de 4 paneles con panel de mapa, y páginas de búsqueda de texto y multimedia | [README](frontend/README.md) |
+| [`apps/`](apps/) | servicios de la Parte 5 y su portal | [README](apps/README.md) |
+| [`apps/web/`](apps/web/) | portal de las aplicaciones: rutas, salud de cada servicio, PWA, contratos y tiempos por etapa | [README](apps/web/README.md) |
 | [`benchmarks/`](benchmarks/) | comparación experimental, con resultados y gráficas | [README](benchmarks/README.md) |
 | [`demos/`](demos/) | datasets de demostración y simulación de concurrencia | [README](demos/README.md) |
 
@@ -237,6 +242,7 @@ en local, como sigue.
 |---|---|
 | el motor, el API y los servicios | Python 3.11 o posterior y [uv](https://docs.astral.sh/uv/) 0.10 o posterior |
 | la interfaz | Node.js 18 o posterior; 22.18 para `npm test` |
+| el portal de aplicaciones | Node.js 22.18 o posterior |
 | redibujar las gráficas (opcional) | `matplotlib`, que se instala con el extra `plots` (`uv sync --all-packages --extra plots`) |
 | medir contra GiST y GIN (opcional) | PostgreSQL con la extensión PostGIS y el extra `postgres`, o Docker (perfil `bench`) |
 | medir contra pgvector y USearch (opcional) | PostgreSQL con la extensión pgvector y los extras `postgres` y `usearch`, o Docker (perfil `bench`) |
@@ -255,6 +261,10 @@ uv sync --all-packages
 npm --prefix frontend install
 cp frontend/.env.example frontend/.env
 
+# portal de las aplicaciones (Parte 5)
+npm --prefix apps/web ci
+cp apps/web/.env.example apps/web/.env
+
 # variables del API: directorio de datos, orígenes del frontend, de dónde se puede cargar
 cp .env.example .env
 ```
@@ -271,6 +281,9 @@ cp .env.example .env
 
 # 3. interfaz, en http://localhost:5173
 npm --prefix frontend run dev
+
+# 4. (opcional) portal de las aplicaciones; con la interfaz en marcha, Vite elige el 5174
+npm --prefix apps/web run dev
 ```
 
 El dataset carga unas 33 000 filas en nueve tablas, **cada una con una organización física
@@ -346,7 +359,8 @@ caen en un rectángulo; para Lima, unos 26 600:
 
 Ninguna ruta, puerto ni credencial está escrita en el código. Las del API y los experimentos
 están en [`.env.example`](.env.example); las de la interfaz, en
-[`frontend/.env.example`](frontend/.env.example).
+[`frontend/.env.example`](frontend/.env.example); las del portal, en
+[`apps/web/.env.example`](apps/web/.env.example) (ver [su README](apps/web/README.md)).
 
 | Variable | Para qué | Por defecto |
 |---|---|---|
@@ -390,6 +404,9 @@ petición sin que entre en el bundle. Cómo crearlas, qué permite cada rol, los
 .venv/bin/python -m pytest -q                 # tests
 npm --prefix frontend run build               # tipos y bundle de la interfaz
 npm --prefix frontend test                    # resaltado y SQL de la página de texto
+npm --prefix apps/web run build               # tipos, bundle y service worker del portal
+npm --prefix apps/web test                    # lógica y rutas del portal
+npm --prefix apps/web run contracts           # contratos OpenAPI y tipos al día (sin diff)
 ```
 
 Lo mismo corre en GitHub Actions ([`.github/workflows/ci.yml`](.github/workflows/ci.yml))
@@ -398,6 +415,9 @@ necesitan PostgreSQL o los extras de gráficas se saltan solos cuando no están.
 levanta además la aplicación con `docker compose`: construye las dos imágenes, espera a que
 la demo se cargue y el API y la interfaz estén sanos, y hace una búsqueda de texto a través
 de nginx.
+Otro trabajo vuelve a exportar los contratos OpenAPI y a generar los tipos del portal, y
+falla si no coinciden con los versionados; después construye el portal, corre sus tests y
+su recorrido de Playwright en Chromium.
 
 Los tests siguen la estructura de `src/`, así que se pueden ejecutar por módulo:
 

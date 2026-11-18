@@ -381,3 +381,22 @@ def test_an_integer_column_cannot_have_a_similarity_index(engine):
 
     with pytest.raises(CatalogError, match="VECTOR\\(n\\)"):
         engine.execute("CREATE INDEX i ON docs USING IVF (grupo)")
+
+
+def test_a_filter_on_several_columns_reads_each_of_them(indexed):
+    engine, _ = indexed
+    allowed = [key for key in range(1, ROWS + 1) if key % GROUPS == 2 and key > 150]
+
+    found = search(engine, QUERIES[2], tail="AND grupo = 2 AND id > 150")
+
+    assert ids_of(found) == top(brute_force(QUERIES[2], "cosine", allowed), K)
+
+
+def test_a_row_can_be_read_with_only_some_columns(indexed):
+    engine, _ = indexed
+    table = engine.table("docs")
+    _, record = next(table.addressed_scan())
+
+    partial = table.unpack_columns(record, [1])
+
+    assert partial == (None, table.unpack(record)[1], None)

@@ -18,7 +18,13 @@ from collections.abc import Iterator
 from itertools import tee
 
 from index.similarity import SimilarityIndex, SimilarityResult
-from query.expressions import ColumnSlot, ExpressionEvaluator, RowLayout, describe_expression
+from query.expressions import (
+    ColumnSlot,
+    ExpressionEvaluator,
+    RowLayout,
+    column_references,
+    describe_expression,
+)
 from query.operators import TableOperator, internal_schema
 from query.plan import PlanNode
 from query.row_store import AddressedRecord
@@ -81,15 +87,23 @@ class VectorSearchScan(TableOperator):
         return self._result
 
     def _allowed(self) -> list[RecordId] | None:
-        """Las filas que cumplen el resto del WHERE, o `None` si no hay filtro."""
+        """Las filas que cumplen el resto del WHERE, o `None` si no hay filtro. De cada
+        candidata se leen solo las columnas que el filtro nombra: con 100 000 filas de
+        un `VECTOR(384)` y un filtro sobre un entero, decodificar la fila entera era casi
+        todo el costo de la consulta."""
         if self._prefilter is None:
             return None
         path, condition = self._prefilter
         evaluator = ExpressionEvaluator(RowLayout.of_table(self._table.schema, self._alias()))
+        read = {
+            self._table.schema.position_of(reference.name)
+            for reference in column_references(condition)
+        }
         allowed = [
             address
             for address, record in path.addressed()
-            if address is not None and evaluator.matches(condition, self._table.unpack(record))
+            if address is not None
+            and evaluator.matches(condition, self._table.unpack_columns(record, read))
         ]
         self._candidates = len(allowed)
         return allowed

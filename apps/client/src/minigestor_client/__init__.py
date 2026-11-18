@@ -1,1 +1,93 @@
 """Cliente del API REST del minigestor: lo que un servicio usa para hablar con la base."""
+
+from .async_client import AsyncClient, AsyncTransaction
+from .context import REQUEST_ID_HEADER, current_request_id, new_request_id, request_id_scope
+from .errors import (
+    AuthenticationError,
+    ConflictError,
+    DefinitionMismatchError,
+    DomainError,
+    EngineError,
+    MinigestorError,
+    NotFoundError,
+    PermissionDeniedError,
+    ResultTruncatedError,
+    ServerError,
+    ServiceUnavailableError,
+    SqlSyntaxError,
+    StatementTimeoutError,
+    TransportError,
+)
+from .media import MediaFile
+from .models import (
+    ColumnInfo,
+    LoadReport,
+    MediaUpload,
+    Plan,
+    QueryResult,
+    Record,
+    RejectedBatch,
+    Segment,
+    SegmentNeighbour,
+    SegmentSearch,
+    SegmentTimings,
+    SimilarityInfo,
+    StatementOutcome,
+    TableInfo,
+    TimeRange,
+)
+from .options import NO_RETRIES, PoolLimits, RetryPolicy, Timeouts
+from .statements import is_read_only
+from .sync_client import Client, Transaction
+from .timing import SERVER_TIMING_HEADER, parse_server_timing
+from .values import Point, UnencodableValueError
+
+__all__ = [
+    "NO_RETRIES",
+    "REQUEST_ID_HEADER",
+    "SERVER_TIMING_HEADER",
+    "AsyncClient",
+    "AsyncTransaction",
+    "AuthenticationError",
+    "Client",
+    "ColumnInfo",
+    "ConflictError",
+    "DefinitionMismatchError",
+    "DomainError",
+    "EngineError",
+    "LoadReport",
+    "MediaFile",
+    "MediaUpload",
+    "MinigestorError",
+    "NotFoundError",
+    "PermissionDeniedError",
+    "Plan",
+    "Point",
+    "PoolLimits",
+    "QueryResult",
+    "Record",
+    "RejectedBatch",
+    "ResultTruncatedError",
+    "RetryPolicy",
+    "Segment",
+    "SegmentNeighbour",
+    "SegmentSearch",
+    "SegmentTimings",
+    "ServerError",
+    "ServiceUnavailableError",
+    "SimilarityInfo",
+    "SqlSyntaxError",
+    "StatementOutcome",
+    "StatementTimeoutError",
+    "TableInfo",
+    "TimeRange",
+    "Timeouts",
+    "Transaction",
+    "TransportError",
+    "UnencodableValueError",
+    "current_request_id",
+    "is_read_only",
+    "new_request_id",
+    "parse_server_timing",
+    "request_id_scope",
+]

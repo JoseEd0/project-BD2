@@ -75,29 +75,32 @@ FIGURES: tuple[Figure | BarFigure | CurveFigure, ...] = (
     BarFigure(
         filename="vectores-recall",
         report=REPORT,
-        title="Recall@10 contra la búsqueda exacta, por SQL",
+        title="Recall@10 contra la exacta, por SQL",
         subtitle=(
-            "Media de 500 consultas (100 con filtro) con el esfuerzo por omisión. 1 es "
-            "encontrar los mismos 10 vecinos que la búsqueda exacta."
+            "Media de 500 consultas (100 con filtro), esfuerzo\n"
+            "por omisión. 1 es dar los 10 vecinos de la exacta."
         ),
         sizes_label=SIZES_LABEL,
         panels=(
             BarPanel(
-                "Recall@{k}",
+                "Sin filtro", "Recall@10", "recall_en_k", (BarGroup("", QUERY),), WITH_EXACT
+            ),
+            BarPanel(
+                "Filtro del 10 %",
                 "Recall@10",
                 "recall_en_k",
-                (BarGroup("sin filtro", QUERY), BarGroup("filtro del 10 %", FILTERED_QUERY)),
-                WITH_EXACT,
+                (BarGroup("", FILTERED_QUERY),),
+                INDEXES,
             ),
         ),
     ),
     CurveFigure(
         filename="vectores-curvas",
         report=REPORT,
-        title="Recall@10 contra latencia por SQL, barriendo el esfuerzo",
+        title="Recall@10 contra latencia",
         subtitle=(
-            "IVF: probes de 1 a 128; HNSW: ef_search de 10 a 320. El anillo marca el esfuerzo "
-            "por omisión.\nArriba a la izquierda es mejor: más recall en menos tiempo."
+            "Por SQL. IVF: probes de 1 a 128;\nHNSW: ef_search de 10 a 320.\n"
+            "El anillo marca el valor por omisión.\nArriba a la izquierda es mejor."
         ),
         columns=1,
         x_axis="mediana por consulta (ms)",
@@ -106,6 +109,6 @@ FIGURES: tuple[Figure | BarFigure | CurveFigure, ...] = (
         order_field="esfuerzo",
         default_field="por_omision",
         sizes_label=SIZES_LABEL,
-        panels=(CurvePanel("Coseno · 384 dimensiones", CURVE, INDEXES),),
+        panels=(CurvePanel("384 dim.", CURVE, INDEXES),),
     ),
 )

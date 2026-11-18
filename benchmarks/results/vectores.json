@@ -1,0 +1,546 @@
+{
+  "name": "vectores",
+  "parameters": {
+    "tamanos": [
+      1000,
+      10000,
+      100000
+    ],
+    "dimension": 384,
+    "mezcla": {
+      "grupos": 1000,
+      "dimension_intrinseca": 24,
+      "dispersion": 1.0,
+      "ruido": 0.5,
+      "semilla": 20261117
+    },
+    "metrica": "cosine",
+    "consultas": 500,
+    "consultas_con_filtro": 100,
+    "filtro": "parte = número de consulta % 10 (10 % de las filas, índice hash)",
+    "repeticiones": 3,
+    "k": 10,
+    "hilos": 1,
+    "ef_search_barridos": [
+      10,
+      20,
+      40,
+      80,
+      160,
+      320
+    ],
+    "probes_barridos": [
+      1,
+      2,
+      4,
+      8,
+      16,
+      32,
+      64,
+      128
+    ],
+    "versiones": {
+      "faiss": "1.16.0",
+      "numpy": "2.5.5"
+    },
+    "maquina": {
+      "procesador": "Apple M4 Pro",
+      "nucleos": 12,
+      "sistema": "macOS-27.0.1-arm64-arm-64bit",
+      "python": "3.12.11",
+      "carga_media_1_min": 2.92
+    },
+    "carga_media_al_terminar": 3.51
+  },
+  "measurements": [
+    {
+      "technique": "tabla (heap + hash)",
+      "operation": "carga",
+      "dataset_size": 1000,
+      "milliseconds": 637.0206670253538,
+      "extra": {}
+    },
+    {
+      "technique": "HNSW (gestor, SQL)",
+      "operation": "construcción",
+      "dataset_size": 1000,
+      "milliseconds": 72.75391701841727,
+      "extra": {
+        "m": 16,
+        "ef_search": 40,
+        "vectors": 1000,
+        "zero_vectors": 0
+      }
+    },
+    {
+      "technique": "HNSW (gestor, SQL)",
+      "operation": "espacio",
+      "dataset_size": 1000,
+      "milliseconds": 0.0,
+      "extra": {
+        "kib": 1650.8
+      }
+    },
+    {
+      "technique": "HNSW (gestor, SQL)",
+      "operation": "consulta",
+      "dataset_size": 1000,
+      "milliseconds": 0.3282495017629117,
+      "extra": {
+        "p95_ms": 0.3967152180848643,
+        "recall_en_k": 0.9278
+      }
+    },
+    {
+      "technique": "HNSW (gestor, SQL)",
+      "operation": "consulta con filtro",
+      "dataset_size": 1000,
+      "milliseconds": 0.7274789968505502,
+      "extra": {
+        "p95_ms": 0.7854586525354534,
+        "recall_en_k": 1.0
+      }
+    },
+    {
+      "technique": "IVF (gestor, SQL)",
+      "operation": "construcción",
+      "dataset_size": 1000,
+      "milliseconds": 23.885916045401245,
+      "extra": {
+        "lists": 25,
+        "probes": 5,
+        "vectors": 1000,
+        "zero_vectors": 0
+      }
+    },
+    {
+      "technique": "IVF (gestor, SQL)",
+      "operation": "espacio",
+      "dataset_size": 1000,
+      "milliseconds": 0.0,
+      "extra": {
+        "kib": 1562.0
+      }
+    },
+    {
+      "technique": "IVF (gestor, SQL)",
+      "operation": "consulta",
+      "dataset_size": 1000,
+      "milliseconds": 0.30181248439475894,
+      "extra": {
+        "p95_ms": 0.3146827162709087,
+        "recall_en_k": 0.5144000000000001
+      }
+    },
+    {
+      "technique": "IVF (gestor, SQL)",
+      "operation": "consulta con filtro",
+      "dataset_size": 1000,
+      "milliseconds": 0.8086460002232343,
+      "extra": {
+        "p95_ms": 0.8645889611216262,
+        "recall_en_k": 1.0
+      }
+    },
+    {
+      "technique": "búsqueda exacta (gestor, SQL)",
+      "operation": "construcción",
+      "dataset_size": 1000,
+      "milliseconds": 12.68020796123892,
+      "extra": {
+        "nota": "primera consulta: lee la tabla"
+      }
+    },
+    {
+      "technique": "búsqueda exacta (gestor, SQL)",
+      "operation": "consulta",
+      "dataset_size": 1000,
+      "milliseconds": 0.31358294654637575,
+      "extra": {
+        "p95_ms": 0.3294693713542074,
+        "recall_en_k": 1.0
+      }
+    },
+    {
+      "technique": "tabla (heap + hash)",
+      "operation": "carga",
+      "dataset_size": 10000,
+      "milliseconds": 5261.333458009176,
+      "extra": {}
+    },
+    {
+      "technique": "HNSW (gestor, SQL)",
+      "operation": "construcción",
+      "dataset_size": 10000,
+      "milliseconds": 937.2365000308491,
+      "extra": {
+        "m": 16,
+        "ef_search": 40,
+        "vectors": 10000,
+        "zero_vectors": 0
+      }
+    },
+    {
+      "technique": "HNSW (gestor, SQL)",
+      "operation": "espacio",
+      "dataset_size": 10000,
+      "milliseconds": 0.0,
+      "extra": {
+        "kib": 16495.8
+      }
+    },
+    {
+      "technique": "HNSW (gestor, SQL)",
+      "operation": "consulta",
+      "dataset_size": 10000,
+      "milliseconds": 0.3330830077175051,
+      "extra": {
+        "p95_ms": 0.4321271029766649,
+        "recall_en_k": 0.9572
+      }
+    },
+    {
+      "technique": "HNSW (gestor, SQL)",
+      "operation": "consulta con filtro",
+      "dataset_size": 10000,
+      "milliseconds": 3.9209580281749368,
+      "extra": {
+        "p95_ms": 4.373318448779173,
+        "recall_en_k": 1.0
+      }
+    },
+    {
+      "technique": "IVF (gestor, SQL)",
+      "operation": "construcción",
+      "dataset_size": 10000,
+      "milliseconds": 169.4061669986695,
+      "extra": {
+        "lists": 100,
+        "probes": 10,
+        "vectors": 10000,
+        "zero_vectors": 0
+      }
+    },
+    {
+      "technique": "IVF (gestor, SQL)",
+      "operation": "espacio",
+      "dataset_size": 10000,
+      "milliseconds": 0.0,
+      "extra": {
+        "kib": 15386.1
+      }
+    },
+    {
+      "technique": "IVF (gestor, SQL)",
+      "operation": "consulta",
+      "dataset_size": 10000,
+      "milliseconds": 0.32212500809691846,
+      "extra": {
+        "p95_ms": 0.33476873650215566,
+        "recall_en_k": 0.8974000000000001
+      }
+    },
+    {
+      "technique": "IVF (gestor, SQL)",
+      "operation": "consulta con filtro",
+      "dataset_size": 10000,
+      "milliseconds": 4.729854001197964,
+      "extra": {
+        "p95_ms": 4.9918524047825485,
+        "recall_en_k": 1.0
+      }
+    },
+    {
+      "technique": "búsqueda exacta (gestor, SQL)",
+      "operation": "construcción",
+      "dataset_size": 10000,
+      "milliseconds": 139.97758401092142,
+      "extra": {
+        "nota": "primera consulta: lee la tabla"
+      }
+    },
+    {
+      "technique": "búsqueda exacta (gestor, SQL)",
+      "operation": "consulta",
+      "dataset_size": 10000,
+      "milliseconds": 0.4972290189471096,
+      "extra": {
+        "p95_ms": 0.5194791185203939,
+        "recall_en_k": 1.0
+      }
+    },
+    {
+      "technique": "tabla (heap + hash)",
+      "operation": "carga",
+      "dataset_size": 100000,
+      "milliseconds": 63761.50099997176,
+      "extra": {}
+    },
+    {
+      "technique": "HNSW (gestor, SQL)",
+      "operation": "construcción",
+      "dataset_size": 100000,
+      "milliseconds": 13264.35399998445,
+      "extra": {
+        "m": 16,
+        "ef_search": 40,
+        "vectors": 100000,
+        "zero_vectors": 0
+      }
+    },
+    {
+      "technique": "HNSW (gestor, SQL)",
+      "operation": "espacio",
+      "dataset_size": 100000,
+      "milliseconds": 0.0,
+      "extra": {
+        "kib": 164975.2
+      }
+    },
+    {
+      "technique": "HNSW (gestor, SQL)",
+      "operation": "consulta",
+      "dataset_size": 100000,
+      "milliseconds": 0.3245415282435715,
+      "extra": {
+        "p95_ms": 0.3415440587559715,
+        "recall_en_k": 0.9705999999999999
+      }
+    },
+    {
+      "technique": "HNSW (gestor, SQL)",
+      "operation": "consulta con filtro",
+      "dataset_size": 100000,
+      "milliseconds": 61.503437493229285,
+      "extra": {
+        "p95_ms": 64.8252684099134,
+        "recall_en_k": 0.89
+      }
+    },
+    {
+      "technique": "HNSW (gestor, SQL)",
+      "operation": "curva",
+      "dataset_size": 100000,
+      "milliseconds": 0.3352089552208781,
+      "extra": {
+        "esfuerzo": 10,
+        "por_omision": false,
+        "recall_en_k": 0.7772
+      }
+    },
+    {
+      "technique": "HNSW (gestor, SQL)",
+      "operation": "curva",
+      "dataset_size": 100000,
+      "milliseconds": 0.3344374999869615,
+      "extra": {
+        "esfuerzo": 20,
+        "por_omision": false,
+        "recall_en_k": 0.9038
+      }
+    },
+    {
+      "technique": "HNSW (gestor, SQL)",
+      "operation": "curva",
+      "dataset_size": 100000,
+      "milliseconds": 0.3403750015422702,
+      "extra": {
+        "esfuerzo": 40,
+        "por_omision": true,
+        "recall_en_k": 0.9705999999999999
+      }
+    },
+    {
+      "technique": "HNSW (gestor, SQL)",
+      "operation": "curva",
+      "dataset_size": 100000,
+      "milliseconds": 0.35266700433567166,
+      "extra": {
+        "esfuerzo": 80,
+        "por_omision": false,
+        "recall_en_k": 0.9907999999999999
+      }
+    },
+    {
+      "technique": "HNSW (gestor, SQL)",
+      "operation": "curva",
+      "dataset_size": 100000,
+      "milliseconds": 0.39499998092651367,
+      "extra": {
+        "esfuerzo": 160,
+        "por_omision": false,
+        "recall_en_k": 0.9967999999999999
+      }
+    },
+    {
+      "technique": "HNSW (gestor, SQL)",
+      "operation": "curva",
+      "dataset_size": 100000,
+      "milliseconds": 0.5571455112658441,
+      "extra": {
+        "esfuerzo": 320,
+        "por_omision": false,
+        "recall_en_k": 0.9976
+      }
+    },
+    {
+      "technique": "IVF (gestor, SQL)",
+      "operation": "construcción",
+      "dataset_size": 100000,
+      "milliseconds": 2201.3159170164727,
+      "extra": {
+        "lists": 316,
+        "probes": 18,
+        "vectors": 100000,
+        "zero_vectors": 0
+      }
+    },
+    {
+      "technique": "IVF (gestor, SQL)",
+      "operation": "espacio",
+      "dataset_size": 100000,
+      "milliseconds": 0.0,
+      "extra": {
+        "kib": 152821.1
+      }
+    },
+    {
+      "technique": "IVF (gestor, SQL)",
+      "operation": "consulta",
+      "dataset_size": 100000,
+      "milliseconds": 0.4395205178298056,
+      "extra": {
+        "p95_ms": 0.4991107358364388,
+        "recall_en_k": 0.977
+      }
+    },
+    {
+      "technique": "IVF (gestor, SQL)",
+      "operation": "consulta con filtro",
+      "dataset_size": 100000,
+      "milliseconds": 61.24397899839096,
+      "extra": {
+        "p95_ms": 65.4723042389378,
+        "recall_en_k": 0.9520000000000001
+      }
+    },
+    {
+      "technique": "IVF (gestor, SQL)",
+      "operation": "curva",
+      "dataset_size": 100000,
+      "milliseconds": 0.33335399348288774,
+      "extra": {
+        "esfuerzo": 1,
+        "por_omision": false,
+        "recall_en_k": 0.9348
+      }
+    },
+    {
+      "technique": "IVF (gestor, SQL)",
+      "operation": "curva",
+      "dataset_size": 100000,
+      "milliseconds": 0.3337915113661438,
+      "extra": {
+        "esfuerzo": 2,
+        "por_omision": false,
+        "recall_en_k": 0.9538
+      }
+    },
+    {
+      "technique": "IVF (gestor, SQL)",
+      "operation": "curva",
+      "dataset_size": 100000,
+      "milliseconds": 0.3486665082164109,
+      "extra": {
+        "esfuerzo": 4,
+        "por_omision": false,
+        "recall_en_k": 0.9604000000000001
+      }
+    },
+    {
+      "technique": "IVF (gestor, SQL)",
+      "operation": "curva",
+      "dataset_size": 100000,
+      "milliseconds": 0.3769165195990354,
+      "extra": {
+        "esfuerzo": 8,
+        "por_omision": false,
+        "recall_en_k": 0.9696
+      }
+    },
+    {
+      "technique": "IVF (gestor, SQL)",
+      "operation": "curva",
+      "dataset_size": 100000,
+      "milliseconds": 0.4328960203565657,
+      "extra": {
+        "esfuerzo": 16,
+        "por_omision": false,
+        "recall_en_k": 0.9758
+      }
+    },
+    {
+      "technique": "IVF (gestor, SQL)",
+      "operation": "curva",
+      "dataset_size": 100000,
+      "milliseconds": 0.44641696149483323,
+      "extra": {
+        "esfuerzo": 18,
+        "por_omision": true,
+        "recall_en_k": 0.977
+      }
+    },
+    {
+      "technique": "IVF (gestor, SQL)",
+      "operation": "curva",
+      "dataset_size": 100000,
+      "milliseconds": 0.5430000019259751,
+      "extra": {
+        "esfuerzo": 32,
+        "por_omision": false,
+        "recall_en_k": 0.9838000000000001
+      }
+    },
+    {
+      "technique": "IVF (gestor, SQL)",
+      "operation": "curva",
+      "dataset_size": 100000,
+      "milliseconds": 0.7671249622944742,
+      "extra": {
+        "esfuerzo": 64,
+        "por_omision": false,
+        "recall_en_k": 0.9924000000000001
+      }
+    },
+    {
+      "technique": "IVF (gestor, SQL)",
+      "operation": "curva",
+      "dataset_size": 100000,
+      "milliseconds": 1.2275624903850257,
+      "extra": {
+        "esfuerzo": 128,
+        "por_omision": false,
+        "recall_en_k": 0.9977999999999999
+      }
+    },
+    {
+      "technique": "búsqueda exacta (gestor, SQL)",
+      "operation": "construcción",
+      "dataset_size": 100000,
+      "milliseconds": 1488.7895829742774,
+      "extra": {
+        "nota": "primera consulta: lee la tabla"
+      }
+    },
+    {
+      "technique": "búsqueda exacta (gestor, SQL)",
+      "operation": "consulta",
+      "dataset_size": 100000,
+      "milliseconds": 2.412708505289629,
+      "extra": {
+        "p95_ms": 2.649144094903021,
+        "recall_en_k": 1.0
+      }
+    }
+  ]
+}

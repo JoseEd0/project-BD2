@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 from rag.cleaning import (
-    clean_pages,
-    join_lines,
+    clean_document,
     normalize_characters,
     page_lines,
     remove_repeated_edges,
@@ -12,17 +11,8 @@ from rag.settings import CleaningSettings
 SETTINGS = CleaningSettings()
 
 
-def test_a_word_split_at_the_end_of_a_line_is_joined() -> None:
-    assert join_lines(["the exam-", "ple works"]) == "the example works"
-
-
-def test_a_hyphen_before_a_capital_or_a_number_is_kept() -> None:
-    assert join_lines(["Smith-", "Jones and"]) == "Smith- Jones and"
-    assert join_lines(["pages 10-", "20 here"]) == "pages 10- 20 here"
-
-
 def test_lines_are_joined_with_single_spaces() -> None:
-    assert join_lines(["first line", "second line"]) == "first line second line"
+    assert clean_document(["first line\nsecond line"], SETTINGS).pages == ["first line second line"]
     assert page_lines("  a \t b \n\n  c  \n") == ["a b", "c"]
 
 
@@ -74,7 +64,7 @@ def test_the_arxiv_stamp_and_headers_are_cleaned_from_whole_pages() -> None:
         "Short Title\nThird page text.\n3",
         "Short Title\nFourth page.\n4",
     ]
-    assert clean_pages(raw, SETTINGS) == [
+    assert clean_document(raw, SETTINGS).pages == [
         "Title of the paper We study efficient joins.",
         "Second page text.",
         "Third page text.",
@@ -83,4 +73,14 @@ def test_the_arxiv_stamp_and_headers_are_cleaned_from_whole_pages() -> None:
 
 
 def test_an_empty_page_stays_empty() -> None:
-    assert clean_pages(["", "  \n "], SETTINGS) == ["", ""]
+    assert clean_document(["", "  \n "], SETTINGS).pages == ["", ""]
+
+
+def test_a_document_reports_its_hyphenation_decisions() -> None:
+    raw = ["A data-driven exam-\nple of data-\ndriven work.", "Another exam-\nple here."]
+    document = clean_document(raw, SETTINGS)
+    assert document.pages == [
+        "A data-driven example of data-driven work.",
+        "Another example here.",
+    ]
+    assert document.hyphenation == {"joined_by_default": 2, "kept_compound_seen": 1}

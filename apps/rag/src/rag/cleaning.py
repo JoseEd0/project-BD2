@@ -6,10 +6,8 @@
 2. Encabezados y pies: una línea del borde de la página que se repite en muchas páginas
    (con los números igualados, para que «Página 3» y «Página 4» cuenten como la misma)
    se borra. También el sello lateral de arXiv de la primera página.
-3. Guiones de fin de línea: `exam-` + `ple` se une en `example` cuando la línea siguiente
-   sigue en minúscula. Una palabra compuesta partida justo en su guion (`data-driven`)
-   pierde el guion: sin diccionario no se distinguen, y para buscar pesa menos que dejar
-   miles de palabras partidas.
+3. Guiones de fin de línea: `exam-` + `ple` se une en `example`, pero `data-` + `driven`
+   queda `data-driven`. Decide la evidencia del propio documento (`hyphenation.py`).
 4. Espacios: cada página queda en una sola línea con espacios simples; los fragmentos se
    cortan por oraciones, no por líneas.
 """
@@ -21,8 +19,10 @@ import re
 import unicodedata
 from collections import Counter
 from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import Final
 
+from .hyphenation import Evidence, join_lines
 from .settings import CleaningSettings
 
 SOFT_HYPHEN = "\N{SOFT HYPHEN}"
@@ -34,18 +34,28 @@ SURROGATE_PASS = "surrogatepass"
 REPLACE_INVALID = "replace"
 DIGITS = re.compile(r"\d+")
 DIGIT_PLACEHOLDER = "#"
-HYPHENATED_LINE_END = re.compile(r"[^\W\d_]-$")
 ARXIV_STAMP = re.compile(r"^arXiv:\S+\s+\[[\w.-]+\]\s+\d{1,2}\s+\w{3}\s+\d{4}$", re.IGNORECASE)
 
 
-def clean_pages(raw_pages: Sequence[str], settings: CleaningSettings) -> list[str]:
-    """El texto limpio de cada página, en el mismo orden; una página sin texto queda `""`."""
-    pages = [page_lines(raw) for raw in raw_pages]
-    without_edges = remove_repeated_edges(pages, settings)
-    return [
-        join_lines([line for line in lines if not ARXIV_STAMP.match(line)])
-        for lines in without_edges
+@dataclass(frozen=True, slots=True)
+class CleanedDocument:
+    """El texto limpio de cada página, en orden (una página sin texto queda `""`), y
+    cuántos guiones de fin de línea se dejaron o quitaron por cada regla."""
+
+    pages: list[str]
+    hyphenation: dict[str, int]
+
+
+def clean_document(raw_pages: Sequence[str], settings: CleaningSettings) -> CleanedDocument:
+    """Limpia las páginas de un documento (ver el docstring del módulo)."""
+    pages = [
+        [line for line in lines if not ARXIV_STAMP.match(line)]
+        for lines in remove_repeated_edges([page_lines(raw) for raw in raw_pages], settings)
     ]
+    evidence = Evidence.from_pages(pages)
+    tally: Counter[str] = Counter()
+    texts = [join_lines(lines, evidence, tally) for lines in pages]
+    return CleanedDocument(texts, {str(rule): count for rule, count in sorted(tally.items())})
 
 
 def normalize_characters(text: str) -> str:
@@ -93,18 +103,6 @@ def remove_repeated_edges(
     )
     repeated = {key for key, count in counts.items() if count >= threshold}
     return [_drop_repeated(lines, repeated, settings.edge_lines) for lines in pages]
-
-
-def join_lines(lines: Sequence[str]) -> str:
-    """Las líneas en un solo texto, uniendo las palabras partidas con guion al final de
-    una línea cuando la siguiente sigue en minúscula."""
-    pieces: list[str] = []
-    for line in lines:
-        if pieces and HYPHENATED_LINE_END.search(pieces[-1]) and line[0].islower():
-            pieces[-1] = pieces[-1][:-1] + line
-        else:
-            pieces.append(line)
-    return " ".join(pieces)
 
 
 def _edges(lines: Sequence[str], settings: CleaningSettings) -> list[str]:

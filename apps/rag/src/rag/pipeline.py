@@ -30,6 +30,7 @@ from appkit.download import DownloadError, sha256_of
 
 from .arxiv import ArxivRecord, harvest, in_scope, oai_set, pdf_url, select_papers
 from .chunking import chunk_pages
+from .cleaning import CleanedDocument
 from .course import (
     COURSE_SOURCE,
     MARKDOWN_MEDIA_TYPE,
@@ -50,6 +51,7 @@ from .files import (
     write_json,
     write_jsonl,
 )
+from .hyphenation import Hyphenation
 from .licenses import is_redistributable, license_family
 from .records import ChunkRecord, Failure, Paper
 from .settings import CleaningSettings, CorpusSettings
@@ -71,7 +73,7 @@ TEXTLESS_REASON = "PDF sin texto (escaneado)"
 CHUNK_ID_SEPARATOR = "#"
 # Se guarda con el texto de cada documento: subirla al cambiar la extracción o la limpieza
 # obliga a volver a extraer lo que quedó en `paginas/` con la versión anterior.
-EXTRACTION_VERSION = 1
+EXTRACTION_VERSION = 2
 
 # Conteos que el manifiesto trae siempre, aunque valgan cero.
 REPORTED_COUNTS = (
@@ -159,6 +161,7 @@ class BuildReport:
 
     counts: Counter[str] = field(default_factory=Counter)
     licenses: Counter[str] = field(default_factory=Counter)
+    hyphenation: Counter[str] = field(default_factory=Counter)
     durations: dict[str, float] = field(default_factory=dict)
     failures: list[Failure] = field(default_factory=list)
 
@@ -213,14 +216,14 @@ def harvest_query(settings: CorpusSettings) -> dict[str, object]:
     }
 
 
-def extract_document(path: Path, media_type: str, settings: CleaningSettings) -> list[str]:
+def extract_document(path: Path, media_type: str, settings: CleaningSettings) -> CleanedDocument:
     """El texto limpio de cada página (o sección, en Markdown) de un documento.
 
     Raises:
         UnreadablePdfError, TextlessPdfError: ver `extraction.extract_pages`.
     """
     if media_type == MARKDOWN_MEDIA_TYPE:
-        return markdown_sections(path.read_text(encoding=ENCODING))
+        return CleanedDocument(markdown_sections(path.read_text(encoding=ENCODING)), {})
     return extract_pages(path, settings)
 
 
@@ -402,11 +405,13 @@ class Extracted:
 
     sha256: str
     pages: list[str]
+    hyphenation: dict[str, int]
 
 
-def _outcome(result: Callable[[], list[str]]) -> dict[str, object]:
+def _outcome(result: Callable[[], CleanedDocument]) -> dict[str, object]:
     try:
-        return {"pages": result()}
+        document = result()
+        return {"pages": document.pages, "hyphenation": document.hyphenation}
     except UnreadablePdfError as error:
         return {"failure": f"{UNREADABLE_REASON}: {error}", "kind": UNREADABLE_KIND}
     except TextlessPdfError as error:
@@ -444,8 +449,13 @@ def _usable(
             report.counts[str(outcome.get("kind"))] += 1
             report.fail(document.paper_id, EXTRACTION_STAGE, str(outcome.get("failure")))
             continue
+        hyphenation = outcome.get("hyphenation")
         usable[document.paper_id] = Extracted(
-            str(outcome["sha256"]), [str(text) for text in page_texts]
+            str(outcome["sha256"]),
+            [str(text) for text in page_texts],
+            {str(rule): int(count) for rule, count in hyphenation.items()}
+            if isinstance(hyphenation, dict)
+            else {},
         )
     return usable
 
@@ -471,6 +481,7 @@ def _chunk_all(
             report.fail(document.paper_id, DUPLICATE_STAGE, f"mismo archivo que {original}")
             continue
         seen_files[content.sha256] = document.paper_id
+        report.hyphenation.update(content.hyphenation)
         own = _document_chunks(document, content.pages, settings, seen_chunks, report)
         chunks.extend(own)
         papers.append(_paper(document, content, paths, own))
@@ -533,6 +544,12 @@ def _paper(
     )
 
 
+def _hyphenation_summary(tally: Counter[str]) -> dict[str, int]:
+    rules = {str(rule): tally[str(rule)] for rule in Hyphenation}
+    kept = sum(count for rule, count in rules.items() if Hyphenation(rule).keeps_hyphen)
+    return {**rules, "kept": kept, "joined": sum(rules.values()) - kept}
+
+
 def _manifest(
     paths: CorpusPaths,
     settings: CorpusSettings,
@@ -566,6 +583,7 @@ def _manifest(
         },
         "counts": counts,
         "licenses_in_scope": dict(report.licenses.most_common()),
+        "hyphenation": _hyphenation_summary(report.hyphenation),
         "bytes": {
             "documents": sum(paper.bytes for paper in papers),
             "papers_jsonl": paths.papers_file.stat().st_size,

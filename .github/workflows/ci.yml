@@ -54,6 +54,50 @@ jobs:
       - name: Tests
         run: npm test
 
+  portal:
+    name: Portal de aplicaciones
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.10.11"
+          python-version: "3.12"
+          enable-cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - name: Instalar
+        run: |
+          uv sync --locked --all-packages
+          npm ci
+      - name: Contratos y tipos al día
+        # Un API que cambió sin volver a generar los tipos del portal no entra.
+        run: |
+          npm run contracts
+          git diff --exit-code -- openapi src/api/generated
+          test -z "$(git status --porcelain -- openapi src/api/generated)"
+      - name: Tipos y bundle
+        run: npm run build
+      - name: Tests
+        run: npm test
+      - name: Chromium para Playwright
+        run: npx playwright install --with-deps chromium
+      - name: Playwright
+        run: npm run e2e
+      - name: Trazas de Playwright
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces
+          path: apps/web/test-results
+          retention-days: 7
+
   compose:
     name: Docker compose
     runs-on: ubuntu-latest

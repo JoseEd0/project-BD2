@@ -45,6 +45,7 @@ from query.index_methods import (
     method_named,
     secondary_method_names,
 )
+from query.ingest import LoadRowsStatement, insert_rows
 from query.journal import DiscardingJournal, Journal
 from query.loader import infer_schema, read_values
 from query.operators import UnsupportedQueryError
@@ -264,6 +265,8 @@ class Engine:
             return self._explain(statement)
         if isinstance(statement, InsertStatement):
             return self._insert(statement, journal)
+        if isinstance(statement, LoadRowsStatement):
+            return self._insert_loaded(statement, journal)
         if isinstance(statement, DeleteStatement):
             return self._delete(statement, journal)
         if isinstance(statement, UpdateStatement):
@@ -339,6 +342,13 @@ class Engine:
         return QueryResult(
             message=f"{len(statement.rows)} fila(s) insertada(s) en '{table.name}'",
             affected_rows=len(statement.rows),
+        )
+
+    def _insert_loaded(self, statement: LoadRowsStatement, journal: Journal) -> QueryResult:
+        table = self.table(statement.table)
+        count = insert_rows(table, statement.rows, _JournalOf(journal, table.name))
+        return QueryResult(
+            message=f"{count} fila(s) cargada(s) en '{table.name}'", affected_rows=count
         )
 
     def _delete(self, statement: DeleteStatement, journal: Journal) -> QueryResult:

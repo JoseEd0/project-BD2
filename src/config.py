@@ -95,6 +95,17 @@ DEFAULT_KMEANS_SAMPLES_PER_WORD = 256
 # descriptores por objeto, 2 000 dan de sobra los 256 por palabra que usa k-means, sin
 # extraer dos veces toda la colección.
 DEFAULT_VOCABULARY_TRAINING_OBJECTS = 2_000
+# Las ventanas de 5 a 10 s que pide el enunciado para la detección de copyright, con un
+# salto de media ventana: cada instante del audio cae en dos ventanas, y un tramo copiado
+# que empieza a mitad de una ventana llena entera la siguiente.
+DEFAULT_SEGMENT_WINDOW_SECONDS = 10.0
+DEFAULT_SEGMENT_HOP_SECONDS = 5.0
+# Un segundo da unas cien ventanas MFCC: menos no llena un histograma de palabras auditivas.
+DEFAULT_MIN_SEGMENT_SECONDS = 1.0
+# Diez minutos cubren una canción larga; decodificada a mono en 48 kHz ocupa unos 110 MiB.
+DEFAULT_MAX_SEGMENT_AUDIO_SECONDS = 600.0
+# Diez minutos con el salto por omisión dan 119 ventanas; 256 dejan bajar el salto a 2,5 s.
+DEFAULT_MAX_SEGMENTS = 256
 DEFAULT_LOCK_TIMEOUT_SECONDS = 5.0
 DEFAULT_CSV_DELIMITER = ","
 DEFAULT_CSV_ENCODING = "utf-8"
@@ -218,6 +229,14 @@ class EngineConfig:
         kmeans_samples_per_word: descriptores por palabra con los que se entrena, como mucho.
         vocabulary_training_objects: objetos de cuyos descriptores sale la muestra de
             entrenamiento.
+        segment_window_seconds: duración de cada ventana en la consulta por segmentos de
+            un audio, si la petición no dice otra.
+        segment_hop_seconds: segundos entre el inicio de una ventana y el de la siguiente,
+            si la petición no dice otro.
+        min_segment_seconds: la ventana más corta que se admite, y el audio más corto que
+            se puede consultar por segmentos.
+        max_segment_audio_seconds: duración máxima del audio que se consulta por segmentos.
+        max_segments: ventanas que puede tener una consulta por segmentos.
         lock_timeout_seconds: espera máxima de una transacción por un bloqueo.
         csv_delimiter: separador de los archivos que carga `CREATE TABLE ... FROM FILE`.
         csv_encoding: codificación de esos archivos.
@@ -284,6 +303,11 @@ class EngineConfig:
     kmeans_seed: int = DEFAULT_KMEANS_SEED
     kmeans_samples_per_word: int = DEFAULT_KMEANS_SAMPLES_PER_WORD
     vocabulary_training_objects: int = DEFAULT_VOCABULARY_TRAINING_OBJECTS
+    segment_window_seconds: float = DEFAULT_SEGMENT_WINDOW_SECONDS
+    segment_hop_seconds: float = DEFAULT_SEGMENT_HOP_SECONDS
+    min_segment_seconds: float = DEFAULT_MIN_SEGMENT_SECONDS
+    max_segment_audio_seconds: float = DEFAULT_MAX_SEGMENT_AUDIO_SECONDS
+    max_segments: int = DEFAULT_MAX_SEGMENTS
     lock_timeout_seconds: float = DEFAULT_LOCK_TIMEOUT_SECONDS
     csv_delimiter: str = DEFAULT_CSV_DELIMITER
     csv_encoding: str = DEFAULT_CSV_ENCODING
@@ -338,6 +362,7 @@ class EngineConfig:
             "kmeans_iterations",
             "kmeans_samples_per_word",
             "vocabulary_training_objects",
+            "max_segments",
         ):
             _require_between(name, getattr(self, name), 1, None)
         _require_between("merge_fan_in", self.merge_fan_in, MIN_MERGE_FAN_IN, None)
@@ -369,6 +394,18 @@ class EngineConfig:
             )
         if self.audio_duration_seconds is not None:
             _require_positive("audio_duration_seconds", self.audio_duration_seconds)
+        for name in (
+            "segment_window_seconds",
+            "segment_hop_seconds",
+            "min_segment_seconds",
+            "max_segment_audio_seconds",
+        ):
+            _require_positive(name, getattr(self, name))
+        if self.segment_window_seconds < self.min_segment_seconds:
+            raise ConfigurationError(
+                "segment_window_seconds no puede ser menor que min_segment_seconds, "
+                f"y es {self.segment_window_seconds}"
+            )
         bm25_error = bm25_parameters_error(self.bm25_k1, self.bm25_b)
         if bm25_error is not None:
             raise ConfigurationError(bm25_error)

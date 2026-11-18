@@ -21,18 +21,23 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable, Iterable, Iterator
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
+import numpy as np
+
 from config import EngineConfig
-from index.vector import vector_id_of
+from index.vector import VectorMetric, VectorSearchStats, record_id_of, vector_id_of
 from multimedia import (
     Descriptors,
     FailedExtraction,
     FeatureStore,
     MediaKind,
     MediaReference,
+    TemporalFragment,
+    decode_segments,
+    describe_segments,
     descriptor_dimension,
     extract_each,
     extract_features,
@@ -46,7 +51,7 @@ from storage.record import FieldReader
 from storage.record_id import RecordId
 from storage.types import Key
 
-from .base import QueryVector, SimilarityIndex, SimilarityQuery
+from .base import QueryVector, SimilarityIndex, SimilarityQuery, SimilarRow
 from .errors import MixedMediaError, SimilarityIndexError
 from .spill import DescriptorSpill
 from .vectors import IndexedVectors, VectorBatches, VectorIndexSettings
@@ -56,6 +61,37 @@ SECONDS_TO_MILLISECONDS = 1000
 
 MediaResolver = Callable[[str], Path]
 IndexedFile = tuple[RecordId, MediaReference]
+
+
+@dataclass(frozen=True, slots=True)
+class SegmentMatches:
+    """Una ventana del audio consultado y las filas más parecidas a ella."""
+
+    window: TemporalFragment
+    rows: tuple[SimilarRow, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class SegmentSearchResult:
+    """Lo que devolvió una consulta por segmentos y lo que costó cada etapa.
+
+    Attributes:
+        duration: segundos del audio consultado.
+        segments: cada ventana, en orden, con sus vecinos de mayor a menor puntaje.
+        metric: la métrica del índice, con la que se puntuó.
+        stats: el trabajo de la búsqueda de todas las ventanas juntas.
+        decode_ms: lo que tardó decodificar el audio, una vez.
+        extraction_ms: lo que tardó describir y cuantizar todas las ventanas.
+        search_ms: lo que tardó la búsqueda de todas las ventanas en el índice.
+    """
+
+    duration: float
+    segments: tuple[SegmentMatches, ...]
+    metric: VectorMetric
+    stats: VectorSearchStats
+    decode_ms: float
+    extraction_ms: float
+    search_ms: float
 
 
 class MediaSimilarityIndex(SimilarityIndex):
@@ -151,6 +187,51 @@ class MediaSimilarityIndex(SimilarityIndex):
     def close(self) -> None:
         self._store.close()
         super().close()
+
+    def similar_segments(
+        self, path: Path, window: float, hop: float, k: int
+    ) -> SegmentSearchResult:
+        """Las `k` filas más parecidas a cada ventana de `window` segundos, cada `hop`, del
+        audio de `path`, con la métrica del índice.
+
+        El audio se decodifica una vez y todas las ventanas se buscan en un solo lote: cada
+        una recibe las mismas filas y puntajes que `similar` con su tramo
+        (`ruta#t=inicio,fin`).
+
+        Raises:
+            SegmentLimitError: si el audio o las ventanas pasan de un límite de la
+                configuración.
+            SimilarityIndexError: si el índice no está construido.
+            MixedMediaError: si la columna guarda imágenes.
+            MediaError: si el archivo no es un audio o no se puede leer.
+        """
+        self._require_built()
+        self._require_kind(media_kind_of(path))
+        started = time.perf_counter()
+        segmented = decode_segments(path, window, hop, self._config)
+        decoded = time.perf_counter()
+        queries = np.stack(
+            [self._store.vectorize(found) for found in describe_segments(segmented, self._config)]
+        )
+        described = time.perf_counter()
+        found = self._vectors.search_many(queries, k)
+        searched = time.perf_counter()
+        segments = tuple(
+            SegmentMatches(
+                window,
+                tuple(SimilarRow(record_id_of(hit.vector_id), hit.score) for hit in hits),
+            )
+            for window, hits in zip(segmented.windows, found.hits, strict=True)
+        )
+        return SegmentSearchResult(
+            duration=segmented.audio.duration,
+            segments=segments,
+            metric=self.settings.metric,
+            stats=found.stats,
+            decode_ms=_milliseconds(started, decoded),
+            extraction_ms=_milliseconds(decoded, described),
+            search_ms=_milliseconds(described, searched),
+        )
 
     def _add(self, value: Key, record_id: RecordId) -> None:
         reference = media_reference(self._path_text(value), self._resolve)

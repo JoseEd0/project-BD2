@@ -1,4 +1,5 @@
-"""Tramos de audio (`ruta#t=inicio,fin`) en una columna con índice de similitud."""
+"""Tramos de audio (`ruta#t=inicio,fin`) en una columna con índice de similitud y la
+consulta por segmentos de un audio entero."""
 
 from pathlib import Path
 
@@ -15,12 +16,16 @@ from tests.multimedia.media_support import (
 )
 
 import multimedia.parallel
+import multimedia.segments
 from config import EngineConfig
+from errors import DomainError
 from index.similarity import MediaSimilarityIndex
 from multimedia import (
     FragmentOnImageError,
     FragmentOutOfRangeError,
     MalformedFragmentError,
+    MediaReference,
+    SegmentLimitError,
     decode_audio,
 )
 from query.engine import Engine
@@ -28,6 +33,7 @@ from query.engine import Engine
 SONGS = 3
 SONG_SECONDS = 4.0
 WINDOW = 1.0
+HOP = 0.5
 VOCABULARY = 8
 K = 3
 FRAGMENT_STARTS = (0.0, 1.0, 2.0, 3.0)
@@ -53,7 +59,7 @@ def config(tmp_path: Path, media: Path) -> EngineConfig:
 
 @pytest.fixture
 def decodes(monkeypatch: pytest.MonkeyPatch) -> list[Path]:
-    """Los audios decodificados enteros al construir."""
+    """Los audios decodificados enteros, al construir o al consultar por segmentos."""
     decoded: list[Path] = []
 
     def counting(path: Path):
@@ -61,6 +67,7 @@ def decodes(monkeypatch: pytest.MonkeyPatch) -> list[Path]:
         return decode_audio(path)
 
     monkeypatch.setattr(multimedia.parallel, "decode_audio", counting)
+    monkeypatch.setattr(multimedia.segments, "decode_audio", counting)
     return decoded
 
 
@@ -161,3 +168,34 @@ def test_a_photo_with_a_fragment_cannot_be_indexed(config, media):
 
         with pytest.raises(FragmentOnImageError):
             engine.execute("CREATE INDEX i ON fotos USING HNSW (ruta)")
+
+
+@pytest.mark.parametrize("method", ["HNSW", "IVF"])
+def test_every_segment_gets_what_its_fragment_gets_alone(config, media, decodes, method):
+    song = media / "cancion1.wav"
+    with fragment_table(config, media, method) as engine:
+        index = media_index(engine)
+        decodes.clear()
+
+        result = index.similar_segments(song, WINDOW, HOP, K)
+
+        assert decodes == [song]
+        assert result.duration == pytest.approx(SONG_SECONDS)
+        assert len(result.segments) == 7
+        for segment in result.segments:
+            alone = index.similar(MediaReference(song, segment.window), K).rows
+            assert [row.record_id for row in segment.rows] == [row.record_id for row in alone]
+            assert [row.score for row in segment.rows] == pytest.approx(
+                [row.score for row in alone], rel=1e-6
+            )
+
+
+def test_a_segment_query_over_the_limits_is_refused(config, media):
+    limited = EngineConfig(**{**config_fields(config), "max_segments": 2})
+    with fragment_table(limited, media) as engine, pytest.raises(SegmentLimitError):
+        media_index(engine).similar_segments(media / "cancion0.wav", WINDOW, HOP, K)
+
+
+def test_a_photo_has_no_segments(config, media):
+    with fragment_table(config, media) as engine, pytest.raises(DomainError):
+        media_index(engine).similar_segments(media / "foto.png", WINDOW, HOP, K)

@@ -17,7 +17,7 @@ from config import EngineConfig
 from index.bplustree import ClusteredBPlusIndex
 from index.inverted import TextSearchIndex
 from index.rtree import SearchStats, SpatialIndex
-from index.secondary import RangeIndex, SecondaryIndex
+from index.secondary import RangeIndex, RebuildableIndex, SecondaryIndex
 from index.similarity import SimilarityIndex
 from query.catalog import IndexDefinition, Organization, TableDefinition
 from query.index_methods import Capability, method_named
@@ -154,7 +154,7 @@ class Table:
             self._text_values = self._open_text_values()
             self._rows = OutOfRowSerializer(self._serializer, self._text_values)
             for index in definition.indexes:
-                self._indexes[index.name] = self._open_index(index)
+                self._indexes[index.name] = self._reopened_index(index)
         except Exception:
             self.close()
             raise
@@ -451,7 +451,7 @@ class Table:
         """
         self._require_addresses()
         index = self._open_index(definition)
-        index.build((record, _located(address)) for address, record in self._storage.scan())
+        index.build(self._indexed_rows())
         self._indexes[definition.name] = index
         return index
 
@@ -714,6 +714,17 @@ class Table:
         clustered = ClusteredBPlusIndex(path, self._serializer, key_field, self._config)
         return KeyedStore(clustered, key_of)
 
+    def _reopened_index(self, definition: IndexDefinition) -> SecondaryIndex:
+        """Un índice de la tabla al abrirla; el que perdió su archivo, reconstruido."""
+        index = self._open_index(definition)
+        if isinstance(index, RebuildableIndex) and index.needs_rows:
+            index.build(self._indexed_rows())
+        return index
+
+    def _indexed_rows(self) -> Iterator[tuple[bytes, RecordId]]:
+        """Las filas guardadas con la dirección que recibe un índice secundario."""
+        return ((record, _located(address)) for address, record in self._storage.scan())
+
     def _open_index(self, definition: IndexDefinition) -> SecondaryIndex:
         method = method_named(definition.method)
         if method is None:
@@ -722,7 +733,12 @@ class Table:
             )
         path = self._index_path(definition.name)
         return method.opener(
-            path, self._rows, definition.column, self._config, definition.options
+            path,
+            self._rows,
+            definition.column,
+            self._config,
+            definition.options,
+            self._indexed_rows,
         )
 
     def _open_text_values(self) -> VariableLengthFile | None:

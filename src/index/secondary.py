@@ -9,13 +9,17 @@ dejan fuera las filas en las que es NULL y guardan el par `(valor, dirección)` 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from types import TracebackType
 from typing import Any, Protocol, Self, runtime_checkable
 
 from storage.record import FieldReader, Record
 from storage.record_id import RecordId
 from storage.types import Key
+
+# Las filas de la tabla con su dirección, cada vez que se piden: lo que un índice derivado de
+# ellas lee para reconstruirse.
+RowSource = Callable[[], Iterator[tuple[bytes, RecordId]]]
 
 
 class SecondaryIndex(Protocol):
@@ -44,6 +48,16 @@ class RangeIndex(SecondaryIndex, Protocol):
 
     def range_search(self, low: Key | None, high: Key | None) -> Iterator[tuple[Key, RecordId]]:
         ...
+
+
+@runtime_checkable
+class RebuildableIndex(SecondaryIndex, Protocol):
+    """Un índice derivado de las filas de la tabla que no se guarda en cada COMMIT: si al
+    abrir la tabla le falta su archivo, `needs_rows` lo dice y la tabla lo reconstruye con
+    `build`."""
+
+    @property
+    def needs_rows(self) -> bool: ...
 
 
 class ColumnIndex(ABC):

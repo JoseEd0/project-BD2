@@ -20,6 +20,7 @@ gráficas de [`figures/`](figures/) y todas las tablas de este documento.
 .venv/bin/python -m benchmarks.faces_benchmark --lfw data/datasets/lfw/lfw \
     --models data/models/faces --sides 500 1000 2000 4000 --sample 500 --threads 1
 .venv/bin/python -m benchmarks.segments_benchmark --tracks-directory data/datasets/fma_small/pistas
+.venv/bin/python -m benchmarks.ingest_benchmark --sizes 1000 10000 50000
 .venv/bin/python -m benchmarks.plot              # redibuja todas las gráficas
 ```
 
@@ -1201,7 +1202,7 @@ filas, que es un cambio del planificador y queda fuera de esta medida. Con 10 00
   MiB de 100 000 × 384 `float32`; el grafo suma un 10 %. Es un derivado: se reescribe al
   cerrar, no en cada `COMMIT`.
 - **Cargar la tabla es lo lento** (64 s para 100 000 filas fila a fila, con su índice de
-  clave primaria y el hash): la carga masiva es del issue #69.
+  clave primaria y el hash): la carga masiva se mide en la sección 9.
 
 ### La Parte 4 después del cambio
 
@@ -1415,6 +1416,117 @@ que no sale idéntico entre construcciones, como se vio en la sección 6); los t
 dentro de un ±5 %, lo que varía la medida en un equipo compartido, salvo el `CREATE INDEX`
 HNSW de audio, que bajó un 9 %. Además, sobre 20 pistas de
 FMA, los MFCC de la lectura nueva son idénticos bit a bit a los de `librosa.load`.
+
+## 9. Carga masiva — NDJSON contra `INSERT` con parámetros, por HTTP
+
+`ingest_benchmark.py` mide lo que paga un servicio de la Parte 5 que llena sus tablas en el
+gestor —decenas de miles de fragmentos con su embedding de 384 dimensiones— según cómo le
+mande las filas. **Contra un servidor de verdad**: uvicorn en otro proceso, arrancado con
+`app_from_environment` como en Docker, y un cliente `httpx` con la conexión abierta. El
+tiempo es el del cliente, de la primera petición a la última respuesta, así que incluye
+convertir cada fila a JSON (unos 120 µs por fila con un vector), la red local y el servidor.
+No se usa el cliente de pruebas de FastAPI: lee el cuerpo entero antes de entregarlo, y la
+carga por partes no se mediría.
+
+**Técnicas.** *INSERT, una fila por petición*: `INSERT INTO t VALUES ($1, $2, …)` con
+`params`, una transacción por fila, lo que haría un servicio que no sabe de lotes (hasta
+10 000 filas: más allá tarda minutos y no cambia la conclusión). *INSERT, un lote por
+petición*: `VALUES ($1, …), ($4, …), …` con 1 000 filas, la mejor forma de cargar sin la ruta
+nueva (el experimento sube `MINIGESTOR_MAX_REQUEST_BYTES` para que quepa: mil filas con
+vector son ~8 MiB de JSON). *NDJSON*: `POST /tables/{name}/rows` con el cuerpo enviado por
+partes y lotes de 1 000 filas, los mismos que el INSERT por lotes.
+
+**Escenarios**, cada uno sobre una tabla recién creada: `filas (id INT PRIMARY KEY, nombre
+VARCHAR(24), ciudad VARCHAR(16), nota FLOAT)`, las de la Parte 1; `vectores (id INT PRIMARY
+KEY, parte INT, emb VECTOR(384))` con los embeddings sintéticos de la sección 6, sin índice o
+con un HNSW (`metric = 'cosine'`, `M` 16) creado antes —con la tabla vacía, que la carga
+NDJSON construye al final, o con una fila previa, que la obliga a mantenerlo fila a fila— o
+creado después con `CREATE INDEX`; y `lugares (id INT PRIMARY KEY, lugar POINT)` con puntos
+al azar en Lima y un R-Tree en los mismos tres momentos.
+
+**Dónde corrió.** Apple M4 Pro (12 núcleos), macOS, Python 3.12, un hilo de FAISS
+(`--threads 1`); una sola repetición por medida (`--repetitions`), carga media de 3 a 7
+durante la medida (en el JSON). Tardó 7 min 25 s.
+
+### Resultados medidos
+
+![Carga masiva por HTTP: filas por segundo](figures/ingesta.png)
+
+Filas por segundo (más es mejor):
+
+| Escenario | Filas | INSERT, 1 fila/petición | INSERT, lote/petición | NDJSON |
+|---|---:|---:|---:|---:|
+| sin vector | 1 000 | 682 | 4 410 | **5 103** |
+| sin vector | 10 000 | 650 | 2 708 | **2 942** |
+| sin vector | 50 000 | — | 2 284 | **2 458** |
+| VECTOR(384), sin índice | 1 000 | 596 | 2 114 | **2 455** |
+| VECTOR(384), sin índice | 10 000 | 541 | 1 650 | **2 196** |
+| VECTOR(384), sin índice | 50 000 | — | 1 440 | **1 859** |
+| VECTOR(384), HNSW creado antes, tabla vacía | 1 000 | 557 | 1 883 | **2 161** |
+| VECTOR(384), HNSW creado antes, tabla vacía | 10 000 | 479 | 1 346 | **1 834** |
+| VECTOR(384), HNSW creado antes, tabla vacía | 50 000 | — | 1 190 | **1 530** |
+
+Cuándo se construye el índice, siempre con NDJSON (filas por segundo, y en el creado
+después, cuánto de las 50 000 fue cargar y cuánto el `CREATE INDEX`):
+
+| Índice | Filas | Antes, tabla vacía (al final) | Antes, tabla con filas (fila a fila) | Después (`CREATE INDEX`) |
+|---|---:|---:|---:|---:|
+| HNSW | 1 000 | 2 161 | 2 111 | 2 171 |
+| HNSW | 10 000 | 1 834 | 1 754 | 1 851 |
+| HNSW | 50 000 | **1 530** | 1 462 | 1 523 (26,9 s + 6,0 s) |
+| R-Tree | 1 000 | 4 827 | 2 790 | 4 514 |
+| R-Tree | 10 000 | 2 837 | 1 838 | 2 880 |
+| R-Tree | 50 000 | **2 266** | 1 509 | 2 269 (21,8 s + 0,3 s) |
+
+### Antes de medir: convertir los vectores costaba más que guardarlos
+
+La primera medida daba 1 694 filas/s con NDJSON y 1 432 con el INSERT por lotes (2 000
+filas con vector). Medido por partes, cada vector de 384 componentes pasaba tres veces por
+Python componente a componente: 68 µs al convertir el JSON en `VECTOR` y 73 µs en cada una
+de las dos validaciones del registro (al comprobar la fila y al guardarla). Comprobar que
+todos los componentes son `float` finitos con una pasada en C por condición
+(`are_finite_floats`) los dejó en 4,6 y 8,7 µs, y la carga subió a **2 266 y 1 822 filas/s**
+(+34 % y +27 %). Lo que queda, medido con `cProfile` sobre el motor: con 10 000 filas sin
+vector, el **95 % del tiempo es el B+ de la clave primaria**, que se recorre dos veces por fila
+—para comprobar que la clave no se repite y para insertarla— y que decodifica y vuelve a
+codificar el nodo entero en cada acceso. Un B+ con construcción de abajo arriba lo
+resolvería en una tabla vacía; no existe todavía y queda fuera de este issue.
+
+### Conclusiones
+
+- **El INSERT de una fila por petición es lo que no hay que hacer**: 650 filas/s sin vector y
+  480–600 con él, porque cada fila paga una petición HTTP, analizar el SQL y una
+  transacción con su escritura a disco. NDJSON es **4,5 veces más rápido con 10 000 filas sin
+  vector y 4 veces con vector**: 10 000 embeddings entran en 4,6 s en vez de 18,5.
+- **Frente al INSERT por lotes, NDJSON gana un 8–36 %**: los dos escriben los mismos lotes
+  en las mismas transacciones, y lo que NDJSON se ahorra es analizar un SQL con miles de
+  parámetros y viajar en un solo cuerpo JSON. La diferencia que importa es otra: el INSERT
+  por lotes **falla entero** con una fila mala y su cuerpo tiene que caber en
+  `MINIGESTOR_MAX_REQUEST_BYTES`, mientras que NDJSON rechaza solo el lote culpable, dice la
+  línea, y su cuerpo no tiene tope porque nunca está entero en memoria.
+- **Construir al final paga sobre todo en el R-Tree**: con la tabla vacía, la carga STR al
+  terminar deja la carga **un 50 % más rápida** que insertar cada punto con Guttman (2 266
+  frente a 1 509 filas/s con 50 000), y cuesta lo mismo que crear el índice después (0,3 s
+  de STR para 50 000 puntos). En el **HNSW la ganancia es chica, 2–5 %**: FAISS inserta en el
+  grafo de a un vector también cuando recibe todos juntos (con un hilo), así que lo único que
+  se ahorra es la llamada por fila. Crear el HNSW antes, sobre la tabla vacía, y crearlo
+  después cuestan lo mismo (1 530 frente a 1 523 filas/s): la migración puede declarar sus
+  índices primero sin pagar de más.
+- **El rendimiento baja con el tamaño** en todas las técnicas, de ~5 000 a ~2 500 filas/s sin
+  vector: es el B+ de la clave primaria, cada vez más alto y con más páginas fuera del buffer
+  pool (ver arriba). Es lo siguiente que habría que atacar para cargas de cientos de miles.
+
+### Reproducirlo
+
+```bash
+.venv/bin/python -m benchmarks.ingest_benchmark --sizes 1000 10000 50000
+.venv/bin/python -m benchmarks.plot
+```
+
+Sin datasets que descargar ni PostgreSQL. `--batch-rows` cambia el tamaño de lote de las dos
+cargas por lotes, `--single-row-limit` hasta dónde se mide el INSERT de una fila,
+`--repetitions` cuántas veces se repite cada carga (se reporta la mediana), `--threads` los
+hilos de FAISS y `--dimension` y `--seed`, los datos.
 
 ## Gráficas
 

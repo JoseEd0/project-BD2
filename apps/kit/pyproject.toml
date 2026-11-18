@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "minigestor-kit"
 version = "0.1.0"
-description = "Lo común de los servicios de la Parte 5: configuración, logs, salud y errores"
+description = "Lo común de los servicios de la Parte 5: configuración, logs, salud, errores y descargas"
 requires-python = ">=3.11"
 dependencies = []
 

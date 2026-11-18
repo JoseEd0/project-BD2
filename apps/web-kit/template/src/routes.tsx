@@ -1,10 +1,9 @@
-import { lazy, type ComponentType } from "react";
+import { lazy } from "react";
 import type { RouteObject } from "react-router";
 
 import { Layout } from "./components/Layout";
 import { RouteErrorBoundary } from "./components/RouteErrorBoundary";
 import { NotFoundPage } from "./pages/NotFoundPage";
-import { PORTAL_APPS, type AppId } from "./services/catalog";
 
 /*
  * Cada página en su propio fragmento del bundle, con `React.lazy` y no con el `lazy` de las
@@ -14,22 +13,13 @@ import { PORTAL_APPS, type AppId } from "./services/catalog";
  */
 const HomePage = lazy(() => import("./pages/HomePage"));
 
-const APP_PAGES: Record<AppId, ComponentType> = {
-  copyright: lazy(() => import("./pages/copyright/CopyrightPage")),
-  shop: lazy(() => import("./pages/shop/ShopPage")),
-  papers: lazy(() => import("./pages/papers/PapersPage")),
-  faces: lazy(() => import("./pages/faces/FacesPage")),
-};
-
 export const routes: RouteObject[] = [
   {
     path: "/",
     Component: Layout,
-    // Si falla la propia barra, no hay dentro de qué mostrar el error: se muestra solo.
     ErrorBoundary: RouteErrorBoundary,
     children: [
       { index: true, Component: HomePage, ErrorBoundary: RouteErrorBoundary },
-      ...PORTAL_APPS.map((app) => ({ path: app.slug, Component: APP_PAGES[app.id], ErrorBoundary: RouteErrorBoundary })),
       { path: "*", Component: NotFoundPage },
     ],
   },

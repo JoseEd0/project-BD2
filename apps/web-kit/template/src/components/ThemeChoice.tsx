@@ -1,5 +1,4 @@
-import { THEME_PREFERENCES, type ThemePreference } from "../theme/themePreference";
-import { useThemePreference } from "../theme/useThemePreference";
+import { THEME_PREFERENCES, useThemePreference, type ThemePreference } from "@minigestor/web-kit";
 
 const PREFERENCE_LABELS: Record<ThemePreference, string> = {
   system: "Sistema",
@@ -8,13 +7,13 @@ const PREFERENCE_LABELS: Record<ThemePreference, string> = {
 };
 
 /** Tres opciones de radio: con el teclado se recorren con las flechas, como cualquier grupo. */
-export function ThemeSwitch() {
+export function ThemeChoice() {
   const { preference, choosePreference } = useThemePreference();
   return (
-    <fieldset className="theme-switch">
+    <fieldset>
       <legend className="visually-hidden">Tema</legend>
       {THEME_PREFERENCES.map((option) => (
-        <label key={option} className="theme-option">
+        <label key={option}>
           <input
             type="radio"
             name="theme"
@@ -22,7 +21,7 @@ export function ThemeSwitch() {
             checked={preference === option}
             onChange={() => choosePreference(option)}
           />
-          <span>{PREFERENCE_LABELS[option]}</span>
+          {PREFERENCE_LABELS[option]}
         </label>
       ))}
     </fieldset>

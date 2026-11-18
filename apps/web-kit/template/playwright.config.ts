@@ -1,14 +1,14 @@
 import { defineConfig, devices } from "@playwright/test";
 
-/** El puerto que `vite preview` usa por omisión; `PORTAL_E2E_PORT` lo cambia. */
+/** El puerto que `vite preview` usa por omisión; `WEB_E2E_PORT` lo cambia. */
 const VITE_PREVIEW_DEFAULT_PORT = "4173";
-const port = process.env.PORTAL_E2E_PORT ?? VITE_PREVIEW_DEFAULT_PORT;
+const port = process.env.WEB_E2E_PORT ?? VITE_PREVIEW_DEFAULT_PORT;
 const baseURL = `http://localhost:${port}`;
 
 /**
  * Corre contra el build (`npm run build` antes): el service worker solo existe ahí. Sin
- * `PORTAL_DEV_*`, `vite preview` no reenvía nada, y cada test decide qué responden los
- * servicios con `context.route`.
+ * `WEB_DEV_API_URL`, `vite preview` no reenvía nada, y cada test decide qué responde el API
+ * con `context.route`.
  */
 export default defineConfig({
   testDir: "e2e",

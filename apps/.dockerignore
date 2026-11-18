@@ -1,0 +1,12 @@
+# Contexto de las imágenes de las interfaces (`docker build ... apps`): fuentes, no
+# dependencias instaladas ni salidas de un build local.
+**/node_modules
+**/dist
+**/test-results
+**/playwright-report
+**/.env
+**/.env.*
+**/__pycache__
+**/*.py[cod]
+**/.DS_Store
+**/.venv

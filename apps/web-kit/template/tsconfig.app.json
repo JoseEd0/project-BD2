@@ -5,6 +5,8 @@
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "preserveSymlinks": true,
     "jsx": "react-jsx",
     "types": ["vite/client", "vite-plugin-pwa/react"],
     "strict": true,

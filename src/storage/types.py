@@ -304,9 +304,15 @@ class VectorCodec(FieldCodec):
         self.slots = dimension
 
     def to_slots(self, value: Value) -> tuple[Any, ...]:
-        if not isinstance(value, tuple) or len(value) != self.dimension:
+        if not isinstance(value, tuple):
             raise InvalidValueError(
                 f"se esperaba un vector de dimensión {self.dimension}, llegó {value!r}"
+            )
+        if len(value) != self.dimension:
+            # Un embedding tiene cientos de componentes: se dice su dimensión, no se imprime.
+            raise InvalidValueError(
+                f"se esperaba un vector de dimensión {self.dimension} y llegó uno de "
+                f"dimensión {len(value)}"
             )
         if not all(is_number(component) for component in value):
             raise InvalidValueError(f"los componentes de un vector son números, llegó {value!r}")

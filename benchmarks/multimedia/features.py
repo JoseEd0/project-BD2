@@ -39,6 +39,7 @@ from multimedia import (
     Descriptors,
     FailedExtraction,
     FeatureStore,
+    MediaReference,
     extract_features,
     extract_in_parallel,
     training_positions,
@@ -235,7 +236,8 @@ def _time_extraction(paths: list[Path], config: EngineConfig, workers: int) -> f
 
 
 def _descriptors_of(paths: list[Path], config: EngineConfig, workers: int) -> Iterator[Descriptors]:
-    for outcome in extract_in_parallel(paths, config, workers):
+    references = (MediaReference(path) for path in paths)
+    for outcome in extract_in_parallel(references, config, workers):
         if isinstance(outcome, FailedExtraction):
             raise outcome.error
         yield outcome.descriptors

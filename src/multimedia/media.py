@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from enum import Enum, unique
 from pathlib import Path
 
-from .errors import UnsupportedMediaTypeError
+from .errors import FragmentOnImageError, UnsupportedMediaTypeError
+from .fragments import MediaReference, TemporalFragment, split_fragment
 
 # Los formatos que decodifican, sin códecs aparte, OpenCV (imágenes) y libsndfile (audio,
 # MP3 incluido desde su versión 1.1).
@@ -33,4 +35,27 @@ def media_kind_of(path: Path) -> MediaKind:
     supported = ", ".join(sorted(IMAGE_EXTENSIONS | AUDIO_EXTENSIONS))
     raise UnsupportedMediaTypeError(
         f"'{path.name}' no es una imagen ni un audio conocidos (extensiones: {supported})"
+    )
+
+
+def media_reference(text: str, locate: Callable[[str], Path]) -> MediaReference:
+    """El archivo que nombra `text` y el tramo que pide su `#t=`, si lo lleva.
+
+    `locate` convierte la ruta escrita, ya sin el fragmento, en la del archivo, y rechaza la
+    que no se puede leer.
+
+    Raises:
+        MediaFragmentError: si el fragmento no se puede leer, está vacío o es de una imagen.
+        UnsupportedMediaTypeError: si la extensión no es de imagen ni de audio.
+    """
+    written, fragment = split_fragment(text)
+    path = locate(written)
+    if fragment is not None and media_kind_of(path) is MediaKind.IMAGE:
+        raise fragment_on_image(path, fragment)
+    return MediaReference(path, fragment)
+
+
+def fragment_on_image(path: Path, fragment: TemporalFragment) -> FragmentOnImageError:
+    return FragmentOnImageError(
+        f"'{path.name}#{fragment}' es una imagen: los fragmentos temporales (#t=) son de audio"
     )

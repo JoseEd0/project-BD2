@@ -25,7 +25,7 @@ from typing import Final
 
 from .settings import CleaningSettings
 
-SOFT_HYPHEN = "­"
+SOFT_HYPHEN = "\N{SOFT HYPHEN}"
 CONTROL_CATEGORY = "Cc"
 NEWLINE = "\n"
 NORMALIZATION_FORM: Final = "NFKC"

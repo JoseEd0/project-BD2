@@ -9,7 +9,7 @@ concurrencia y música real para la búsqueda por similitud de audio.
 
 Genera y carga un **e-commerce con cinco tablas relacionadas**, cada una con una
 organización física distinta, para que en la misma demo se vean las tres funcionando, una
-sexta con datos espaciales y tres más, de texto, que no se generan sino que se cargan de la
+sexta con datos espaciales, una séptima con embeddings y tres más, de texto, que no se generan sino que se cargan de la
 muestra ESCI versionada (sección 2):
 
 ```
@@ -25,6 +25,7 @@ categorias ──< productos ──┐
 | `pedidos` | 6 000 | **archivo secuencial** | ordenado por `id` |
 | `detalle_pedidos` | 18 000 | heap file | clave primaria + **B+ en `pedido_id`** |
 | `tiendas` | 3 000 | heap file | clave primaria + **R-Tree en `ubicacion`** |
+| `fragmentos` | 1 200 | heap file | clave primaria + **HNSW coseno en `embedding`** (`VECTOR(16)`) |
 | `catalogo` | 2 000 | heap file | clave primaria + **índice invertido en `texto`** |
 | `consultas` | 36 | heap file | clave primaria |
 | `juicios` | 894 | heap file | **B+ en `query_id`** |
@@ -34,6 +35,12 @@ ubicación como `POINT(latitud, longitud)`. Los puntos se generan dentro del con
 doce distritos, de modo que «tiendas dentro de Miraflores» tiene una respuesta
 comprobable: las que llevan ese distrito. Los contornos son **polígonos simplificados a
 mano**, no límites oficiales.
+
+`fragmentos` es la tabla de los embeddings: cada fila es una nota de uno de seis temas con
+un `VECTOR(16)` de norma 1. Los vectores **son sintéticos**: una mezcla de gaussianas con
+la semilla del generador, un centro por tema y un desvío de 0,35 alrededor, normalizados.
+Se parecen a los de un modelo en lo que importa para la demo —los de un mismo tema quedan
+juntos— y caben en un atajo de la consola: `SIMILAR_TO(embedding, [ ... ], k = 5)`.
 
 ```bash
 .venv/bin/python demos/poblar_ecommerce.py --data-dir ./data

@@ -34,6 +34,8 @@ const SCORE_DIGITS = 3;
 
 const IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tif", ".tiff"];
 const AUDIO_EXTENSIONS = [".wav", ".mp3", ".flac", ".ogg"];
+const FRAGMENT_SEPARATOR = "#";
+const MEDIA_FILE_ROUTE = "/media/file";
 /** Nombres de columna que la galería usa como título y como clase, por orden de preferencia. */
 const TITLE_COLUMNS = ["titulo", "title", "nombre", "name"];
 const CATEGORY_COLUMNS = ["categoria", "category", "genero", "genre", "palabra", "word", "clase"];
@@ -91,8 +93,29 @@ export interface PanelOutcome {
   elapsedMs: number | null;
 }
 
+/**
+ * Una ruta con un tramo de Media Fragments, como `pista.mp3#t=10,20`: el archivo y el
+ * fragmento sin el `#`. Como en una URL, el primer `#` empieza el fragmento.
+ */
+export function splitMediaFragment(path: string): { file: string; fragment: string | null } {
+  const at = path.indexOf(FRAGMENT_SEPARATOR);
+  return at < 0 ? { file: path, fragment: null } : { file: path.slice(0, at), fragment: path.slice(at + 1) };
+}
+
+/**
+ * La dirección relativa de `GET /media/file` para un archivo: el API sirve el archivo entero
+ * y el fragmento va al final de la dirección, donde `<audio>` lo lee y reproduce solo ese
+ * tramo.
+ */
+export function mediaFilePath(path: string): string {
+  const { file, fragment } = splitMediaFragment(path);
+  const query = `${MEDIA_FILE_ROUTE}?${new URLSearchParams({ path: file })}`;
+  return fragment === null ? query : `${query}${FRAGMENT_SEPARATOR}${fragment}`;
+}
+
 export function mediaKindOf(path: string): MediaKind | null {
-  const extension = path.slice(path.lastIndexOf(".")).toLowerCase();
+  const { file } = splitMediaFragment(path);
+  const extension = file.slice(file.lastIndexOf(".")).toLowerCase();
   if (IMAGE_EXTENSIONS.includes(extension)) {
     return "image";
   }

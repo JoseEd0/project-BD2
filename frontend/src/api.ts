@@ -1,4 +1,5 @@
 import { API_URL, MISSING_API_URL } from "./config";
+import { mediaFilePath } from "./lib/mediaSearch";
 import type {
   FileUpload,
   MediaUpload,
@@ -117,9 +118,12 @@ export function uploadMediaQuery(file: File): Promise<MediaUpload> {
   return request("/media/queries", { method: "POST", body: form });
 }
 
-/** Dirección de un archivo multimedia tal cual, para un `<audio>` (acepta `Range`). */
+/**
+ * Dirección de un archivo multimedia tal cual, para un `<audio>` (acepta `Range`); con el
+ * tramo de la ruta (`#t=10,20`), el reproductor empieza y termina en él.
+ */
 export function mediaFileUrl(path: string): string {
-  return apiUrl(`/media/file?${new URLSearchParams({ path })}`);
+  return apiUrl(mediaFilePath(path));
 }
 
 /** Dirección de la miniatura de una imagen. */

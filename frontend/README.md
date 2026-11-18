@@ -88,7 +88,7 @@ evento `hashchange`), sin dependencias: no hace falta configurar el servidor, y 
 - **Consultas** — editor con **numeración de líneas y resaltado de sintaxis**, `⌘↵` /
   `Ctrl↵` para ejecutar, `Tab` para indentar e historial de las últimas 25 consultas.
   Admite **varias sentencias separadas por `;`**: se ejecutan en orden y el panel muestra
-  las filas de la última consulta. Debajo, **76 atajos** agrupados por bloque de la
+  las filas de la última consulta. Debajo, **77 atajos** agrupados por bloque de la
   exposición —*Carga*, *Índices*, *Plan*, *Externos*, *SQL*, *Borrar*, *Transacciones*,
   *Espacial*, *Texto*, *Multimedia* y *Vectores*—; un clic escribe la consulta en el editor. Todos se pueden lanzar varias veces sin error: los que
   crean o borran tablas usan `IF [NOT] EXISTS`, y los de *Borrar* trabajan sobre filas de
@@ -239,7 +239,9 @@ ve escrito sobre su resultado, y se puede copiar o abrir en la consola.
 - **La galería es una tabla con cabeceras:** `#`, el archivo (miniatura servida por
   `GET /media/thumbnail`, o un reproductor que pide el audio por rangos a `GET /media/file`),
   la fila con su clase, marcada si coincide con la de la consulta sin depender solo del
-  color, y la similitud con una barra relativa a la mejor.
+  color, y la similitud con una barra relativa a la mejor. Una fila que es un tramo
+  (`pista.mp3#t=10,20`) pide el archivo entero y deja el `#t=10,20` al final de la
+  dirección: el propio `<audio>` empieza en el segundo 10 y se detiene en el 20.
 - **Debajo, en pestañas,** el plan de cada consulta (`VectorSearchScan`) y cada índice de la
   columna: vectores, palabras del vocabulario y en uso, y los nodos por nivel de HNSW o el
   tamaño de cada lista de IVF. La misma vista sale en «⌬ Estructura» de la consola.

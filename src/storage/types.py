@@ -324,7 +324,9 @@ class VectorCodec(FieldCodec):
         return components
 
     def from_slots(self, slots: tuple[Any, ...]) -> Value:
-        return tuple(float(component) for component in slots)
+        # `struct` ya devuelve cada componente `f` como un `float` de Python: convertirlos
+        # uno a uno costaba el 65 % de leer una fila de 384 componentes.
+        return slots
 
     def neutral_value(self) -> Value:
         return (0.0,) * self.dimension

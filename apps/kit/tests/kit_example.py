@@ -1,7 +1,12 @@
-"""Un servicio mínimo hecho con el kit. Solo existe para los tests (los de `apps/kit/tests` y
-el de punta a punta contra el gestor real en `tests/kit/`); no se despliega."""
+"""Un servicio mínimo hecho con el kit. Existe para los tests (los de `apps/kit/tests` y el de
+punta a punta contra el gestor real en `tests/kit/`) y para probar la topología de Docker
+mientras ninguna aplicación tiene su API: el perfil `example` lo corre con la imagen y el
+compose de las apps (`deploy/example/compose.yaml`), con `create_app` como fábrica y
+`python -m kit_example` como carga inicial."""
 
 from __future__ import annotations
+
+import asyncio
 
 import httpx
 from fastapi import APIRouter, FastAPI
@@ -12,7 +17,10 @@ from appkit import (
     Engine,
     ResourceNotFoundError,
     ServiceSettings,
+    configure_logging,
     create_service_app,
+    engine_client,
+    load_settings,
     timed,
 )
 from minigestor_client import Record
@@ -29,6 +37,8 @@ READ_NOTE = "SELECT id, texto FROM ej_notas WHERE id = $1"
 WRITE_NOTE = "INSERT INTO ej_notas VALUES ($1, $2)"
 BROKEN_SQL = "SELEC id FROM ej_notas"
 NOTES_STAGE = "notas"
+SEED_NOTE_ID = 1
+SEED_NOTE_TEXT = "la nota de la carga inicial"
 
 
 class ExampleSettings(ServiceSettings):
@@ -76,3 +86,26 @@ def create_example_app(
     )
     app.include_router(router)
     return app
+
+
+def create_app() -> FastAPI:
+    """La aplicación configurada con el entorno, como la arranca la imagen de los servicios."""
+    settings = load_settings(ExampleSettings)
+    configure_logging(settings.log_level)
+    return create_example_app(settings)
+
+
+async def seed(
+    settings: ExampleSettings, transport: httpx.AsyncBaseTransport | None = None
+) -> bool:
+    """Deja la nota de la carga inicial si falta; devuelve si la escribió. Repetirla no
+    duplica nada, como todo trabajo del perfil `seed`."""
+    async with engine_client(settings, settings.engine_key, transport) as engine:
+        if await engine.fetch_one(READ_NOTE, [SEED_NOTE_ID]) is not None:
+            return False
+        await engine.execute(WRITE_NOTE, [SEED_NOTE_ID, SEED_NOTE_TEXT])
+        return True
+
+
+if __name__ == "__main__":
+    asyncio.run(seed(load_settings(ExampleSettings)))

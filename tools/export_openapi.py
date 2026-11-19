@@ -50,7 +50,9 @@ def engine_app() -> Iterator[FastAPI]:
 
 @contextmanager
 def copyright_app() -> Iterator[FastAPI]:
-    settings = CopyrightSettings(engine_url=UNUSED_ENGINE_URL, engine_key=UNUSED_ENGINE_KEY)
+    settings = CopyrightSettings.model_validate(
+        {"engine_url": UNUSED_ENGINE_URL, "engine_key": UNUSED_ENGINE_KEY}
+    )
     yield build_copyright_app(settings)
 
 

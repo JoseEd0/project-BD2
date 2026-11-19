@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import stat
 from pathlib import Path
 
 import numpy as np
@@ -99,3 +100,15 @@ def test_an_unknown_key_cannot_be_read(tmp_path: Path):
     cache.add(["a"], vectors(1))
     with pytest.raises(KeyError):
         cache.vectors(["z"])
+
+
+def test_a_complete_cache_is_read_from_a_read_only_directory(tmp_path: Path):
+    EmbeddingCache(tmp_path, MODEL).add(["a"], vectors(1))
+    directory = model_directory(tmp_path)
+    for path in (*directory.iterdir(), directory, tmp_path):
+        path.chmod(stat.S_IREAD | stat.S_IEXEC if path.is_dir() else stat.S_IREAD)
+    try:
+        assert EmbeddingCache(tmp_path, MODEL).vectors(["a"]).tolist() == vectors(1).tolist()
+    finally:
+        for path in (tmp_path, directory, *directory.iterdir()):
+            path.chmod(stat.S_IRWXU)

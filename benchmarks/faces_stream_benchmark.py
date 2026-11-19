@@ -51,6 +51,7 @@ WITHOUT_CACHE = "sin caché de rastros"
 STAGES = ("decode", "detect", "track", "embed", "search")
 REST_STAGE = "resto"
 TAIL_FIELD = "p95_sobre_p50_ms"
+SERVER_TAIL_FIELD = "servidor_p95_sobre_p50_ms"
 PERCENTILES = (50, 95)
 FRAME_SIZE = (640, 480)
 FACE_HEIGHT = 400
@@ -105,6 +106,9 @@ class Run:
         for percentile in PERCENTILES:
             figures[f"servidor_p{percentile}_ms"] = _percentile(self.server_total_ms, percentile)
         figures[TAIL_FIELD] = round(figures["p95_ms"] - figures["p50_ms"], DIGITS)
+        figures[SERVER_TAIL_FIELD] = round(
+            figures["servidor_p95_ms"] - figures["servidor_p50_ms"], DIGITS
+        )
         figures["max_ms"] = round(max(self.latencies_ms), DIGITS)
         figures["rostros"] = self.faces
         figures["de_la_cache"] = self.cached

@@ -6,6 +6,7 @@ from __future__ import annotations
 from benchmarks.faces_stream_benchmark import (
     REPORT_NAME,
     REST_STAGE,
+    SERVER_TAIL_FIELD,
     TAIL_FIELD,
     WITH_CACHE,
     WITHOUT_CACHE,
@@ -35,7 +36,8 @@ FIGURES: tuple[BreakdownFigure, ...] = (
         title="Rostros en vivo: latencia de un cuadro por WebSocket",
         subtitle=(
             "Cuadros JPEG de 640 x 480 con una persona registrada, a 10 por segundo, en el "
-            "mismo equipo.\nLa meta es 100 ms por cuadro. Más corto es mejor."
+            "mismo equipo.\nDetectar con YuNet, embeber con SFace, buscar en el HNSW del "
+            "gestor. La meta es 100 ms. Más corto es mejor."
         ),
         panels=(
             BreakdownPanel(
@@ -44,20 +46,29 @@ FIGURES: tuple[BreakdownFigure, ...] = (
                 BARS,
                 (
                     Segment("decodificar", "decode_p50_ms", LIGHT_BLUE),
-                    Segment("detectar (YuNet)", "detect_p50_ms", BLUE),
-                    Segment("rastros (Redis)", "track_p50_ms", AQUA),
-                    Segment("embeber (SFace)", "embed_p50_ms", DARK_BLUE),
-                    Segment("buscar (HNSW)", "search_p50_ms", ORANGE),
-                    Segment("red, proxy y espera", f"{REST_STAGE}_p50_ms", AXIS),
+                    Segment("detectar", "detect_p50_ms", BLUE),
+                    Segment("Redis", "track_p50_ms", AQUA),
+                    Segment("embeber", "embed_p50_ms", DARK_BLUE),
+                    Segment("buscar", "search_p50_ms", ORANGE),
+                    Segment("red y espera", f"{REST_STAGE}_p50_ms", AXIS),
                 ),
             ),
             BreakdownPanel(
-                "Punta a punta: p50 y p95",
+                "En el servidor: p50 y p95",
+                MILLISECONDS,
+                BARS,
+                (
+                    Segment("p50", "servidor_p50_ms", BLUE),
+                    Segment("hasta p95", SERVER_TAIL_FIELD, LIGHT_BLUE),
+                ),
+            ),
+            BreakdownPanel(
+                "En el celular: p50 y p95",
                 MILLISECONDS,
                 BARS,
                 (
                     Segment("p50", "p50_ms", BLUE),
-                    Segment("de p50 a p95", TAIL_FIELD, LIGHT_BLUE),
+                    Segment("hasta p95", TAIL_FIELD, LIGHT_BLUE),
                 ),
             ),
         ),

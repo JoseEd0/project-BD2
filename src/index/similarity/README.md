@@ -100,7 +100,7 @@ sin mirar a los demás.
 - con otra, comparando contra todas las filas con una búsqueda exacta que se arma una vez y
   se descarta cuando la tabla cambia, porque el índice se construyó para ordenar con la suya;
 - `allowed` son las filas que deja el resto del `WHERE`: la búsqueda solo puede devolver
-  esas (ver [`index/vector/README.md`](../vector/README.md#la-búsqueda)).
+  esas (ver [`index/vector/README.md`](../vector/README.md#la-búsqueda-basepy)).
 
 Una consulta de otro tipo que la columna (un audio contra fotos) es un `MixedMediaError`.
 
@@ -132,7 +132,7 @@ filas y puntajes que `similar` con su tramo, y el resultado dice lo que tardó c
 Los límites son de la configuración: `max_segment_audio_seconds`, `min_segment_seconds` y
 `max_segments` (ver [`multimedia/segments.py`](../../multimedia/segments.py)). La sirve
 `POST /media/segments`; las medidas, en
-[`benchmarks/README.md`](../../../benchmarks/README.md#7-tramos-de-audio-y-consulta-por-segmentos).
+[`benchmarks/README.md`](../../../benchmarks/README.md#8-tramos-de-audio-y-consulta-por-segmentos).
 
 ## Columnas `VECTOR(n)`
 

@@ -63,6 +63,12 @@ class FacePipeline:
     def detect(self, image: BgrImage) -> list[DetectedFace]:
         return self._detector.detect(image)
 
+    def align(self, image: BgrImage, face: DetectedFace) -> BgrImage:
+        return self._embedder.align(image, face)
+
+    def describe(self, aligned: BgrImage) -> Embedding:
+        return self._embedder.describe(aligned)
+
     def embed(self, image: BgrImage, face: DetectedFace) -> Embedding:
         return self._embedder.embed(image, face)
 

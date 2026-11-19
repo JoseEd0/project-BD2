@@ -28,6 +28,9 @@ gráficas de [`figures/`](figures/) y todas las tablas de este documento.
     --thresholds 0.363 0.4 0.45 0.5 0.55
 .venv/bin/python -m benchmarks.copyright_catalog_benchmark --data-dir data/datasets \
     --sizes 1000 2000 4000 8000 --threads 8
+.venv/bin/python -m benchmarks.faces_stream_benchmark --api-url http://127.0.0.1:<web>/api \
+    --target nginx=ws://127.0.0.1:<web>/api/ws/recognize \
+    --target directo=ws://127.0.0.1:<api>/ws/recognize --frames 300 --warmup 20 --fps 10
 .venv/bin/python -m benchmarks.plot              # redibuja todas las gráficas
 ```
 
@@ -128,6 +131,7 @@ docker compose --profile bench down       # apaga PostgreSQL
 | [12. Catálogo de copyright](#12-catálogo-de-copyright--descargar-cargar-e-indexar-fma-por-tramos) | descargar fma_small por rangos, cargar 83 290 tramos por NDJSON y construir su HNSW, según el tamaño del catálogo; disco del gestor | [catálogo](figures/copyright-catalogo.png) |
 | [13. Ingesta del RAG](#13-ingesta-del-rag--embeddings-e5-en-onnx-y-carga-con-bm25-y-hnsw) | multilingual-e5-small fp32 vs int8 en ONNX por hilos; siembra de 98 585 fragmentos y cada etapa de la carga (NDJSON, índice invertido, HNSW) | [embeddings](figures/rag-embeddings.png), [carga](figures/rag-ingesta.png) |
 | [14. Detección de copyright](#14-detección-de-copyright--latencia-de-post-detections-y-casos-de-control) | latencia de `POST /detections` por duración de la subida y sus etapas; puntajes de copias enteras, tramos de 15 y 7,5 s y pistas no catalogadas frente al umbral | [latencia](figures/copyright-deteccion.png), [etapas](figures/copyright-deteccion-etapas.png), [puntajes](figures/copyright-deteccion-puntajes.png) |
+| [15. Rostros en vivo](#15-rostros-en-vivo--latencia-por-cuadro-por-websocket) | un cuadro de punta a punta por WebSocket, por el nginx o directo a la API, con y sin la caché de rastros en Redis, con cada etapa | [en vivo](figures/rostros-tiempo-real.png) |
 
 **Cómo leer las gráficas.** Cada una es una fila de paneles, uno por operación, con el
 número de filas en horizontal y una línea por técnica. Los dos ejes son logarítmicos: los
@@ -1949,6 +1953,84 @@ uv run --no-sync python -m benchmarks.plot
 `--workspace`), `--data-dir` la carpeta de datasets cuyas rutas guarda ese gestor,
 `--durations`, `--repetitions`, `--cases`, `--held-out` y `--seed` lo de arriba. La medida
 publicada tardó menos de 2 min.
+
+## 15. Rostros en vivo — latencia por cuadro por WebSocket
+
+`faces_stream_benchmark.py` mide el reconocimiento en vivo del servicio de rostros
+([`apps/faces`](../apps/faces/README.md#reconocimiento-en-vivo), #91) como lo usa un celular:
+un cliente WebSocket manda cuadros JPEG de 640 x 480 (unos 26 KB) con el rostro de una
+persona registrada, que se corre hasta 12 px de un cuadro a otro, a 10 cuadros por segundo;
+espera la respuesta de cada uno y manda el siguiente. La latencia de un cuadro va de que el
+cliente lo envía a que recibe su resultado. Se mide contra el **compose** (gestor, Redis,
+API y nginx en Docker, en la misma máquina) por dos caminos —**por el nginx** de la web,
+como en producción, y **directo** al puerto de la API— y cada uno **con la caché de
+rastros** y **sin ella** (un `hello` con `track_cache: false` en la misma conexión). Cada
+pasada son 300 cuadros tras 20 de calentamiento; la galería tiene una persona (con 1 000, la
+búsqueda cuesta lo mismo: sección 11).
+
+**Dónde corrió.** Apple M4 Pro (12 núcleos), macOS, Docker Desktop; la API con dos
+pipelines y la configuración del compose (`FACES_TRACK_VERIFY_SECONDS` de 2 s). La carga
+media del equipo fue de 5,2 a 7,8 durante la medida (otros trabajos en la misma máquina) y
+la de la máquina de Docker, de 1,2 a 2,0; cada pasada guarda las dos, antes y después.
+
+![Rostros en vivo: latencia de un cuadro por WebSocket](figures/rostros-tiempo-real.png)
+
+| Camino | Rastros | p50 | p95 | máx. | Decodificar | Detectar | Redis | Embeber | Buscar | Red y espera |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| nginx | con caché | **16,4 ms** | **25,6 ms** | 40,0 ms | 4,1 | 7,5 | 0,5 | 0,0 | 0,0 | 3,9 |
+| nginx | sin caché | 23,8 ms | 29,2 ms | 57,1 ms | 3,1 | 6,2 | — | 4,9 | 5,6 | 3,5 |
+| directo | con caché | 16,2 ms | 27,7 ms | 136,5 ms | 4,0 | 7,3 | 0,5 | 0,0 | 0,0 | 3,6 |
+| directo | sin caché | 23,4 ms | 28,9 ms | 42,1 ms | 3,5 | 6,2 | — | 4,7 | 5,2 | 3,4 |
+
+Las etapas son medianas en milisegundos, medidas en el servidor; «red y espera» es la
+latencia del cliente menos esas etapas. Con la caché, 285 de los 300 rostros salieron del
+rastro: uno de cada 20 cuadros (2 s a 10 por segundo) vuelve a describirse y buscarse.
+Ningún cuadro se descartó, porque el cliente espera cada respuesta.
+
+### Conclusiones
+
+- **La meta de 100 ms se cumple con holgura**: p50 de 16 a 24 ms y p95 de 26 a 29 ms de
+  punta a punta. Un cuadro de cámara reducido a 640 px cuesta lo que una foto de LFW
+  (sección 7), no lo que una foto de celular de 12 MP.
+- **La caché de rastros ahorra un tercio de la mediana** (23,8 → 16,4 ms por el nginx): un
+  rostro ya identificado no pasa por SFace (5 ms) ni por el HNSW y el nombre en el gestor
+  (5 ms, dos viajes HTTP al contenedor del gestor), y leer y guardar sus rastros en Redis
+  cuesta 0,5 ms. El p95 casi no cambia porque los cuadros que vuelven a verificar —el 5 %—
+  hacen el camino completo: esa es la cola.
+- **El nginx no se nota**: la diferencia entre ir por él o directo es menor que el ruido
+  (0,2 a 0,4 ms en la mediana). Los 3,5 ms de «red y espera» son sobre todo el reenvío de
+  puertos de Docker Desktop entre macOS y su máquina virtual, que está en los dos caminos.
+- **Lo que queda es detectar**: YuNet sobre el cuadro entero (6 a 7,5 ms) y decodificarlo
+  (3 a 4 ms) se pagan en cada cuadro, con o sin rastros. Bajar la resolución del cuadro o
+  detectar solo alrededor de los rastros conocidos es lo siguiente que ahorraría.
+
+**Lo que esta medida no dice.** Es la red local de una sola máquina: por Wi-Fi hasta un
+celular se suma su ida y vuelta, y por el túnel, la de Internet. El máximo de 136 ms del
+camino directo con caché es un solo cuadro, con el equipo cargado. La contrapresión no se
+ve aquí porque el cliente espera cada respuesta; la prueba con un productor rápido está en
+[`test_faces_realtime_connection.py`](../apps/faces/tests/test_faces_realtime_connection.py).
+El efecto de la caché según cuántas personas haya y cuánto se muevan es parte de #92.
+
+### Reproducirlo
+
+```bash
+python -m tools.compose_keys
+FACES_WEB_PORT=127.0.0.1: FACES_WEB_TLS_PORT=127.0.0.1: docker compose -p rostros-bench \
+    -f compose.yaml -f benchmarks/faces_stream.compose.yaml up -d --build --wait faces-web
+docker compose -p rostros-bench port faces-web 8080     # → 127.0.0.1:<web>
+docker compose -p rostros-bench port faces-api 8000     # → 127.0.0.1:<api>
+.venv/bin/python -m benchmarks.faces_stream_benchmark --api-url http://127.0.0.1:<web>/api \
+    --target nginx=ws://127.0.0.1:<web>/api/ws/recognize \
+    --target directo=ws://127.0.0.1:<api>/ws/recognize \
+    --frames 300 --warmup 20 --fps 10 --compose-project rostros-bench
+.venv/bin/python -m benchmarks.plot
+docker compose -p rostros-bench down --volumes
+```
+
+[`faces_stream.compose.yaml`](faces_stream.compose.yaml) publica la API solo en localhost,
+pide el plan de registro de dos tomas de frente (las fotos de prueba no tienen otras poses) y
+pone otro nombre a las imágenes para no reemplazar las del despliegue de siempre. Tarda unos
+dos minutos más la construcción de las imágenes.
 
 ## Gráficas
 

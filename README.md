@@ -139,7 +139,8 @@ apps/                servicios de la Parte 5, que usan el gestor solo por su API
                      tramos de 5 s en el gestor, su trabajo de carga y su API
   shop/              tienda con recomendaciones (opción B): dataset de Amazon Reviews 2023
                      con tiendas de Lima
-  rag/               RAG sobre papers (opción A): corpus, ingesta con e5 en ONNX y búsqueda
+  rag/               RAG sobre papers (opción A): corpus, ingesta con e5 en ONNX, búsqueda y
+                     respuestas de Claude con citas por SSE
   faces/             reconocimiento facial: YuNet, SFace y LFW; registro, reconocimiento y borrado
   web-kit/           lógica sin estilos que comparten las interfaces de las aplicaciones
     template/        plantilla de la interfaz de cada app: React + TypeScript
@@ -194,7 +195,7 @@ proyecto:
 | [`apps/`](apps/) | aplicaciones de la Parte 5: su API y su interfaz | [README](apps/README.md) |
 | [`apps/copyright/`](apps/copyright/) | copyright en audio: descarga verificada de FMA, catálogo por tramos con HNSW, trabajo de carga y API de lectura | [README](apps/copyright/README.md) |
 | [`apps/shop/`](apps/shop/) | tienda con recomendaciones: dataset de compras reales, fotos, tiendas de Lima e inventario | [README](apps/shop/README.md) |
-| [`apps/rag/`](apps/rag/) | RAG sobre papers: corpus de arXiv, embeddings e5 en ONNX, ingesta en el gestor, búsqueda BM25, vectorial e híbrida | [README](apps/rag/README.md) |
+| [`apps/rag/`](apps/rag/) | RAG sobre papers: corpus de arXiv, embeddings e5 en ONNX, ingesta en el gestor, búsqueda BM25, vectorial e híbrida, respuestas de Claude Sonnet 5.5 con citas comprobadas por SSE y la página citada | [README](apps/rag/README.md) |
 | [`apps/faces/`](apps/faces/) | rostros: decodificación segura, detección con YuNet, embedding con SFace, descarga de modelos y de LFW; API de registro con consentimiento y controles de calidad, reconocimiento y borrado | [README](apps/faces/README.md) |
 | [`apps/web-kit/`](apps/web-kit/) | kit de las interfaces: cliente tipado, salud, tiempos por etapa, tema, PWA y la plantilla de cada app | [README](apps/web-kit/README.md) |
 | [`benchmarks/`](benchmarks/) | comparación experimental, con resultados y gráficas | [README](benchmarks/README.md) |
@@ -472,6 +473,8 @@ están en [`.env.example`](.env.example); las de la interfaz, en
 | `MINIGESTOR_DATASETS_DIR` | carpeta de datos que el perfil `bench` monta como `data/datasets/` | `./data/datasets` |
 | `RAG_DATA_DIR` | carpeta donde el corpus del RAG deja `rag_papers/` (y de donde la lee `rag.seed`) sin `--data-dir` | — |
 | `RAG_MODELS_DIR` | carpeta del modelo de embeddings del RAG (multilingual-e5-small en ONNX) y de sus tests | — |
+| `RAG_ANTHROPIC_API_KEY` | clave de la API de Anthropic del servicio del RAG (solo en su entorno); sin ella, `/answers` responde 503 | — |
+| `RAG_LLM_PROVIDER` | `anthropic` o `simulated` (sin red ni costo: tests y CI) | `anthropic` |
 
 Las dos obligatorias no tienen un valor por omisión a propósito: sin `MINIGESTOR_CORS_ORIGINS`
 el API no arranca y dice por qué; sin `VITE_API_URL` la interfaz lo avisa en el panel de

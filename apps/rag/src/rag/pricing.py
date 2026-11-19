@@ -6,6 +6,9 @@ cobra lo mismo que Claude Sonnet 5 salvo la lectura de caché, que cuesta la mit
 escritura en caché cuesta 1,25 veces la entrada con la vida de 5 minutos y 2 veces con la de
 una hora; la lectura, 0,05 veces en Sonnet 5.5 y 0,1 veces en Sonnet 5. El razonamiento
 (thinking) se cobra como salida y ya viene contado en `output_tokens`.
+
+La evaluación (#87) usa además Claude Haiku 5.5 como juez y la Batch API, que cobra la mitad
+de todo token (`BATCH_DISCOUNT`).
 """
 
 from __future__ import annotations
@@ -14,9 +17,11 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 
 TOKENS_PER_PRICE_UNIT = 1_000_000
+BATCH_DISCOUNT = 0.5
 
 SONNET_5_5 = "claude-sonnet-5-5"
 SONNET_5 = "claude-sonnet-5"
+HAIKU_5_5 = "claude-haiku-5-5"
 SIMULATED_MODEL = "simulated"
 
 
@@ -39,6 +44,12 @@ PRICES: dict[str, ModelPrice] = {
     # (`fallbacks: "default"`): sus tokens se cobran a su precio.
     SONNET_5: ModelPrice(
         input=2.00, output=10.00, cache_write_5m=2.50, cache_write_1h=4.00, cache_read=0.20
+    ),
+    # Haiku 5.5 tiene dos tarifas según el largo del prompt; esta es la de hasta 100 000
+    # tokens, la única que alcanza el juez de la evaluación (unos 6 000). Caché: lectura a
+    # 0,1 veces la entrada, escritura a 1,25 y 2 veces.
+    HAIKU_5_5: ModelPrice(
+        input=0.10, output=0.50, cache_write_5m=0.125, cache_write_1h=0.20, cache_read=0.01
     ),
     SIMULATED_MODEL: ModelPrice(
         input=0.0, output=0.0, cache_write_5m=0.0, cache_write_1h=0.0, cache_read=0.0
@@ -99,6 +110,12 @@ def attempt_cost(attempt: Attempt) -> float | None:
         + usage.cache_read_tokens * price.cache_read
     )
     return dollars / TOKENS_PER_PRICE_UNIT
+
+
+def batch_cost(attempt: Attempt) -> float | None:
+    """Dólares de un intento hecho por la Batch API, o `None` si su modelo no tiene precio."""
+    cost = attempt_cost(attempt)
+    return None if cost is None else cost * BATCH_DISCOUNT
 
 
 def total_cost(attempts: Iterable[Attempt]) -> float | None:

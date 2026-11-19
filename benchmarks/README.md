@@ -1951,7 +1951,8 @@ núcleos.
   material (bucles, otra versión) o el descriptor no las distingue, y solo escuchándolas se
   sabe. Con 0,50
   pasarían solo 9 de los 20 tramos de 15 s y las mismas tres no catalogadas. **La curva
-  ROC de la evaluación (#77) lo calibra** con muchos más casos y transformaciones del audio.
+  ROC de la evaluación (#77) lo calibra** con muchos más casos y transformaciones del audio:
+  queda en 0,43 ([§16](#16-evaluación-de-la-detección-de-copyright--remixes-con-la-verdad-conocida)).
 - **La subida de 60 s no tiene la segunda copia**: tres pistas de 29,9 s dejan para la
   tercera 0,2 s, que no llena una ventana; por eso son 10 copias y no 20.
 

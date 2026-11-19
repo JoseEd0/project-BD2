@@ -17,6 +17,8 @@ import { useRecognitionStream } from "../../realtime/useRecognitionStream";
 
 /** Cada cuánto se pregunta a la compuerta si ya toca disparar. */
 const GATE_TICK_MS = 200;
+/** Con tan pocos intentos, las tomas dejan de salir solas: las dispara la persona. */
+const MANUAL_ONLY_ATTEMPTS = 5;
 
 export interface CaptureStepProps {
   readonly enrollment: Enrollment;
@@ -29,7 +31,11 @@ export interface CaptureStepProps {
   readonly onCancel: () => void;
 }
 
-function detailOf(feedback: ShotFeedback | null): { text: string; rejected: boolean } {
+function detailOf(feedback: ShotFeedback | null, manualOnly: boolean): { text: string; rejected: boolean } {
+  if (manualOnly && feedback?.tone !== "accepted") {
+    const prefix = feedback === null ? "" : `${feedback.message} `;
+    return { text: `${prefix}Quedan pocos intentos: toca «Tomar ahora» cuando estés listo.`, rejected: true };
+  }
   if (feedback === null) {
     return { text: "La foto se toma sola cuando tu cara está quieta dentro del óvalo.", rejected: false };
   }
@@ -89,7 +95,8 @@ export function CaptureStep(props: CaptureStepProps) {
       return;
     }
     const timer = window.setInterval(() => {
-      if (!latest.current.shooting && gate.current?.shouldShoot(performance.now())) {
+      const automatic = latest.current.enrollment.attempts_left > MANUAL_ONLY_ATTEMPTS;
+      if (automatic && !latest.current.shooting && gate.current?.shouldShoot(performance.now())) {
         void shootRef.current();
       }
     }, GATE_TICK_MS);
@@ -104,7 +111,7 @@ export function CaptureStep(props: CaptureStepProps) {
       : hintFresh && issue !== null
         ? PRECHECK_MESSAGES[issue]
         : enrollment.message;
-  const detail = detailOf(feedback);
+  const detail = detailOf(feedback, enrollment.attempts_left <= MANUAL_ONLY_ATTEMPTS);
 
   const top = (
     <>

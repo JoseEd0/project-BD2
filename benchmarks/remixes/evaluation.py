@@ -46,7 +46,6 @@ F1 = "F1"
 UPLOAD_SPAN = "subida"
 ORIGINAL_SPAN = "original"
 CHOSEN = "elegido"
-PROVISIONAL = "provisional"
 THRESHOLDS = "umbrales"
 TRUE_POSITIVE_RATE = "tpr"
 FALSE_POSITIVE_RATE = "fpr"
@@ -55,6 +54,7 @@ IOU = "iou"
 SONG_KEY = "cancion"
 SCORE_KEY = "puntaje"
 SIMILARITY_KEY = "similitud"
+COVERAGE_KEY = "cobertura"
 WINDOWS_KEY = "ventanas"
 DIGITS = 3
 SECONDS_PER_MINUTE = 60.0
@@ -90,6 +90,7 @@ def compact_match(match: dict[str, Any]) -> dict[str, Any]:
         SONG_KEY: int(match["song"]["id"]),
         SCORE_KEY: round(float(match["score"]), DIGITS),
         SIMILARITY_KEY: round(float(match["mean_similarity"]), DIGITS),
+        COVERAGE_KEY: round(float(match["coverage"]), DIGITS),
         WINDOWS_KEY: int(match["windows"]),
         UPLOAD_SPAN: _span_pair(match["upload"]),
         ORIGINAL_SPAN: _span_pair(match["original"]),
@@ -115,7 +116,6 @@ def analyse(
     report: Report,
     uploads: Sequence[Upload],
     thresholds: Sequence[float],
-    provisional: float,
     length_bins: Sequence[float],
     calibration: str,
 ) -> float:
@@ -131,7 +131,7 @@ def analyse(
     for version, group in (*by_version.items(), (ALL_VERSIONS, list(uploads))):
         cases = [upload.case for upload in group]
         _add_roc(report, version, roc_curve(cases, thresholds), chosen, remixes)
-        _add_detection(report, version, cases, chosen, provisional, remixes)
+        _add_detection(report, version, cases, chosen, remixes)
         _add_localization(report, version, cases, chosen, remixes)
         _add_latency(report, version, group, remixes)
         _add_recall_by_length(report, version, group, chosen, length_bins, remixes)
@@ -235,10 +235,9 @@ def _add_detection(
     version: str,
     cases: Sequence[Case],
     chosen: float,
-    provisional: float,
     remixes: int,
 ) -> None:
-    at_chosen, at_provisional = counts(cases, chosen), counts(cases, provisional)
+    at_chosen = counts(cases, chosen)
     for name, measure in ((PRECISION, "precision"), (RECALL, "recall"), (F1, "f1")):
         report.add(
             name,
@@ -246,7 +245,6 @@ def _add_detection(
             remixes,
             0.0,
             elegido=round(getattr(at_chosen, measure), DIGITS),
-            provisional=round(getattr(at_provisional, measure), DIGITS),
             aciertos=at_chosen.true_positives,
             falsas_alarmas=at_chosen.false_positives,
             fallos=at_chosen.false_negatives,

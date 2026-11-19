@@ -51,8 +51,8 @@ un gris frío de tienda; las etiquetas, manila; las tintas de sello, cuatro.
 | `--alert` | `#B42318` | `#FF9C8F` | errores, servicio caído |
 
 **Tintas de sello** (texto y borde del sello, siempre sobre manila; ≥ 4,5:1 en los dos temas):
-compras violeta `#5B2A86`, visual azul `#1D4E89`, texto verde `#23633A`, cercanía rojo
-`#9E2A1F`. Fuera de la etiqueta (la cabecera de cada fila, los marcadores del mapa) cada
+compras violeta `#5B2A86`, visual azul `#1D4E89`, texto verde `#1F5A34`, cercanía rojo
+`#922619`. Fuera de la etiqueta (la cabecera de cada fila, los marcadores del mapa) cada
 tinta tiene su versión clara para el tema oscuro: `#C9A8EE`, `#90B9F0`, `#8AD3A0`, `#F49D91`.
 **Nunca solo color**: cada sello dice el nombre de su señal.
 

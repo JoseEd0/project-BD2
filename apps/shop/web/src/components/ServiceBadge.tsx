@@ -8,7 +8,7 @@ export function ServiceBadge() {
   return (
     <p className={`service service-${state}`} role="status">
       <span className="service-dot" aria-hidden="true" />
-      {text}
+      <span className="service-text">{text}</span>
     </p>
   );
 }

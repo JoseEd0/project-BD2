@@ -9,6 +9,8 @@ import type { Point } from "./point";
 
 const MAX_ZOOM = 19;
 const DEFAULT_ZOOM = 12;
+/** Las tiendas suelen estar a menos de un kilómetro: más cerca, cada número se lee y se toca. */
+const FIT_MAX_ZOOM = 16;
 const FIT_PADDING: L.PointTuple = [28, 28];
 const MARKER_SIZE: L.PointTuple = [30, 30];
 const YOU_SIZE: L.PointTuple = [20, 20];
@@ -65,6 +67,7 @@ export default function StockMap({ point, stores, selectedStore, choosing, onCho
       observer.disconnect();
       map.current = null;
       layers.current = null;
+      fittedFor.current = null;
       instance.remove();
     };
     // El mapa se crea una vez; el punto y las tiendas los pinta el efecto de abajo.
@@ -97,8 +100,10 @@ export default function StockMap({ point, stores, selectedStore, choosing, onCho
     const view = `${point.lat},${point.lon}:${stores.map((store) => store.id).join(",")}`;
     if (fittedFor.current !== view) {
       fittedFor.current = view;
+      // Recién montado en su columna, el mapa puede no conocer aún su tamaño final.
+      instance.invalidateSize();
       const corners = stores.map((store): L.LatLngTuple => [store.ubicacion.lat, store.ubicacion.lon]);
-      instance.fitBounds(L.latLngBounds([here, ...corners]), { padding: FIT_PADDING, maxZoom: DEFAULT_ZOOM + 2 });
+      instance.fitBounds(L.latLngBounds([here, ...corners]), { padding: FIT_PADDING, maxZoom: FIT_MAX_ZOOM, animate: false });
     }
   }, [point, stores, selectedStore]);
 

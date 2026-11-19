@@ -12,6 +12,7 @@ interface ProductPhotoProps {
 /** La foto sobre su recuadro blanco; sin foto, o si no llega, un hueco que lo dice. */
 export function ProductPhoto({ productId, hasPhoto, eager = false }: ProductPhotoProps) {
   const [failed, setFailed] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   if (!hasPhoto || failed) {
     return (
       <span className="photo photo-missing">
@@ -21,12 +22,13 @@ export function ProductPhoto({ productId, hasPhoto, eager = false }: ProductPhot
     );
   }
   return (
-    <span className="photo">
+    <span className={loaded ? "photo" : "photo photo-loading"}>
       <img
         src={productPhotoUrl(productId)}
         alt=""
         loading={eager ? "eager" : "lazy"}
         decoding="async"
+        onLoad={() => setLoaded(true)}
         onError={() => setFailed(true)}
       />
     </span>

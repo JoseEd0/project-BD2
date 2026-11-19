@@ -26,7 +26,7 @@ datasets = ["pyarrow>=15"]
 usearch = ["usearch>=2.20"]
 
 [dependency-groups]
-dev = ["pytest>=8.0", "ruff>=0.6", "mypy>=1.11", "httpx>=0.27"]
+dev = ["pytest>=8.0", "ruff>=0.6", "mypy>=1.11", "httpx>=0.27", "fakeredis>=2.26"]
 
 # El gestor es la raíz del espacio de trabajo y cada servicio de la Parte 5 un miembro con su
 # propio pyproject. Un solo uv.lock fija las versiones de todos.

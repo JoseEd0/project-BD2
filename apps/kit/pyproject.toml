@@ -13,6 +13,8 @@ dependencies = [
     "pydantic-settings>=2.4",
     # Todo servicio corre sobre uvicorn en su imagen (`deploy/service/Dockerfile`).
     "uvicorn[standard]>=0.30",
+    # La caché opcional de los servicios (`appkit.cache`): si Redis no responde, siguen sin ella.
+    "redis>=5.2",
 ]
 
 [tool.uv.sources]

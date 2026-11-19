@@ -140,6 +140,7 @@ docker compose --profile bench down       # apaga PostgreSQL
 | [13. Ingesta del RAG](#13-ingesta-del-rag--embeddings-e5-en-onnx-y-carga-con-bm25-y-hnsw) | multilingual-e5-small fp32 vs int8 en ONNX por hilos; siembra de 98 585 fragmentos y cada etapa de la carga (NDJSON, índice invertido, HNSW) | [embeddings](figures/rag-embeddings.png), [carga](figures/rag-ingesta.png) |
 | [14. Detección de copyright](#14-detección-de-copyright--latencia-de-post-detections-y-casos-de-control) | latencia de `POST /detections` por duración de la subida y sus etapas; puntajes de copias enteras, tramos de 15 y 7,5 s y pistas no catalogadas frente al umbral | [latencia](figures/copyright-deteccion.png), [etapas](figures/copyright-deteccion-etapas.png), [puntajes](figures/copyright-deteccion-puntajes.png) |
 | [15. Rostros en vivo](#15-rostros-en-vivo--latencia-por-cuadro-por-websocket) | un cuadro de punta a punta por WebSocket, por el nginx o directo a la API, con y sin la caché de rastros en Redis, con cada etapa | [en vivo](figures/rostros-tiempo-real.png) |
+| [16. Recomendaciones de la tienda](#16-recomendaciones-de-la-tienda--cuatro-señales-y-caché) | compras conjuntas al vuelo vs materializadas; latencia p50/p95 de cada señal y de la recomendación con caché fría y caliente | [recomendaciones](figures/tienda-recomendaciones.png) |
 | [18. Rostros en LFW](#18-rostros-en-lfw--verificación-identificación-latencia-y-caché) | verificación con el protocolo de LFW (exactitud por pliegues, TAR a FAR fijo, ROC) y umbrales calibrados; identificación en el gestor, HNSW vs búsqueda exacta; p99 de cada etapa; aciertos de la caché de rastros según la velocidad del rostro | [verificación](figures/rostros-evaluacion-verificacion.png), [identificación](figures/rostros-evaluacion-identificacion.png), [latencia](figures/rostros-evaluacion-latencia.png), [caché](figures/rostros-cache.png) |
 
 **Cómo leer las gráficas.** Cada una es una fila de paneles, uno por operación, con el
@@ -2041,6 +2042,70 @@ docker compose -p rostros-bench down --volumes
 pide el plan de registro de dos tomas de frente (las fotos de prueba no tienen otras poses) y
 pone otro nombre a las imágenes para no reemplazar las del despliegue de siempre. Tarda unos
 dos minutos más la construcción de las imágenes.
+
+## 16. Recomendaciones de la tienda — cuatro señales y caché
+
+`shop_recommend_benchmark.py` mide el recomendador de la tienda (#81) sobre el catálogo
+entero de la sección 10, con el gestor en otro proceso (uvicorn), la tienda en este y un Redis
+de verdad en Docker. Primero corre `shop.seed` sobre el gestor ya cargado, que añade
+`shop_historial` y materializa `shop_compras_conjuntas` con el `GROUP BY` del gestor; después
+mide las compras conjuntas de un producto **al vuelo**, con el autojoin sobre el archivo
+secuencial y sobre el historial con B+, y pide `GET /productos/{id}/recomendaciones` para
+100 productos al azar (semilla 81) con una ubicación en Lima: una vez con la caché fría y
+otra caliente. De cada respuesta fría toma los milisegundos de cada señal.
+
+Apple M4 Pro (12 núcleos), macOS, Python 3.12, con otros procesos en el equipo: carga media
+10,2 al empezar y 7,6 al terminar. Una sola ejecución; las latencias son una cota
+superior de las de un equipo libre.
+
+![Tienda: recomendar con cuatro señales del gestor](figures/tienda-recomendaciones.png)
+
+| Compras conjuntas de un producto | Consultas | p50 | p95 |
+|---|---:|---:|---:|
+| al vuelo sobre `shop_compras` (secuencial) | 1 | 67,3 s | 67,3 s |
+| al vuelo sobre `shop_historial` (B+) | 5 | 2,9 s | 3,4 s |
+| materializada (búsqueda por el B+) | 100 | 4,5 ms | 7,7 ms |
+| materializar todos los pares en la carga | 70 | 793,6 s (una vez) | |
+
+| Petición `GET /productos/{id}/recomendaciones` | Productos | p50 | p95 |
+|---|---:|---:|---:|
+| compras conjuntas (materializada) | 100 | 4,5 ms | 7,7 ms |
+| visual, CLIP (embedding + HNSW) | 100 | 19,5 ms | 28,2 ms |
+| texto, BM25 con el título | 100 | 23,6 ms | 41,5 ms |
+| cercanía (hash + R-Tree, tras las otras) | 100 | 31,2 ms | 84,3 ms |
+| **recomendación completa, caché fría** | 100 | 68,9 ms | 142,8 ms |
+| **recomendación completa, caché caliente (Redis)** | 100 | 1,9 ms | 3,4 ms |
+
+Conclusiones:
+
+- **Las compras conjuntas no se pueden calcular por petición**: 67,3 s sobre el archivo
+  secuencial (sin índices secundarios, y el `WHERE` se aplica después del `JOIN`) y 2,9 s
+  sobre el historial con B+ (el lado derecho del `JOIN` se recorre entero). Materializadas,
+  son una búsqueda por el B+ de 4,5 ms; la carga paga 793,6 s una vez (369 087 pares con
+  soporte 2 y como mucho 500 por producto, en 70 consultas `GROUP BY` por lotes de
+  unas 10 000 compras), unos 12 s por lote. Antes eran 47 s: `EXPLAIN ANALYZE` mostró el
+  `JOIN` en 6 s y el filtro de encima en 35 s, que comparaba cada una de las 180 000 filas
+  reunidas con las 747 opciones del `IN`. Un `IN` de textos literales ahora se busca en un
+  conjunto, y la materialización bajó de 2 231 s (la medida anterior, con el mismo código
+  salvo ese cambio) a 793,6 s.
+- **El índice de los pares es un B+, no un hash.** Con el hash extendible la primera medida
+  no terminó: con cientos de filas por clave, el directorio se duplicaba en cada inserción
+  que caía en una cubeta llena de una misma clave (llegó a 4 GB y el gestor estuvo horas al
+  97 % de CPU). Reproducido aparte: 400 claves repetidas 300 veces llevan el directorio a
+  2^18 entradas.
+- **La caché quita casi todo el trabajo**: la recomendación fusionada baja de 68,9 ms a
+  1,9 ms de mediana con Redis.
+- **Cada señal es una consulta corta del gestor**; la cercanía va después de las otras tres
+  (necesita sus candidatos), así que su tiempo se suma a la más lenta de ellas.
+
+```bash
+docker run -d --name redis-medida -p 127.0.0.1:6391:6379 redis:8.8.4-alpine
+uv run --no-sync python -m benchmarks.shop_recommend_benchmark --data-dir data/datasets \
+    --models data/models/shop --engine-data-dir <copia del gestor de la sección 10> \
+    --redis-url redis://127.0.0.1:6391/0 --products 100 --on-the-fly-products 5
+```
+
+`--engine-data-dir` se modifica (la carga añade tablas): conviene una copia.
 
 ## 18. Rostros en LFW — verificación, identificación, latencia y caché
 

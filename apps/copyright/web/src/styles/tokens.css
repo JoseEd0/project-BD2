@@ -1,0 +1,80 @@
+/* Los tokens de DESIGN.md. `data-theme` lo fija el kit en <html> antes de pintar. */
+:root {
+  color-scheme: light;
+  --paper: #f4f6fa;
+  --paper-raised: #ffffff;
+  --paper-sunken: #e9edf4;
+  --ink: #111827;
+  --ink-soft: #3b4659;
+  --ink-faint: #566175;
+  --rule: #d3d9e4;
+  --rule-strong: #aab3c3;
+  --edition: #1b3874;
+  --edition-deep: #142b5a;
+  --on-edition: #f3f6fc;
+  --on-edition-soft: #c3cfe8;
+  --focus: #2563eb;
+  --alert: #a3261b;
+  --alert-wash: #fbeceb;
+  --clear: #17683d;
+  --clear-wash: #e6f4ec;
+  --waveform: #3b4659;
+  --waveform-played: #111827;
+  --swipe-alpha: 0.85;
+  --chip-ink: #111827;
+
+  --ink-a: #ffdd33;
+  --ink-b: #ff8cc6;
+  --ink-c: #78de8a;
+  --ink-d: #ffb056;
+  --ink-e: #79cbff;
+  --ink-f: #c7a4ff;
+
+  --font-ui: "Atkinson Hyperlegible Next Variable", system-ui, sans-serif;
+  --font-measure: "Atkinson Hyperlegible Mono Variable", ui-monospace, monospace;
+  --text-xs: 0.8125rem;
+  --text-sm: 0.9375rem;
+  --text-md: 1rem;
+  --text-lg: 1.25rem;
+  --text-xl: 1.75rem;
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-12: 3rem;
+
+  --radius-chip: 4px;
+  --radius-panel: 6px;
+  --target: 44px;
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --quick: 160ms;
+  --stroke: 420ms;
+  --measure-width: 72rem;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --paper: #0d1424;
+  --paper-raised: #141e35;
+  --paper-sunken: #0a101d;
+  --ink: #e8edf6;
+  --ink-soft: #b4bed1;
+  --ink-faint: #8f9bb3;
+  --rule: #26324e;
+  --rule-strong: #3b4a6d;
+  --edition: #15254a;
+  --edition-deep: #0f1c3a;
+  --on-edition: #e8edf6;
+  --on-edition-soft: #a9b8d8;
+  --focus: #93b8ff;
+  --alert: #ff9a8f;
+  --alert-wash: #2c1820;
+  --clear: #7fd9a4;
+  --clear-wash: #10261e;
+  --waveform: #8f9bb3;
+  --waveform-played: #e8edf6;
+  --swipe-alpha: 0.9;
+}

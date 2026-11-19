@@ -11,7 +11,7 @@ import { NotFoundPage } from "./pages/NotFoundPage";
  * `lazy` de React Router deja la ruta en blanco, mientras que el error de `React.lazy` lo
  * atrapa el límite de error de esa ruta.
  */
-const HomePage = lazy(() => import("./pages/HomePage"));
+const StudioPage = lazy(() => import("./pages/StudioPage"));
 
 export const routes: RouteObject[] = [
   {
@@ -19,7 +19,7 @@ export const routes: RouteObject[] = [
     Component: Layout,
     ErrorBoundary: RouteErrorBoundary,
     children: [
-      { index: true, Component: HomePage, ErrorBoundary: RouteErrorBoundary },
+      { index: true, Component: StudioPage, ErrorBoundary: RouteErrorBoundary },
       { path: "*", Component: NotFoundPage },
     ],
   },

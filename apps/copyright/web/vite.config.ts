@@ -11,9 +11,10 @@ import { APP } from "./src/identity";
 const DEV_ENV_PREFIX = "WEB_DEV_";
 const TEST_API_BASE_URL = "http://app.test/api";
 
-// El mismo valor que el fondo del tema claro en `src/styles.css`: el manifiesto no puede leer
-// CSS, y el sistema lo pinta antes de que cargue la página.
-const BACKGROUND_COLOR = "#ffffff";
+// `--paper` y `--edition` del tema claro (`src/styles/tokens.css`): el manifiesto no puede leer
+// CSS, y el sistema los pinta antes de que cargue la página.
+const BACKGROUND_COLOR = "#f4f6fa";
+const THEME_COLOR = "#1b3874";
 
 /** En desarrollo, el API se reenvía sin su prefijo, como lo hace nginx. */
 function devProxy(env: Record<string, string>): Record<string, ProxyOptions> {
@@ -44,7 +45,7 @@ export default defineConfig(({ mode }) => {
             start_url: "/",
             scope: "/",
             display: "standalone",
-            theme_color: BACKGROUND_COLOR,
+            theme_color: THEME_COLOR,
             background_color: BACKGROUND_COLOR,
             icons: [{ src: "icon.svg", sizes: "any", type: "image/svg+xml", purpose: "any" }],
           },

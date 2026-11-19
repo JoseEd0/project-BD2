@@ -250,5 +250,17 @@ def _cpu_name() -> str:
     return platform.processor()
 
 
+REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
+
+
+def repository_path(path: Path) -> str:
+    """`path` relativa a la raíz del repositorio, para que un resultado versionado no guarde
+    rutas de la máquina en que se midió; fuera del repositorio, solo su nombre."""
+    resolved = path.resolve()
+    if resolved.is_relative_to(REPOSITORY_ROOT):
+        return str(resolved.relative_to(REPOSITORY_ROOT))
+    return resolved.name
+
+
 def results_directory(root: Path) -> Path:
     return root / RESULTS_DIRECTORY

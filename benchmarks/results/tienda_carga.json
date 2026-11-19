@@ -1,7 +1,7 @@
 {
   "name": "tienda_carga",
   "parameters": {
-    "datos": "/Users/jose/Documents/University/8to-ciclo/BD2/project-BD2/data/datasets",
+    "datos": "data/datasets",
     "gestor": "uvicorn en otro proceso, directorio de datos vacío",
     "cache_de_embeddings": "vacía",
     "fotos_por_lote": 32,

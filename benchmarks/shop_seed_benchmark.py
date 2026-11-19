@@ -40,7 +40,12 @@ import numpy as np
 import onnxruntime
 
 from api.settings import IMPORT_DIRECTORIES_VARIABLE
-from benchmarks.common import Report, machine_description, results_directory
+from benchmarks.common import (
+    Report,
+    machine_description,
+    repository_path,
+    results_directory,
+)
 from benchmarks.engine_process import engine_server
 from query.plan import MILLISECONDS_PER_SECOND
 from shop.catalog.schema import (
@@ -252,7 +257,7 @@ def _ms(seconds: float) -> float:
 
 def _parameters(arguments: Arguments) -> dict[str, Any]:
     return {
-        "datos": str(arguments.data_dir),
+        "datos": repository_path(arguments.data_dir),
         "gestor": "uvicorn en otro proceso, directorio de datos vacío",
         "cache_de_embeddings": "vacía" if arguments.embeddings_dir is None else "la indicada",
         "fotos_por_lote": arguments.clip_batch_size,

@@ -76,6 +76,14 @@ def test_in_with_a_null_never_says_not_in(datos: Engine):
     assert ids(datos, "NOT n = 1") == [2]
 
 
+def test_a_long_in_list_of_texts_answers_like_one_comparison_each(datos: Engine):
+    names = ", ".join(f"'n{number}'" for number in range(500))
+    assert ids(datos, f"s IN ({names}, 'luis')") == [2]
+    assert ids(datos, f"s NOT IN ({names}, 'luis')") == [1]
+    assert ids(datos, f"s IN ({names}, NULL)") == []
+    assert ids(datos, "f IN ('2026-02-01', '2026-03-01')") == [2]
+
+
 def test_operators_propagate_null(datos: Engine):
     result = datos.execute("SELECT -n, NOT ok, -x, n + x, s IN ('ana', 'x') FROM t ORDER BY id")
     assert result.columns == ("-n", "NOT ok", "-x", "n + x", "s IN ('ana', 'x')")

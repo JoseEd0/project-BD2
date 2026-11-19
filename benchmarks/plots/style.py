@@ -122,6 +122,16 @@ def format_fraction(value: float) -> str:
     return f"{value:.{FRACTION_DECIMALS}f}"
 
 
+# Desgloses: barras horizontales apiladas, una fila de alto por barra, y aire a la derecha
+# para el total rotulado al final de la más larga.
+BREAKDOWN_PANEL_WIDTH = 5.2
+BREAKDOWN_ROW_HEIGHT = 0.42
+BREAKDOWN_MIN_HEIGHT = 1.6
+BREAKDOWN_BAR_SHARE = 0.68
+BREAKDOWN_LABEL_ROOM = 1.22
+BREAKDOWN_LABEL_GAP = 0.015
+
+
 # Curvas de recall contra latencia: paneles más anchos, porque los puntos se reparten a lo
 # ancho, y un anillo alrededor del punto del esfuerzo por omisión.
 CURVE_PANEL_WIDTH = 4.1

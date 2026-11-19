@@ -1,8 +1,9 @@
 """Lo que se dibuja, declarado como datos: técnicas, series, magnitudes, paneles y figuras.
 
-Hay dos clases de figura: `Figure`, con una línea por técnica frente al tamaño de los datos
-en ejes logarítmicos, y `BarFigure`, con barras agrupadas en un eje lineal de 0 a 1 para
-medidas que son fracciones, como la precisión.
+Hay dos clases principales de figura: `Figure`, con una línea por técnica frente al tamaño
+de los datos en ejes logarítmicos, y `BarFigure`, con barras agrupadas en un eje lineal de 0
+a 1 para medidas que son fracciones, como la precisión. `BreakdownFigure` desglosa en barras
+apiladas las cifras de una sola ejecución.
 """
 
 from __future__ import annotations
@@ -215,3 +216,44 @@ class GalleryFigure:
     operation: str
     cases: tuple[tuple[str, str], ...]
     images: bool
+
+
+@dataclass(frozen=True, slots=True)
+class Segment:
+    """Un tramo de una barra apilada: la clave de `extra` de donde sale y su color."""
+
+    label: str
+    field: str
+    color: str
+
+
+@dataclass(frozen=True, slots=True)
+class StackedBar:
+    """Una barra: su rótulo y la medida de la que salen sus tramos."""
+
+    label: str
+    technique: str
+    operation: str
+
+
+@dataclass(frozen=True, slots=True)
+class BreakdownPanel:
+    """Barras horizontales apiladas en un eje lineal, una por paso o por objeto; cada una
+    suma los tramos de `segments` que tenga su medida."""
+
+    title: str
+    measure: Measure
+    bars: tuple[StackedBar, ...]
+    segments: tuple[Segment, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class BreakdownFigure:
+    """Una imagen de desgloses: un panel por columna, para cifras de una sola ejecución
+    (cuánto tardó cada paso, cuánto ocupa cada tabla) en vez de una serie por tamaño."""
+
+    filename: str
+    report: str
+    title: str
+    subtitle: str
+    panels: tuple[BreakdownPanel, ...]

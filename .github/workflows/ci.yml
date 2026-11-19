@@ -178,6 +178,9 @@ jobs:
   compose:
     name: Docker compose
     runs-on: ubuntu-latest
+    # Sin `shell:`, los pasos corren con `bash -e` y sin pipefail: `set -e` no mira un comando
+    # negado con `!` ni el que escribe en un `tee`. Lo que no debe responder se comprueba con
+    # `if …; then exit 1; fi`, y lo que se guarda con `tee`, dentro de `(set -o pipefail; …)`.
     env:
       WEB_URL: http://localhost:8080
       # El servicio de ejemplo del kit, montado como una aplicación (deploy/example), por HTTP y
@@ -242,11 +245,18 @@ jobs:
             --header "Range: bytes=0-99" --output /dev/null --write-out "%{http_code}" \
             "$WEB_URL/api/media/file" | grep -q 206
       - name: Con el API en marcha, la demo no se vuelve a cargar
-        run: docker compose run --rm demo | grep -q "la demo no se vuelve a cargar"
+        run: |
+          (set -o pipefail; docker compose run --rm demo | tee /tmp/demo-otra-vez)
+          grep -q "la demo no se vuelve a cargar" /tmp/demo-otra-vez
       - name: El gestor no se alcanza desde el anfitrión ni sin clave
         run: |
-          ! curl --silent --max-time 3 http://localhost:8000/health
-          ! docker compose exec -T example-web wget -q -T 3 -O /dev/null http://engine:8000/health
+          if curl --silent --max-time 3 http://localhost:8000/health; then
+            echo "El gestor responde desde el anfitrión"; exit 1
+          fi
+          docker compose exec -T example-web wget -q -T 3 -O /dev/null http://example-api:8000/health
+          if docker compose exec -T example-web wget -q -T 3 -O /dev/null http://engine:8000/health; then
+            echo "La web del ejemplo llega al gestor"; exit 1
+          fi
           docker compose exec -T example-api python -c "import urllib.error as e, urllib.request as u
           try: u.urlopen('http://engine:8000/tables', timeout=3)
           except e.HTTPError as error: assert error.code == 401, error.code
@@ -265,8 +275,11 @@ jobs:
           docker compose logs engine | grep '"humo-escritura"' | grep -q '"service": "ejemplo"'
       - name: Cabeceras de seguridad, HSTS solo por HTTPS y límites del nginx
         run: |
-          curl --silent --head "$EXAMPLE_URL/" | grep -qi "content-security-policy: .*'sha256-"
-          ! curl --silent --head "$EXAMPLE_URL/" | grep -qi strict-transport-security
+          http_headers=$(curl --fail --silent --show-error --head "$EXAMPLE_URL/")
+          grep -qi "content-security-policy: .*'sha256-" <<< "$http_headers"
+          if grep -qi strict-transport-security <<< "$http_headers"; then
+            echo "La respuesta por HTTP lleva HSTS"; exit 1
+          fi
           curl --silent --head --cacert data/certs/cert.pem "$EXAMPLE_TLS_URL/" | grep -qi strict-transport-security
           head -c 2000000 /dev/zero > /tmp/grande
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' --data-binary @/tmp/grande "$EXAMPLE_URL/api/notas")" = 413
@@ -308,7 +321,7 @@ jobs:
       - name: La tienda carga su catálogo, una segunda vez sin repetir nada, y lo sirve
         run: |
           docker compose run --rm shop-seed
-          docker compose run --rm shop-seed 2>&1 | tee /tmp/segunda-carga
+          (set -o pipefail; docker compose run --rm shop-seed 2>&1 | tee /tmp/segunda-carga)
           grep -q "shop_productos ya tiene sus 5 filas" /tmp/segunda-carga
           curl --fail --silent --show-error "$SHOP_URL/api/health"
           curl --fail --silent --show-error "$SHOP_URL/api/ready" | grep -q ready
@@ -316,7 +329,7 @@ jobs:
       - name: Copyright indexa su catálogo por tramos, una segunda vez sin repetir nada, y lo sirve
         run: |
           docker compose run --rm copyright-seed
-          docker compose run --rm copyright-seed 2>&1 | tee /tmp/segunda-carga-copyright
+          (set -o pipefail; docker compose run --rm copyright-seed 2>&1 | tee /tmp/segunda-carga-copyright)
           grep -q "cr_segmentos: ya tiene sus 12 filas" /tmp/segunda-carga-copyright
           curl --fail --silent --show-error "$COPYRIGHT_URL/api/health"
           curl --fail --silent --show-error "$COPYRIGHT_URL/api/ready" | grep -q ready
@@ -325,7 +338,7 @@ jobs:
       - name: Papers siembra su corpus y busca por su web en los tres modos
         run: |
           docker compose run --rm papers-seed
-          docker compose run --rm papers-seed 2>&1 | tee /tmp/segunda-siembra
+          (set -o pipefail; docker compose run --rm papers-seed 2>&1 | tee /tmp/segunda-siembra)
           grep -q "rag_chunks ya tiene sus 7 filas" /tmp/segunda-siembra
           curl --fail --silent --show-error "$PAPERS_URL/api/health" | grep -q ok
           curl --fail --silent --show-error "$PAPERS_URL/api/ready" | grep -q ready
@@ -347,9 +360,9 @@ jobs:
           test "$(wc -l < /tmp/reparto)" -eq 3
       - name: El perfil bench mide GiST contra su PostgreSQL
         run: |
-          docker compose --profile bench run --rm bench python -m benchmarks.spatial_benchmark \
-            --sizes 1000 --queries 5 --output /tmp/espacial \
-            | grep "GiST (PostgreSQL) | radio 1 km" | grep -q "coinciden_con_el_motor=5/5"
+          (set -o pipefail; docker compose --profile bench run --rm bench python -m benchmarks.spatial_benchmark \
+            --sizes 1000 --queries 5 --output /tmp/espacial | tee /tmp/medida-espacial)
+          grep "GiST (PostgreSQL) | radio 1 km" /tmp/medida-espacial | grep -q "coinciden_con_el_motor=5/5"
       - name: pgvector en el PostgreSQL de referencia
         run: |
           docker compose --profile bench exec -T postgres psql --username postgres \

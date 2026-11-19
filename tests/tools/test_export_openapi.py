@@ -31,23 +31,32 @@ def test_every_contract_lives_under_apps() -> None:
 
 
 def test_the_engine_contract_describes_its_health_route(tmp_path: Path) -> None:
-    [path] = export_contracts(tmp_path)
+    path = export_contracts(tmp_path)[0]
     schema = json.loads(path.read_text(encoding="utf-8"))
     assert path == tmp_path / "apps" / "client" / "openapi" / "engine.json"
     assert schema["openapi"].startswith("3.")
     assert "get" in schema["paths"]["/health"]
 
 
+def test_the_copyright_contract_lives_next_to_its_interface(tmp_path: Path) -> None:
+    export_contracts(tmp_path)
+    path = tmp_path / CONTRACTS["copyright"].path
+    assert CONTRACTS["copyright"].path == Path("apps/copyright/web/openapi/copyright.json")
+    paths = json.loads(path.read_text(encoding="utf-8"))["paths"]
+    assert {"/detections", "/songs/{song_id}/audio"} <= set(paths)
+
+
 def test_exporting_twice_writes_the_same_bytes(tmp_path: Path) -> None:
-    [first] = export_contracts(tmp_path / "first")
-    [second] = export_contracts(tmp_path / "second")
-    assert first.read_bytes() == second.read_bytes()
+    first = export_contracts(tmp_path / "first")
+    second = export_contracts(tmp_path / "second")
+    assert [path.read_bytes() for path in first] == [path.read_bytes() for path in second]
 
 
-def test_the_versioned_engine_contract_is_up_to_date(tmp_path: Path) -> None:
-    [exported] = export_contracts(tmp_path)
-    versioned = REPOSITORY_ROOT / CONTRACTS["engine"].path
-    assert exported.read_text(encoding="utf-8") == versioned.read_text(encoding="utf-8")
+def test_the_versioned_contracts_are_up_to_date(tmp_path: Path) -> None:
+    export_contracts(tmp_path)
+    for contract in CONTRACTS.values():
+        exported = (tmp_path / contract.path).read_text(encoding="utf-8")
+        assert exported == (REPOSITORY_ROOT / contract.path).read_text(encoding="utf-8")
 
 
 def test_each_service_is_written_next_to_its_consumer(tmp_path: Path) -> None:

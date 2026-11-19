@@ -1,6 +1,6 @@
 # Copyright en audio (opción C): su API, su interfaz, su carga inicial y su túnel, montados
 # como cualquier aplicación (ver apps/README.md, «Desplegar una app»). Lo incluye el
-# compose raíz. Hasta que llegue su interfaz (#78), la web es la plantilla del kit.
+# compose raíz. La web es su propia interfaz, `apps/copyright/web`.
 #
 # El catálogo de FMA no viaja en la imagen: el gestor lee el audio por su ruta, así que la
 # carpeta de datasets entra de solo lectura en el gestor (compose raíz) y en la carga
@@ -29,7 +29,7 @@ services:
     extends: { file: ../../deploy/app.compose.yaml, service: web }
     build:
       args:
-        APP_DIR: web-kit/template
+        APP_DIR: copyright/web
     image: minigestor-copyright-web
     environment:
       API_UPSTREAM: http://copyright-api:8000

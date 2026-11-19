@@ -1,0 +1,42 @@
+/*
+ * Un marcador neutro, no un diseño: cada app define el suyo en su `DESIGN.md` y reemplaza
+ * este archivo. Solo muestra que `data-theme` (lo fija el kit antes de pintar) cambia el tema.
+ */
+:root {
+  --ground: #ffffff;
+  --ink: #1a1a1a;
+  --muted: #6b6b6b;
+  font-family: system-ui, sans-serif;
+  line-height: 1.5;
+}
+
+:root[data-theme="dark"] {
+  --ground: #121212;
+  --ink: #ececec;
+  --muted: #a0a0a0;
+}
+
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+}
+
+.shell {
+  max-width: 48rem;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

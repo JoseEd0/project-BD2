@@ -536,6 +536,33 @@ saltarse.
 
 ## Rendimiento medido
 
+### Evaluación con LFW
+
+Con [`benchmarks/faces_evaluation_benchmark.py`](../../benchmarks/faces_evaluation_benchmark.py)
+y [`faces_cache_benchmark.py`](../../benchmarks/faces_cache_benchmark.py): las 13 233 fotos
+de LFW con el pipeline del servicio, tomando el rostro más cercano al centro. Resultados
+crudos en [`rostros_evaluacion.json`](../../benchmarks/results/rostros_evaluacion.json) y
+[`rostros_cache.json`](../../benchmarks/results/rostros_cache.json); análisis en
+[`benchmarks/README.md`](../../benchmarks/README.md#16-rostros-en-lfw--verificación-identificación-latencia-y-caché).
+
+![Verificación con los pares de LFW](../../benchmarks/figures/rostros-evaluacion-verificacion.png)
+
+| Medida | Resultado |
+|---|---:|
+| exactitud con el protocolo (10 pliegues, 6 000 pares) | **99,30 % ± 0,40 %** |
+| TAR a FAR 10⁻³ (protocolo / todos los pares de LFW) | 98,50 % / 99,64 % |
+| TAR a FAR 10⁻² (protocolo / todos los pares de LFW) | 99,23 % / 99,72 % |
+| rank-1 con 1 679 personas en el gestor (HNSW / exacta) | 98,60 % / 98,72 % |
+| primer vecino del HNSW igual al de la búsqueda exacta | 99,83 % |
+| buscar por SQL en el HNSW, p50 / p99 | 0,21 / 0,32 ms |
+| analizar una foto de LFW, p50 / p99 | 17,5 / 29,6 ms |
+| aciertos de la caché de rastros, rostro quieto o hasta 40 px por cuadro; ahorro p50 | 92 a 95 %; 4,5 a 10 ms |
+| aciertos desde 56 px por cuadro (el IoU con el cuadro anterior baja de 0,3) | 0 % |
+
+De aquí salen los umbrales de *Duplicados y umbrales*: 0,363 para comparar una toma con las
+anteriores (FAR de 10⁻³ en LFW) y **0,47** para reconocer, que con 1 000 personas acepta como
+alguien a cerca del 1 % de los desconocidos.
+
 ### En vivo
 
 Con [`benchmarks/faces_stream_benchmark.py`](../../benchmarks/faces_stream_benchmark.py)
@@ -577,8 +604,8 @@ de OpenCV, Apple M4 Pro, OpenCV 5.0.0 y Pillow 13.0.0. Resultados crudos en
 **Cobertura del detector en LFW:** YuNet encuentra al menos un rostro en **13 221 de las
 13 233 fotos (99,91 %)**; en 12 no encuentra ninguno, y en 1 033 (7,8 %) encuentra más de
 uno, porque muchas fotos de LFW son de prensa y tienen a otras personas detrás. Por eso la
-evaluación de LFW (#92) debe tomar el rostro que corresponde al centro de la foto y no
-exigir uno solo.
+evaluación de LFW (arriba) toma el rostro más cercano al centro de la foto y no exige uno
+solo.
 
 - El **embedding** cuesta lo mismo con cualquier foto (13 ms): SFace siempre ve 112 x 112.
 - La **detección** deja de crecer pasados los 640 px: YuNet ve siempre la foto reducida a

@@ -35,11 +35,12 @@ DEFAULT_NEIGHBOURS_PER_WINDOW = 10
 # del catálogo (ver el README).
 DEFAULT_MIN_RUN_WINDOWS = 2
 # El de máxima J de Youden en la curva ROC de 400 remixes sin distorsión, con la verdad conocida
-# (benchmarks/README.md, §17): encuentra el 55 % de los fragmentos copiados y da alguna
-# coincidencia en el 29 % de los remixes sin copias. Ningún umbral separa mucho mejor (área
-# bajo la curva 0,62), y bajo una distorsión de nivel, ruido, tempo o tono no hay umbral que
-# sirva: el descriptor deja de encontrar la copia.
-DEFAULT_MATCH_THRESHOLD = 0.43
+# y el puntaje por la evidencia de la racha (benchmarks/README.md, §17): encuentra el 71 % de
+# los fragmentos copiados y da alguna coincidencia en el 23 % de los remixes sin copias (área
+# bajo la curva 0,79). Es bajo porque el puntaje lo es: una racha de 3 ventanas (10 s) con
+# similitud media 0,93 vale 3/7 · 0,53 = 0,23 y pasa; con 0,92, 0,20 y no. Bajo una distorsión
+# de nivel, ruido, tempo o tono ningún umbral sirve: el descriptor deja de encontrar la copia.
+DEFAULT_MATCH_THRESHOLD = 0.21
 DEFAULT_MAX_MATCHES = 10
 # Por debajo, silencio digital o el ruido de fondo de una grabación: -60 dBFS es mil veces
 # menos potencia que una pista a -30 dBFS, que ya suena bajo.

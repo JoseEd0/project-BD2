@@ -1,20 +1,32 @@
-# RAG sobre papers: el corpus
+# RAG sobre papers
 
 Servicio de la opción A del Anexo A: un chat que responde con papers y cita la página de
-donde sale cada afirmación. Este paquete (`rag`) es, por ahora, **el corpus**: baja los
-papers, saca su texto página por página, lo limpia y lo corta en fragmentos con su paper y
-su página. La ingesta en el gestor (BM25 y embeddings en HNSW, #85) y las respuestas (#86)
-llegan después y leen lo que deja aquí.
+donde sale cada afirmación. El paquete `rag` tiene, por ahora, tres partes:
+
+1. **El corpus** (`rag.corpus`, #84): baja los papers, saca su texto página por página, lo
+   limpia y lo corta en fragmentos con su paper y su página.
+2. **La ingesta** (`rag.seed`, #85): calcula el embedding de cada fragmento con
+   multilingual-e5-small en ONNX y carga papers y fragmentos en el gestor, con un índice
+   invertido en inglés (BM25) y un HNSW por coseno.
+3. **La búsqueda** (`rag.api`, #85): `POST /search` en modo BM25, vectorial o híbrido (RRF),
+   sobre la que se construyen las respuestas con Claude (#86).
 
 ```bash
 uv sync --all-packages
 uv run python -m rag.corpus build --data-dir data/datasets \
     --material Proyecto_Integrador_BD2.md --material docs/informe.pdf
+uv run python -m rag.models --salida data/models/rag
+RAG_ENGINE_URL=http://localhost:8000 RAG_ENGINE_KEY=… RAG_MIGRATION_KEY=… \
+    RAG_MODELS_DIR=data/models/rag uv run python -m rag.seed --data-dir data/datasets
+RAG_ENGINE_URL=… RAG_ENGINE_KEY=… RAG_MODELS_DIR=data/models/rag \
+    uv run uvicorn --factory rag.api:create_app --port 8003
 ```
 
-Todo queda en `<data-dir>/rag_papers/`. La carpeta de datos sale de `--data-dir` o de la
-variable `RAG_DATA_DIR`; nada de eso se versiona. Volver a correr el comando sigue desde
-donde quedó y no duplica nada.
+El corpus queda en `<data-dir>/rag_papers/`. La carpeta de datos sale de `--data-dir` o de
+la variable `RAG_DATA_DIR`; nada de eso se versiona. Volver a correr cualquiera de los
+comandos sigue desde donde quedó y no duplica nada.
+
+# El corpus
 
 ## Qué papers entran
 
@@ -224,7 +236,150 @@ uv run python -m rag.corpus figure --manifest benchmarks/results/rag_corpus.json
     --output benchmarks/figures/rag-fragmentos.png
 ```
 
-## Tests
+# La ingesta en el gestor
+
+El servicio usa el gestor como cualquier aplicación usa su base de datos: **solo por HTTP**,
+con `minigestor_client` y `appkit`, y con sus tablas prefijadas `rag_`.
+
+## Esquema
+
+Las migraciones (`rag/schema.py`) son repetibles (`CREATE … IF NOT EXISTS`) y corren al
+arrancar el API y al empezar la siembra, con la clave `admin` (`RAG_MIGRATION_KEY`):
+
+| Tabla | Columnas | Índices |
+|---|---|---|
+| `rag_papers` | `paper_id` (clave), `source`, `title`, `authors` (separados por `; `), `year`, `abstract`, `primary_category`, `license`, `url`, `file_path`, `media_type`, `sha256`, `pages` | la clave primaria |
+| `rag_chunks` | `chunk_id` (clave), `paper_id`, `ordinal`, `page_start`, `page_end`, `words`, `content` (`TEXT`), `embedding` (`VECTOR(384)`) | `rag_chunks_content`: `INVERTED (content) WITH (idioma = 'en')`; `rag_chunks_embedding`: `HNSW (embedding) WITH (metric = 'cosine', m = 16, ef_construction = 128)` |
+
+Los dos índices se declaran **con la tabla vacía**: la primera carga masiva los difiere y el
+gestor los construye de una vez al final (SPIMI y FAISS con todos los vectores), en vez de
+mantenerlos fila a fila (#69).
+
+## Embeddings: multilingual-e5-small en ONNX
+
+| | |
+|---|---|
+| Modelo | [`intfloat/multilingual-e5-small`](https://huggingface.co/intfloat/multilingual-e5-small), licencia **MIT**, 118 M parámetros, 384 dimensiones, multilingüe (el vocabulario de XLM-R) |
+| Revisión fijada | `614241f622f53c4eeff9890bdc4f31cfecc418b3` |
+| fp32 | `onnx/model.onnx`, 470 268 510 bytes, SHA-256 `ca456c06b3a9505ddfd9131408916dd79290368331e7d76bb621f1cba6bc8665` |
+| int8 | `onnx/model_qint8_avx512_vnni.onnx`, 118 346 824 bytes, SHA-256 `dd476dd0c2514e9b9be83aeb3853fac0763e0bdf4a71645407587d77c48a2d88` |
+| Tokenizador | `tokenizer.json`, 17 082 730 bytes, SHA-256 `0b44a9d7b51c3c62626640cda0e2c2f70fdacdc25bbbd68038369d14ebdf4c39` |
+
+Los dos ONNX los exportaron los autores del modelo en el mismo repositorio, así que la
+licencia es la del modelo. `python -m rag.models --salida <carpeta> [--variante fp32
+--variante int8]` los baja con `appkit.download` (reanudable, y un archivo con otra suma
+nunca queda con el nombre final). Sin PyTorch ni `transformers`: **onnxruntime** corre el
+modelo y **tokenizers** lee `tokenizer.json`.
+
+La receta (`rag/embeddings.py`) es la de la tarjeta del modelo:
+
+- **prefijos**: `passage: ` delante de cada fragmento y `query: ` delante de cada pregunta;
+- **truncado a 512 tokens** (el tope del modelo), contando los especiales;
+- **promedio** de la última capa sobre los tokens reales (máscara de atención), sin el relleno;
+- **normalización L2**: el producto punto es el coseno, la métrica del HNSW.
+
+Los fragmentos van en lotes de 32 (`RAG_EMBEDDING_BATCH_SIZE`) **ordenados por largo**
+dentro de ventanas de 1 024: un lote junta secuencias parecidas y casi no calcula relleno, y
+la memoria queda acotada por la ventana (la atención de un lote de 32 × 512 tokens ocupa
+400 MB en float32).
+
+**Verificado contra la implementación de referencia.** `tests/fixtures/e5_reference.json`
+guarda los tokens y los vectores de cinco textos (dos preguntas, dos pasajes en inglés y en
+español y uno de más de 512 tokens) calculados con `transformers` 5.23 y PyTorch 2.15 con la
+receta de la tarjeta, en la misma revisión; `tests/fixtures/e5_reference.py` los regenera en
+un entorno aparte (PyTorch no es dependencia del proyecto). Los tokens coinciden uno a uno;
+los vectores fp32, con una diferencia máxima de 1,8·10⁻⁷ por componente (el test exige
+menos de 10⁻⁵); los int8, con coseno de al menos 0,972 (el test exige 0,96).
+
+## Caché de embeddings
+
+`rag/embedding_cache.py` guarda cada vector por la **huella SHA-256 del texto** del
+fragmento y por el **modelo** (nombre, revisión y precisión: `multilingual-e5-small@614241f622f5-int8`),
+en dos archivos que solo crecen (`vectors.f32` y `keys.txt`) con `fsync` por lote. Volver a
+sembrar —otro gestor, un volumen borrado— no pasa ningún fragmento por el modelo, y un
+proceso muerto a mitad de un lote deja, al abrir, vectores sin huella que se recortan. Por
+omisión vive en `<data-dir>/rag_papers/embeddings/` (`--cache-dir` o
+`RAG_EMBEDDING_CACHE_DIR` la cambian); una caché completa se lee aunque la carpeta sea de
+solo lectura.
+
+## La siembra: `python -m rag.seed`
+
+1. aplica las migraciones con la clave `admin`;
+2. carga `rag_papers` desde `papers.jsonl`;
+3. si a `rag_chunks` le faltan filas, calcula los embeddings que no están en la caché (el
+   modelo solo se carga si falta alguno) con un log de avance (fragmentos por segundo y
+   minutos que faltan);
+4. carga `rag_chunks` con su vector por NDJSON (`bulk_insert`), sin tener nunca el corpus
+   en memoria.
+
+**Repetible y reanudable.** Una tabla con todas sus filas no se toca, así que una segunda
+corrida no calcula ni carga nada. La carga masiva confirma lotes enteros y en el orden de
+los archivos del corpus, que es estable: una cortada deja un prefijo, y la siguiente sigue
+desde la fila siguiente a las que hay. Una tabla con más filas que el corpus, o un lote
+rechazado, detienen la siembra con un error (`IngestError`). `--report` deja los conteos y
+los tiempos en un JSON. La carga del corpus entero termina construyendo los dos índices;
+`RAG_ENGINE_LOAD_TIMEOUT_SECONDS` sube el plazo del cliente si hiciera falta.
+
+# La búsqueda: `POST /search`
+
+`rag.api:create_app` arma el servicio con `appkit.create_service_app` (`/health`, `/ready`,
+migraciones al arrancar, `X-Request-ID`, `Server-Timing`, logs JSON y errores uniformes) y
+carga el modelo al arrancar. Sin estado: escala con réplicas.
+
+```bash
+curl -s localhost:8003/search -H 'content-type: application/json' \
+    -d '{"query": "¿Cómo se estima la cardinalidad con aprendizaje?", "mode": "hybrid", "k": 5}'
+```
+
+| Campo | Qué es |
+|---|---|
+| `query` | la pregunta, de 1 a 1 000 caracteres |
+| `mode` | `bm25`, `vector` o `hybrid` (por omisión) |
+| `k` | fragmentos, de 1 a 50 (10 por omisión) |
+
+Cada resultado trae `rank`, `chunk_id`, `paper` (`paper_id`, `title`, `authors`, `year`,
+`url`, `file_path`, `media_type`, `license`), `page_start`, `page_end`, `text`, `score` (el
+del modo) y `bm25` / `vector` con el puesto y el puntaje de cada método, o `null` si ese
+método no lo trajo.
+
+- **`bm25`**: `WHERE MATCH(content, $1) USING BM25`. La pregunta va en minúsculas y sin
+  paréntesis: dentro de `MATCH`, `AND`, `OR`, `NOT` y los paréntesis son operadores.
+- **`vector`**: el embedding de `query: <pregunta>` con `WHERE SIMILAR_TO(embedding, $1,
+  k = $2) USING HNSW WITH ef_search = 128`; el puntaje es el coseno.
+- **`hybrid`**: las dos listas, 50 fragmentos cada una, en paralelo, fusionadas con
+  **Reciprocal Rank Fusion** (`rag/fusion.py`, `k = 60` del paper de Cormack et al.): cada
+  lista suma `1/(60 + puesto)`. Solo cuentan los puestos: el BM25 no tiene techo y el coseno
+  va de −1 a 1, y sumarlos exigiría normalizarlos. Los empates se resuelven por el mejor
+  puesto y después por la clave.
+
+`Server-Timing` separa `embedding`, `bm25`, `vector` y `papers` (la metadata de los papers
+de los resultados, en una sola consulta con `IN`).
+
+# Despliegue
+
+`apps/rag/compose.yaml`, incluido desde el compose raíz (ver
+[`apps/README.md`](../README.md#desplegar-una-app)):
+
+| Servicio | Qué es |
+|---|---|
+| `papers-api` | la imagen de `deploy/service/Dockerfile` con el modelo int8 dentro (`apps/rag/docker-build.sh` lo baja y comprueba al construir; arranca sin red); redes `data`, `papers` y `cache`; 2 hilos de onnxruntime por réplica y 1 GiB |
+| `papers-web` | por ahora la plantilla del kit web (#88 trae la suya), en `8103` / `8403`; 5 peticiones/s por IP con ráfaga de 10 |
+| `papers-seed` | perfil `seed`: `python -m rag.seed` con el corpus montado de solo lectura (`PAPERS_DATASETS_DIR`, por omisión `data/datasets`) |
+| `papers-tunnel` | perfil `tunnel`: una URL pública temporal para la web |
+
+```bash
+python3 -m tools.compose_keys                      # claves RAG_ENGINE_KEY y RAG_MIGRATION_KEY
+docker compose up --build --detach --wait
+docker compose run --rm papers-seed                # una vez; repetirla no hace nada
+curl -s localhost:8103/api/search -H 'content-type: application/json' -d '{"query": "BM25"}'
+```
+
+Si los embeddings ya se calcularon fuera de Docker, están en el corpus montado:
+`RAG_SEED_EMBEDDING_CACHE_DIR=/data/datasets/rag_papers/embeddings` hace que la siembra los
+lea de ahí y solo cargue. Sin ella, los calcula en el `/tmp` del contenedor. La CI siembra el
+corpus diminuto de los tests (`tests/fixtures/datasets/`) y busca por `:8103` en los tres modos.
+
+# Tests
 
 `apps/rag/tests/` no usa la red: el OAI-PMH y el servidor de PDF son de mentira y los PDF
 se escriben a mano en el test (`rag_pdf_factory.py`). Cubren el filtro de licencias, el
@@ -234,6 +389,28 @@ y pies repetidos, la página vacía, el PDF escaneado y el dañado, los límites
 solapamiento, que no se corte una oración, la página de cada fragmento, la deduplicación
 al volver a correr y la reanudación después de una corrida cortada.
 
+Los de la ingesta y la búsqueda:
+
+- `test_rag_embeddings.py`: tokens y vectores contra la referencia de PyTorch (fp32 a 10⁻⁵,
+  int8 con coseno ≥ 0,96), el promedio que ignora el relleno, la norma 1, el truncado a 512
+  tokens, que los lotes ordenados por largo devuelvan los vectores en su orden y que una
+  pregunta en español quede más cerca de su respuesta en inglés que de otra. Necesitan el
+  modelo en `RAG_MODELS_DIR`; sin la variable se saltan, y la CI la define y baja las dos
+  variantes antes (con caché).
+- `test_rag_embedding_cache.py`, `test_rag_fusion.py`, `test_rag_models.py`,
+  `test_rag_search_query.py`: la caché (vacía, un vector, reabrir, por modelo, repetidos,
+  un proceso muerto a mitad, solo lectura), RRF (vacío, una lista, empates, `k`), los
+  archivos del modelo y la pregunta como texto libre en `MATCH`.
+- En [`tests/rag/`](../../tests/rag/), contra el gestor real servido por HTTP en el mismo
+  proceso, con claves `write` y `admin` y un corpus diminuto (`tests/rag/rag_corpus.py`,
+  versionado también en `tests/fixtures/datasets/` para la CI del compose): la siembra
+  (todo entra con los índices diferidos, una segunda corrida no hace nada, la caché evita
+  cargar el modelo, una carga cortada sigue donde quedó, una tabla con filas de más la
+  detiene) y el API (salud, los tres modos, la cita con su paper y sus páginas,
+  `Server-Timing`, las validaciones y, con el modelo real, preguntas en español que
+  encuentran en modo vectorial el fragmento en inglés).
+
 ```bash
-uv run pytest apps/rag -q
+uv run python -m rag.models --salida data/models/rag --variante int8 --variante fp32
+RAG_MODELS_DIR=data/models/rag uv run pytest apps/rag tests/rag -q
 ```

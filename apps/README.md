@@ -12,7 +12,7 @@ apps/
   kit/             appkit: configuración, logs, trazas, salud, errores, migraciones y descargas
   copyright/       copyright en audio (opción C): catálogo de FMA indexado por tramos (`songcheck`)
   shop/            tienda con recomendaciones (opción B): dataset, catálogo en el gestor y CLIP
-  rag/             RAG sobre papers (opción A): por ahora, el corpus de arXiv y sus fragmentos
+  rag/             RAG sobre papers (opción A): corpus de arXiv, ingesta con e5 y búsqueda híbrida
   faces/           rostros (opción D): YuNet y SFace; API de registro, reconocimiento y borrado
   web-kit/         @minigestor/web-kit: lógica sin estilos que comparten las interfaces
     template/      plantilla de la interfaz de una app: Vite y React
@@ -186,6 +186,6 @@ Los datos de cada servicio se bajan con su propio comando a la carpeta de datase
 nunca se versiona; el de la tienda está en [`shop/README.md`](shop/README.md) y el de
 copyright en [`copyright/README.md`](copyright/README.md).
 
-Los tests de [`faces/`](faces/README.md) y de [`shop/`](shop/README.md) que corren modelos
-los buscan en `FACES_MODELS_DIR` y `SHOP_MODELS_DIR`; sin la variable se saltan, y la CI la
-define y los baja antes.
+Los tests de [`faces/`](faces/README.md), [`shop/`](shop/README.md) y [`rag/`](rag/README.md)
+que corren modelos los buscan en `FACES_MODELS_DIR`, `SHOP_MODELS_DIR` y `RAG_MODELS_DIR`;
+sin la variable se saltan, y la CI la define y los baja antes.

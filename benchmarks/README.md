@@ -23,6 +23,9 @@ gráficas de [`figures/`](figures/) y todas las tablas de este documento.
 .venv/bin/python -m benchmarks.ingest_benchmark --sizes 1000 10000 50000
 .venv/bin/python -m benchmarks.shop_seed_benchmark --data-dir data/datasets \
     --models data/models/shop --engine-data-dir data/tienda-gestor
+.venv/bin/python -m benchmarks.faces_service_benchmark --lfw data/datasets/lfw/lfw \
+    --models data/models/faces --people 1000 --checkpoints 100 250 500 1000 --queries 200 \
+    --thresholds 0.363 0.4 0.45 0.5 0.55
 .venv/bin/python -m benchmarks.plot              # redibuja todas las gráficas
 ```
 
@@ -119,6 +122,7 @@ docker compose --profile bench down       # apaga PostgreSQL
 | [8. Tramos de audio](#8-tramos-de-audio-y-consulta-por-segmentos) | consulta por segmentos con una decodificación vs un `SIMILAR_TO` por ventana; índice de tramos vs pistas enteras | [consulta](figures/segmentos-consulta.png), [índice](figures/segmentos-indice.png) |
 | [9. Carga masiva](#9-carga-masiva--ndjson-contra-insert-con-parámetros-por-http) | NDJSON vs `INSERT` con parámetros por HTTP; cuándo construir un índice | [ingesta](figures/ingesta.png) |
 | [10. Carga de la tienda](#10-carga-de-la-tienda--el-catálogo-entero-con-sift-y-clip) | tiempo de cada tabla e índice, SIFT vs CLIP, y espacio del catálogo de Amazon en el gestor | [carga](figures/tienda-carga.png) |
+| [11. Servicio de rostros](#11-servicio-de-rostros--registro-reconocimiento-y-conjunto-abierto) | registrar una toma y reconocer por el API según el tamaño de la galería; umbrales de coseno 1:N y duplicados falsos con LFW | [reconocer](figures/rostros-servicio-reconocer.png), [conjunto abierto](figures/rostros-servicio-conjunto-abierto.png) |
 
 **Cómo leer las gráficas.** Cada una es una fila de paneles, uno por operación, con el
 número de filas en horizontal y una línea por técnica. Los dos ejes son logarítmicos: los
@@ -1591,6 +1595,87 @@ fuera de la fila), `shop_compras` 41,7, inventario 10,9, usuarios 7,9 y tiendas 
 
 Detalle, decisiones y tablas completas en [`apps/shop/README.md`](../apps/shop/README.md#medido-cargar-todo-el-dataset).
 
+## 11. Servicio de rostros — registro, reconocimiento y conjunto abierto
+
+`faces_service_benchmark.py` mide el API de rostros ([`apps/faces`](../apps/faces/README.md),
+#90) de punta a punta: cada tiempo es una petición HTTP completa al servicio, que analiza la
+foto, busca en el HNSW coseno de `face_embeddings` y escribe en el gestor por
+`minigestor_client`. El gestor corre en el mismo proceso, sin red.
+
+- Se registran **1 000 personas de LFW** con al menos dos fotos (de 1 680), elegidas al azar
+  (semilla 20261118), con una sola toma de frente: se prueban sus fotos en orden hasta que
+  una pasa los controles de calidad, y la última queda fuera para reconocerla después.
+  Antes de cada registro, `POST /identify` con su primera foto da el mejor coseno de un
+  desconocido contra la galería de ese momento: de ahí salen los **duplicados falsos**.
+- Al llegar a 100, 250, 500 y 1 000 personas se miden 200 reconocimientos de fotos no
+  usadas de personas registradas y 200 de personas con una sola foto en LFW (nunca
+  registradas). Con cada umbral de coseno se cuenta la **FPIR** (desconocidas reconocidas
+  como alguien) y la **FNIR** (registradas que no salen como ellas mismas).
+- Los umbrales de duplicado del servicio se apagan para que nadie quede fuera; lo que
+  habrían bloqueado se cuenta aparte.
+
+![Rostros: reconocer una foto por el API](figures/rostros-servicio-reconocer.png)
+
+| Personas registradas | Registrada p50 / p95 | Desconocida p50 / p95 | Análisis p50 | Galería p50 (registrada / desconocida) |
+|---:|---:|---:|---:|---:|
+| 100 | 22,2 / 23,6 ms | 20,5 / 22,5 ms | 17,1 ms | 4,2 / 2,5 ms |
+| 250 | 33,9 / 93,6 ms | 41,9 / 72,3 ms | 19,7 ms | 9,3 / 13,3 ms |
+| 500 | 40,7 / 87,2 ms | 36,5 / 65,3 ms | 18,2 ms | 16,8 / 10,5 ms |
+| 1 000 | 23,1 / 25,9 ms | 21,6 / 24,5 ms | 17,3 ms | 4,6 / 3,4 ms |
+
+| Registro (1 000 personas) | Peticiones | p50 | p95 | Análisis p50 / p95 | Sesión p50 / p95 | Galería p50 / p95 | Guardar p50 / p95 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| toma aceptada | 1 000 | 27,7 ms | 75,8 ms | 17,2 / 23,7 ms | 5,0 / 25,6 ms | 2,4 / 10,9 ms | 2,0 / 9,7 ms |
+| toma rechazada | 1 336 | 23,2 ms | 56,6 ms | 17,1 / 22,1 ms | 5,1 / 29,1 ms | — | — |
+| terminar el registro | 1 000 | 17,2 ms | 93,5 ms | — | 3,3 / 17,9 ms | 2,0 / 10,3 ms | 10,9 / 62,4 ms |
+
+![Rostros: errores del conjunto abierto en LFW](figures/rostros-servicio-conjunto-abierto.png)
+
+| Umbral | FPIR con 100 / 250 / 500 / 1 000 | FNIR con 100 / 250 / 500 / 1 000 | Duplicados falsos hasta 1 000 personas |
+|---:|---:|---:|---:|
+| 0,363 (OpenCV) | 9 / 18 / 30,5 / **46,5 %** | 7 / 7,5 / 4 / 4 % | 503 de 1 513 (33,2 %) |
+| 0,40 | 3 / 5,5 / 8 / 14,5 % | 7 / 8,5 / 4,5 / 4,5 % | 160 (10,6 %) |
+| **0,45** (servicio) | 1 / 1,5 / 2 / **1,5 %** | 10 / 11 / 7 / **5 %** | 17 (1,1 %) |
+| 0,50 | 0 / 0 / 1 / 0 % | 13 / 14,5 / 10 / 8 % | 4 (0,26 %) |
+| 0,55 | 0 / 0 / 0 / 0 % | 19 / 20 / 16,5 / 17 % | 1 (0,07 %) |
+
+De las 2 336 tomas que se enviaron para registrar a las 1 000 personas se rechazaron 1 336:
+650 por no ser de frente (el plan pedía solo esa pose) y 406 por quedar entre de frente y
+girada, 170 por tener más de un rostro de tamaño parecido, 50 por rostro chico, 20 por
+borrosas, 16 por giro excesivo, 16 por cabeza inclinada, 5 por mirar abajo, 2 sin rostro y 1
+sobreexpuesta. Las medidas de las 2 164 tomas con un solo rostro (percentiles 0,5 / 50 / 99,5)
+son la referencia de los umbrales de calidad: ancho del rostro 76 / 94 / 120 px, gris medio
+74 / 130 / 186, nitidez 34 / 205 / 971, giro −44° / 1° / 35°, cabeceo −18° / 0° / 22°,
+inclinación −13° / −1° / 15°.
+
+### Conclusiones
+
+- **El umbral de verificación no sirve para reconocer.** 0,363 es el punto de OpenCV para
+  comparar dos fotos (1:1); contra una galería, un desconocido tiene N oportunidades de
+  pasarlo y la FPIR crece con N: 9 % con 100 personas y 46,5 % con 1 000. Con 0,45 queda en
+  1 a 2 % en todos los tamaños medidos, a cambio de una FNIR de 5 a 11 % (con 100 a 200
+  consultas por tamaño, cada punto es una o dos consultas). El servicio usa 0,45 para reconocer y para el aviso de «te pareces mucho», y
+  0,50 para decir «ya estás registrado como X»; #92 los calibrará a un FAR fijo.
+- **Los duplicados falsos siguen la misma curva.** Bloquear desde 0,363 habría impedido
+  registrarse a un tercio de las personas mientras la galería crecía a 1 000; desde 0,45, al
+  1,1 %, y decir un nombre equivocado (0,50), al 0,26 %.
+- **Reconocer cuesta lo mismo con 100 que con 1 000 personas** (22 y 23 ms): el análisis de
+  la foto (17 ms, el pipeline de la sección 7) es tres cuartos del total y la galería —el
+  HNSW y el nombre de la persona— de 2 a 5 ms. Una persona registrada cuesta 1 a 2 ms más
+  que una desconocida porque su coseno pasa el umbral y se busca su nombre.
+- **Una toma cuesta 28 ms en la mediana**: 17 de análisis, 5 de leer y contar la sesión en
+  el gestor, 2 de buscar duplicados y 2 de guardar. Terminar el registro, una transacción
+  con cuatro sentencias, 17 ms. El p95 sube a 76 y 94 ms, y lo que más sube son las
+  etapas que escriben en el gestor (`sesion` y `guardar`), no el análisis.
+
+**Lo que esta medida no dice.** El equipo estaba cargado por otros procesos (carga media
+de 17 al empezar): los puntos de 250 y 500 personas lo muestran, con el análisis —que no
+depende de la galería— 2 a 7 ms más lento y la galería varias veces más lenta que con 100 y
+1 000; la tendencia que vale es la de 100 contra 1 000. Esta medida se tomó antes de fijar
+los hilos de FAISS con `--threads`. Las fotos de LFW son de 250 px y de prensa: con fotos de
+celular el análisis sube (sección 7) y las tomas giradas sí entran. La FPIR y la FNIR salen
+de 200 consultas por tamaño: un punto de diferencia es una consulta.
+
 ### Reproducirlo
 
 ```bash
@@ -1603,6 +1688,16 @@ uv run python -m shop.clip models --salida data/models/shop
 
 `--engine-data-dir` tiene que estar vacío (sin él, uno temporal); `--embeddings-dir` reusa una
 caché (sin él, una vacía, y se miden todas las fotos).
+.venv/bin/python -m faces lfw --salida data/datasets/lfw
+.venv/bin/python -m faces models --salida data/models/faces
+.venv/bin/python -m benchmarks.faces_service_benchmark --lfw data/datasets/lfw/lfw \
+    --models data/models/faces --people 1000 --checkpoints 100 250 500 1000 --queries 200 \
+    --thresholds 0.363 0.4 0.45 0.5 0.55
+.venv/bin/python -m benchmarks.plot
+```
+
+Tarda de 6 a 8 minutos. Las FPIR, FNIR, duplicados falsos, rechazos y medidas no dependen
+de la carga del equipo: salieron idénticos en las cuatro ejecuciones que se hicieron.
 
 ## Gráficas
 

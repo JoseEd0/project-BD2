@@ -6,7 +6,8 @@ from dataclasses import dataclass
 from http import HTTPStatus
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Header, Request, Response, UploadFile
+from fastapi import APIRouter, Depends, File, Header, Response, UploadFile
+from starlette.requests import HTTPConnection
 
 from faces.api.enrollments import EnrollmentService
 from faces.api.errors import UNREADABLE_IMAGE, UnreadableImageError, UploadTooLargeError
@@ -21,6 +22,7 @@ from faces.api.models import (
     StartEnrollment,
 )
 from faces.api.people import PeopleService
+from faces.api.realtime.connection import StreamServices
 from faces.consent import ConsentText
 
 MEBIBYTE = 1 << 20
@@ -37,11 +39,12 @@ class FacesServices:
     enrollments: EnrollmentService
     identification: IdentificationService
     people: PeopleService
+    stream: StreamServices
     max_upload_bytes: int
 
 
-def services_of(request: Request) -> FacesServices:
-    services = request.app.state.faces
+def services_of(connection: HTTPConnection) -> FacesServices:
+    services = connection.app.state.faces
     assert isinstance(services, FacesServices)
     return services
 

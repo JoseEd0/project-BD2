@@ -132,6 +132,8 @@ config.local.*
 !benchmarks/figures/*.png
 # Tres fotos de dominio público (NASA) para los tests de rostros; licencia en su README.
 !apps/faces/tests/fixtures/*.jpg
+# Los íconos de instalación de cada PWA (iPhone y Android piden PNG): unos KB cada uno.
+!apps/*/web/public/*.png
 
 # --- Modelos y vectores precomputados ---
 *.npy

@@ -2,13 +2,8 @@
 
 El proyecto tiene \totalpruebas{} pruebas automáticas, que cubren el
 \coberturapruebas{}\,\% de las líneas y ramas del motor, y el código pasa \texttt{ruff} y
-\texttt{mypy} en modo estricto; la integración continua las corre en Python~3.11 y~3.12,
-compila las interfaces y levanta el compose completo. Además de los casos de cada
-estructura (vacía, un elemento, división y fusión de nodos, desbordamiento de página), cada
-índice tiene un validador que recorre la estructura y comprueba sus invariantes, y se
-comparan contra un modelo con miles de operaciones al azar: una lista ordenada, la búsqueda
-por fuerza bruta o la misma consulta sin índice, que debe devolver lo mismo. Las 1\,800
-consultas del experimento espacial devuelven las mismas filas que PostGIS, el índice
-invertido sale idéntico byte a byte con un bloque de SPIMI o con muchos, y los servicios de
-la Parte~5 se prueban contra el API real del gestor. Las pruebas de almacenamiento usan
-páginas de 256 bytes para que con pocos registros ya haya varias páginas.
+\texttt{mypy} en modo estricto; la integración continua las corre en Python~3.11 y~3.12 y
+levanta el compose completo. Además de los casos de cada estructura (vacía, un elemento,
+división y fusión, desbordamiento), cada índice tiene un validador de sus invariantes y se
+compara contra un modelo con miles de operaciones al azar o con la misma consulta sin
+índice. Los servicios de la Parte~5 se prueban contra el API real del gestor.

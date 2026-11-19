@@ -91,6 +91,13 @@ class NoTextEncoder:
         return np.zeros((len(texts), EMBEDDING_DIMENSION), dtype=np.float32)
 
 
+class NoImageEncoder:
+    """Ni la búsqueda con una foto subida: la torre de imagen tampoco se carga."""
+
+    def embed_pixels(self, batch: np.ndarray) -> np.ndarray:
+        return np.zeros((len(batch), EMBEDDING_DIMENSION), dtype=np.float32)
+
+
 def run(arguments: Arguments) -> Report:
     report = Report(REPORT_NAME, _parameters(arguments))
     environment = {
@@ -177,7 +184,9 @@ def _recommendations(
         max_search_limit=ON_THE_FLY_LIMIT,
     )
     redis = redis_factory(arguments.redis_url, settings.redis_timeout_seconds)
-    app = create_app(settings, text_encoder=NoTextEncoder(), redis=redis)
+    app = create_app(
+        settings, text_encoder=NoTextEncoder(), image_encoder=NoImageEncoder(), redis=redis
+    )
     cold: list[float] = []
     warm: list[float] = []
     signals: dict[str, list[float]] = defaultdict(list)

@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, Query, Request, Response
 
 from appkit import BadRequestError, Engine, timed
 from minigestor_client import Point, Record
+from shop.catalog.queries import fetch_products
 from shop.recommend.cache import (
     PRODUCT_ENTITY,
     USER_ENTITY,
@@ -34,7 +35,7 @@ from shop.recommend.recommender import (
 from shop.settings import ShopSettings
 
 from . import models
-from .routes import LATITUDE_LIMIT, LONGITUDE_LIMIT, Settings
+from .routes import ENGINE_STAGE, LATITUDE_LIMIT, LONGITUDE_LIMIT, Settings, search_limit
 
 CACHE_HEADER = "X-Cache"
 CACHE_STAGE = "cache"
@@ -107,6 +108,23 @@ async def user_recommendations(
         return await _recommender(engine, settings).for_user(user_id, request)
 
     return await _cached(cache, entry, compute, user_id, Scope.USER)
+
+
+@router.get("/usuarios/{user_id}/compras")
+async def purchases(
+    user_id: str, engine: Engine, settings: Settings, limite: Limit = None
+) -> list[models.ProductSummary]:
+    """Lo que compró `user_id` en la partición del recomendador, de lo más reciente a lo más
+    antiguo: lo que describe al usuario y lo que sus recomendaciones dejan fuera."""
+    limit = search_limit(limite, settings)
+    history = await user_history(engine, user_id, settings.recommendation_split)
+    with timed(ENGINE_STAGE):
+        products = await fetch_products(engine, history[:limit])
+    return [
+        models.ProductSummary.model_validate(products[product])
+        for product in history[:limit]
+        if product in products
+    ]
 
 
 @router.post("/usuarios/{user_id}/compras", status_code=201)

@@ -3,8 +3,9 @@
     SHOP_ENGINE_URL=http://engine:8000 SHOP_ENGINE_KEY=... SHOP_MODELS_DIR=/models \\
     uvicorn --factory shop.api:create_app --host 0.0.0.0 --port 8000
 
-Al arrancar aplica las migraciones del catálogo (`shop.catalog.schema.SCHEMA`) y carga la
-torre de texto de CLIP; las rutas están en `routes.py`.
+Al arrancar aplica las migraciones del catálogo (`shop.catalog.schema.SCHEMA`) y carga las
+dos torres de CLIP (la de texto para buscar fotos con palabras, la de imagen para buscar con
+una foto); las rutas están en `routes.py`, `photos.py`, `facets.py` y `recommendations.py`.
 """
 
 from __future__ import annotations
@@ -24,10 +25,14 @@ from appkit import (
     redis_factory,
 )
 from shop.catalog.schema import SCHEMA
-from shop.clip import ClipTextEncoder, ClipTokenizer, locate_models
+from shop.clip import ClipImageEncoder, ClipTextEncoder, ClipTokenizer, locate_models
 from shop.recommend.cache import ResponseCache
 from shop.settings import ShopSettings
 
+from .facets import Facets
+from .facets import router as facets_router
+from .photos import PixelEmbedder
+from .photos import router as photos_router
 from .recommendations import router as recommendations_router
 from .routes import TextEmbedder, router
 
@@ -39,12 +44,13 @@ def create_app(
     settings: ShopSettings | None = None,
     *,
     text_encoder: TextEmbedder | None = None,
+    image_encoder: PixelEmbedder | None = None,
     engine_transport: httpx.AsyncBaseTransport | None = None,
     redis: RedisFactory | None = None,
 ) -> FastAPI:
     """La aplicación de la tienda. Sin argumentos lee la configuración del entorno, que es
-    como la arranca uvicorn; `text_encoder`, `engine_transport` y `redis` (otro Redis en lugar
-    del de `SHOP_REDIS_URL`) son para los tests y los benchmarks.
+    como la arranca uvicorn; `text_encoder`, `image_encoder`, `engine_transport` y `redis`
+    (otro Redis en lugar del de `SHOP_REDIS_URL`) son para los tests y los benchmarks.
 
     Raises:
         appkit.SettingsError: si falta o no vale una variable `SHOP_*`.
@@ -57,8 +63,9 @@ def create_app(
     cache = OptionalRedis(redis or _redis_of(settings), settings.cache_retry_seconds)
 
     @asynccontextmanager
-    async def load_text_encoder(app: FastAPI) -> AsyncIterator[None]:
+    async def load_encoders(app: FastAPI) -> AsyncIterator[None]:
         app.state.text_encoder = text_encoder or _clip_text_encoder(configured)
+        app.state.image_encoder = image_encoder or _clip_image_encoder(configured)
         async with cache.connected():
             app.state.cache = ResponseCache(
                 cache, configured.cache_ttl_seconds, _cache_version(configured)
@@ -70,12 +77,15 @@ def create_app(
         name=NAME,
         version=VERSION,
         migrations=SCHEMA,
-        lifespan=load_text_encoder,
+        lifespan=load_encoders,
         engine_transport=engine_transport,
         degradables=[cache],
     )
     app.state.settings = settings
+    app.state.facets = Facets()
     app.include_router(router)
+    app.include_router(photos_router)
+    app.include_router(facets_router)
     app.include_router(recommendations_router)
     return app
 
@@ -97,6 +107,10 @@ def _cache_version(settings: ShopSettings) -> str:
             str(settings.user_profile_products),
         )
     )
+
+
+def _clip_image_encoder(settings: ShopSettings) -> ClipImageEncoder:
+    return ClipImageEncoder(locate_models(settings.models_dir).vision, settings.clip_threads)
 
 
 def _clip_text_encoder(settings: ShopSettings) -> ClipTextEncoder:

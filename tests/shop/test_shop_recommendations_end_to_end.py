@@ -13,7 +13,7 @@ import numpy as np
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from tests.shop.conftest import ENGINE_KEY, ENGINE_URL
+from tests.shop.conftest import ENGINE_KEY, ENGINE_URL, FakeImageEncoder
 
 from appkit import RedisFactory, redis_factory
 from minigestor_client import AsyncClient
@@ -47,6 +47,7 @@ def shop_client(engine_app: FastAPI, tmp_path: Path, redis: RedisFactory) -> Tes
     app = create_app(
         settings,
         text_encoder=AnyTextEncoder(),
+        image_encoder=FakeImageEncoder(),
         engine_transport=httpx.ASGITransport(app=engine_app),
         redis=redis,
     )

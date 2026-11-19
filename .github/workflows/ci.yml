@@ -359,6 +359,17 @@ jobs:
           grep -qi "x-cache: miss" /tmp/primera
           curl --fail --silent --show-error --dump-header /tmp/segunda --output /dev/null "$url"
           grep -qi "x-cache: hit" /tmp/segunda
+      - name: La tienda sirve su propia interfaz, las fotos y la búsqueda con una foto
+        # La guitarra y el pack de iniciación comparten foto: cualquiera de los dos es el primero.
+        run: |
+          curl --fail --silent --show-error "$SHOP_URL/" | grep -q "<title>Cajón"
+          curl --fail --silent --show-error --dump-header /tmp/cabeceras-tienda --output /dev/null "$SHOP_URL/"
+          grep -qi "img-src 'self' data: blob: https://tile.openstreetmap.org" /tmp/cabeceras-tienda
+          grep -qi "geolocation=(self)" /tmp/cabeceras-tienda
+          curl --fail --silent --show-error --output /tmp/guitarra.jpg "$SHOP_URL/api/productos/B000GUITAR/foto"
+          python3 -c "import sys; assert open('/tmp/guitarra.jpg', 'rb').read(2) == b'\xff\xd8'"
+          curl --fail --silent --show-error --form "foto=@/tmp/guitarra.jpg;type=image/jpeg" "$SHOP_URL/api/busqueda/foto?limite=2" \
+            | python3 -c "import json, sys; found = json.load(sys.stdin); assert found[0]['producto']['id'] in ('B000GUITAR', 'B000COPYGT'), found"
       - name: Copyright indexa su catálogo por tramos, una segunda vez sin repetir nada, y lo sirve
         run: |
           docker compose run --rm copyright-seed

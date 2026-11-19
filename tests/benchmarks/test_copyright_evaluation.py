@@ -12,14 +12,20 @@ from benchmarks.remixes.evaluation import (
     PRECISION,
     RECALL,
     ROC,
+    SCORE_KEY,
     SCORES,
+    SIMILARITY_KEY,
+    SONG_KEY,
     UPLOAD_SPAN,
+    WINDOWS_KEY,
     Scoring,
     Upload,
     add_scoring_comparison,
     analyse,
+    compact_match,
     length_bin_label,
     load_uploads,
+    match_of,
     save_uploads,
 )
 from benchmarks.remixes.generator import Span
@@ -140,8 +146,10 @@ def measured(report: Report, technique: str, operation: str) -> dict:
 
 def test_the_analysis_chooses_the_youden_threshold_and_measures_at_it():
     report = Report("prueba", {})
-    chosen = analyse(report, uploads(), THRESHOLDS, 0.5, (5.0, 7.5, 20.0))
+    chosen = analyse(report, uploads(), THRESHOLDS, 0.5, (5.0, 7.5, 20.0), "original")
     assert chosen == 0.75
+    assert report.parameters["umbral_elegido"] == 0.75
+    assert measured(report, "original", ROC)["tpr_elegido"] == 1.0
     assert measured(report, ALL_VERSIONS, ROC)["tpr_elegido"] == 0.5
     assert measured(report, ALL_VERSIONS, ROC)["fpr_elegido"] == 0.0
     assert measured(report, PRECISION, "original")["elegido"] == 1.0
@@ -159,12 +167,12 @@ def test_the_analysis_chooses_the_youden_threshold_and_measures_at_it():
 def test_another_scoring_is_compared_on_the_same_matches():
     report = Report("prueba", {})
     matches = [
-        [{"song": {"id": 1}, "score": 0.2, "windows": 3, **_spans()}],
-        [{"song": {"id": 2}, "score": 0.6, "windows": 1, **_spans()}],
+        [{SONG_KEY: 1, SCORE_KEY: 0.2, WINDOWS_KEY: 3, **_spans()}],
+        [{SONG_KEY: 2, SCORE_KEY: 0.6, WINDOWS_KEY: 1, **_spans()}],
         [],
         [],
     ]
-    by_windows = Scoring("ventanas", lambda match: match["windows"] / 3)
+    by_windows = Scoring("ventanas", lambda match: match[WINDOWS_KEY] / 3)
     add_scoring_comparison(report, uploads(), matches, [by_windows], THRESHOLDS)
     pooled = next(
         item.extra
@@ -176,7 +184,7 @@ def test_another_scoring_is_compared_on_the_same_matches():
 
 
 def test_uploads_survive_the_cases_file(tmp_path: Path):
-    matches = [[{"song": {"id": 1}, "score": 0.9, **_spans()}], [], [], []]
+    matches = [[{SONG_KEY: 1, SCORE_KEY: 0.9, **_spans()}], [], [], []]
     path = save_uploads(tmp_path / "casos.json", uploads(), matches)
     loaded, raw = load_uploads(path)
     assert raw == matches
@@ -184,6 +192,28 @@ def test_uploads_survive_the_cases_file(tmp_path: Path):
     assert loaded[0].case.detected[0].song_id == 1
 
 
+def test_a_match_of_the_service_is_kept_compact_and_read_back():
+    api = {
+        "song": {"id": 7, "title": "t", "artist": "a"},
+        "upload": {"start_seconds": 2.5, "end_seconds": 10.0},
+        "original": {"start_seconds": 5.0, "end_seconds": 12.5},
+        "score": 0.123456,
+        "mean_similarity": 0.98765,
+        "coverage": 0.5,
+        "windows": 2,
+        "offset_seconds": -2.5,
+    }
+    kept = compact_match(api)
+    assert kept == {
+        SONG_KEY: 7,
+        SCORE_KEY: 0.123,
+        SIMILARITY_KEY: 0.988,
+        WINDOWS_KEY: 2,
+        UPLOAD_SPAN: [2.5, 10.0],
+        "original": [5.0, 12.5],
+    }
+    assert match_of(kept) == Detected(7, 0.123, Span(2.5, 10.0), Span(5.0, 12.5))
+
+
 def _spans() -> dict:
-    span = {"start_seconds": 0.0, "end_seconds": 7.5}
-    return {"upload": span, "original": span}
+    return {UPLOAD_SPAN: [0.0, 7.5], "original": [0.0, 7.5]}

@@ -7,6 +7,7 @@ un experimento nuevo solo añade su módulo y lo suma aquí.
 from benchmarks.plots import (
     copyright_catalog,
     copyright_detection,
+    copyright_evaluation,
     faces,
     faces_evaluation,
     faces_service,
@@ -51,6 +52,7 @@ FIGURES: tuple[
     *shop.FIGURES,
     *copyright_catalog.FIGURES,
     *copyright_detection.FIGURES,
+    *copyright_evaluation.FIGURES,
     *rag.FIGURES,
     *shop_recommend.FIGURES,
     *rag_evaluation.FIGURES,

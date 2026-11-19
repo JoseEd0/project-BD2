@@ -126,6 +126,7 @@ docker compose --profile bench down       # apaga PostgreSQL
 | [10. Carga de la tienda](#10-carga-de-la-tienda--el-catálogo-entero-con-sift-y-clip) | tiempo de cada tabla e índice, SIFT vs CLIP, y espacio del catálogo de Amazon en el gestor | [carga](figures/tienda-carga.png) |
 | [11. Servicio de rostros](#11-servicio-de-rostros--registro-reconocimiento-y-conjunto-abierto) | registrar una toma y reconocer por el API según el tamaño de la galería; umbrales de coseno 1:N y duplicados falsos con LFW | [reconocer](figures/rostros-servicio-reconocer.png), [conjunto abierto](figures/rostros-servicio-conjunto-abierto.png) |
 | [12. Catálogo de copyright](#12-catálogo-de-copyright--descargar-cargar-e-indexar-fma-por-tramos) | descargar fma_small por rangos, cargar 83 290 tramos por NDJSON y construir su HNSW, según el tamaño del catálogo; disco del gestor | [catálogo](figures/copyright-catalogo.png) |
+| [13. Ingesta del RAG](#13-ingesta-del-rag--embeddings-e5-en-onnx-y-carga-con-bm25-y-hnsw) | multilingual-e5-small fp32 vs int8 en ONNX por hilos; siembra de 98 585 fragmentos y cada etapa de la carga (NDJSON, índice invertido, HNSW) | [embeddings](figures/rag-embeddings.png), [carga](figures/rag-ingesta.png) |
 
 **Cómo leer las gráficas.** Cada una es una fila de paneles, uno por operación, con el
 número de filas en horizontal y una línea por técnica. Los dos ejes son logarítmicos: los
@@ -1787,6 +1788,66 @@ uv run --no-sync python -m benchmarks.plot
 baja de nuevo), `--threads` las descargas a la vez, `--seed` la muestra de cada tamaño y
 `--workspace` dónde crear los gestores temporales. La medida publicada tardó unos 25 min,
 15 de ellos en la descarga.
+
+## 13. Ingesta del RAG — embeddings e5 en ONNX y carga con BM25 y HNSW
+
+`rag_ingest_benchmark.py` mide la ingesta del RAG sobre papers (#85) en cuatro partes: la
+velocidad de multilingual-e5-small en onnxruntime, **fp32 contra int8**, según los hilos
+(1 000 fragmentos repartidos por el corpus, mediana de 2 pasadas) y cuánto se parecen sus
+vectores; la **siembra del corpus entero** (`rag.seed`, 98 585 fragmentos de 1 495
+documentos) contra un gestor en un uvicorn aparte, dos veces; **cada etapa de la carga** por
+separado con 1 000, 10 000 y 98 585 fragmentos (NDJSON sin índices, `CREATE INDEX` invertido,
+`CREATE INDEX` HNSW, y la carga con los índices diferidos); y diez preguntas a mano, en
+español y en inglés, en los tres modos de búsqueda. Las tablas completas, el espacio en disco
+y las preguntas están en el [README del servicio](../apps/rag/README.md#medidas-de-la-ingesta).
+
+**Dónde corrió.** Apple M4 Pro (12 núcleos), macOS, Python 3.12, onnxruntime 1.32,
+tokenizers 0.23; 8 hilos en la siembra. **Con contención**: otros trabajos pesados corrían
+en la misma máquina (carga media 14,3 al empezar, 5,3 al terminar, picos de 51): los tiempos
+son una cota inferior. Tardó 1 h 0 min.
+
+![Embeddings por segundo según los hilos](figures/rag-embeddings.png)
+![Cada etapa de la carga en el gestor](figures/rag-ingesta.png)
+
+| Medida | Resultado |
+|---|---|
+| embeddings, fp32 / int8, 8 hilos | 39,6 / **45,3** fragmentos/s (4 hilos: 31,2 / 38,0; 1 hilo: 16,5 / 12,8) |
+| int8 contra fp32 | coseno medio 0,994 (mínimo 0,977); 7,3 de 10 vecinos en común |
+| siembra: embeddings (int8, 8 hilos) | 2 565,6 s, **38,4 fragmentos/s**; 12,5 % truncados a 512 tokens |
+| siembra: carga con índices diferidos | 65,0 s |
+| siembra: total / segunda corrida | **43,9 min** / 1,6 s |
+| etapas con 98 585 fragmentos | NDJSON 44,3 s, invertido 17,4 s, HNSW 5,4 s; con los índices diferidos, 67,1 s |
+| en disco | 624 MiB: tabla 354 MiB, invertido 96 MiB, HNSW 159 MiB, claves 12 MiB |
+| búsqueda (cliente) | BM25 5–18 ms, vectorial 11–13 ms, híbrida 13–30 ms |
+
+### Conclusiones
+
+- **El 97 % de la ingesta es calcular embeddings** en CPU; la carga y los dos índices son
+  65 s. La caché por huella del texto hace que volver a sembrar tarde segundos.
+- **int8 es la variante del servicio**: un 14–22 % más rápido con 4 y 8 hilos, cuatro veces
+  más chico y a coseno 0,99 de fp32; con 1 o 2 hilos fp32 gana, y con 12 los dos caen (núcleos
+  de eficiencia y contención). Cambia el orden fino de los vecinos (7 de 10 en común), lo que
+  medirá la evaluación de recuperación (#87).
+- **Diferir los índices cuesta lo mismo que crearlos después** (67,1 s en los dos casos),
+  como en el HNSW de la §9: la migración los declara antes sin pagar de más.
+- **En español, BM25 solo encuentra los dos documentos del curso**; la búsqueda vectorial
+  cruza el idioma y trae el paper en inglés que corresponde.
+
+### Reproducirlo
+
+```bash
+uv run python -m rag.models --salida data/models/rag --variante int8 --variante fp32
+.venv/bin/python -m benchmarks.rag_ingest_benchmark --data-dir data/datasets \
+    --models data/models/rag --engine-dir data/engine-rag --threads 1 2 4 8 12 \
+    --sample 1000 --repetitions 2 --seed-threads 8
+.venv/bin/python -m benchmarks.plot
+```
+
+Necesita el corpus de `python -m rag.corpus build` (ver el README del servicio). La caché de
+embeddings (`--cache-dir`, por omisión la del corpus) tiene que empezar vacía para medir el
+cálculo, y `--engine-dir`, sin las tablas del RAG para medir la carga; el gestor queda
+sembrado al terminar. `--sizes` cambia los tamaños de las etapas y `--search-repetitions`, las
+búsquedas por pregunta.
 
 ## Gráficas
 

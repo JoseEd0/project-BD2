@@ -48,7 +48,7 @@ FIGURES: tuple[BreakdownFigure, ...] = (
                 (
                     StackedBar("al vuelo, compras (secuencial)", ON_THE_FLY_SEQUENTIAL,
                                COPURCHASE_STRATEGY),
-                    StackedBar("al vuelo, historial (hash)", ON_THE_FLY_HISTORY,
+                    StackedBar("al vuelo, historial (B+)", ON_THE_FLY_HISTORY,
                                COPURCHASE_STRATEGY),
                     StackedBar("materializada", MATERIALIZED, COPURCHASE_STRATEGY),
                 ),

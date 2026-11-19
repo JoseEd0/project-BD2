@@ -10,6 +10,7 @@ Además de lo común a todo servicio (`RAG_ENGINE_URL`, `RAG_ENGINE_KEY`,
 | `RAG_EMBEDDING_THREADS` | hilos de onnxruntime | los núcleos de la máquina |
 | `RAG_EMBEDDING_BATCH_SIZE` | secuencias por llamada al modelo | `32` |
 | `RAG_DATA_DIR` | carpeta de datasets con `rag_papers/` (solo la ingesta) | ninguna |
+| `RAG_EMBEDDING_CACHE_DIR` | caché de embeddings (solo la ingesta) | `rag_papers/embeddings` |
 """
 
 from __future__ import annotations
@@ -37,6 +38,7 @@ class RagSettings(ServiceSettings):
     embedding_threads: int = Field(default=EmbedderSettings().threads, ge=1)
     embedding_batch_size: int = Field(default=DEFAULT_BATCH_SIZE, ge=1)
     data_dir: Path | None = None
+    embedding_cache_dir: Path | None = None
 
     def embedder(self) -> EmbedderSettings:
         return EmbedderSettings(

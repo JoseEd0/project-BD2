@@ -4,7 +4,8 @@
     RAG_MODELS_DIR=data/models/rag uv run python -m rag.seed --data-dir data/datasets
 
 Lee `<data-dir>/rag_papers/` (lo que deja `python -m rag.corpus build`), guarda los
-embeddings en `<data-dir>/rag_papers/embeddings/` (o en `--cache-dir`) y carga
+embeddings en `<data-dir>/rag_papers/embeddings/` (o en `--cache-dir` o
+`RAG_EMBEDDING_CACHE_DIR`) y carga
 `rag_papers` y `rag_chunks`. Es repetible: una segunda corrida no calcula ni carga nada,
 y una cortada sigue donde quedó. `--report` deja los conteos y tiempos en un JSON.
 """
@@ -129,7 +130,9 @@ def main(arguments: list[str] | None = None) -> None:
     if data_directory is None:
         parser.exit(1, "error: falta --data-dir o RAG_DATA_DIR\n")
     corpus = CorpusPaths(data_directory / CORPUS_DIRECTORY)
-    cache_directory = options.cache_dir or corpus.root / CACHE_DIRECTORY
+    cache_directory = (
+        options.cache_dir or settings.embedding_cache_dir or corpus.root / CACHE_DIRECTORY
+    )
     try:
         report = asyncio.run(
             seed(settings, corpus, cache_directory, lambda: load_embedder(settings))

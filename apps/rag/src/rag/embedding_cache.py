@@ -14,6 +14,8 @@ archivos que solo crecen:
 
 Se escriben primero los vectores y después las huellas, con `fsync` en cada lote: si el
 proceso muere entre las dos escrituras, al abrir sobran vectores sin huella, y se recortan.
+Una caché completa se puede abrir en una carpeta de solo lectura (la del corpus montada en
+un contenedor): abrirla y leerla no escribe nada.
 """
 
 from __future__ import annotations
@@ -42,7 +44,8 @@ class EmbeddingCache:
 
     def __init__(self, directory: Path, model_id: str) -> None:
         self._directory = directory / _safe_name(model_id)
-        self._directory.mkdir(parents=True, exist_ok=True)
+        if not self._directory.is_dir():
+            self._directory.mkdir(parents=True)
         self._vectors_path = self._directory / VECTORS_FILENAME
         self._keys_path = self._directory / KEYS_FILENAME
         self._positions = _recovered_positions(self._vectors_path, self._keys_path)
@@ -104,14 +107,18 @@ def _safe_name(model_id: str) -> str:
 def _recovered_positions(vectors_path: Path, keys_path: Path) -> dict[str, int]:
     """Las huellas guardadas con su fila; recorta lo que dejó a medias un proceso muerto."""
     keys = _complete_lines(keys_path)
-    stored_vectors = vectors_path.stat().st_size // VECTOR_BYTES if vectors_path.exists() else 0
+    stored_vectors = _size_of(vectors_path) // VECTOR_BYTES
     complete = min(len(keys), stored_vectors)
-    if vectors_path.exists():
+    if _size_of(vectors_path) != complete * VECTOR_BYTES:
         os.truncate(vectors_path, complete * VECTOR_BYTES)
     kept = "".join(key + "\n" for key in keys[:complete]).encode(ENCODING)
     if keys_path.exists() and keys_path.stat().st_size != len(kept):
         keys_path.write_bytes(kept)
     return {key: row for row, key in enumerate(keys[:complete])}
+
+
+def _size_of(path: Path) -> int:
+    return path.stat().st_size if path.exists() else 0
 
 
 def _complete_lines(path: Path) -> list[str]:

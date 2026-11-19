@@ -222,7 +222,7 @@ persona más parecida:
 En los dos primeros casos la sesión y sus tomas se borran: no hay nada más que hacer con
 ellas. Una persona vencida que aún no se borró no cuenta. Todos los umbrales son
 configuración; la evaluación con LFW que los calibra está en
-[`benchmarks/README.md`](../../benchmarks/README.md#16-rostros-en-lfw--verificación-identificación-latencia-y-caché).
+[`benchmarks/README.md`](../../benchmarks/README.md#18-rostros-en-lfw--verificación-identificación-latencia-y-caché).
 
 **Dos registros que terminan a la vez.** La búsqueda de duplicados de `finish` corre dentro
 de la transacción que crea a la persona, después de borrar la sesión: ese `DELETE` bloquea
@@ -543,7 +543,7 @@ y [`faces_cache_benchmark.py`](../../benchmarks/faces_cache_benchmark.py): las 1
 de LFW con el pipeline del servicio, tomando el rostro más cercano al centro. Resultados
 crudos en [`rostros_evaluacion.json`](../../benchmarks/results/rostros_evaluacion.json) y
 [`rostros_cache.json`](../../benchmarks/results/rostros_cache.json); análisis en
-[`benchmarks/README.md`](../../benchmarks/README.md#16-rostros-en-lfw--verificación-identificación-latencia-y-caché).
+[`benchmarks/README.md`](../../benchmarks/README.md#18-rostros-en-lfw--verificación-identificación-latencia-y-caché).
 
 ![Verificación con los pares de LFW](../../benchmarks/figures/rostros-evaluacion-verificacion.png)
 

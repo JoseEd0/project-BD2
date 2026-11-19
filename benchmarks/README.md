@@ -140,7 +140,7 @@ docker compose --profile bench down       # apaga PostgreSQL
 | [13. Ingesta del RAG](#13-ingesta-del-rag--embeddings-e5-en-onnx-y-carga-con-bm25-y-hnsw) | multilingual-e5-small fp32 vs int8 en ONNX por hilos; siembra de 98 585 fragmentos y cada etapa de la carga (NDJSON, índice invertido, HNSW) | [embeddings](figures/rag-embeddings.png), [carga](figures/rag-ingesta.png) |
 | [14. Detección de copyright](#14-detección-de-copyright--latencia-de-post-detections-y-casos-de-control) | latencia de `POST /detections` por duración de la subida y sus etapas; puntajes de copias enteras, tramos de 15 y 7,5 s y pistas no catalogadas frente al umbral | [latencia](figures/copyright-deteccion.png), [etapas](figures/copyright-deteccion-etapas.png), [puntajes](figures/copyright-deteccion-puntajes.png) |
 | [15. Rostros en vivo](#15-rostros-en-vivo--latencia-por-cuadro-por-websocket) | un cuadro de punta a punta por WebSocket, por el nginx o directo a la API, con y sin la caché de rastros en Redis, con cada etapa | [en vivo](figures/rostros-tiempo-real.png) |
-| [16. Rostros en LFW](#16-rostros-en-lfw--verificación-identificación-latencia-y-caché) | verificación con el protocolo de LFW (exactitud por pliegues, TAR a FAR fijo, ROC) y umbrales calibrados; identificación en el gestor, HNSW vs búsqueda exacta; p99 de cada etapa; aciertos de la caché de rastros según la velocidad del rostro | [verificación](figures/rostros-evaluacion-verificacion.png), [identificación](figures/rostros-evaluacion-identificacion.png), [latencia](figures/rostros-evaluacion-latencia.png), [caché](figures/rostros-cache.png) |
+| [18. Rostros en LFW](#18-rostros-en-lfw--verificación-identificación-latencia-y-caché) | verificación con el protocolo de LFW (exactitud por pliegues, TAR a FAR fijo, ROC) y umbrales calibrados; identificación en el gestor, HNSW vs búsqueda exacta; p99 de cada etapa; aciertos de la caché de rastros según la velocidad del rostro | [verificación](figures/rostros-evaluacion-verificacion.png), [identificación](figures/rostros-evaluacion-identificacion.png), [latencia](figures/rostros-evaluacion-latencia.png), [caché](figures/rostros-cache.png) |
 
 **Cómo leer las gráficas.** Cada una es una fila de paneles, uno por operación, con el
 número de filas en horizontal y una línea por técnica. Los dos ejes son logarítmicos: los
@@ -1320,7 +1320,7 @@ foto por foto, con un hilo de OpenCV:
 con otros procesos en el equipo); con más hilos OpenCV reparte la red, y en el servidor de
 Docker la cifra será otra. Las fotos ampliadas no tienen más detalle que la original de
 250 px: miden el costo de su tamaño, no la precisión con fotos grandes. La exactitud de la
-verificación con los pares de LFW y el umbral del conjunto abierto se miden en la sección 16.
+verificación con los pares de LFW y el umbral del conjunto abierto se miden en la sección 18.
 
 ## 8. Tramos de audio y consulta por segmentos
 
@@ -1674,7 +1674,7 @@ inclinación −13° / −1° / 15°.
   1 a 2 % en todos los tamaños medidos, a cambio de una FNIR de 5 a 11 % (con 100 a 200
   consultas por tamaño, cada punto es una o dos consultas). El servicio usaba 0,45 para
   reconocer y para el aviso de «te pareces mucho», y 0,50 para decir «ya estás registrado
-  como X»; la sección 16 los calibró a un FAR fijo y subió los dos primeros a 0,47.
+  como X»; la sección 18 los calibró a un FAR fijo y subió los dos primeros a 0,47.
 - **Los duplicados falsos siguen la misma curva.** Bloquear desde 0,363 habría impedido
   registrarse a un tercio de las personas mientras la galería crecía a 1 000; desde 0,45, al
   1,1 %, y decir un nombre equivocado (0,50), al 0,26 %.
@@ -2019,7 +2019,7 @@ celular se suma su ida y vuelta, y por el túnel, la de Internet. El máximo de 
 camino directo con caché es un solo cuadro, con el equipo cargado. La contrapresión no se
 ve aquí porque el cliente espera cada respuesta; la prueba con un productor rápido está en
 [`test_faces_realtime_connection.py`](../apps/faces/tests/test_faces_realtime_connection.py).
-El efecto de la caché según cuánto se mueve el rostro está en la sección 16.
+El efecto de la caché según cuánto se mueve el rostro está en la sección 18.
 
 ### Reproducirlo
 
@@ -2042,7 +2042,7 @@ pide el plan de registro de dos tomas de frente (las fotos de prueba no tienen o
 pone otro nombre a las imágenes para no reemplazar las del despliegue de siempre. Tarda unos
 dos minutos más la construcción de las imágenes.
 
-## 16. Rostros en LFW — verificación, identificación, latencia y caché
+## 18. Rostros en LFW — verificación, identificación, latencia y caché
 
 `faces_evaluation_benchmark.py` califica el reconocedor del servicio de rostros
 ([`apps/faces`](../apps/faces/README.md), #92) con LFW: describe las 13 233 fotos con el

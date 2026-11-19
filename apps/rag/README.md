@@ -383,7 +383,7 @@ corpus diminuto de los tests (`tests/fixtures/datasets/`) y busca por `:8103` en
 
 # Medidas de la ingesta
 
-`benchmarks/rag_ingest_benchmark.py` (ver [`benchmarks/README.md` §12](../../benchmarks/README.md#12-ingesta-del-rag--embeddings-e5-en-onnx-y-carga-con-bm25-y-hnsw)),
+`benchmarks/rag_ingest_benchmark.py` (ver [`benchmarks/README.md` §13](../../benchmarks/README.md#13-ingesta-del-rag--embeddings-e5-en-onnx-y-carga-con-bm25-y-hnsw)),
 el 18 de noviembre de 2026, en un Apple M4 Pro (12 núcleos: 8 de rendimiento y 4 de
 eficiencia), con el gestor en un **uvicorn aparte** (`app_from_environment`, como en Docker)
 sobre `data/engine-rag/` y claves `write` y `admin`. Los JSON crudos están en

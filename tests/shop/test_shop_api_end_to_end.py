@@ -3,7 +3,6 @@ búsqueda de texto, fotos por texto con CLIP y tiendas cercanas."""
 
 from __future__ import annotations
 
-import asyncio
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -14,13 +13,10 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from tests.shop.conftest import ENGINE_KEY, ENGINE_URL, FakeImageEncoder
 
-from minigestor_client import AsyncClient
 from shop.api import create_app
 from shop.catalog.rows import DatasetPaths, product_images
 from shop.clip import load_image, pixel_values
 from shop.clip.encoder import Embeddings
-from shop.seed import run_seed
-from shop.seed.job import EncoderLoader
 from shop.settings import SeedSettings, ShopSettings
 
 MAX_RESULTS = 3
@@ -38,16 +34,6 @@ class PhotoTextEncoder:
     def embed(self, texts: list[str]) -> Embeddings:
         self.texts.extend(texts)
         return np.stack([self.vector for _ in texts])
-
-
-@pytest.fixture
-def seeded(engine_app: FastAPI, seed_settings: SeedSettings, load_encoder: EncoderLoader) -> None:
-    async def seed() -> None:
-        transport = httpx.ASGITransport(app=engine_app)
-        async with AsyncClient(ENGINE_URL, ENGINE_KEY, transport=transport) as engine:
-            await run_seed(engine, seed_settings, load_encoder)
-
-    asyncio.run(seed())
 
 
 @pytest.fixture

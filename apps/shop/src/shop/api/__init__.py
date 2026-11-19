@@ -14,12 +14,15 @@ from contextlib import asynccontextmanager
 
 import httpx
 from fastapi import FastAPI
+from redis.asyncio import Redis
 
 from appkit import configure_logging, create_service_app, load_settings
 from shop.catalog.schema import SCHEMA
 from shop.clip import ClipTextEncoder, ClipTokenizer, locate_models
+from shop.recommend.cache import ResponseCache, redis_client
 from shop.settings import ShopSettings
 
+from .recommendations import router as recommendations_router
 from .routes import TextEmbedder, router
 
 NAME = "shop"
@@ -31,9 +34,11 @@ def create_app(
     *,
     text_encoder: TextEmbedder | None = None,
     engine_transport: httpx.AsyncBaseTransport | None = None,
+    cache_client: Redis | None = None,
 ) -> FastAPI:
     """La aplicación de la tienda. Sin argumentos lee la configuración del entorno, que es
-    como la arranca uvicorn; `text_encoder` y `engine_transport` son para los tests.
+    como la arranca uvicorn; `text_encoder`, `engine_transport` y `cache_client` (un Redis en
+    lugar del de `SHOP_REDIS_URL`) son para los tests.
 
     Raises:
         appkit.SettingsError: si falta o no vale una variable `SHOP_*`.
@@ -47,7 +52,18 @@ def create_app(
     @asynccontextmanager
     async def load_text_encoder(app: FastAPI) -> AsyncIterator[None]:
         app.state.text_encoder = text_encoder or _clip_text_encoder(configured)
-        yield
+        redis = cache_client or _redis(configured)
+        app.state.cache = ResponseCache(
+            redis,
+            configured.cache_ttl_seconds,
+            _cache_version(configured),
+            configured.cache_retry_seconds,
+        )
+        try:
+            yield
+        finally:
+            if redis is not None and cache_client is None:
+                await redis.aclose()
 
     app = create_service_app(
         settings,
@@ -59,7 +75,27 @@ def create_app(
     )
     app.state.settings = settings
     app.include_router(router)
+    app.include_router(recommendations_router)
     return app
+
+
+def _redis(settings: ShopSettings) -> Redis | None:
+    if settings.redis_url is None:
+        return None
+    return redis_client(str(settings.redis_url), settings.redis_timeout_seconds)
+
+
+def _cache_version(settings: ShopSettings) -> str:
+    """Los pesos y lo demás que cambia una recomendación: con otra configuración, otras
+    claves."""
+    return "-".join(
+        (
+            settings.fusion_weights().version(),
+            settings.recommendation_split,
+            str(settings.candidates_per_signal),
+            str(settings.user_profile_products),
+        )
+    )
 
 
 def _clip_text_encoder(settings: ShopSettings) -> ClipTextEncoder:

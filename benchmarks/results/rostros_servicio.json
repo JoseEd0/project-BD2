@@ -1,0 +1,855 @@
+{
+  "name": "rostros_servicio",
+  "parameters": {
+    "personas": 1000,
+    "personas_con_dos_fotos": 1680,
+    "personas_con_una_foto": 4069,
+    "tamanos": [
+      100,
+      250,
+      500,
+      1000
+    ],
+    "consultas": 200,
+    "umbrales": [
+      0.363,
+      0.4,
+      0.45,
+      0.5,
+      0.55
+    ],
+    "semilla": 20261118,
+    "hilos_opencv": 1,
+    "ancho_minimo_rostro": 80.0,
+    "nitidez_minima": 40.0,
+    "equipo": {
+      "procesador": "Apple M4 Pro",
+      "nucleos": 12,
+      "sistema": "macOS-27.0.1-arm64-arm-64bit",
+      "python": "3.12.11",
+      "carga_media_1_min": 17.23
+    }
+  },
+  "measurements": [
+    {
+      "technique": "persona registrada",
+      "operation": "reconocer",
+      "dataset_size": 100,
+      "milliseconds": 22.179,
+      "extra": {
+        "p95_ms": 23.6,
+        "consultas": 100,
+        "analisis_p50_ms": 17.072,
+        "analisis_p95_ms": 17.441,
+        "sesion_p50_ms": 0.0,
+        "sesion_p95_ms": 0.0,
+        "galeria_p50_ms": 4.168,
+        "galeria_p95_ms": 5.029,
+        "guardar_p50_ms": 0.0,
+        "guardar_p95_ms": 0.0,
+        "total_p50_ms": 22.179,
+        "total_p95_ms": 23.6
+      }
+    },
+    {
+      "technique": "desconocida",
+      "operation": "reconocer",
+      "dataset_size": 100,
+      "milliseconds": 20.488,
+      "extra": {
+        "p95_ms": 22.472,
+        "consultas": 200,
+        "analisis_p50_ms": 17.047,
+        "analisis_p95_ms": 17.434,
+        "sesion_p50_ms": 0.0,
+        "sesion_p95_ms": 0.0,
+        "galeria_p50_ms": 2.491,
+        "galeria_p95_ms": 4.37,
+        "guardar_p50_ms": 0.0,
+        "guardar_p95_ms": 0.0,
+        "total_p50_ms": 20.488,
+        "total_p95_ms": 22.472
+      }
+    },
+    {
+      "technique": "umbral 0.363",
+      "operation": "conjunto abierto",
+      "dataset_size": 100,
+      "milliseconds": 0.0,
+      "extra": {
+        "fnir": 0.07,
+        "fpir": 0.09,
+        "registradas": 100,
+        "desconocidas": 200
+      }
+    },
+    {
+      "technique": "umbral 0.4",
+      "operation": "conjunto abierto",
+      "dataset_size": 100,
+      "milliseconds": 0.0,
+      "extra": {
+        "fnir": 0.07,
+        "fpir": 0.03,
+        "registradas": 100,
+        "desconocidas": 200
+      }
+    },
+    {
+      "technique": "umbral 0.45",
+      "operation": "conjunto abierto",
+      "dataset_size": 100,
+      "milliseconds": 0.0,
+      "extra": {
+        "fnir": 0.1,
+        "fpir": 0.01,
+        "registradas": 100,
+        "desconocidas": 200
+      }
+    },
+    {
+      "technique": "umbral 0.5",
+      "operation": "conjunto abierto",
+      "dataset_size": 100,
+      "milliseconds": 0.0,
+      "extra": {
+        "fnir": 0.13,
+        "fpir": 0.0,
+        "registradas": 100,
+        "desconocidas": 200
+      }
+    },
+    {
+      "technique": "umbral 0.55",
+      "operation": "conjunto abierto",
+      "dataset_size": 100,
+      "milliseconds": 0.0,
+      "extra": {
+        "fnir": 0.19,
+        "fpir": 0.0,
+        "registradas": 100,
+        "desconocidas": 200
+      }
+    },
+    {
+      "technique": "persona registrada",
+      "operation": "reconocer",
+      "dataset_size": 250,
+      "milliseconds": 33.903,
+      "extra": {
+        "p95_ms": 93.589,
+        "consultas": 200,
+        "analisis_p50_ms": 19.694,
+        "analisis_p95_ms": 35.124,
+        "sesion_p50_ms": 0.0,
+        "sesion_p95_ms": 0.0,
+        "galeria_p50_ms": 9.261,
+        "galeria_p95_ms": 46.53,
+        "guardar_p50_ms": 0.0,
+        "guardar_p95_ms": 0.0,
+        "total_p50_ms": 33.903,
+        "total_p95_ms": 93.589
+      }
+    },
+    {
+      "technique": "desconocida",
+      "operation": "reconocer",
+      "dataset_size": 250,
+      "milliseconds": 41.92,
+      "extra": {
+        "p95_ms": 72.331,
+        "consultas": 200,
+        "analisis_p50_ms": 24.081,
+        "analisis_p95_ms": 41.073,
+        "sesion_p50_ms": 0.0,
+        "sesion_p95_ms": 0.0,
+        "galeria_p50_ms": 13.34,
+        "galeria_p95_ms": 33.751,
+        "guardar_p50_ms": 0.0,
+        "guardar_p95_ms": 0.0,
+        "total_p50_ms": 41.92,
+        "total_p95_ms": 72.331
+      }
+    },
+    {
+      "technique": "umbral 0.363",
+      "operation": "conjunto abierto",
+      "dataset_size": 250,
+      "milliseconds": 0.0,
+      "extra": {
+        "fnir": 0.075,
+        "fpir": 0.18,
+        "registradas": 200,
+        "desconocidas": 200
+      }
+    },
+    {
+      "technique": "umbral 0.4",
+      "operation": "conjunto abierto",
+      "dataset_size": 250,
+      "milliseconds": 0.0,
+      "extra": {
+        "fnir": 0.085,
+        "fpir": 0.055,
+        "registradas": 200,
+        "desconocidas": 200
+      }
+    },
+    {
+      "technique": "umbral 0.45",
+      "operation": "conjunto abierto",
+      "dataset_size": 250,
+      "milliseconds": 0.0,
+      "extra": {
+        "fnir": 0.11,
+        "fpir": 0.015,
+        "registradas": 200,
+        "desconocidas": 200
+      }
+    },
+    {
+      "technique": "umbral 0.5",
+      "operation": "conjunto abierto",
+      "dataset_size": 250,
+      "milliseconds": 0.0,
+      "extra": {
+        "fnir": 0.145,
+        "fpir": 0.0,
+        "registradas": 200,
+        "desconocidas": 200
+      }
+    },
+    {
+      "technique": "umbral 0.55",
+      "operation": "conjunto abierto",
+      "dataset_size": 250,
+      "milliseconds": 0.0,
+      "extra": {
+        "fnir": 0.2,
+        "fpir": 0.0,
+        "registradas": 200,
+        "desconocidas": 200
+      }
+    },
+    {
+      "technique": "persona registrada",
+      "operation": "reconocer",
+      "dataset_size": 500,
+      "milliseconds": 40.743,
+      "extra": {
+        "p95_ms": 87.161,
+        "consultas": 200,
+        "analisis_p50_ms": 18.214,
+        "analisis_p95_ms": 26.173,
+        "sesion_p50_ms": 0.0,
+        "sesion_p95_ms": 0.0,
+        "galeria_p50_ms": 16.847,
+        "galeria_p95_ms": 56.645,
+        "guardar_p50_ms": 0.0,
+        "guardar_p95_ms": 0.0,
+        "total_p50_ms": 40.743,
+        "total_p95_ms": 87.161
+      }
+    },
+    {
+      "technique": "desconocida",
+      "operation": "reconocer",
+      "dataset_size": 500,
+      "milliseconds": 36.538,
+      "extra": {
+        "p95_ms": 65.307,
+        "consultas": 200,
+        "analisis_p50_ms": 20.37,
+        "analisis_p95_ms": 45.255,
+        "sesion_p50_ms": 0.0,
+        "sesion_p95_ms": 0.0,
+        "galeria_p50_ms": 10.477,
+        "galeria_p95_ms": 27.261,
+        "guardar_p50_ms": 0.0,
+        "guardar_p95_ms": 0.0,
+        "total_p50_ms": 36.538,
+        "total_p95_ms": 65.307
+      }
+    },
+    {
+      "technique": "umbral 0.363",
+      "operation": "conjunto abierto",
+      "dataset_size": 500,
+      "milliseconds": 0.0,
+      "extra": {
+        "fnir": 0.04,
+        "fpir": 0.305,
+        "registradas": 200,
+        "desconocidas": 200
+      }
+    },
+    {
+      "technique": "umbral 0.4",
+      "operation": "conjunto abierto",
+      "dataset_size": 500,
+      "milliseconds": 0.0,
+      "extra": {
+        "fnir": 0.045,
+        "fpir": 0.08,
+        "registradas": 200,
+        "desconocidas": 200
+      }
+    },
+    {
+      "technique": "umbral 0.45",
+      "operation": "conjunto abierto",
+      "dataset_size": 500,
+      "milliseconds": 0.0,
+      "extra": {
+        "fnir": 0.07,
+        "fpir": 0.02,
+        "registradas": 200,
+        "desconocidas": 200
+      }
+    },
+    {
+      "technique": "umbral 0.5",
+      "operation": "conjunto abierto",
+      "dataset_size": 500,
+      "milliseconds": 0.0,
+      "extra": {
+        "fnir": 0.1,
+        "fpir": 0.01,
+        "registradas": 200,
+        "desconocidas": 200
+      }
+    },
+    {
+      "technique": "umbral 0.55",
+      "operation": "conjunto abierto",
+      "dataset_size": 500,
+      "milliseconds": 0.0,
+      "extra": {
+        "fnir": 0.165,
+        "fpir": 0.0,
+        "registradas": 200,
+        "desconocidas": 200
+      }
+    },
+    {
+      "technique": "persona registrada",
+      "operation": "reconocer",
+      "dataset_size": 1000,
+      "milliseconds": 23.098,
+      "extra": {
+        "p95_ms": 25.867,
+        "consultas": 200,
+        "analisis_p50_ms": 17.278,
+        "analisis_p95_ms": 18.928,
+        "sesion_p50_ms": 0.0,
+        "sesion_p95_ms": 0.0,
+        "galeria_p50_ms": 4.556,
+        "galeria_p95_ms": 6.405,
+        "guardar_p50_ms": 0.0,
+        "guardar_p95_ms": 0.0,
+        "total_p50_ms": 23.098,
+        "total_p95_ms": 25.867
+      }
+    },
+    {
+      "technique": "desconocida",
+      "operation": "reconocer",
+      "dataset_size": 1000,
+      "milliseconds": 21.597,
+      "extra": {
+        "p95_ms": 24.461,
+        "consultas": 200,
+        "analisis_p50_ms": 17.068,
+        "analisis_p95_ms": 18.88,
+        "sesion_p50_ms": 0.0,
+        "sesion_p95_ms": 0.0,
+        "galeria_p50_ms": 3.428,
+        "galeria_p95_ms": 5.44,
+        "guardar_p50_ms": 0.0,
+        "guardar_p95_ms": 0.0,
+        "total_p50_ms": 21.597,
+        "total_p95_ms": 24.461
+      }
+    },
+    {
+      "technique": "umbral 0.363",
+      "operation": "conjunto abierto",
+      "dataset_size": 1000,
+      "milliseconds": 0.0,
+      "extra": {
+        "fnir": 0.04,
+        "fpir": 0.465,
+        "registradas": 200,
+        "desconocidas": 200
+      }
+    },
+    {
+      "technique": "umbral 0.4",
+      "operation": "conjunto abierto",
+      "dataset_size": 1000,
+      "milliseconds": 0.0,
+      "extra": {
+        "fnir": 0.045,
+        "fpir": 0.145,
+        "registradas": 200,
+        "desconocidas": 200
+      }
+    },
+    {
+      "technique": "umbral 0.45",
+      "operation": "conjunto abierto",
+      "dataset_size": 1000,
+      "milliseconds": 0.0,
+      "extra": {
+        "fnir": 0.05,
+        "fpir": 0.015,
+        "registradas": 200,
+        "desconocidas": 200
+      }
+    },
+    {
+      "technique": "umbral 0.5",
+      "operation": "conjunto abierto",
+      "dataset_size": 1000,
+      "milliseconds": 0.0,
+      "extra": {
+        "fnir": 0.08,
+        "fpir": 0.0,
+        "registradas": 200,
+        "desconocidas": 200
+      }
+    },
+    {
+      "technique": "umbral 0.55",
+      "operation": "conjunto abierto",
+      "dataset_size": 1000,
+      "milliseconds": 0.0,
+      "extra": {
+        "fnir": 0.17,
+        "fpir": 0.0,
+        "registradas": 200,
+        "desconocidas": 200
+      }
+    },
+    {
+      "technique": "toma aceptada",
+      "operation": "registrar una toma",
+      "dataset_size": 1000,
+      "milliseconds": 27.723,
+      "extra": {
+        "p95_ms": 75.777,
+        "consultas": 1000,
+        "analisis_p50_ms": 17.21,
+        "analisis_p95_ms": 23.684,
+        "sesion_p50_ms": 4.988,
+        "sesion_p95_ms": 25.607,
+        "galeria_p50_ms": 2.396,
+        "galeria_p95_ms": 10.883,
+        "guardar_p50_ms": 1.951,
+        "guardar_p95_ms": 9.721,
+        "total_p50_ms": 27.723,
+        "total_p95_ms": 75.777
+      }
+    },
+    {
+      "technique": "toma rechazada",
+      "operation": "registrar una toma",
+      "dataset_size": 1000,
+      "milliseconds": 23.192,
+      "extra": {
+        "p95_ms": 56.571,
+        "consultas": 1336,
+        "analisis_p50_ms": 17.087,
+        "analisis_p95_ms": 22.075,
+        "sesion_p50_ms": 5.054,
+        "sesion_p95_ms": 29.079,
+        "galeria_p50_ms": 0.0,
+        "galeria_p95_ms": 0.0,
+        "guardar_p50_ms": 0.0,
+        "guardar_p95_ms": 0.0,
+        "total_p50_ms": 23.192,
+        "total_p95_ms": 56.571
+      }
+    },
+    {
+      "technique": "persona registrada",
+      "operation": "terminar el registro",
+      "dataset_size": 1000,
+      "milliseconds": 17.228,
+      "extra": {
+        "p95_ms": 93.482,
+        "consultas": 1000,
+        "analisis_p50_ms": 0.0,
+        "analisis_p95_ms": 0.0,
+        "sesion_p50_ms": 3.338,
+        "sesion_p95_ms": 17.861,
+        "galeria_p50_ms": 1.99,
+        "galeria_p95_ms": 10.285,
+        "guardar_p50_ms": 10.936,
+        "guardar_p95_ms": 62.429,
+        "total_p50_ms": 17.228,
+        "total_p95_ms": 93.482
+      }
+    },
+    {
+      "technique": "LFW",
+      "operation": "rechazos de calidad",
+      "dataset_size": 1000,
+      "milliseconds": 0.0,
+      "extra": {
+        "tomas": 2336,
+        "rechazadas": 1336,
+        "pose_unclear": 406,
+        "pose_not_in_plan": 650,
+        "face_too_small": 50,
+        "multiple_faces": 170,
+        "head_tilted": 16,
+        "looking_down": 5,
+        "turned_too_far": 16,
+        "blurry": 20,
+        "overexposed": 1,
+        "no_face": 2
+      }
+    },
+    {
+      "technique": "face_width",
+      "operation": "medidas de las tomas",
+      "dataset_size": 2164,
+      "milliseconds": 0.0,
+      "extra": {
+        "p0.5": 75.532,
+        "p1": 77.466,
+        "p5": 82.438,
+        "p50": 94.256,
+        "p95": 107.836,
+        "p99": 116.109,
+        "p99.5": 120.152
+      }
+    },
+    {
+      "technique": "outside_fraction",
+      "operation": "medidas de las tomas",
+      "dataset_size": 2164,
+      "milliseconds": 0.0,
+      "extra": {
+        "p0.5": 0.0,
+        "p1": 0.0,
+        "p5": 0.0,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "p99.5": 0.0
+      }
+    },
+    {
+      "technique": "brightness",
+      "operation": "medidas de las tomas",
+      "dataset_size": 2164,
+      "milliseconds": 0.0,
+      "extra": {
+        "p0.5": 73.576,
+        "p1": 77.862,
+        "p5": 94.595,
+        "p50": 129.904,
+        "p95": 165.594,
+        "p99": 181.959,
+        "p99.5": 185.963
+      }
+    },
+    {
+      "technique": "overexposed_fraction",
+      "operation": "medidas de las tomas",
+      "dataset_size": 2164,
+      "milliseconds": 0.0,
+      "extra": {
+        "p0.5": 0.0,
+        "p1": 0.0,
+        "p5": 0.0,
+        "p50": 0.0,
+        "p95": 0.001,
+        "p99": 0.018,
+        "p99.5": 0.032
+      }
+    },
+    {
+      "technique": "sharpness",
+      "operation": "medidas de las tomas",
+      "dataset_size": 2164,
+      "milliseconds": 0.0,
+      "extra": {
+        "p0.5": 33.571,
+        "p1": 41.861,
+        "p5": 75.052,
+        "p50": 205.109,
+        "p95": 532.199,
+        "p99": 803.56,
+        "p99.5": 971.477
+      }
+    },
+    {
+      "technique": "yaw",
+      "operation": "medidas de las tomas",
+      "dataset_size": 2164,
+      "milliseconds": 0.0,
+      "extra": {
+        "p0.5": -43.755,
+        "p1": -37.554,
+        "p5": -23.907,
+        "p50": 1.159,
+        "p95": 24.045,
+        "p99": 33.023,
+        "p99.5": 34.986
+      }
+    },
+    {
+      "technique": "pitch",
+      "operation": "medidas de las tomas",
+      "dataset_size": 2164,
+      "milliseconds": 0.0,
+      "extra": {
+        "p0.5": -17.973,
+        "p1": -16.449,
+        "p5": -12.35,
+        "p50": 0.437,
+        "p95": 12.982,
+        "p99": 19.514,
+        "p99.5": 22.22
+      }
+    },
+    {
+      "technique": "roll",
+      "operation": "medidas de las tomas",
+      "dataset_size": 2164,
+      "milliseconds": 0.0,
+      "extra": {
+        "p0.5": -12.815,
+        "p1": -11.388,
+        "p5": -7.659,
+        "p50": -0.907,
+        "p95": 7.864,
+        "p99": 12.547,
+        "p99.5": 15.113
+      }
+    },
+    {
+      "technique": "umbral 0.363",
+      "operation": "duplicados falsos",
+      "dataset_size": 100,
+      "milliseconds": 0.0,
+      "extra": {
+        "registros": 148,
+        "bloqueados": 8,
+        "tasa": 0.05405
+      }
+    },
+    {
+      "technique": "umbral 0.4",
+      "operation": "duplicados falsos",
+      "dataset_size": 100,
+      "milliseconds": 0.0,
+      "extra": {
+        "registros": 148,
+        "bloqueados": 1,
+        "tasa": 0.00676
+      }
+    },
+    {
+      "technique": "umbral 0.45",
+      "operation": "duplicados falsos",
+      "dataset_size": 100,
+      "milliseconds": 0.0,
+      "extra": {
+        "registros": 148,
+        "bloqueados": 0,
+        "tasa": 0.0
+      }
+    },
+    {
+      "technique": "umbral 0.5",
+      "operation": "duplicados falsos",
+      "dataset_size": 100,
+      "milliseconds": 0.0,
+      "extra": {
+        "registros": 148,
+        "bloqueados": 0,
+        "tasa": 0.0
+      }
+    },
+    {
+      "technique": "umbral 0.55",
+      "operation": "duplicados falsos",
+      "dataset_size": 100,
+      "milliseconds": 0.0,
+      "extra": {
+        "registros": 148,
+        "bloqueados": 0,
+        "tasa": 0.0
+      }
+    },
+    {
+      "technique": "umbral 0.363",
+      "operation": "duplicados falsos",
+      "dataset_size": 250,
+      "milliseconds": 0.0,
+      "extra": {
+        "registros": 380,
+        "bloqueados": 42,
+        "tasa": 0.11053
+      }
+    },
+    {
+      "technique": "umbral 0.4",
+      "operation": "duplicados falsos",
+      "dataset_size": 250,
+      "milliseconds": 0.0,
+      "extra": {
+        "registros": 380,
+        "bloqueados": 10,
+        "tasa": 0.02632
+      }
+    },
+    {
+      "technique": "umbral 0.45",
+      "operation": "duplicados falsos",
+      "dataset_size": 250,
+      "milliseconds": 0.0,
+      "extra": {
+        "registros": 380,
+        "bloqueados": 2,
+        "tasa": 0.00526
+      }
+    },
+    {
+      "technique": "umbral 0.5",
+      "operation": "duplicados falsos",
+      "dataset_size": 250,
+      "milliseconds": 0.0,
+      "extra": {
+        "registros": 380,
+        "bloqueados": 0,
+        "tasa": 0.0
+      }
+    },
+    {
+      "technique": "umbral 0.55",
+      "operation": "duplicados falsos",
+      "dataset_size": 250,
+      "milliseconds": 0.0,
+      "extra": {
+        "registros": 380,
+        "bloqueados": 0,
+        "tasa": 0.0
+      }
+    },
+    {
+      "technique": "umbral 0.363",
+      "operation": "duplicados falsos",
+      "dataset_size": 500,
+      "milliseconds": 0.0,
+      "extra": {
+        "registros": 735,
+        "bloqueados": 141,
+        "tasa": 0.19184
+      }
+    },
+    {
+      "technique": "umbral 0.4",
+      "operation": "duplicados falsos",
+      "dataset_size": 500,
+      "milliseconds": 0.0,
+      "extra": {
+        "registros": 735,
+        "bloqueados": 37,
+        "tasa": 0.05034
+      }
+    },
+    {
+      "technique": "umbral 0.45",
+      "operation": "duplicados falsos",
+      "dataset_size": 500,
+      "milliseconds": 0.0,
+      "extra": {
+        "registros": 735,
+        "bloqueados": 3,
+        "tasa": 0.00408
+      }
+    },
+    {
+      "technique": "umbral 0.5",
+      "operation": "duplicados falsos",
+      "dataset_size": 500,
+      "milliseconds": 0.0,
+      "extra": {
+        "registros": 735,
+        "bloqueados": 1,
+        "tasa": 0.00136
+      }
+    },
+    {
+      "technique": "umbral 0.55",
+      "operation": "duplicados falsos",
+      "dataset_size": 500,
+      "milliseconds": 0.0,
+      "extra": {
+        "registros": 735,
+        "bloqueados": 0,
+        "tasa": 0.0
+      }
+    },
+    {
+      "technique": "umbral 0.363",
+      "operation": "duplicados falsos",
+      "dataset_size": 1000,
+      "milliseconds": 0.0,
+      "extra": {
+        "registros": 1513,
+        "bloqueados": 503,
+        "tasa": 0.33245
+      }
+    },
+    {
+      "technique": "umbral 0.4",
+      "operation": "duplicados falsos",
+      "dataset_size": 1000,
+      "milliseconds": 0.0,
+      "extra": {
+        "registros": 1513,
+        "bloqueados": 160,
+        "tasa": 0.10575
+      }
+    },
+    {
+      "technique": "umbral 0.45",
+      "operation": "duplicados falsos",
+      "dataset_size": 1000,
+      "milliseconds": 0.0,
+      "extra": {
+        "registros": 1513,
+        "bloqueados": 17,
+        "tasa": 0.01124
+      }
+    },
+    {
+      "technique": "umbral 0.5",
+      "operation": "duplicados falsos",
+      "dataset_size": 1000,
+      "milliseconds": 0.0,
+      "extra": {
+        "registros": 1513,
+        "bloqueados": 4,
+        "tasa": 0.00264
+      }
+    },
+    {
+      "technique": "umbral 0.55",
+      "operation": "duplicados falsos",
+      "dataset_size": 1000,
+      "milliseconds": 0.0,
+      "extra": {
+        "registros": 1513,
+        "bloqueados": 1,
+        "tasa": 0.00066
+      }
+    }
+  ]
+}

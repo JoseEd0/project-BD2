@@ -2319,9 +2319,10 @@ el acierto con el **vecino** (el fragmento anterior o el siguiente del mismo pap
 
 **Dónde corrió.** Apple M4 Pro (12 núcleos), macOS, Python 3.12, el gestor en un uvicorn
 aparte sobre una copia de `data/engine-rag/` (98 585 fragmentos, vectores int8). **Con
-contención**: carga media 8,3 al empezar y 10,7 al terminar. Los tres modos son los de
-`POST /search` con `k = 10` (el híbrido funde 50 de cada lista con RRF); la latencia es la
-del cliente, embedding de la pregunta incluido. Tardó 13 s.
+contención**: carga media 5,7 al empezar y 5,4 al terminar. Los tres modos son los de
+`POST /search` con `k = 10` después de #136: BM25 busca la pregunta sin las palabras vacías
+de su idioma y el híbrido funde 50 de cada lista con RRF; la latencia es la del cliente,
+embedding de la pregunta incluido. Tardó unos 15 s.
 
 ![Recall@5, Recall@10 y MRR por modo y grupo](figures/rag-evaluacion-recuperacion.png)
 ![Recall@10 según qué cuenta como correcto](figures/rag-evaluacion-relevancia.png)
@@ -2330,17 +2331,21 @@ del cliente, embedding de la pregunta incluido. Tardó 13 s.
 
 | Modo | Recall@5 | Recall@10 | MRR@10 | Recall@10, vecino | Recall@10, paper | Mediana (ms) | p95 (ms) |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| BM25 | 0,111 | 0,111 | 0,080 | 0,111 | 0,111 | 13,1 | 29,1 |
-| vectorial | **0,422** | **0,533** | **0,325** | **0,644** | 0,800 | 27,2 | 47,2 |
-| híbrido (RRF) | 0,378 | 0,511 | 0,292 | 0,556 | **0,822** | 34,4 | 55,5 |
+| BM25 | 0,267 | 0,422 | 0,178 | 0,467 | 0,667 | 9,5 | 17,2 |
+| vectorial | 0,422 | 0,533 | **0,325** | 0,644 | 0,800 | 18,2 | 26,6 |
+| híbrido (RRF) | **0,467** | **0,578** | 0,286 | **0,689** | **0,844** | 23,9 | 33,0 |
 
 **Por grupo** (Recall@10 exacto / MRR@10):
 
 | Modo | cs.DB (24) | cs.IR (16) | curso, en español (5) |
 |---|---:|---:|---:|
-| BM25 | 0,000 / 0,000 | 0,000 / 0,000 | **1,000 / 0,717** |
+| BM25 | 0,375 / 0,152 | 0,313 / 0,054 | **1,000 / 0,700** |
 | vectorial | **0,625 / 0,394** | **0,500 / 0,302** | 0,200 / 0,067 |
-| híbrido (RRF) | 0,458 / 0,285 | 0,438 / 0,252 | **1,000** / 0,458 |
+| híbrido (RRF) | **0,625** / 0,341 | 0,438 / 0,174 | 0,800 / 0,379 |
+
+Antes de #136, con la pregunta entera en BM25, BM25 no encontraba ningún fragmento de los
+papers (Recall@10 0,111, solo las del curso) y el híbrido quedaba por debajo del vectorial
+(0,511); los JSON de esa corrida están en la historia de git.
 
 **int8 contra fp32.** La ingesta (#85) vio que los vectores int8 comparten 7,3 de 10 vecinos
 con los fp32. Aquí se midió solo **int8**, que es lo desplegado: comparar con fp32 exige
@@ -2350,37 +2355,29 @@ sembrado con `RAG_EMBEDDING_MODEL=fp32` con el mismo comando.
 
 ### Conclusiones
 
-- **BM25 no cruza el idioma.** El índice invertido es en inglés y las preguntas en español:
-  no encuentra ni un fragmento de los papers (0 de 40) y acierta las 5 del curso, que están
-  en español. Para una pregunta en español, BM25 trae casi siempre los documentos del curso.
-- **La búsqueda vectorial lleva el peso**: encuentra el fragmento exacto entre los 10 primeros
-  en la mitad de las preguntas (0,53) y el paper correcto en 8 de cada 10. Contando el vecino
-  sube a 0,64: parte de los «fallos» son el fragmento de al lado, que trae el mismo pasaje.
-- **El híbrido no mejora al vectorial en los papers** (0,46 contra 0,63 en cs.DB): RRF suma
-  por igual una lista de BM25 que en español es ruido, y ese ruido empuja hacia abajo los
-  aciertos del vectorial. Sí rescata las preguntas del curso (1,0 contra 0,2), donde el
-  vectorial falla. A nivel de paper los dos quedan iguales (0,82 y 0,80). Es el modo que usa
-  `POST /answers`: en la corrida de las respuestas, solo **20 de las 45** preguntas llevaron
-  su fragmento correcto entre los 8 que recibe el modelo, un techo para citarlo. Medir el híbrido con preguntas en
-  inglés, o pesar menos a BM25 cuando la pregunta no está en inglés, queda como trabajo
-  siguiente; con 45 preguntas, una diferencia de 0,05 es de dos preguntas.
-- **Una latencia de decenas de milisegundos**: 13 ms BM25, 27 ms vectorial (casi todo el
-  embedding de la pregunta) y 34 ms híbrido de mediana, con la máquina cargada.
+- **Quitar las palabras vacías del español hace útil a BM25.** El índice es en inglés: con la
+  pregunta entera, «de», «la» o «qué» no coincidían con nada útil y BM25 solo traía los
+  documentos del curso. Sin ellas le quedan los nombres y siglas que comparte con los papers
+  (SHARP, InfluxDB, Iceberg…) y encuentra el fragmento en el 38 % de las preguntas de cs.DB.
+- **El híbrido es ahora el mejor en Recall**: 0,58 a 10 y 0,84 a nivel de paper, contra 0,53
+  y 0,80 del vectorial, y el único que funciona en los dos idiomas (0,80 en el curso, donde el
+  vectorial acierta 1 de 5). El vectorial sigue con el mejor MRR (0,325 contra 0,286): cuando
+  encuentra el fragmento, lo pone más arriba. En cs.IR el híbrido sigue por debajo (0,44
+  contra 0,50). Con 45 preguntas, una diferencia de 0,05 son dos preguntas.
+- **Contando el vecino sube a 0,69**: parte de los «fallos» son el fragmento de al lado, que
+  trae el mismo pasaje.
+- **Una latencia de decenas de milisegundos**: 9,5 ms BM25, 18 ms vectorial (casi todo el
+  embedding de la pregunta) y 24 ms híbrido de mediana.
 
 ### Las respuestas
 
 Con `--answers simulated` el experimento hace las 63 preguntas por el mismo camino que
 `POST /answers`, con el modelo simulado: sirve para **probar el camino y medir lo que no
-depende del modelo**, no la calidad. Mediana de la recuperación con la selección del prompt,
-32,6 ms (máximo 60,7); el evento `sources` sale a los 32,7 ms de preguntar. El prompt estimado
-es de 5 199 tokens de media.
-
-**Un hallazgo.** La pregunta u07 («¿Cuál es el punto de fusión del tungsteno?») se quedó
-**sin ningún fragmento**: el primero del híbrido (`2512.16255#34`) tiene 24 424 caracteres en
-207 «palabras» (una tabla sin espacios), unos 8 400 tokens estimados, más que los 6 000 del
-contexto, y la selección se detiene en el primero que no cabe. En una pregunta sin respuesta
-no cambia nada, pero en una con respuesta la dejaría sin documentos. En el corpus hay 3
-fragmentos así.
+depende del modelo**, no la calidad. Cada pregunta recibe 12 fragmentos (`RAG_ANSWER_CHUNKS`
+tras #136); **28 de las 45** con respuesta llevan su fragmento correcto entre ellos, un techo
+para citarlo (con los 8 de antes eran 20). Mediana de la recuperación con la selección del
+prompt, 21,2 ms (máximo 32,5); el evento `sources` sale a los 21,3 ms de preguntar. El prompt
+estimado es de 7 920 tokens de media.
 
 **Pendiente de la clave**, con su costo estimado (tokens de los prompts reales de esta
 corrida por los precios de `rag.pricing`; lo esperado supone 600 tokens de salida por
@@ -2390,9 +2387,9 @@ entera):
 | Paso | Modelo | Esperado (USD) | Cota (USD) |
 |---|---|---:|---:|
 | 80 preguntas por la Batch API (a mitad de precio) | Claude Sonnet 5.5 | 0,15 | 0,55 |
-| responder las 63 preguntas de hoy | Claude Sonnet 5.5, esfuerzo `low` | 1,03 | 2,58 |
-| juzgar esas respuestas | Claude Haiku 5.5 | 0,06 | 0,19 |
-| **con las ~133 preguntas del conjunto completo** | | **≈ 2,5** | ≈ 6,4 |
+| responder las 63 preguntas de hoy | Claude Sonnet 5.5, esfuerzo `low` | 1,38 | 3,29 |
+| juzgar esas respuestas | Claude Haiku 5.5 | 0,07 | 0,23 |
+| **con las ~133 preguntas del conjunto completo** | | **≈ 3,2** | ≈ 8,0 |
 
 `--budget-usd` es un tope duro de lo gastado (respuestas y juez juntos), con el mismo tope
 diario del servicio: reserva la cota de cada llamada antes de hacerla y la cambia por el

@@ -1,10 +1,11 @@
 # Copyright en audio (Parte 5, opción C)
 
-Detecta si una canción contiene fragmentos de otras. Este paquete, `songcheck`, trae por
-ahora **el catálogo de canciones originales** (#75): las 8 000 pistas de `fma_small` del
-Free Music Archive, cortadas en tramos de 5 s e indexadas en el gestor con el HNSW de la
-Parte 4 sobre sus MFCC; el trabajo de carga que lo deja listo, y un API de lectura. La
-detección llega en #76, la evaluación en #77 y la interfaz en #78. Como todo servicio de la
+Detecta si una canción contiene fragmentos de otras. Este paquete, `songcheck`, trae **el
+catálogo de canciones originales** (#75): las 8 000 pistas de `fma_small` del Free Music
+Archive, cortadas en tramos de 5 s e indexadas en el gestor con el HNSW de la Parte 4 sobre
+sus MFCC; el trabajo de carga que lo deja listo y un API de lectura; y **la detección**
+(#76): `POST /detections` recibe un audio y devuelve las canciones del catálogo que suenan
+dentro, alineadas por votación por desfase. La evaluación llega en #77 y la interfaz en #78. Como todo servicio de la
 Parte 5, usa el gestor solo por su API REST ([`apps/README.md`](../README.md)).
 
 El paquete se llama `songcheck` y no `copyright`, que es un nombre interno de Python.
@@ -19,6 +20,11 @@ El paquete se llama `songcheck` y no `copyright`, que es un nombre interno de Py
 | [`schema.py`](src/songcheck/schema.py) | las tablas `cr_canciones` y `cr_segmentos` y sus índices |
 | [`seed.py`](src/songcheck/seed.py) | el trabajo de carga: `python -m songcheck.seed` |
 | [`api.py`](src/songcheck/api.py) | el API: `uvicorn --factory songcheck.api:create_app` |
+| [`upload.py`](src/songcheck/upload.py) | el audio subido: su formato por el contenido, su tamaño y su duración |
+| [`loudness.py`](src/songcheck/loudness.py) | el nivel de cada ventana, para que el silencio no vote |
+| [`detection.py`](src/songcheck/detection.py) | la votación por desfase y el puntaje, sin HTTP |
+| [`detection_api.py`](src/songcheck/detection_api.py) | `POST /detections` |
+| [`sample.py`](src/songcheck/sample.py) | un catálogo de juguete con melodías generadas, para probar un despliegue |
 | [`settings.py`](src/songcheck/settings.py) | la configuración, con el prefijo `COPYRIGHT_` |
 
 ## El catálogo en disco
@@ -167,6 +173,139 @@ errores uniformes y las migraciones al arrancar.
 | `GET /songs?query=&genre=&limit=&offset=` | canciones: con `query`, las que mejor responden por BM25 sobre título y artista (con su `score`); sin ella, en orden de id; `genre` filtra por género exacto. `limit` de 1 a 100 (20) |
 | `GET /songs/{id}` | una canción con los tramos con que está indexada; `404` si no está |
 | `GET /catalog` | canciones, tramos, ventana y salto, si el HNSW ya existe y canciones por género |
+| `POST /detections` | las canciones del catálogo que suenan dentro del audio subido (campo `file`); ver abajo |
+
+## Detección
+
+```bash
+curl -F "file=@cancion.mp3" http://localhost:8101/api/detections
+```
+
+1. **El audio se reconoce por su contenido** ([`upload.py`](src/songcheck/upload.py)): la
+   firma de sus primeros bytes (`RIFF…WAVE`, `fLaC`, `OggS`, `ID3` o la sincronía de una
+   trama MPEG) y después libsndfile, la librería con que lo decodifica el gestor, tiene que
+   abrirlo y reconocer el mismo formato. El nombre no cuenta: un PNG llamado `cancion.mp3`
+   es un `415` y un WAV llamado `cancion.mp3` se acepta como WAV. Al gestor, que reconoce un
+   audio por la extensión, le llega con la de su formato real.
+2. **Las ventanas en silencio no votan** ([`loudness.py`](src/songcheck/loudness.py)). Un
+   tramo en silencio se parece a cualquier otro, y como todas las ventanas en silencio de
+   una subida reciben los mismos vecinos, se encadenarían en rachas falsas. El audio se
+   decodifica por bloques de 0,1 s y una ventana por debajo de `SILENCE_THRESHOLD_DBFS`
+   (−60 dBFS) no vota y corta la racha. Una subida en silencio entera no llega al gestor.
+3. **El gestor busca los vecinos de cada ventana**, con las mismas ventanas del catálogo
+   (`windows.WINDOWING`, 5 s cada 2,5 s), en una sola petición (`POST /media/segments`): lo
+   decodifica una vez, saca los MFCC de cada ventana y busca todas en un lote del HNSW.
+4. **La votación por desfase** ([`detection.py`](src/songcheck/detection.py)) arma las
+   coincidencias, y sus canciones se leen de `cr_canciones` en una consulta.
+
+### Votación por desfase
+
+Buscar cada ventana por separado da falsos positivos: dos canciones del mismo género se
+parecen en un tramo suelto. Lo que delata una copia es que **varias ventanas seguidas**
+tengan por vecina a la misma canción con el **mismo desfase** `t_subida − t_original` (la
+idea de Shazam y de Content ID). Por cada canción candidata:
+
+- cada vecino de cada ventana vota por un desfase, en saltos de 2,5 s: las ventanas de la
+  subida y las del catálogo empiezan en la misma rejilla, así que el desfase es entero;
+- el **apoyo** de un desfase son las ventanas con un voto a un salto o menos de él: una copia
+  que no empieza en la rejilla cae entre dos tramos del catálogo y vota por los dos. A igual
+  apoyo gana el pico del histograma, la mayor similitud por ese desfase exacto;
+- el desfase con más apoyo da las **rachas** de ventanas consecutivas que lo apoyan y en las
+  que **el original avanza**: el tramo elegido para cada ventana no va hacia atrás ni se
+  repite en más de dos ventanas seguidas. Una copia fuera de la rejilla repite tramo una vez;
+  un tramo del catálogo que se parece a todo (un «hub» del índice) aparece en muchas
+  ventanas seguidas con un desfase que crece un salto por ventana, y sin esa condición la
+  tolerancia lo encadenaría;
+- las rachas de `MIN_RUN_WINDOWS` ventanas o más (2: 7,5 s de audio) son coincidencias; sus
+  ventanas ya no votan por otro desfase de la misma canción y se sigue con el siguiente. Una
+  subida de una sola ventana pide rachas de una.
+
+**Puntaje = similitud media de la racha × cobertura**, y la cobertura es la fracción de las
+ventanas que las dos grabaciones podían compartir: `ventanas de la racha / min(ventanas
+audibles de la subida, ventanas del original)`. Dividir solo por la subida castigaría un
+sample de 10 s dentro de una canción de 3 min, justo lo que se busca; dividir solo por el
+original, un fragmento corto de un original largo. Con el mínimo, una copia que cubre todo
+lo que podía cubrir vale 1 sea la subida más larga o más corta que el original. Todo es puro
+y determinista: el orden de los vecinos no cambia la respuesta y los empates se rompen por
+similitud, desfase, canción y posición.
+
+### La respuesta
+
+Su forma, con valores de ejemplo:
+
+```json
+{
+  "format": "MP3", "duration_seconds": 180.0, "sample_rate": 44100, "channels": 2,
+  "window_seconds": 5.0, "hop_seconds": 2.5, "windows": 71, "silent_windows": 0,
+  "threshold": 0.45, "detected": true,
+  "matches": [{
+    "song": {"id": 2, "title": "Food", "artist": "AWOL"},
+    "upload": {"start_seconds": 60.0, "end_seconds": 87.5},
+    "original": {"start_seconds": 0.0, "end_seconds": 27.5},
+    "offset_seconds": 60.0, "windows": 10, "mean_similarity": 0.997,
+    "coverage": 1.0, "score": 0.997, "above_threshold": true
+  }],
+  "engine_timings": {"decode_ms": 128.0, "extraction_ms": 160.4, "search_ms": 1.5}
+}
+```
+
+Las coincidencias van de mayor a menor puntaje, hasta `MAX_MATCHES`; `detected` dice si
+alguna pasa el umbral. `Server-Timing` lleva cada etapa: `probe`, `loudness`, `segments` (la
+ida y vuelta al gestor), las tres del gestor (`decode`, `extraction`, `search`, sobre todas
+las ventanas a la vez), `voting` y `songs`.
+
+| Subida | Respuesta |
+|---|---|
+| copia del catálogo, en MP3, WAV, FLAC u OGG, mono o estéreo, a cualquier frecuencia | `200` con la coincidencia; el gestor mezcla a mono y remuestrea (probado a 16 y 44,1 kHz) |
+| en silencio | `200` sin coincidencias, `silent_windows` = `windows` |
+| más corta que una ventana (de 1 a 5 s) | `200`, una sola ventana, como en el gestor |
+| más corta que 1 s | `400` `AudioTooShortError` |
+| vacía, o con firma de audio y contenido dañado | `400` `CorruptAudioError` |
+| otro formato, aunque se llame `.mp3` | `415` `UnsupportedAudioError` |
+| más pesada que `MAX_UPLOAD_BYTES` o más larga que `MAX_UPLOAD_SECONDS` | `413` `UploadTooLargeError` o `AudioTooLongError` |
+
+| Variable (`COPYRIGHT_…`) | Para qué | Por omisión |
+|---|---|---|
+| `MAX_UPLOAD_BYTES` | el audio más pesado | 48 MiB (el gestor admite 64) |
+| `MAX_UPLOAD_SECONDS` | el audio más largo | 600 s: 239 ventanas, dentro de las 256 del gestor |
+| `NEIGHBOURS_PER_WINDOW` | tramos que se piden por ventana | 10 |
+| `MIN_RUN_WINDOWS` | ventanas seguidas que hacen una coincidencia | 2 |
+| `MATCH_THRESHOLD` | puntaje desde el que una coincidencia es copia | 0,45, provisional |
+| `MAX_MATCHES` | coincidencias que se devuelven | 10 |
+| `SILENCE_THRESHOLD_DBFS` | nivel bajo el cual una ventana no vota | −60 |
+
+**El umbral es provisional**: sale de 20 casos de cada tipo contra el catálogo entero (abajo);
+la curva ROC de la evaluación (#77) lo calibra.
+
+### Medido
+
+Medido el 19-11-2026 en el mismo equipo, con carga media de 4,9 a 5,1, contra una copia del
+gestor con el catálogo entero de la que se borraron 40 canciones para usarlas como pistas no
+catalogadas. El detalle está en el
+[§14 de `benchmarks/README.md`](../../benchmarks/README.md#14-detección-de-copyright--latencia-de-post-detections-y-casos-de-control)
+y los datos crudos en
+[`benchmarks/results/copyright_deteccion.json`](../../benchmarks/results/copyright_deteccion.json).
+
+| Subida en MP3 | Ventanas | p50 | p95 |
+|---:|---:|---:|---:|
+| 30 s | 11 | 79,8 ms | 87,2 ms |
+| 60 s | 23 | 157,4 ms | 165,4 ms |
+| 180 s | 71 | 489,8 ms | 531,9 ms |
+
+| Caso (20 de cada uno) | Puntaje de la copiada (mediana) | Pasa 0,45 |
+|---|---:|---:|
+| pista del catálogo entera | 0,997 | 20, con desfase 0 |
+| tramo de 15 s fuera de la rejilla, desfase real 4 s | 0,494 | 18, con desfase 5 o 2,5 s |
+| tramo de 7,5 s | 0,266 | 0 |
+| pista no catalogada (mejor de cualquier canción) | 0,272 | 3 |
+
+- Unos **7 ms por ventana**, casi todo en decodificar y sacar MFCC; el HNSW y la votación no
+  llegan a 2 ms con 3 min. El servicio decodifica el audio una vez más para medir el nivel
+  de las ventanas, un tercio de la latencia.
+- Las copias largas se separan bien de lo que no se copió; un tramo de 7,5 s no: cubre dos
+  o tres de las 11 ventanas que podía compartir y la cobertura lo deja en el rango de las
+  canciones no copiadas. Las tres pistas no catalogadas que pasan tienen rachas de 6 a 8
+  ventanas con otra canción del FMA y hay que escucharlas para saber si comparten material.
 
 ## Docker
 
@@ -202,8 +341,10 @@ PYTHONPATH=apps/copyright/src python3 -m songcheck.sample --data-dir data/datase
 ```
 
 Es lo que hace el trabajo `compose` de la CI: carga ese catálogo dos veces (la segunda no
-carga nada) y consulta `/api/health`, `/api/ready`, `/api/catalog` y `/api/songs/2` por el
-puerto 8101. Las claves salen de `tools/compose_keys.py`, donde la app ya está con el prefijo
+carga nada), consulta `/api/health`, `/api/ready`, `/api/catalog` y `/api/songs/2` por el
+puerto 8101 y sube a `/api/detections` la pista 2 desde los 2,5 s, con nombre de MP3: tiene
+que salir detectada, como WAV, con desfase −2,5 s. La web deja pasar cuerpos de hasta
+`COPYRIGHT_WEB_MAX_BODY_SIZE` (49 MiB: el audio máximo y el multipart). Las claves salen de `tools/compose_keys.py`, donde la app ya está con el prefijo
 `COPYRIGHT_`: el API atiende con `COPYRIGHT_ENGINE_KEY` (`write`) y migra y carga con
 `COPYRIGHT_MIGRATION_KEY` (`admin`).
 
@@ -261,8 +402,8 @@ MB/s con 8 conexiones; las otras 2 000 ya estaban (las de la demo) y solo se ver
 ## Tests
 
 ```bash
-uv run pytest apps/copyright -q     # ventanas, catálogo, descarga contra un FMA de juguete
-uv run pytest tests/copyright -q    # carga y API contra el gestor real, en el mismo proceso
+uv run pytest apps/copyright -q     # ventanas, catálogo, descarga, votación por desfase
+uv run pytest tests/copyright -q    # carga, API y detección contra el gestor real
 ```
 
 La descarga se prueba contra un servidor HTTP local que sirve un `.zip` de juguete por
@@ -273,6 +414,13 @@ aplicación: cargan audios generados, comprueban que un tramo se encuentra a sí
 HNSW, que una segunda carga no cambia nada, que una carga cortada sigue donde quedó y que el
 trabajo completo (`run_seed`, con el FMA de juguete y el gestor servido por uvicorn) se
 puede repetir sin hacer nada.
+
+La votación se prueba con listas de ventanas sintéticas: copia exacta, desplazada y fuera de
+la rejilla, dos canciones pegadas, la misma copiada dos veces, ruido, empates, un tramo que
+no avanza y el orden de los vecinos. `POST /detections` se prueba contra el gestor real con
+el catálogo de `songcheck.sample` (pistas de 30 s): un tramo copiado con su desfase y sus
+tramos, en FLAC, OGG y MP3 con nombre de WAV, a 44,1 kHz estéreo, dos canciones pegadas, una
+subida de una ventana, silencio, ruido, un PNG, un audio dañado y los límites.
 
 ## Licencias
 

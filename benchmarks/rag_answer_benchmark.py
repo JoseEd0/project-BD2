@@ -23,7 +23,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import json
 import statistics
 import time
 from dataclasses import dataclass
@@ -33,8 +32,9 @@ from typing import Any
 from benchmarks.common import Report, machine_description, results_directory
 from benchmarks.engine_process import engine_server
 from benchmarks.rag.questions import QUESTIONS
+from benchmarks.rag.streaming import MILLISECONDS_PER_SECOND, TimedAnswer, time_answer
 from minigestor_client import AsyncClient
-from rag.answering import DELTA_EVENT, DONE_EVENT, ERROR_EVENT, Answerer, PreparedAnswer
+from rag.answering import Answerer, PreparedAnswer
 from rag.budget import DailyBudget
 from rag.claude import Effort
 from rag.config import (
@@ -53,9 +53,6 @@ DEFAULT_EFFORTS: tuple[Effort, ...] = ("low", "medium")
 DEFAULT_REPETITIONS = 2
 # El gestor del experimento no tiene claves de servicio (ver benchmarks/engine_process.py).
 UNUSED_ENGINE_KEY = "sin-clave"
-MILLISECONDS_PER_SECOND = 1000.0
-DATA_PREFIX = "data: "
-EVENT_PREFIX = "event: "
 SUMMARY_HEADER = (
     "| Esfuerzo | Respuestas | Costo (USD) | Salida (tokens) | Primer texto (ms) | Total (ms) |"
 )
@@ -71,14 +68,6 @@ class Settings:
     repetitions: int
     budget_usd: float
     simulated: bool
-
-
-@dataclass(frozen=True, slots=True)
-class Timed:
-    first_text_ms: float | None
-    total_ms: float
-    done: dict[str, Any] | None
-    error: dict[str, Any] | None
 
 
 def run(settings: Settings) -> Report:
@@ -115,26 +104,8 @@ async def _answer_all(
             started = time.perf_counter()
             prepared = await answerer.prepare(question, engine, embedder)
             retrieval_ms = (time.perf_counter() - started) * MILLISECONDS_PER_SECOND
-            timed = await _timed(answerer, prepared)
+            timed = await time_answer(answerer, prepared, time.perf_counter())
             _record(report, effort, (language, question, repetition), prepared, retrieval_ms, timed)
-
-
-async def _timed(answerer: Answerer, prepared: PreparedAnswer) -> Timed:
-    started = time.perf_counter()
-    first_text: float | None = None
-    done: dict[str, Any] | None = None
-    error: dict[str, Any] | None = None
-    async for frame in answerer.events(prepared):
-        name, data = _parsed(frame)
-        if name == DELTA_EVENT and first_text is None:
-            first_text = time.perf_counter()
-        elif name == DONE_EVENT:
-            done = data
-        elif name == ERROR_EVENT:
-            error = data
-    total = time.perf_counter() - started
-    first_ms = None if first_text is None else (first_text - started) * MILLISECONDS_PER_SECOND
-    return Timed(first_ms, total * MILLISECONDS_PER_SECOND, done, error)
 
 
 def _record(
@@ -143,7 +114,7 @@ def _record(
     asked: tuple[str, str, int],
     prepared: PreparedAnswer,
     retrieval_ms: float,
-    timed: Timed,
+    timed: TimedAnswer,
 ) -> None:
     language, question, repetition = asked
     done = timed.done or {}
@@ -172,11 +143,6 @@ def _record(
         respuesta=done.get("answer"),
         error=timed.error,
     )
-
-
-def _parsed(frame: bytes) -> tuple[str, dict[str, Any]]:
-    name_line, data_line = frame.decode().strip().split("\n")
-    return name_line.removeprefix(EVENT_PREFIX), json.loads(data_line.removeprefix(DATA_PREFIX))
 
 
 def _rag_settings(settings: Settings, base_url: str) -> RagSettings:

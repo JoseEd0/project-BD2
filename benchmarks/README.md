@@ -142,6 +142,7 @@ docker compose --profile bench down       # apaga PostgreSQL
 | [15. Rostros en vivo](#15-rostros-en-vivo--latencia-por-cuadro-por-websocket) | un cuadro de punta a punta por WebSocket, por el nginx o directo a la API, con y sin la caché de rastros en Redis, con cada etapa | [en vivo](figures/rostros-tiempo-real.png) |
 | [16. Recomendaciones de la tienda](#16-recomendaciones-de-la-tienda--cuatro-señales-y-caché) | compras conjuntas al vuelo vs materializadas; latencia p50/p95 de cada señal y de la recomendación con caché fría y caliente | [recomendaciones](figures/tienda-recomendaciones.png) |
 | [18. Rostros en LFW](#18-rostros-en-lfw--verificación-identificación-latencia-y-caché) | verificación con el protocolo de LFW (exactitud por pliegues, TAR a FAR fijo, ROC) y umbrales calibrados; identificación en el gestor, HNSW vs búsqueda exacta; p99 de cada etapa; aciertos de la caché de rastros según la velocidad del rostro | [verificación](figures/rostros-evaluacion-verificacion.png), [identificación](figures/rostros-evaluacion-identificacion.png), [latencia](figures/rostros-evaluacion-latencia.png), [caché](figures/rostros-cache.png) |
+| [19. Evaluación del RAG](#19-evaluación-del-rag--recuperación-de-preguntas-en-español-y-respuestas-con-claude) | Recall@5, Recall@10 y MRR de BM25, vectorial e híbrido con 45 preguntas en español de fragmentos conocidos, por categoría y criterio de acierto; respuestas simuladas para probar el camino (la calidad con Claude, pendiente de la clave) | [recuperación](figures/rag-evaluacion-recuperacion.png), [criterio](figures/rag-evaluacion-relevancia.png) |
 
 **Cómo leer las gráficas.** Cada una es una fila de paneles, uno por operación, con el
 número de filas en horizontal y una línea por técnica. Los dos ejes son logarítmicos: los
@@ -2285,6 +2286,173 @@ La evaluación tarda unos cinco minutos, cuatro de ellos en describir las 13 233
 `--embeddings-cache archivo.npz` las guarda y las reutiliza. Las exactitudes, umbrales,
 TAR, rank-1 y tasas no dependen de la carga del equipo: salieron idénticos en las tres
 ejecuciones que se hicieron. La caché tarda unos siete minutos.
+
+## 19. Evaluación del RAG — recuperación de preguntas en español y respuestas con Claude
+
+`rag_evaluation_benchmark.py` evalúa el RAG sobre papers (#87) con un conjunto de preguntas
+en español cuya respuesta correcta es un fragmento conocido del corpus. **La recuperación
+está medida**; la calidad de las respuestas (fidelidad, citas, «no está en los documentos»)
+necesita la clave de la API de Anthropic, que todavía no hay, y **queda pendiente**: el
+código, los tests y los comandos están listos (ver abajo).
+
+**El conjunto** ([`rag/preguntas.jsonl`](rag/preguntas.jsonl)): 63 preguntas, todas
+`origin: author`, escritas a mano por el autor del proyecto.
+
+- **45 con respuesta.** Los fragmentos salen de `python -m benchmarks.rag_questions sample`
+  (semilla 87): por estrato —cs.DB de 2025 (8), cs.DB de 2026 (16), cs.IR de 2026 (16) y el
+  material del curso (5), el único en español—, un fragmento de prosa por paper (sin listas de
+  referencias ni tablas). Para cada uno se leyó el fragmento y se escribió una pregunta que
+  él responde, como la escribiría alguien que no lo ha visto.
+- **18 sin respuesta en el corpus** (cocina, deporte, geografía, trámites en el Perú, la nota
+  de un examen del curso, el precio de Netflix en el Perú…): se comprobó con `grep` sobre los
+  98 585 fragmentos que sus palabras clave no aparecen o no responden la pregunta.
+
+Las preguntas generadas con la **Batch API** (`origin: batch`, unas 70 más) se suman cuando
+haya clave (abajo). El archivo no guarda texto del corpus, solo la pregunta y los
+identificadores del fragmento y del paper.
+
+**Qué cuenta como acierto.** Cada pregunta tiene un solo fragmento correcto, así que
+Recall@k es la fracción de preguntas cuyo fragmento aparece entre los k primeros y MRR@10 la
+media de `1/puesto`. Como los fragmentos se solapan de 50 a 120 palabras, se informa también
+el acierto con el **vecino** (el fragmento anterior o el siguiente del mismo paper) y con el
+**paper** (cualquier fragmento del documento correcto: la cita llevaría al PDF correcto).
+
+**Dónde corrió.** Apple M4 Pro (12 núcleos), macOS, Python 3.12, el gestor en un uvicorn
+aparte sobre una copia de `data/engine-rag/` (98 585 fragmentos, vectores int8). **Con
+contención**: carga media 8,3 al empezar y 10,7 al terminar. Los tres modos son los de
+`POST /search` con `k = 10` (el híbrido funde 50 de cada lista con RRF); la latencia es la
+del cliente, embedding de la pregunta incluido. Tardó 13 s.
+
+![Recall@5, Recall@10 y MRR por modo y grupo](figures/rag-evaluacion-recuperacion.png)
+![Recall@10 según qué cuenta como correcto](figures/rag-evaluacion-relevancia.png)
+
+**Las 45 preguntas con respuesta:**
+
+| Modo | Recall@5 | Recall@10 | MRR@10 | Recall@10, vecino | Recall@10, paper | Mediana (ms) | p95 (ms) |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| BM25 | 0,111 | 0,111 | 0,080 | 0,111 | 0,111 | 13,1 | 29,1 |
+| vectorial | **0,422** | **0,533** | **0,325** | **0,644** | 0,800 | 27,2 | 47,2 |
+| híbrido (RRF) | 0,378 | 0,511 | 0,292 | 0,556 | **0,822** | 34,4 | 55,5 |
+
+**Por grupo** (Recall@10 exacto / MRR@10):
+
+| Modo | cs.DB (24) | cs.IR (16) | curso, en español (5) |
+|---|---:|---:|---:|
+| BM25 | 0,000 / 0,000 | 0,000 / 0,000 | **1,000 / 0,717** |
+| vectorial | **0,625 / 0,394** | **0,500 / 0,302** | 0,200 / 0,067 |
+| híbrido (RRF) | 0,458 / 0,285 | 0,438 / 0,252 | **1,000** / 0,458 |
+
+**int8 contra fp32.** La ingesta (#85) vio que los vectores int8 comparten 7,3 de 10 vecinos
+con los fp32. Aquí se midió solo **int8**, que es lo desplegado: comparar con fp32 exige
+volver a calcular los 98 585 embeddings (43,9 min en la ingesta, más con la máquina cargada)
+y sembrar otro gestor, y no se hizo. Se puede repetir esta evaluación sobre un gestor
+sembrado con `RAG_EMBEDDING_MODEL=fp32` con el mismo comando.
+
+### Conclusiones
+
+- **BM25 no cruza el idioma.** El índice invertido es en inglés y las preguntas en español:
+  no encuentra ni un fragmento de los papers (0 de 40) y acierta las 5 del curso, que están
+  en español. Para una pregunta en español, BM25 trae casi siempre los documentos del curso.
+- **La búsqueda vectorial lleva el peso**: encuentra el fragmento exacto entre los 10 primeros
+  en la mitad de las preguntas (0,53) y el paper correcto en 8 de cada 10. Contando el vecino
+  sube a 0,64: parte de los «fallos» son el fragmento de al lado, que trae el mismo pasaje.
+- **El híbrido no mejora al vectorial en los papers** (0,46 contra 0,63 en cs.DB): RRF suma
+  por igual una lista de BM25 que en español es ruido, y ese ruido empuja hacia abajo los
+  aciertos del vectorial. Sí rescata las preguntas del curso (1,0 contra 0,2), donde el
+  vectorial falla. A nivel de paper los dos quedan iguales (0,82 y 0,80). Es el modo que usa
+  `POST /answers`: en la corrida de las respuestas, solo **20 de las 45** preguntas llevaron
+  su fragmento correcto entre los 8 que recibe el modelo, un techo para citarlo. Medir el híbrido con preguntas en
+  inglés, o pesar menos a BM25 cuando la pregunta no está en inglés, queda como trabajo
+  siguiente; con 45 preguntas, una diferencia de 0,05 es de dos preguntas.
+- **Una latencia de decenas de milisegundos**: 13 ms BM25, 27 ms vectorial (casi todo el
+  embedding de la pregunta) y 34 ms híbrido de mediana, con la máquina cargada.
+
+### Las respuestas
+
+Con `--answers simulated` el experimento hace las 63 preguntas por el mismo camino que
+`POST /answers`, con el modelo simulado: sirve para **probar el camino y medir lo que no
+depende del modelo**, no la calidad. Mediana de la recuperación con la selección del prompt,
+32,6 ms (máximo 60,7); el evento `sources` sale a los 32,7 ms de preguntar. El prompt estimado
+es de 5 199 tokens de media.
+
+**Un hallazgo.** La pregunta u07 («¿Cuál es el punto de fusión del tungsteno?») se quedó
+**sin ningún fragmento**: el primero del híbrido (`2512.16255#34`) tiene 24 424 caracteres en
+207 «palabras» (una tabla sin espacios), unos 8 400 tokens estimados, más que los 6 000 del
+contexto, y la selección se detiene en el primero que no cabe. En una pregunta sin respuesta
+no cambia nada, pero en una con respuesta la dejaría sin documentos. En el corpus hay 3
+fragmentos así.
+
+**Pendiente de la clave**, con su costo estimado (tokens de los prompts reales de esta
+corrida por los precios de `rag.pricing`; lo esperado supone 600 tokens de salida por
+respuesta y 800 por veredicto; la cota, toda la entrada al precio más caro y la salida
+entera):
+
+| Paso | Modelo | Esperado (USD) | Cota (USD) |
+|---|---|---:|---:|
+| 80 preguntas por la Batch API (a mitad de precio) | Claude Sonnet 5.5 | 0,15 | 0,55 |
+| responder las 63 preguntas de hoy | Claude Sonnet 5.5, esfuerzo `low` | 1,03 | 2,58 |
+| juzgar esas respuestas | Claude Haiku 5.5 | 0,06 | 0,19 |
+| **con las ~133 preguntas del conjunto completo** | | **≈ 2,5** | ≈ 6,4 |
+
+`--budget-usd` es un tope duro de lo gastado (respuestas y juez juntos), con el mismo tope
+diario del servicio: reserva la cota de cada llamada antes de hacerla y la cambia por el
+costo real al terminar.
+
+```bash
+cp -R data/engine-rag /tmp/engine-rag-copia && rm -f /tmp/engine-rag-copia/.motor.lock
+# 1. preguntas de la Batch API: estimar, enviar, esperar y filtrar, revisar a mano y sumar
+uv run --no-sync python -m benchmarks.rag_questions submit --data-dir data/datasets \
+    --state data/rag-preguntas/lote.json --budget-usd 1 --dry-run
+RAG_ANTHROPIC_API_KEY=… uv run --no-sync python -m benchmarks.rag_questions submit \
+    --data-dir data/datasets --state data/rag-preguntas/lote.json --budget-usd 1
+RAG_ANTHROPIC_API_KEY=… uv run --no-sync python -m benchmarks.rag_questions collect \
+    --data-dir data/datasets --state data/rag-preguntas/lote.json \
+    --candidates data/rag-preguntas/candidatas.jsonl
+uv run --no-sync python -m benchmarks.rag_questions accept --data-dir data/datasets \
+    --candidates data/rag-preguntas/candidatas.jsonl
+# 2. recuperación, respuestas y juez
+RAG_ANTHROPIC_API_KEY=… uv run --no-sync python -m benchmarks.rag_evaluation_benchmark \
+    --engine-dir /tmp/engine-rag-copia --models data/models/rag \
+    --answers anthropic --judge --budget-usd 5
+# 3. validar el juez contra 20 respuestas revisadas a mano
+uv run --no-sync python -m benchmarks.rag_judge_agreement sample --size 20
+uv run --no-sync python -m benchmarks.rag_judge_agreement score
+uv run --no-sync python -m benchmarks.plot
+```
+
+**Revisión a mano de las candidatas de la Batch API** (`review: ok` o `drop` en
+`candidatas.jsonl`). El filtro automático ya descartó las que no citan el fragmento palabra
+por palabra, no son preguntas en español, tienen menos de 6 o más de 40 palabras, nombran
+«el fragmento» o «los autores», o repiten otra. Quien revisa marca `drop` si:
+
+1. la cita (`evidence`) no responde de verdad la pregunta;
+2. la pregunta es tan general que muchos papers la responderían (no tiene un solo fragmento
+   correcto);
+3. hace falta haber leído el fragmento para entenderla (un símbolo, una tabla, «el método
+   propuesto» sin nombre);
+4. copia una oración del fragmento casi entera (premia a BM25 sin ser una pregunta real);
+5. el fragmento es una tabla, una fórmula o una lista de referencias que pasó el filtro.
+
+**Revisión a mano del juez** (`revision_fidelidad.jsonl`): para cada pregunta de la muestra,
+leer la respuesta junto a sus fragmentos (`fragmentos_enviados` en
+`rag_evaluacion_respuestas.json`) y escribir `{"pregunta_id": …, "fiel": true|false}`, con
+`fiel` falso si alguna afirmación no sale de los fragmentos. `score` informa la fracción de
+acuerdo y la kappa de Cohen; la fidelidad del juez se publica junto con ese acuerdo.
+
+### Reproducirlo
+
+```bash
+cp -R data/engine-rag /tmp/engine-rag-copia && rm -f /tmp/engine-rag-copia/.motor.lock
+uv run --no-sync python -m benchmarks.rag_evaluation_benchmark \
+    --engine-dir /tmp/engine-rag-copia --models data/models/rag --answers simulated
+uv run --no-sync python -m benchmarks.plot
+```
+
+Escribe `results/rag_evaluacion.json` (por modo y grupo, y el detalle de cada pregunta: los
+10 fragmentos recuperados y el puesto del correcto con cada criterio) y
+`results/rag_evaluacion_respuestas.json` (por pregunta: tiempos, fragmentos enviados, citas,
+tokens, costo, respuesta y, con `--judge`, el veredicto). Sin `--answers`, solo la
+recuperación.
 
 ## Gráficas
 

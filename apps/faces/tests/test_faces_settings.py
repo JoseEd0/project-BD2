@@ -38,6 +38,18 @@ def test_the_plan_and_thresholds_come_from_the_environment(environment: pytest.M
     assert settings.thresholds().match == 0.5
 
 
+def test_real_time_recognition_comes_from_the_environment(environment: pytest.MonkeyPatch):
+    assert load_settings(FacesSettings).redis_url is None
+    environment.setenv("FACES_REDIS_URL", "redis://redis:6379/1")
+    environment.setenv("FACES_TRACK_VERIFY_SECONDS", "3")
+    environment.setenv("FACES_TRACK_MIN_IOU", "0.4")
+    environment.setenv("FACES_STREAM_MAX_FPS", "12")
+    settings = load_settings(FacesSettings)
+    assert settings.redis_url == "redis://redis:6379/1"
+    assert (settings.tracking().verify_seconds, settings.tracking().min_iou) == (3.0, 0.4)
+    assert settings.stream_max_fps == 12.0
+
+
 @pytest.mark.parametrize(
     ("variable", "value", "problem"),
     [
@@ -45,6 +57,8 @@ def test_the_plan_and_thresholds_come_from_the_environment(environment: pytest.M
         ("FACES_ENROLLMENT_POSES", "[]", "FACES_ENROLLMENT_POSES"),
         ("FACES_MATCH_THRESHOLD", "1.5", "FACES_MATCH_THRESHOLD"),
         ("FACES_LOOKALIKE_THRESHOLD", "0.9", "lookalike_threshold"),
+        ("FACES_STREAM_MAX_FPS", "0", "FACES_STREAM_MAX_FPS"),
+        ("FACES_TRACK_MIN_IOU", "1.5", "FACES_TRACK_MIN_IOU"),
     ],
 )
 def test_bad_values_stop_the_start(

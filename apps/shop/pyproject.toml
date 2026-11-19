@@ -7,7 +7,13 @@ name = "minigestor-shop"
 version = "0.1.0"
 description = "Tienda con recomendaciones de la Parte 5 (opción B): dataset, catálogo y recomendador"
 requires-python = ">=3.11"
-dependencies = ["minigestor-kit", "pillow>=11"]
+dependencies = [
+    "minigestor-kit",
+    "numpy>=1.26",
+    "onnxruntime>=1.20",
+    "pillow>=11",
+    "tokenizers>=0.20",
+]
 
 [tool.uv.sources]
 minigestor-kit = { workspace = true }

@@ -13,3 +13,7 @@ class ModelNotFoundError(ClipError):
 
 class UnreadableImageError(ClipError):
     """El archivo no es una imagen que Pillow pueda decodificar."""
+
+
+class EmbeddingCacheError(ClipError):
+    """El archivo de la caché de embeddings no tiene la forma esperada."""

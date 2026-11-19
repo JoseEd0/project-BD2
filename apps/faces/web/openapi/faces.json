@@ -1,0 +1,883 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "faces",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/consent": {
+      "get": {
+        "summary": "Consent",
+        "description": "El texto vigente del consentimiento y su versión, que se envía al registrarse.",
+        "operationId": "consent_consent_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Consent"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/enrollments": {
+      "post": {
+        "summary": "Start Enrollment",
+        "operationId": "start_enrollment_enrollments_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartEnrollment"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Enrollment"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/enrollments/{enrollment_id}": {
+      "get": {
+        "summary": "Enrollment Status",
+        "operationId": "enrollment_status_enrollments__enrollment_id__get",
+        "parameters": [
+          {
+            "name": "enrollment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Enrollment Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Enrollment"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Cancel Enrollment",
+        "operationId": "cancel_enrollment_enrollments__enrollment_id__delete",
+        "parameters": [
+          {
+            "name": "enrollment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Enrollment Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/enrollments/{enrollment_id}/shots": {
+      "post": {
+        "summary": "Submit Shot",
+        "description": "Una toma: `accepted` con la pose que cubrió, o el motivo y qué corregir.",
+        "operationId": "submit_shot_enrollments__enrollment_id__shots_post",
+        "parameters": [
+          {
+            "name": "enrollment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Enrollment Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_submit_shot_enrollments__enrollment_id__shots_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShotResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/enrollments/{enrollment_id}/finish": {
+      "post": {
+        "summary": "Finish Enrollment",
+        "operationId": "finish_enrollment_enrollments__enrollment_id__finish_post",
+        "parameters": [
+          {
+            "name": "enrollment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Enrollment Id"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Enrolled"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/identify": {
+      "post": {
+        "summary": "Identify",
+        "operationId": "identify_identify_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_identify_identify_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Identification"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/person": {
+      "get": {
+        "summary": "Person",
+        "operationId": "person_person_get",
+        "parameters": [
+          {
+            "name": "X-Person-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "El código que se recibió al registrarse.",
+              "title": "X-Person-Id"
+            },
+            "description": "El código que se recibió al registrarse."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Person"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Forget Person",
+        "description": "Borra a la persona y todos sus embeddings. Responde igual si ya no estaba.",
+        "operationId": "forget_person_person_delete",
+        "parameters": [
+          {
+            "name": "X-Person-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "El código que se recibió al registrarse.",
+              "title": "X-Person-Id"
+            },
+            "description": "El código que se recibió al registrarse."
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Body_identify_identify_post": {
+        "properties": {
+          "image": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "Image",
+            "description": "La foto: JPEG, PNG, WebP, BMP, GIF o TIFF."
+          }
+        },
+        "type": "object",
+        "required": [
+          "image"
+        ],
+        "title": "Body_identify_identify_post"
+      },
+      "Body_submit_shot_enrollments__enrollment_id__shots_post": {
+        "properties": {
+          "image": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "Image",
+            "description": "La foto: JPEG, PNG, WebP, BMP, GIF o TIFF."
+          }
+        },
+        "type": "object",
+        "required": [
+          "image"
+        ],
+        "title": "Body_submit_shot_enrollments__enrollment_id__shots_post"
+      },
+      "Consent": {
+        "properties": {
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "purpose": {
+            "type": "string",
+            "title": "Purpose"
+          },
+          "stored_data": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Stored Data"
+          },
+          "not_stored": {
+            "type": "string",
+            "title": "Not Stored"
+          },
+          "retention_days": {
+            "type": "integer",
+            "title": "Retention Days"
+          },
+          "retention": {
+            "type": "string",
+            "title": "Retention"
+          },
+          "rights": {
+            "type": "string",
+            "title": "Rights"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text",
+            "description": "El texto completo que se acepta, con todo lo anterior."
+          }
+        },
+        "type": "object",
+        "required": [
+          "version",
+          "title",
+          "purpose",
+          "stored_data",
+          "not_stored",
+          "retention_days",
+          "retention",
+          "rights",
+          "text"
+        ],
+        "title": "Consent"
+      },
+      "ConsentAcceptance": {
+        "properties": {
+          "version": {
+            "type": "string",
+            "maxLength": 64,
+            "title": "Version"
+          },
+          "accepted": {
+            "type": "boolean",
+            "title": "Accepted"
+          }
+        },
+        "type": "object",
+        "required": [
+          "version",
+          "accepted"
+        ],
+        "title": "ConsentAcceptance"
+      },
+      "Enrolled": {
+        "properties": {
+          "person": {
+            "$ref": "#/components/schemas/Person"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "person",
+          "message"
+        ],
+        "title": "Enrolled"
+      },
+      "Enrollment": {
+        "properties": {
+          "enrollment_id": {
+            "type": "string",
+            "title": "Enrollment Id"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          },
+          "poses": {
+            "items": {
+              "$ref": "#/components/schemas/Pose"
+            },
+            "type": "array",
+            "title": "Poses"
+          },
+          "covered": {
+            "items": {
+              "$ref": "#/components/schemas/Pose"
+            },
+            "type": "array",
+            "title": "Covered"
+          },
+          "remaining": {
+            "items": {
+              "$ref": "#/components/schemas/Pose"
+            },
+            "type": "array",
+            "title": "Remaining"
+          },
+          "attempts_left": {
+            "type": "integer",
+            "title": "Attempts Left"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "enrollment_id",
+          "display_name",
+          "poses",
+          "covered",
+          "remaining",
+          "attempts_left",
+          "expires_at",
+          "message"
+        ],
+        "title": "Enrollment",
+        "description": "Una sesión de registro: qué poses pide, cuáles tiene y qué hacer ahora."
+      },
+      "FaceBox": {
+        "properties": {
+          "x": {
+            "type": "number",
+            "title": "X"
+          },
+          "y": {
+            "type": "number",
+            "title": "Y"
+          },
+          "width": {
+            "type": "number",
+            "title": "Width"
+          },
+          "height": {
+            "type": "number",
+            "title": "Height"
+          }
+        },
+        "type": "object",
+        "required": [
+          "x",
+          "y",
+          "width",
+          "height"
+        ],
+        "title": "FaceBox"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "Identification": {
+        "properties": {
+          "faces": {
+            "items": {
+              "$ref": "#/components/schemas/IdentifiedFace"
+            },
+            "type": "array",
+            "title": "Faces",
+            "description": "Del rostro más grande al más chico."
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "faces",
+          "message"
+        ],
+        "title": "Identification"
+      },
+      "IdentifiedFace": {
+        "properties": {
+          "box": {
+            "$ref": "#/components/schemas/FaceBox"
+          },
+          "status": {
+            "$ref": "#/components/schemas/MatchStatus"
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score",
+            "description": "El coseno con la persona más parecida, la reconozca o no."
+          }
+        },
+        "type": "object",
+        "required": [
+          "box",
+          "status"
+        ],
+        "title": "IdentifiedFace"
+      },
+      "MatchStatus": {
+        "type": "string",
+        "enum": [
+          "known",
+          "unknown",
+          "too_small"
+        ],
+        "title": "MatchStatus"
+      },
+      "Person": {
+        "properties": {
+          "person_id": {
+            "type": "string",
+            "title": "Person Id",
+            "description": "El código para ver o borrar el registro: guárdalo."
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          },
+          "consent_version": {
+            "type": "string",
+            "title": "Consent Version"
+          },
+          "consented_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Consented At"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At"
+          },
+          "shots": {
+            "type": "integer",
+            "title": "Shots"
+          }
+        },
+        "type": "object",
+        "required": [
+          "person_id",
+          "display_name",
+          "consent_version",
+          "consented_at",
+          "created_at",
+          "expires_at",
+          "shots"
+        ],
+        "title": "Person",
+        "description": "Lo que el servicio guarda de una persona, salvo sus embeddings."
+      },
+      "Pose": {
+        "type": "string",
+        "enum": [
+          "front",
+          "left",
+          "right"
+        ],
+        "title": "Pose",
+        "description": "Hacia dónde mira la persona en una toma, desde su punto de vista: «izquierda» es su\nizquierda, que en una foto sin espejar queda a la derecha de la imagen."
+      },
+      "RejectionReason": {
+        "type": "string",
+        "enum": [
+          "no_face",
+          "multiple_faces",
+          "face_cut_off",
+          "face_too_small",
+          "too_dark",
+          "overexposed",
+          "blurry",
+          "head_tilted",
+          "turned_too_far",
+          "looking_up",
+          "looking_down",
+          "pose_unclear",
+          "pose_already_taken",
+          "pose_not_in_plan",
+          "different_person"
+        ],
+        "title": "RejectionReason",
+        "description": "Por qué no se acepta una toma. El valor es el código que recibe la interfaz."
+      },
+      "ShotQuality": {
+        "properties": {
+          "face_width": {
+            "type": "number",
+            "title": "Face Width"
+          },
+          "outside_fraction": {
+            "type": "number",
+            "title": "Outside Fraction"
+          },
+          "brightness": {
+            "type": "number",
+            "title": "Brightness"
+          },
+          "overexposed_fraction": {
+            "type": "number",
+            "title": "Overexposed Fraction"
+          },
+          "sharpness": {
+            "type": "number",
+            "title": "Sharpness"
+          },
+          "yaw": {
+            "type": "number",
+            "title": "Yaw"
+          },
+          "pitch": {
+            "type": "number",
+            "title": "Pitch"
+          },
+          "roll": {
+            "type": "number",
+            "title": "Roll"
+          }
+        },
+        "type": "object",
+        "required": [
+          "face_width",
+          "outside_fraction",
+          "brightness",
+          "overexposed_fraction",
+          "sharpness",
+          "yaw",
+          "pitch",
+          "roll"
+        ],
+        "title": "ShotQuality",
+        "description": "Lo que se midió de la toma (ver `faces.quality.ShotMeasurements`)."
+      },
+      "ShotResult": {
+        "properties": {
+          "accepted": {
+            "type": "boolean",
+            "title": "Accepted"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RejectionReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "pose": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Pose"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "quality": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ShotQuality"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "enrollment": {
+            "$ref": "#/components/schemas/Enrollment"
+          }
+        },
+        "type": "object",
+        "required": [
+          "accepted",
+          "reason",
+          "message",
+          "pose",
+          "quality",
+          "enrollment"
+        ],
+        "title": "ShotResult",
+        "description": "Una toma aceptada (con la pose que cubrió) o rechazada (con qué corregir)."
+      },
+      "StartEnrollment": {
+        "properties": {
+          "display_name": {
+            "type": "string",
+            "maxLength": 200,
+            "title": "Display Name"
+          },
+          "consent": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConsentAcceptance"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "La versión de GET /consent y `accepted: true`."
+          }
+        },
+        "type": "object",
+        "required": [
+          "display_name"
+        ],
+        "title": "StartEnrollment"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}

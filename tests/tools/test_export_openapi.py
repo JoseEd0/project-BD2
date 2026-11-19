@@ -59,6 +59,13 @@ def test_the_versioned_contracts_are_up_to_date(tmp_path: Path) -> None:
         assert exported == (REPOSITORY_ROOT / contract.path).read_text(encoding="utf-8")
 
 
+def test_the_faces_contract_lives_next_to_its_interface(tmp_path: Path) -> None:
+    [path] = export_contracts(tmp_path, {"faces": CONTRACTS["faces"]})
+    schema = json.loads(path.read_text(encoding="utf-8"))
+    assert CONTRACTS["faces"].path == Path("apps/faces/web/openapi/faces.json")
+    assert {"/consent", "/enrollments/{enrollment_id}/shots", "/person"} <= set(schema["paths"])
+
+
 def test_each_service_is_written_next_to_its_consumer(tmp_path: Path) -> None:
     contracts = {
         "one": Contract(tiny_app, Path("apps/one/web/openapi/one.json")),

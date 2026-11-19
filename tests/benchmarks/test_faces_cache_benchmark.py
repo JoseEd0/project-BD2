@@ -7,20 +7,15 @@ import pytest
 from apps.faces.tests.faces_support import selfie
 from benchmarks.common import Report
 from benchmarks.faces_cache_benchmark import (
+    FRAME_SIZE,
     SPEED,
     TIMELINE,
-    _bounced,
     add_speed,
     hit_rate_per_second,
     sliding_frames,
 )
-from benchmarks.faces_stream_benchmark import FRAME_SIZE, STAGES, WITH_CACHE, WITHOUT_CACHE, Run
+from benchmarks.faces_stream_benchmark import STAGES, WITH_CACHE, WITHOUT_CACHE, Run
 from PIL import Image
-
-
-def test_the_face_bounces_between_the_edges():
-    assert [_bounced(step * 40, 100) for step in range(7)] == [0, 40, 80, 80, 40, 0, 40]
-    assert _bounced(500, 0) == 0
 
 
 def test_a_still_face_gives_identical_frames_and_a_moving_one_does_not():

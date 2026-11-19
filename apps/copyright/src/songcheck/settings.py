@@ -34,9 +34,11 @@ DEFAULT_NEIGHBOURS_PER_WINDOW = 10
 # Dos ventanas seguidas son 7,5 s de audio, la copia más corta que llena entera una ventana
 # del catálogo (ver el README).
 DEFAULT_MIN_RUN_WINDOWS = 2
-# Umbral provisional, de una medida rápida con pocos casos (README, «Detección»); la curva
-# ROC de la evaluación (#77) lo calibra.
-DEFAULT_MATCH_THRESHOLD = 0.5
+# Umbral provisional, medido con 20 casos de cada tipo contra el catálogo entero
+# (benchmarks/README.md, §14): las pistas copiadas enteras puntúan 0,99 o más y 18 de 20
+# tramos de 15 s copiados fuera de la rejilla pasan de 0,45, mientras que 17 de 20 pistas no
+# catalogadas quedan por debajo. La curva ROC de la evaluación (#77) lo calibra.
+DEFAULT_MATCH_THRESHOLD = 0.45
 DEFAULT_MAX_MATCHES = 10
 # Por debajo, silencio digital o el ruido de fondo de una grabación: -60 dBFS es mil veces
 # menos potencia que una pista a -30 dBFS, que ya suena bajo.

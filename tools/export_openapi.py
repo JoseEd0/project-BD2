@@ -25,9 +25,15 @@ from fastapi import FastAPI
 
 from api.main import create_app
 from config import EngineConfig
+from songcheck.api import build_app as build_copyright_app
+from songcheck.settings import CopyrightSettings
 
 JSON_INDENT = 2
 REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
+# Un servicio exige la dirección y la clave del gestor; para exportar su esquema no se
+# conecta a nada (`app.openapi()` no corre el `lifespan`), así que basta una que no existe.
+UNUSED_ENGINE_URL = "http://engine.invalid"
+UNUSED_ENGINE_KEY = "contract-export"
 
 
 @contextmanager
@@ -40,6 +46,12 @@ def engine_app() -> Iterator[FastAPI]:
             yield app
         finally:
             app.state.service.close()
+
+
+@contextmanager
+def copyright_app() -> Iterator[FastAPI]:
+    settings = CopyrightSettings(engine_url=UNUSED_ENGINE_URL, engine_key=UNUSED_ENGINE_KEY)
+    yield build_copyright_app(settings)
 
 
 AppFactory = Callable[[], AbstractContextManager[FastAPI]]
@@ -58,6 +70,7 @@ class Contract:
 # `apps/<app>/web/openapi/<app>.json`.
 CONTRACTS: dict[str, Contract] = {
     "engine": Contract(engine_app, Path("apps/client/openapi/engine.json")),
+    "copyright": Contract(copyright_app, Path("apps/copyright/web/openapi/copyright.json")),
 }
 
 

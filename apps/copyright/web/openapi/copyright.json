@@ -1,0 +1,710 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "copyright",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/songs": {
+      "get": {
+        "summary": "List Songs",
+        "description": "Canciones del catálogo: las que mejor responden a `query` (BM25 sobre título y\nartista) o, sin ella, en orden de id; `genre` filtra por género exacto.",
+        "operationId": "list_songs_songs_get",
+        "parameters": [
+          {
+            "name": "query",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "título o artista",
+              "title": "Query"
+            },
+            "description": "título o artista"
+          },
+          {
+            "name": "genre",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Genre"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SongPage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/songs/{song_id}": {
+      "get": {
+        "summary": "Read Song",
+        "operationId": "read_song_songs__song_id__get",
+        "parameters": [
+          {
+            "name": "song_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Song Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SongDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/songs/{song_id}/audio": {
+      "get": {
+        "summary": "Song Audio",
+        "description": "El audio original de la canción, reenviado del gestor por trozos. Con `Range` responde\n`206` con solo ese trozo, así que un reproductor puede saltar al instante de una\ncoincidencia sin bajar la pista entera; `404` si la canción no está en el catálogo.",
+        "operationId": "song_audio_songs__song_id__audio_get",
+        "parameters": [
+          {
+            "name": "song_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Song Id"
+            }
+          },
+          {
+            "name": "Range",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Range"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "El audio entero.",
+            "content": {
+              "audio/*": {}
+            }
+          },
+          "206": {
+            "content": {
+              "audio/*": {}
+            },
+            "description": "El trozo que pidió `Range`."
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/catalog": {
+      "get": {
+        "summary": "Catalog Summary",
+        "operationId": "catalog_summary_catalog_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogSummary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/detections": {
+      "post": {
+        "summary": "Detect",
+        "description": "Las canciones del catálogo que suenan dentro del audio, por votación por desfase.\n\nResponde `413` si pesa o dura más de lo que admite la configuración, `415` si su\ncontenido no es MP3, WAV, FLAC ni OGG (se mira el contenido, no el nombre) y `400` si\nestá vacío, dañado o dura menos de un segundo. Un audio en silencio no es un error: no\ntiene coincidencias.",
+        "operationId": "detect_detections_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_detect_detections_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Detection"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Body_detect_detections_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "description": "El audio: MP3, WAV, FLAC u OGG"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_detect_detections_post"
+      },
+      "CatalogSummary": {
+        "properties": {
+          "songs": {
+            "type": "integer",
+            "title": "Songs"
+          },
+          "segments": {
+            "type": "integer",
+            "title": "Segments"
+          },
+          "window_seconds": {
+            "type": "number",
+            "title": "Window Seconds"
+          },
+          "hop_seconds": {
+            "type": "number",
+            "title": "Hop Seconds"
+          },
+          "segments_indexed": {
+            "type": "boolean",
+            "title": "Segments Indexed"
+          },
+          "genres": {
+            "items": {
+              "$ref": "#/components/schemas/GenreCount"
+            },
+            "type": "array",
+            "title": "Genres"
+          }
+        },
+        "type": "object",
+        "required": [
+          "songs",
+          "segments",
+          "window_seconds",
+          "hop_seconds",
+          "segments_indexed",
+          "genres"
+        ],
+        "title": "CatalogSummary",
+        "description": "El tamaño del catálogo, las ventanas con que se cortó y si ya se puede buscar en él."
+      },
+      "DetectedMatch": {
+        "properties": {
+          "song": {
+            "$ref": "#/components/schemas/SongReference"
+          },
+          "upload": {
+            "$ref": "#/components/schemas/TimeSpan"
+          },
+          "original": {
+            "$ref": "#/components/schemas/TimeSpan"
+          },
+          "offset_seconds": {
+            "type": "number",
+            "title": "Offset Seconds"
+          },
+          "windows": {
+            "type": "integer",
+            "title": "Windows"
+          },
+          "mean_similarity": {
+            "type": "number",
+            "title": "Mean Similarity"
+          },
+          "coverage": {
+            "type": "number",
+            "title": "Coverage"
+          },
+          "score": {
+            "type": "number",
+            "title": "Score"
+          },
+          "above_threshold": {
+            "type": "boolean",
+            "title": "Above Threshold"
+          }
+        },
+        "type": "object",
+        "required": [
+          "song",
+          "upload",
+          "original",
+          "offset_seconds",
+          "windows",
+          "mean_similarity",
+          "coverage",
+          "score",
+          "above_threshold"
+        ],
+        "title": "DetectedMatch",
+        "description": "Una racha de ventanas de la subida alineada con una canción del catálogo.\n\n`coverage` es la fracción de las ventanas que la subida y el original podrían compartir\n(las audibles de la subida o las del original, las que sean menos) que cubre la racha;\n`score` es `mean_similarity · coverage`."
+      },
+      "Detection": {
+        "properties": {
+          "format": {
+            "type": "string",
+            "title": "Format"
+          },
+          "duration_seconds": {
+            "type": "number",
+            "title": "Duration Seconds"
+          },
+          "sample_rate": {
+            "type": "integer",
+            "title": "Sample Rate"
+          },
+          "channels": {
+            "type": "integer",
+            "title": "Channels"
+          },
+          "window_seconds": {
+            "type": "number",
+            "title": "Window Seconds"
+          },
+          "hop_seconds": {
+            "type": "number",
+            "title": "Hop Seconds"
+          },
+          "windows": {
+            "type": "integer",
+            "title": "Windows"
+          },
+          "silent_windows": {
+            "type": "integer",
+            "title": "Silent Windows"
+          },
+          "threshold": {
+            "type": "number",
+            "title": "Threshold"
+          },
+          "detected": {
+            "type": "boolean",
+            "title": "Detected"
+          },
+          "matches": {
+            "items": {
+              "$ref": "#/components/schemas/DetectedMatch"
+            },
+            "type": "array",
+            "title": "Matches"
+          },
+          "engine_timings": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EngineTimings"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "format",
+          "duration_seconds",
+          "sample_rate",
+          "channels",
+          "window_seconds",
+          "hop_seconds",
+          "windows",
+          "silent_windows",
+          "threshold",
+          "detected",
+          "matches",
+          "engine_timings"
+        ],
+        "title": "Detection",
+        "description": "Lo que se encontró en la subida. `detected` dice si alguna coincidencia pasa el umbral."
+      },
+      "EngineTimings": {
+        "properties": {
+          "decode_ms": {
+            "type": "number",
+            "title": "Decode Ms"
+          },
+          "extraction_ms": {
+            "type": "number",
+            "title": "Extraction Ms"
+          },
+          "search_ms": {
+            "type": "number",
+            "title": "Search Ms"
+          }
+        },
+        "type": "object",
+        "required": [
+          "decode_ms",
+          "extraction_ms",
+          "search_ms"
+        ],
+        "title": "EngineTimings",
+        "description": "Lo que tardó el gestor, sobre todas las ventanas a la vez."
+      },
+      "GenreCount": {
+        "properties": {
+          "genre": {
+            "type": "string",
+            "title": "Genre"
+          },
+          "songs": {
+            "type": "integer",
+            "title": "Songs"
+          }
+        },
+        "type": "object",
+        "required": [
+          "genre",
+          "songs"
+        ],
+        "title": "GenreCount"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "Segment": {
+        "properties": {
+          "start_seconds": {
+            "type": "number",
+            "title": "Start Seconds"
+          },
+          "end_seconds": {
+            "type": "number",
+            "title": "End Seconds"
+          }
+        },
+        "type": "object",
+        "required": [
+          "start_seconds",
+          "end_seconds"
+        ],
+        "title": "Segment"
+      },
+      "Song": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "artist": {
+            "type": "string",
+            "title": "Artist"
+          },
+          "genre": {
+            "type": "string",
+            "title": "Genre"
+          },
+          "duration_seconds": {
+            "type": "number",
+            "title": "Duration Seconds"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "artist",
+          "genre",
+          "duration_seconds"
+        ],
+        "title": "Song",
+        "description": "Una canción original del catálogo. `score` es su relevancia BM25 si se buscó texto."
+      },
+      "SongDetail": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "artist": {
+            "type": "string",
+            "title": "Artist"
+          },
+          "genre": {
+            "type": "string",
+            "title": "Genre"
+          },
+          "duration_seconds": {
+            "type": "number",
+            "title": "Duration Seconds"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score"
+          },
+          "segments": {
+            "items": {
+              "$ref": "#/components/schemas/Segment"
+            },
+            "type": "array",
+            "title": "Segments"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "artist",
+          "genre",
+          "duration_seconds",
+          "segments"
+        ],
+        "title": "SongDetail",
+        "description": "Una canción con los tramos con que está indexada."
+      },
+      "SongPage": {
+        "properties": {
+          "songs": {
+            "items": {
+              "$ref": "#/components/schemas/Song"
+            },
+            "type": "array",
+            "title": "Songs"
+          }
+        },
+        "type": "object",
+        "required": [
+          "songs"
+        ],
+        "title": "SongPage"
+      },
+      "SongReference": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "artist": {
+            "type": "string",
+            "title": "Artist"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "artist"
+        ],
+        "title": "SongReference"
+      },
+      "TimeSpan": {
+        "properties": {
+          "start_seconds": {
+            "type": "number",
+            "title": "Start Seconds"
+          },
+          "end_seconds": {
+            "type": "number",
+            "title": "End Seconds"
+          }
+        },
+        "type": "object",
+        "required": [
+          "start_seconds",
+          "end_seconds"
+        ],
+        "title": "TimeSpan"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}

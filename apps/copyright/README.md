@@ -5,7 +5,7 @@ catálogo de canciones originales** (#75): las 8 000 pistas de `fma_small` del F
 Archive, cortadas en tramos de 5 s e indexadas en el gestor con el HNSW de la Parte 4 sobre
 sus MFCC; el trabajo de carga que lo deja listo y un API de lectura; y **la detección**
 (#76): `POST /detections` recibe un audio y devuelve las canciones del catálogo que suenan
-dentro, alineadas por votación por desfase. La evaluación llega en #77 y la interfaz en #78. Como todo servicio de la
+dentro, alineadas por votación por desfase. La evaluación llega en #77; la interfaz, un estudio de escucha con la línea de tiempo de los tramos, vive en [`web/`](web/README.md). Como todo servicio de la
 Parte 5, usa el gestor solo por su API REST ([`apps/README.md`](../README.md)).
 
 El paquete se llama `songcheck` y no `copyright`, que es un nombre interno de Python.
@@ -319,7 +319,7 @@ y los datos crudos en
 | Servicio | Qué es | Redes | Puertos |
 |---|---|---|---|
 | `copyright-api` | `uvicorn --factory songcheck.api:create_app`, imagen de `deploy/service` con `APP_DIR=copyright` y `APP_PACKAGE=songcheck` | `data`, `copyright` | — |
-| `copyright-web` | la plantilla del kit web hasta #78, que reenvía `/api` a su API | `copyright` | 8101 / 8401 |
+| `copyright-web` | su interfaz ([`web/`](web/README.md)) servida por el nginx del kit web, que reenvía `/api` a su API | `copyright` | 8101 / 8401 |
 | `copyright-seed` (perfil `seed`) | `python -m songcheck.seed` con la imagen del API | `data` | — |
 | `copyright-tunnel` (perfil `tunnel`) | una URL HTTPS temporal para la web | `copyright` | — |
 

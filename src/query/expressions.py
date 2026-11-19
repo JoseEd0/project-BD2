@@ -172,6 +172,7 @@ class ExpressionEvaluator:
         # impide que se libere y que otro objeto herede su identidad.
         self._functions: dict[int, tuple[FunctionCall, ScalarFunction]] = {}
         self._folded: dict[int, tuple[FunctionCall, Value]] = {}
+        self._string_options: dict[int, tuple[InPredicate, frozenset[str] | None]] = {}
 
     def evaluate(self, expression: Expression, row: Record) -> Value:
         """Valor de la expresión para esa fila.
@@ -555,6 +556,9 @@ class ExpressionEvaluator:
         value = self.evaluate(expression.operand, row)
         if value is None:
             return None
+        strings = self._literal_strings(expression) if isinstance(value, str) else None
+        if strings is not None:
+            return (value in strings) != expression.negated
         options = [self.evaluate(item, row) for item in expression.values]
         if any(
             option is not None and _compare(BinaryOperator.EQUAL, value, option)
@@ -564,6 +568,23 @@ class ExpressionEvaluator:
         if any(option is None for option in options):
             return None
         return expression.negated
+
+    def _literal_strings(self, expression: InPredicate) -> frozenset[str] | None:
+        """Las opciones de un `IN` como conjunto, si todas son textos literales; si no, `None`.
+
+        Entre dos textos `=` es la igualdad de Python, así que buscar en el conjunto da lo
+        mismo que comparar con cada opción, en `O(1)` por fila en vez de `O(opciones)`: un
+        `IN` de cientos de ids sobre las filas de un `JOIN` pasaba de 30 s comparando.
+        """
+        cached = self._string_options.get(id(expression))
+        if cached is None:
+            values = [item.value for item in expression.values if isinstance(item, Literal)]
+            literal = len(values) == len(expression.values)
+            strings = [value for value in values if isinstance(value, str)]
+            found = frozenset(strings) if literal and len(strings) == len(values) else None
+            cached = (expression, found)
+            self._string_options[id(expression)] = cached
+        return cached[1]
 
     def _like(self, expression: LikePredicate, row: Record) -> Value:
         value = self.evaluate(expression.operand, row)

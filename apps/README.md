@@ -26,7 +26,7 @@ apps/
 | Aplicación | Carpeta | Contenedores | HTTP / HTTPS | En el compose |
 |---|---|---|---|---|
 | Copyright en audio | `apps/copyright/` | `copyright-api`, `copyright-web` | 8101 / 8401 | sí, con su interfaz |
-| Tienda con recomendaciones | `apps/shop/` | `shop-api`, `shop-web` | 8102 / 8402 | sí; la interfaz es la plantilla hasta #83 |
+| Tienda con recomendaciones | `apps/shop/` | `shop-api`, `shop-web` | 8102 / 8402 | sí, con su tienda Cajón ([`shop/web`](shop/web/README.md)) |
 | Preguntas a papers (RAG) | `apps/rag/` | `papers-api`, `papers-web` | 8103 / 8403 | sí: búsqueda y respuestas por SSE; la web es la plantilla hasta #88 |
 | Reconocimiento de rostros | `apps/faces/` | `faces-api`, `faces-web` | 8104 / 8404 | sí, con su PWA de cámara ([`faces/web`](faces/web/README.md)) |
 | Ejemplo del kit (perfil `example`) | `deploy/example/` | `example-api`, `example-web` | 8100 / 8400 | sí, para probar la topología |

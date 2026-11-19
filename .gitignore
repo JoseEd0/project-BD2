@@ -116,6 +116,7 @@ config.local.*
 !demos/samples/esci/*.csv
 !apps/rag/tests/fixtures/datasets/rag_papers/*.jsonl
 !benchmarks/rag/preguntas.jsonl
+!benchmarks/rag/revision_fidelidad.jsonl
 *.jpg
 *.jpeg
 *.png

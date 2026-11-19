@@ -10,8 +10,10 @@ esa interfaz: se reemplaza por lo que la app hace, su `PRODUCT.md` y su `DESIGN.
 | `src/api/` | la salud del API y, cuando el servicio publique su contrato, los tipos generados |
 | `src/components/`, `src/pages/` | un marcador neutro: estado del servicio, tiempos por etapa y tema |
 | `vite.config.ts` | el kit (`webKit()`), la PWA (`createPwaOptions`) y el reenvío de `/api` en desarrollo |
-| `Dockerfile`, `nginx.conf.template` | la imagen: el build con el kit y nginx sin privilegios que reenvía `/api` solo a `${API_UPSTREAM}` |
 | `tests/`, `e2e/` | Vitest en jsdom y Playwright en Chromium contra el build |
+
+La imagen no es de la interfaz: es la común de todas, [`web-kit/docker/`](../docker/), con
+`APP_DIR=<app>/web`.
 
 ```bash
 npm ci

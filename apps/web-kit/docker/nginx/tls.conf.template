@@ -1,0 +1,11 @@
+# El mismo sitio por HTTPS. Solo se activa si el contenedor tiene un certificado montado
+# (ver 25-tls.sh): la cámara y el micrófono del celular piden un origen seguro.
+server {
+    listen ${WEB_TLS_PORT} ssl;
+    http2 on;
+    ssl_certificate ${TLS_CERTIFICATE};
+    ssl_certificate_key ${TLS_CERTIFICATE_KEY};
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_session_cache shared:tls:1m;
+    include /etc/nginx/conf.d/app/server.conf;
+}

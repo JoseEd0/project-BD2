@@ -1,5 +1,28 @@
 import { Icon } from "../components/Icon";
 
+interface PageStepperProps {
+  readonly pages: number;
+  readonly current: number;
+  readonly onSelect: (page: number) => void;
+}
+
+/** Anterior y siguiente, con la posición; queda fija arriba mientras se baja por la página. */
+export function PageStepper({ pages, current, onSelect }: PageStepperProps) {
+  return (
+    <nav className="fiche__nav" aria-label="Hojear el paper">
+      <button type="button" className="button button--icon" aria-label="Página anterior" disabled={current <= 1} onClick={() => onSelect(current - 1)}>
+        <Icon name="previous" />
+      </button>
+      <p className="fiche__position">
+        Página <strong>{current}</strong> de {pages}
+      </p>
+      <button type="button" className="button button--icon" aria-label="Página siguiente" disabled={current >= pages} onClick={() => onSelect(current + 1)}>
+        <Icon name="next" />
+      </button>
+    </nav>
+  );
+}
+
 /** Cuadros por fila, como las columnas de una microficha. */
 const FRAMES_PER_ROW = 10;
 const ROW_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -25,17 +48,6 @@ export function FicheGrid({ pages, current, cited, passagePages, onSelect }: Fic
   const rows = Math.ceil(pages / FRAMES_PER_ROW);
   return (
     <nav className="fiche" aria-label="Páginas del paper">
-      <div className="fiche__nav">
-        <button type="button" className="button button--icon" aria-label="Página anterior" disabled={current <= 1} onClick={() => onSelect(current - 1)}>
-          <Icon name="previous" />
-        </button>
-        <p className="fiche__position">
-          Página <strong>{current}</strong> de {pages}
-        </p>
-        <button type="button" className="button button--icon" aria-label="Página siguiente" disabled={current >= pages} onClick={() => onSelect(current + 1)}>
-          <Icon name="next" />
-        </button>
-      </div>
       <ol className="fiche__frames">
         {Array.from({ length: rows }, (_, row) => (
           <li key={row} className="fiche__row">

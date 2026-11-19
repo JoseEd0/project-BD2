@@ -93,7 +93,7 @@ test("ask, stream the answer, open the citation: the PDF opens at its page with 
   await expect(page.locator(".textLayer .is-cited").first()).toBeVisible();
   await expect(page.locator(".textLayer .is-cited")).toContainText(["Learned indexes replace"]);
   await expect(page.locator(".textLayer")).not.toContainText("The B+-tree is the dominant");
-  await frames.getByRole("button", { name: "Página siguiente" }).click();
+  await page.getByRole("button", { name: "Página siguiente" }).click();
   await expect(page.getByText(`Página 3 de ${PAGES.length}`)).toBeVisible();
   await expect(page.locator(".textLayer")).toContainText("We compare against ALEX");
 });

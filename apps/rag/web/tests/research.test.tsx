@@ -115,7 +115,7 @@ describe("asking a question", () => {
     const frames = screen.getByRole("navigation", { name: "Páginas del paper" });
     expect(within(frames).getByRole("button", { name: "Página 2, citada, del fragmento" }).getAttribute("aria-current")).toBe("page");
     expect(within(frames).getByRole("button", { name: "Página 1, citada" })).toBeTruthy();
-    await user.click(within(frames).getByRole("button", { name: "Página siguiente" }));
+    await user.click(screen.getByRole("button", { name: "Página siguiente" }));
     expect(await screen.findByText("PDF en la página 3")).toBeTruthy();
   });
 

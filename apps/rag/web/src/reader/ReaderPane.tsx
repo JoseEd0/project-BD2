@@ -6,7 +6,7 @@ import { Icon } from "../components/Icon";
 import { formatAuthors, formatPages } from "../format";
 import type { ReaderTarget } from "../research/readerTarget";
 import { usePage } from "../research/useRetrieval";
-import { FicheGrid } from "./FicheGrid";
+import { FicheGrid, PageStepper } from "./FicheGrid";
 import { PdfPage } from "./PdfPage";
 
 const PDF_MEDIA_TYPE = "application/pdf";
@@ -109,7 +109,10 @@ export default function ReaderPane({ target, citedPages, onPage }: ReaderPanePro
       </header>
       <PassageQuote target={target} located={onPassagePage ? located : null} />
       {page.data !== undefined && (
-        <FicheGrid pages={page.data.pages} current={target.page} cited={citedPages} passagePages={passagePages} onSelect={onPage} />
+        <>
+          <PageStepper pages={page.data.pages} current={target.page} onSelect={onPage} />
+          <FicheGrid pages={page.data.pages} current={target.page} cited={citedPages} passagePages={passagePages} onSelect={onPage} />
+        </>
       )}
       {page.isError && (
         <p className="reader__error" role="alert">

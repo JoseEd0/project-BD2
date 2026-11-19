@@ -1,0 +1,4093 @@
+{
+  "name": "rag_evaluacion",
+  "parameters": {
+    "preguntas": "preguntas.jsonl",
+    "con_respuesta": 45,
+    "sin_respuesta": 18,
+    "k": [
+      5,
+      10
+    ],
+    "mrr_hasta": 10,
+    "modos": [
+      "bm25",
+      "vector",
+      "hybrid"
+    ],
+    "maquina": {
+      "procesador": "Apple M4 Pro",
+      "nucleos": 12,
+      "sistema": "macOS-27.0.1-arm64-arm-64bit",
+      "python": "3.12.11",
+      "carga_media_1_min": 8.3
+    },
+    "carga_media_al_terminar": 8.84
+  },
+  "measurements": [
+    {
+      "technique": "bm25",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 12.22,
+      "extra": {
+        "pregunta_id": "a01",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2507.04872#50",
+        "recuperados": [
+          "curso:informe#8",
+          "curso:informe#7",
+          "curso:proyecto-integrador-bd2#0",
+          "curso:informe#34",
+          "curso:informe#35",
+          "curso:informe#22",
+          "curso:informe#17",
+          "curso:proyecto-integrador-bd2#2",
+          "curso:informe#15",
+          "curso:informe#3"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": null
+      }
+    },
+    {
+      "technique": "vector",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 26.4,
+      "extra": {
+        "pregunta_id": "a01",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2507.04872#50",
+        "recuperados": [
+          "2507.04872#48",
+          "2507.04872#65",
+          "2507.04872#29",
+          "2507.04872#1",
+          "2507.04872#11",
+          "2507.04872#50",
+          "2507.04872#47",
+          "2507.04872#58",
+          "2507.04872#59",
+          "2507.04872#10"
+        ],
+        "puesto": 6,
+        "puesto_vecino": 6,
+        "puesto_paper": 1
+      }
+    },
+    {
+      "technique": "hybrid",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 32.34,
+      "extra": {
+        "pregunta_id": "a01",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2507.04872#50",
+        "recuperados": [
+          "2507.04872#48",
+          "curso:informe#8",
+          "2507.04872#65",
+          "curso:informe#7",
+          "2507.04872#29",
+          "curso:proyecto-integrador-bd2#0",
+          "2507.04872#1",
+          "curso:informe#34",
+          "2507.04872#11",
+          "curso:informe#35"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": 1
+      }
+    },
+    {
+      "technique": "bm25",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 10.79,
+      "extra": {
+        "pregunta_id": "a02",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2510.27168#30",
+        "recuperados": [
+          "curso:informe#4",
+          "curso:informe#26",
+          "curso:proyecto-integrador-bd2#0",
+          "curso:informe#3",
+          "curso:informe#0",
+          "curso:informe#12",
+          "curso:informe#14",
+          "curso:informe#16",
+          "curso:informe#5",
+          "curso:proyecto-integrador-bd2#7"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": null
+      }
+    },
+    {
+      "technique": "vector",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 40.55,
+      "extra": {
+        "pregunta_id": "a02",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2510.27168#30",
+        "recuperados": [
+          "2510.27168#30",
+          "2510.27168#7",
+          "2510.27168#52",
+          "2510.27168#1",
+          "2510.27168#0",
+          "2510.27168#29",
+          "2510.27168#51",
+          "2510.27168#34",
+          "2604.19982#7",
+          "2510.27168#33"
+        ],
+        "puesto": 1,
+        "puesto_vecino": 1,
+        "puesto_paper": 1
+      }
+    },
+    {
+      "technique": "hybrid",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 28.55,
+      "extra": {
+        "pregunta_id": "a02",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2510.27168#30",
+        "recuperados": [
+          "2510.27168#30",
+          "curso:informe#4",
+          "2510.27168#7",
+          "curso:informe#26",
+          "2510.27168#52",
+          "curso:proyecto-integrador-bd2#0",
+          "2510.27168#1",
+          "curso:informe#3",
+          "2510.27168#0",
+          "curso:informe#0"
+        ],
+        "puesto": 1,
+        "puesto_vecino": 1,
+        "puesto_paper": 1
+      }
+    },
+    {
+      "technique": "bm25",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 23.67,
+      "extra": {
+        "pregunta_id": "a03",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2511.00693#2",
+        "recuperados": [
+          "curso:informe#7",
+          "curso:informe#8",
+          "curso:informe#6",
+          "curso:informe#33",
+          "curso:informe#32",
+          "curso:informe#2",
+          "curso:informe#17",
+          "curso:informe#4",
+          "curso:informe#1",
+          "curso:informe#25"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": null
+      }
+    },
+    {
+      "technique": "vector",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 15.59,
+      "extra": {
+        "pregunta_id": "a03",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2511.00693#2",
+        "recuperados": [
+          "2511.00693#4",
+          "2511.00693#1",
+          "2511.00693#22",
+          "2511.00693#5",
+          "2511.00693#2",
+          "2511.00693#20",
+          "2511.00693#19",
+          "2511.00693#3",
+          "2511.00693#18",
+          "2412.00393#0"
+        ],
+        "puesto": 5,
+        "puesto_vecino": 2,
+        "puesto_paper": 1
+      }
+    },
+    {
+      "technique": "hybrid",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 52.44,
+      "extra": {
+        "pregunta_id": "a03",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2511.00693#2",
+        "recuperados": [
+          "2511.00693#4",
+          "2511.00693#1",
+          "2511.00693#5",
+          "2511.00693#0",
+          "curso:informe#7",
+          "curso:informe#8",
+          "2511.00693#22",
+          "curso:informe#6",
+          "curso:informe#33",
+          "2511.00693#2"
+        ],
+        "puesto": 10,
+        "puesto_vecino": 2,
+        "puesto_paper": 1
+      }
+    },
+    {
+      "technique": "bm25",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 18.94,
+      "extra": {
+        "pregunta_id": "a04",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2511.16366#31",
+        "recuperados": [
+          "curso:informe#8",
+          "curso:informe#7",
+          "curso:informe#10",
+          "curso:informe#9",
+          "curso:informe#16",
+          "curso:informe#34",
+          "curso:informe#15",
+          "curso:informe#33",
+          "curso:informe#18",
+          "curso:informe#11"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": null
+      }
+    },
+    {
+      "technique": "vector",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 26.08,
+      "extra": {
+        "pregunta_id": "a04",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2511.16366#31",
+        "recuperados": [
+          "2511.16366#31",
+          "2511.16366#24",
+          "2511.16366#30",
+          "2511.16366#18",
+          "2511.16366#51",
+          "2511.16366#44",
+          "curso:proyecto-integrador-bd2#5",
+          "2606.18801#56",
+          "curso:informe#0",
+          "2511.16366#33"
+        ],
+        "puesto": 1,
+        "puesto_vecino": 1,
+        "puesto_paper": 1
+      }
+    },
+    {
+      "technique": "hybrid",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 31.28,
+      "extra": {
+        "pregunta_id": "a04",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2511.16366#31",
+        "recuperados": [
+          "curso:informe#16",
+          "curso:informe#12",
+          "curso:informe#13",
+          "2511.16366#31",
+          "curso:informe#0",
+          "curso:informe#15",
+          "curso:informe#23",
+          "curso:informe#30",
+          "curso:proyecto-integrador-bd2#9",
+          "curso:proyecto-integrador-bd2#7"
+        ],
+        "puesto": 4,
+        "puesto_vecino": 4,
+        "puesto_paper": 4
+      }
+    },
+    {
+      "technique": "bm25",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 8.62,
+      "extra": {
+        "pregunta_id": "a05",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2511.22832#10",
+        "recuperados": [
+          "curso:informe#8",
+          "curso:informe#7",
+          "curso:informe#4",
+          "curso:informe#10",
+          "curso:informe#15",
+          "curso:informe#3",
+          "curso:proyecto-integrador-bd2#1",
+          "curso:informe#6",
+          "curso:informe#2",
+          "curso:informe#1"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": null
+      }
+    },
+    {
+      "technique": "vector",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 15.91,
+      "extra": {
+        "pregunta_id": "a05",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2511.22832#10",
+        "recuperados": [
+          "2512.23491#46",
+          "2512.23491#47",
+          "2512.23491#9",
+          "2606.27342#4",
+          "2603.11391#22",
+          "2511.22832#10",
+          "2512.23491#44",
+          "2606.01210#74",
+          "2512.23491#11",
+          "2607.12717#36"
+        ],
+        "puesto": 6,
+        "puesto_vecino": 6,
+        "puesto_paper": 6
+      }
+    },
+    {
+      "technique": "hybrid",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 24.28,
+      "extra": {
+        "pregunta_id": "a05",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2511.22832#10",
+        "recuperados": [
+          "2512.23491#46",
+          "curso:informe#8",
+          "2512.23491#47",
+          "curso:informe#7",
+          "2512.23491#9",
+          "curso:informe#4",
+          "2606.27342#4",
+          "curso:informe#10",
+          "2603.11391#22",
+          "curso:informe#15"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": null
+      }
+    },
+    {
+      "technique": "bm25",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 10.8,
+      "extra": {
+        "pregunta_id": "a06",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2512.01092#40",
+        "recuperados": [
+          "curso:informe#6",
+          "curso:proyecto-integrador-bd2#0",
+          "curso:informe#13",
+          "curso:informe#8",
+          "curso:informe#2",
+          "curso:informe#10",
+          "curso:informe#15",
+          "curso:informe#4",
+          "curso:informe#17",
+          "curso:informe#26"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": null
+      }
+    },
+    {
+      "technique": "vector",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 18.88,
+      "extra": {
+        "pregunta_id": "a06",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2512.01092#40",
+        "recuperados": [
+          "2512.01092#70",
+          "2512.01092#1",
+          "2512.01092#49",
+          "2512.01092#12",
+          "2512.01092#47",
+          "2512.01092#69",
+          "2512.01092#71",
+          "2512.01092#20",
+          "2512.01092#0",
+          "2512.01092#13"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": 1
+      }
+    },
+    {
+      "technique": "hybrid",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 26.97,
+      "extra": {
+        "pregunta_id": "a06",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2512.01092#40",
+        "recuperados": [
+          "2512.01092#69",
+          "2512.01092#0",
+          "2512.01092#68",
+          "2512.01092#70",
+          "curso:informe#6",
+          "2512.01092#1",
+          "curso:proyecto-integrador-bd2#0",
+          "2512.01092#49",
+          "curso:informe#13",
+          "2512.01092#12"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": 1
+      }
+    },
+    {
+      "technique": "bm25",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 11.21,
+      "extra": {
+        "pregunta_id": "a07",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2512.05453#8",
+        "recuperados": [
+          "curso:proyecto-integrador-bd2#0",
+          "curso:informe#4",
+          "curso:informe#15",
+          "curso:informe#16",
+          "curso:informe#26",
+          "curso:informe#3",
+          "curso:informe#7",
+          "curso:informe#0",
+          "curso:informe#35",
+          "curso:informe#36"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": null
+      }
+    },
+    {
+      "technique": "vector",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 28.64,
+      "extra": {
+        "pregunta_id": "a07",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2512.05453#8",
+        "recuperados": [
+          "2512.05453#8",
+          "2512.05453#1",
+          "2512.05453#2",
+          "2512.05453#35",
+          "2512.05453#7",
+          "2512.05453#11",
+          "2512.05453#10",
+          "2512.05453#21",
+          "2512.05453#39",
+          "2512.05453#3"
+        ],
+        "puesto": 1,
+        "puesto_vecino": 1,
+        "puesto_paper": 1
+      }
+    },
+    {
+      "technique": "hybrid",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 36.11,
+      "extra": {
+        "pregunta_id": "a07",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2512.05453#8",
+        "recuperados": [
+          "2512.05453#8",
+          "curso:proyecto-integrador-bd2#0",
+          "2512.05453#1",
+          "curso:informe#4",
+          "2512.05453#2",
+          "curso:informe#15",
+          "2512.05453#35",
+          "curso:informe#16",
+          "2512.05453#7",
+          "curso:informe#26"
+        ],
+        "puesto": 1,
+        "puesto_vecino": 1,
+        "puesto_paper": 1
+      }
+    },
+    {
+      "technique": "bm25",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 17.99,
+      "extra": {
+        "pregunta_id": "a08",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2512.14723#10",
+        "recuperados": [
+          "curso:informe#32",
+          "curso:informe#14",
+          "curso:proyecto-integrador-bd2#3",
+          "curso:informe#27",
+          "curso:proyecto-integrador-bd2#6",
+          "curso:informe#16",
+          "curso:informe#33",
+          "curso:informe#20",
+          "curso:informe#31",
+          "curso:informe#19"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": null
+      }
+    },
+    {
+      "technique": "vector",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 21.33,
+      "extra": {
+        "pregunta_id": "a08",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2512.14723#10",
+        "recuperados": [
+          "2512.14723#20",
+          "2512.14723#0",
+          "2512.14723#10",
+          "2512.14723#5",
+          "2512.14723#23",
+          "2512.14723#22",
+          "2512.14723#17",
+          "curso:informe#16",
+          "2512.14723#19",
+          "curso:proyecto-integrador-bd2#6"
+        ],
+        "puesto": 3,
+        "puesto_vecino": 3,
+        "puesto_paper": 1
+      }
+    },
+    {
+      "technique": "hybrid",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 29.53,
+      "extra": {
+        "pregunta_id": "a08",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2512.14723#10",
+        "recuperados": [
+          "curso:informe#16",
+          "curso:proyecto-integrador-bd2#6",
+          "curso:proyecto-integrador-bd2#3",
+          "curso:informe#32",
+          "curso:informe#17",
+          "curso:informe#27",
+          "curso:informe#14",
+          "curso:informe#13",
+          "curso:informe#31",
+          "curso:informe#12"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": null
+      }
+    },
+    {
+      "technique": "bm25",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 21.78,
+      "extra": {
+        "pregunta_id": "a09",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2511.13059#0",
+        "recuperados": [
+          "curso:informe#2",
+          "curso:informe#0",
+          "curso:informe#15",
+          "curso:informe#16",
+          "curso:informe#33",
+          "curso:informe#32",
+          "curso:informe#26",
+          "curso:informe#11",
+          "curso:proyecto-integrador-bd2#9",
+          "curso:informe#4"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": null
+      }
+    },
+    {
+      "technique": "vector",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 26.31,
+      "extra": {
+        "pregunta_id": "a09",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2511.13059#0",
+        "recuperados": [
+          "2605.30156#13",
+          "curso:informe#6",
+          "2608.02268#49",
+          "2608.28352#1",
+          "2511.13059#1",
+          "2608.10139#22",
+          "2602.07584#62",
+          "curso:informe#5",
+          "2602.18775#4",
+          "2602.18775#10"
+        ],
+        "puesto": null,
+        "puesto_vecino": 5,
+        "puesto_paper": 5
+      }
+    },
+    {
+      "technique": "hybrid",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 42.87,
+      "extra": {
+        "pregunta_id": "a09",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2511.13059#0",
+        "recuperados": [
+          "curso:informe#5",
+          "curso:informe#6",
+          "curso:informe#26",
+          "curso:informe#1",
+          "curso:informe#0",
+          "curso:informe#33",
+          "2511.13059#1",
+          "curso:informe#36",
+          "2511.13059#0",
+          "curso:informe#30"
+        ],
+        "puesto": 9,
+        "puesto_vecino": 7,
+        "puesto_paper": 7
+      }
+    },
+    {
+      "technique": "bm25",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 9.59,
+      "extra": {
+        "pregunta_id": "a10",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2601.00304#25",
+        "recuperados": [
+          "curso:proyecto-integrador-bd2#0",
+          "curso:informe#4",
+          "curso:informe#5",
+          "curso:proyecto-integrador-bd2#7",
+          "curso:informe#0",
+          "curso:proyecto-integrador-bd2#10",
+          "curso:proyecto-integrador-bd2#9",
+          "curso:proyecto-integrador-bd2#5",
+          "curso:proyecto-integrador-bd2#3",
+          "curso:informe#13"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": null
+      }
+    },
+    {
+      "technique": "vector",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 22.33,
+      "extra": {
+        "pregunta_id": "a10",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2601.00304#25",
+        "recuperados": [
+          "2601.00304#25",
+          "2601.00304#26",
+          "2601.06705#42",
+          "2601.06705#1",
+          "2601.00304#43",
+          "2606.26385#25",
+          "2604.11454#66",
+          "2601.00304#42",
+          "2511.11399#27",
+          "2608.03840#56"
+        ],
+        "puesto": 1,
+        "puesto_vecino": 1,
+        "puesto_paper": 1
+      }
+    },
+    {
+      "technique": "hybrid",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 24.11,
+      "extra": {
+        "pregunta_id": "a10",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2601.00304#25",
+        "recuperados": [
+          "2601.00304#43",
+          "2601.00304#42",
+          "2608.01459#13",
+          "2601.00304#25",
+          "curso:proyecto-integrador-bd2#0",
+          "2601.00304#26",
+          "curso:informe#4",
+          "2601.06705#42",
+          "curso:informe#5",
+          "2601.06705#1"
+        ],
+        "puesto": 4,
+        "puesto_vecino": 4,
+        "puesto_paper": 1
+      }
+    },
+    {
+      "technique": "bm25",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 10.6,
+      "extra": {
+        "pregunta_id": "a11",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2601.05347#10",
+        "recuperados": [
+          "curso:informe#32",
+          "curso:informe#4",
+          "curso:informe#33",
+          "curso:informe#26",
+          "curso:informe#24",
+          "curso:informe#35",
+          "curso:informe#15",
+          "curso:informe#25",
+          "curso:informe#18",
+          "curso:informe#22"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": null
+      }
+    },
+    {
+      "technique": "vector",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 27.73,
+      "extra": {
+        "pregunta_id": "a11",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2601.05347#10",
+        "recuperados": [
+          "2601.05347#49",
+          "2601.05347#48",
+          "2601.05347#58",
+          "2601.05347#86",
+          "2601.05347#56",
+          "2601.05347#47",
+          "2601.05347#9",
+          "2601.05347#59",
+          "2601.05347#85",
+          "2601.05347#45"
+        ],
+        "puesto": null,
+        "puesto_vecino": 7,
+        "puesto_paper": 1
+      }
+    },
+    {
+      "technique": "hybrid",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 34.57,
+      "extra": {
+        "pregunta_id": "a11",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2601.05347#10",
+        "recuperados": [
+          "2601.05347#56",
+          "2601.05347#51",
+          "2601.05347#49",
+          "curso:informe#32",
+          "2601.05347#48",
+          "curso:informe#4",
+          "2601.05347#58",
+          "curso:informe#33",
+          "2601.05347#86",
+          "curso:informe#26"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": 1
+      }
+    },
+    {
+      "technique": "bm25",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 11.42,
+      "extra": {
+        "pregunta_id": "a12",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2601.10596#12",
+        "recuperados": [
+          "curso:informe#10",
+          "curso:informe#22",
+          "curso:informe#35",
+          "curso:informe#25",
+          "curso:informe#33",
+          "curso:informe#11",
+          "curso:informe#21",
+          "curso:informe#36",
+          "curso:informe#9",
+          "curso:informe#7"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": null
+      }
+    },
+    {
+      "technique": "vector",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 27.15,
+      "extra": {
+        "pregunta_id": "a12",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2601.10596#12",
+        "recuperados": [
+          "2512.17429#100",
+          "2607.07696#3",
+          "2601.10596#4",
+          "2512.17429#164",
+          "2512.17429#101",
+          "2601.10596#17",
+          "2609.02106#3",
+          "2601.09735#5",
+          "2512.17429#172",
+          "2605.31097#173"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": 3
+      }
+    },
+    {
+      "technique": "hybrid",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 33.36,
+      "extra": {
+        "pregunta_id": "a12",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2601.10596#12",
+        "recuperados": [
+          "2512.17429#100",
+          "curso:informe#10",
+          "2607.07696#3",
+          "curso:informe#22",
+          "2601.10596#4",
+          "curso:informe#35",
+          "2512.17429#164",
+          "curso:informe#25",
+          "2512.17429#101",
+          "curso:informe#33"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": 5
+      }
+    },
+    {
+      "technique": "bm25",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 10.22,
+      "extra": {
+        "pregunta_id": "a13",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2602.21213#0",
+        "recuperados": [
+          "curso:informe#7",
+          "curso:proyecto-integrador-bd2#0",
+          "curso:informe#8",
+          "curso:proyecto-integrador-bd2#1",
+          "curso:informe#18",
+          "curso:informe#16",
+          "curso:informe#10",
+          "curso:informe#19",
+          "curso:informe#36",
+          "curso:informe#17"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": null
+      }
+    },
+    {
+      "technique": "vector",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 23.17,
+      "extra": {
+        "pregunta_id": "a13",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2602.21213#0",
+        "recuperados": [
+          "2602.21213#0",
+          "2602.21213#2",
+          "2106.15664#33",
+          "2106.15664#1",
+          "2106.15664#34",
+          "2409.01102#7",
+          "2602.21213#1",
+          "2602.21213#18",
+          "2606.29355#8",
+          "2606.29355#7"
+        ],
+        "puesto": 1,
+        "puesto_vecino": 1,
+        "puesto_paper": 1
+      }
+    },
+    {
+      "technique": "hybrid",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 30.28,
+      "extra": {
+        "pregunta_id": "a13",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2602.21213#0",
+        "recuperados": [
+          "2602.21213#0",
+          "curso:informe#7",
+          "2602.21213#2",
+          "curso:proyecto-integrador-bd2#0",
+          "2106.15664#33",
+          "curso:informe#8",
+          "2106.15664#1",
+          "curso:proyecto-integrador-bd2#1",
+          "2106.15664#34",
+          "curso:informe#18"
+        ],
+        "puesto": 1,
+        "puesto_vecino": 1,
+        "puesto_paper": 1
+      }
+    },
+    {
+      "technique": "bm25",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 17.17,
+      "extra": {
+        "pregunta_id": "a14",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2603.05180#4",
+        "recuperados": [
+          "curso:informe#26",
+          "curso:informe#5",
+          "curso:informe#27",
+          "curso:informe#4",
+          "curso:informe#36",
+          "curso:informe#18",
+          "curso:informe#2",
+          "curso:informe#3",
+          "curso:proyecto-integrador-bd2#2",
+          "curso:proyecto-integrador-bd2#9"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": null
+      }
+    },
+    {
+      "technique": "vector",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 23.96,
+      "extra": {
+        "pregunta_id": "a14",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2603.05180#4",
+        "recuperados": [
+          "2603.05180#4",
+          "2606.07870#34",
+          "2603.05180#3",
+          "2611.22159#90",
+          "2603.05180#11",
+          "2605.02171#2",
+          "2605.02171#3",
+          "2611.22159#91",
+          "2607.17184#40",
+          "2605.02171#57"
+        ],
+        "puesto": 1,
+        "puesto_vecino": 1,
+        "puesto_paper": 1
+      }
+    },
+    {
+      "technique": "hybrid",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 30.38,
+      "extra": {
+        "pregunta_id": "a14",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2603.05180#4",
+        "recuperados": [
+          "2603.05180#4",
+          "2603.05180#3",
+          "curso:informe#26",
+          "2606.07870#34",
+          "curso:informe#5",
+          "curso:informe#27",
+          "2611.22159#90",
+          "curso:informe#4",
+          "2603.05180#11",
+          "curso:informe#36"
+        ],
+        "puesto": 1,
+        "puesto_vecino": 1,
+        "puesto_paper": 1
+      }
+    },
+    {
+      "technique": "bm25",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 11.97,
+      "extra": {
+        "pregunta_id": "a15",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2603.11402#7",
+        "recuperados": [
+          "curso:informe#22",
+          "curso:informe#8",
+          "curso:informe#19",
+          "curso:informe#16",
+          "curso:informe#14",
+          "curso:informe#9",
+          "curso:proyecto-integrador-bd2#2",
+          "curso:informe#6",
+          "curso:informe#11",
+          "curso:informe#7"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": null
+      }
+    },
+    {
+      "technique": "vector",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 21.38,
+      "extra": {
+        "pregunta_id": "a15",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2603.11402#7",
+        "recuperados": [
+          "2510.25684#0",
+          "2403.09060#90",
+          "2510.25684#66",
+          "2611.15263#21",
+          "2608.01173#13",
+          "2611.15263#37",
+          "2608.05441#28",
+          "2610.40620#1",
+          "2603.11402#7",
+          "2610.12692#4"
+        ],
+        "puesto": 9,
+        "puesto_vecino": 9,
+        "puesto_paper": 9
+      }
+    },
+    {
+      "technique": "hybrid",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 27.22,
+      "extra": {
+        "pregunta_id": "a15",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2603.11402#7",
+        "recuperados": [
+          "2510.25684#0",
+          "curso:informe#22",
+          "2403.09060#90",
+          "curso:informe#8",
+          "2510.25684#66",
+          "curso:informe#19",
+          "2611.15263#21",
+          "curso:informe#16",
+          "2608.01173#13",
+          "curso:informe#14"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": null
+      }
+    },
+    {
+      "technique": "bm25",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 14.76,
+      "extra": {
+        "pregunta_id": "a16",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2603.13835#52",
+        "recuperados": [
+          "curso:informe#15",
+          "curso:informe#16",
+          "curso:informe#2",
+          "curso:informe#36",
+          "curso:proyecto-integrador-bd2#2",
+          "curso:informe#26",
+          "curso:informe#8",
+          "curso:informe#33",
+          "curso:informe#9",
+          "curso:informe#11"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": null
+      }
+    },
+    {
+      "technique": "vector",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 23.06,
+      "extra": {
+        "pregunta_id": "a16",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2603.13835#52",
+        "recuperados": [
+          "2603.13835#52",
+          "2409.01102#62",
+          "2603.13835#53",
+          "2409.01102#61",
+          "2603.10625#65",
+          "2608.20092#59",
+          "2603.13835#29",
+          "2603.13835#30",
+          "2611.09346#22",
+          "2603.13835#51"
+        ],
+        "puesto": 1,
+        "puesto_vecino": 1,
+        "puesto_paper": 1
+      }
+    },
+    {
+      "technique": "hybrid",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 45.67,
+      "extra": {
+        "pregunta_id": "a16",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2603.13835#52",
+        "recuperados": [
+          "2603.13835#52",
+          "curso:informe#15",
+          "2409.01102#62",
+          "curso:informe#16",
+          "2603.13835#53",
+          "curso:informe#2",
+          "2409.01102#61",
+          "curso:informe#36",
+          "2603.10625#65",
+          "curso:proyecto-integrador-bd2#2"
+        ],
+        "puesto": 1,
+        "puesto_vecino": 1,
+        "puesto_paper": 1
+      }
+    },
+    {
+      "technique": "bm25",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 16.19,
+      "extra": {
+        "pregunta_id": "a17",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2603.17223#12",
+        "recuperados": [
+          "curso:informe#33",
+          "curso:informe#15",
+          "curso:informe#14",
+          "curso:informe#32",
+          "curso:informe#4",
+          "curso:informe#36",
+          "curso:informe#10",
+          "curso:informe#16",
+          "curso:informe#19",
+          "curso:informe#11"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": null
+      }
+    },
+    {
+      "technique": "vector",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 23.81,
+      "extra": {
+        "pregunta_id": "a17",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2603.17223#12",
+        "recuperados": [
+          "2603.17223#12",
+          "2603.17223#2",
+          "2603.17223#11",
+          "2603.17223#13",
+          "2602.01701#13",
+          "2604.23477#46",
+          "2609.21133#15",
+          "2604.23477#61",
+          "2607.18029#7",
+          "2604.23477#40"
+        ],
+        "puesto": 1,
+        "puesto_vecino": 1,
+        "puesto_paper": 1
+      }
+    },
+    {
+      "technique": "hybrid",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 35.6,
+      "extra": {
+        "pregunta_id": "a17",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2603.17223#12",
+        "recuperados": [
+          "2603.17223#12",
+          "curso:informe#33",
+          "2603.17223#2",
+          "curso:informe#15",
+          "2603.17223#11",
+          "curso:informe#14",
+          "2603.17223#13",
+          "curso:informe#32",
+          "2602.01701#13",
+          "curso:informe#4"
+        ],
+        "puesto": 1,
+        "puesto_vecino": 1,
+        "puesto_paper": 1
+      }
+    },
+    {
+      "technique": "bm25",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 20.23,
+      "extra": {
+        "pregunta_id": "a18",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2604.06231#12",
+        "recuperados": [
+          "curso:proyecto-integrador-bd2#0",
+          "curso:informe#10",
+          "curso:informe#8",
+          "curso:informe#18",
+          "curso:informe#16",
+          "curso:proyecto-integrador-bd2#9",
+          "curso:informe#12",
+          "curso:informe#11",
+          "curso:informe#15",
+          "curso:informe#34"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": null
+      }
+    },
+    {
+      "technique": "vector",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 27.47,
+      "extra": {
+        "pregunta_id": "a18",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2604.06231#12",
+        "recuperados": [
+          "2604.06231#13",
+          "2604.06231#14",
+          "2604.06231#12",
+          "2604.06231#11",
+          "2604.06231#27",
+          "2604.06231#5",
+          "2604.06231#8",
+          "2604.06231#26",
+          "2604.06231#6",
+          "2604.06231#7"
+        ],
+        "puesto": 3,
+        "puesto_vecino": 1,
+        "puesto_paper": 1
+      }
+    },
+    {
+      "technique": "hybrid",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 53.8,
+      "extra": {
+        "pregunta_id": "a18",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2604.06231#12",
+        "recuperados": [
+          "2604.06231#5",
+          "2604.06231#6",
+          "2604.06231#7",
+          "2604.06231#13",
+          "curso:proyecto-integrador-bd2#0",
+          "2604.06231#14",
+          "curso:informe#10",
+          "2604.06231#12",
+          "curso:informe#8",
+          "2604.06231#11"
+        ],
+        "puesto": 8,
+        "puesto_vecino": 4,
+        "puesto_paper": 1
+      }
+    },
+    {
+      "technique": "bm25",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 7.84,
+      "extra": {
+        "pregunta_id": "a19",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2605.30308#11",
+        "recuperados": [
+          "curso:informe#5",
+          "curso:informe#4",
+          "curso:informe#17",
+          "curso:informe#16",
+          "curso:informe#8",
+          "curso:proyecto-integrador-bd2#0",
+          "curso:informe#15",
+          "curso:informe#22",
+          "curso:informe#34",
+          "curso:informe#11"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": null
+      }
+    },
+    {
+      "technique": "vector",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 36.11,
+      "extra": {
+        "pregunta_id": "a19",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2605.30308#11",
+        "recuperados": [
+          "2605.30308#3",
+          "2605.30308#4",
+          "2511.03393#58",
+          "2605.30308#1",
+          "2603.08612#115",
+          "2608.14643#20",
+          "2605.30308#17",
+          "2608.14643#22",
+          "2605.30308#2",
+          "2611.09346#30"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": 1
+      }
+    },
+    {
+      "technique": "hybrid",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 23.25,
+      "extra": {
+        "pregunta_id": "a19",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2605.30308#11",
+        "recuperados": [
+          "2605.30308#3",
+          "curso:informe#5",
+          "2605.30308#4",
+          "curso:informe#4",
+          "2511.03393#58",
+          "curso:informe#17",
+          "2605.30308#1",
+          "curso:informe#16",
+          "2603.08612#115",
+          "curso:informe#8"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": 1
+      }
+    },
+    {
+      "technique": "bm25",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 8.07,
+      "extra": {
+        "pregunta_id": "a20",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2608.28835#17",
+        "recuperados": [
+          "curso:informe#34",
+          "curso:informe#8",
+          "curso:informe#22",
+          "curso:informe#17",
+          "curso:informe#7",
+          "curso:informe#4",
+          "curso:informe#35",
+          "curso:informe#26",
+          "curso:informe#3",
+          "curso:informe#9"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": null
+      }
+    },
+    {
+      "technique": "vector",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 23.85,
+      "extra": {
+        "pregunta_id": "a20",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2608.28835#17",
+        "recuperados": [
+          "2608.28835#16",
+          "2608.28835#12",
+          "2608.28835#15",
+          "2608.28835#44",
+          "2608.28835#45",
+          "2608.28835#29",
+          "2608.28835#17",
+          "2608.28835#28",
+          "2608.28835#20",
+          "2608.28835#5"
+        ],
+        "puesto": 7,
+        "puesto_vecino": 1,
+        "puesto_paper": 1
+      }
+    },
+    {
+      "technique": "hybrid",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 25.45,
+      "extra": {
+        "pregunta_id": "a20",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2608.28835#17",
+        "recuperados": [
+          "2608.28835#16",
+          "curso:informe#34",
+          "2608.28835#12",
+          "curso:informe#8",
+          "2608.28835#15",
+          "curso:informe#22",
+          "2608.28835#44",
+          "curso:informe#17",
+          "2608.28835#45",
+          "curso:informe#7"
+        ],
+        "puesto": null,
+        "puesto_vecino": 1,
+        "puesto_paper": 1
+      }
+    },
+    {
+      "technique": "bm25",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 13.1,
+      "extra": {
+        "pregunta_id": "a21",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2609.03538#96",
+        "recuperados": [
+          "curso:informe#8",
+          "curso:proyecto-integrador-bd2#0",
+          "curso:informe#16",
+          "curso:informe#10",
+          "curso:informe#6",
+          "curso:informe#15",
+          "curso:informe#9",
+          "curso:informe#5",
+          "curso:informe#4",
+          "curso:informe#34"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": null
+      }
+    },
+    {
+      "technique": "vector",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 17.7,
+      "extra": {
+        "pregunta_id": "a21",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2609.03538#96",
+        "recuperados": [
+          "2609.03538#139",
+          "2609.03538#117",
+          "2512.12957#7",
+          "2609.03538#107",
+          "2409.01102#6",
+          "2505.16802#120",
+          "2609.03538#138",
+          "2607.24151#22",
+          "2609.03538#11",
+          "2609.03538#94"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": 1
+      }
+    },
+    {
+      "technique": "hybrid",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 47.11,
+      "extra": {
+        "pregunta_id": "a21",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2609.03538#96",
+        "recuperados": [
+          "2609.03538#139",
+          "curso:informe#8",
+          "2609.03538#117",
+          "curso:proyecto-integrador-bd2#0",
+          "2512.12957#7",
+          "curso:informe#16",
+          "2609.03538#107",
+          "curso:informe#10",
+          "2409.01102#6",
+          "curso:informe#6"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": 1
+      }
+    },
+    {
+      "technique": "bm25",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 10.66,
+      "extra": {
+        "pregunta_id": "a22",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2609.15058#58",
+        "recuperados": [
+          "curso:informe#19",
+          "curso:informe#8",
+          "curso:informe#22",
+          "curso:informe#7",
+          "curso:informe#33",
+          "curso:informe#34",
+          "curso:informe#20",
+          "curso:proyecto-integrador-bd2#2",
+          "curso:informe#21",
+          "curso:proyecto-integrador-bd2#0"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": null
+      }
+    },
+    {
+      "technique": "vector",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 26.55,
+      "extra": {
+        "pregunta_id": "a22",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2609.15058#58",
+        "recuperados": [
+          "2609.15058#55",
+          "2505.03212#56",
+          "2505.03212#58",
+          "2609.15058#66",
+          "2609.15058#56",
+          "2611.12539#8",
+          "2609.15058#54",
+          "2609.15058#102",
+          "2609.15058#92",
+          "2609.15058#53"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": 1
+      }
+    },
+    {
+      "technique": "hybrid",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 34.38,
+      "extra": {
+        "pregunta_id": "a22",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2609.15058#58",
+        "recuperados": [
+          "2609.15058#48",
+          "2609.15058#55",
+          "curso:informe#19",
+          "2505.03212#56",
+          "curso:informe#8",
+          "2505.03212#58",
+          "curso:informe#22",
+          "2609.15058#66",
+          "curso:informe#7",
+          "2609.15058#56"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": 1
+      }
+    },
+    {
+      "technique": "bm25",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 17.84,
+      "extra": {
+        "pregunta_id": "a23",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2609.20489#43",
+        "recuperados": [
+          "curso:informe#10",
+          "curso:informe#8",
+          "curso:informe#33",
+          "curso:informe#34",
+          "curso:informe#17",
+          "curso:proyecto-integrador-bd2#4",
+          "curso:informe#9",
+          "curso:informe#35",
+          "curso:proyecto-integrador-bd2#3",
+          "curso:informe#4"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": null
+      }
+    },
+    {
+      "technique": "vector",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 26.7,
+      "extra": {
+        "pregunta_id": "a23",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2609.20489#43",
+        "recuperados": [
+          "2608.12365#29",
+          "2605.27810#79",
+          "2510.25684#72",
+          "2604.02553#80",
+          "2603.15465#95",
+          "2611.07631#20",
+          "2507.04872#85",
+          "2610.37140#47",
+          "2605.07129#50",
+          "2409.01102#72"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": null
+      }
+    },
+    {
+      "technique": "hybrid",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 58.44,
+      "extra": {
+        "pregunta_id": "a23",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2609.20489#43",
+        "recuperados": [
+          "2608.12365#29",
+          "curso:informe#10",
+          "2605.27810#79",
+          "curso:informe#8",
+          "2510.25684#72",
+          "curso:informe#33",
+          "2604.02553#80",
+          "curso:informe#34",
+          "2603.15465#95",
+          "curso:informe#17"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": null
+      }
+    },
+    {
+      "technique": "bm25",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 7.34,
+      "extra": {
+        "pregunta_id": "a24",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2611.08367#20",
+        "recuperados": [
+          "curso:informe#3",
+          "curso:informe#2",
+          "curso:informe#35",
+          "curso:informe#7",
+          "curso:informe#15",
+          "curso:informe#4",
+          "curso:informe#32",
+          "curso:informe#22",
+          "curso:informe#8",
+          "curso:informe#11"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": null
+      }
+    },
+    {
+      "technique": "vector",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 26.01,
+      "extra": {
+        "pregunta_id": "a24",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2611.08367#20",
+        "recuperados": [
+          "2602.23469#58",
+          "2611.08367#6",
+          "2510.25684#57",
+          "2510.25684#6",
+          "2610.25178#28",
+          "2609.06301#51",
+          "2602.14089#24",
+          "2607.24417#9",
+          "2611.08367#29",
+          "2602.04430#37"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": 2
+      }
+    },
+    {
+      "technique": "hybrid",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 33.18,
+      "extra": {
+        "pregunta_id": "a24",
+        "origen": "author",
+        "categoria": "cs.DB",
+        "idioma_documento": "en",
+        "correcto": "2611.08367#20",
+        "recuperados": [
+          "2602.23469#58",
+          "curso:informe#3",
+          "2611.08367#6",
+          "curso:informe#2",
+          "2510.25684#57",
+          "curso:informe#35",
+          "2510.25684#6",
+          "curso:informe#7",
+          "2610.25178#28",
+          "curso:informe#15"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": 3
+      }
+    },
+    {
+      "technique": "bm25",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 25.07,
+      "extra": {
+        "pregunta_id": "a25",
+        "origen": "author",
+        "categoria": "cs.IR",
+        "idioma_documento": "en",
+        "correcto": "2602.15189#7",
+        "recuperados": [
+          "curso:informe#4",
+          "curso:informe#6",
+          "curso:informe#10",
+          "curso:informe#8",
+          "curso:informe#15",
+          "curso:informe#22",
+          "curso:informe#16",
+          "curso:informe#9",
+          "curso:proyecto-integrador-bd2#0",
+          "curso:informe#5"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": null
+      }
+    },
+    {
+      "technique": "vector",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 23.22,
+      "extra": {
+        "pregunta_id": "a25",
+        "origen": "author",
+        "categoria": "cs.IR",
+        "idioma_documento": "en",
+        "correcto": "2602.15189#7",
+        "recuperados": [
+          "2602.15189#8",
+          "2602.15189#7",
+          "2602.15189#25",
+          "2602.15189#0",
+          "2602.15189#12",
+          "2602.15189#18",
+          "2602.15189#11",
+          "2602.15189#1",
+          "2602.15189#23",
+          "2602.15189#35"
+        ],
+        "puesto": 2,
+        "puesto_vecino": 1,
+        "puesto_paper": 1
+      }
+    },
+    {
+      "technique": "hybrid",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 38.07,
+      "extra": {
+        "pregunta_id": "a25",
+        "origen": "author",
+        "categoria": "cs.IR",
+        "idioma_documento": "en",
+        "correcto": "2602.15189#7",
+        "recuperados": [
+          "2602.15189#8",
+          "curso:informe#4",
+          "2602.15189#7",
+          "curso:informe#6",
+          "2602.15189#25",
+          "curso:informe#10",
+          "2602.15189#0",
+          "curso:informe#8",
+          "2602.15189#12",
+          "curso:informe#15"
+        ],
+        "puesto": 3,
+        "puesto_vecino": 1,
+        "puesto_paper": 1
+      }
+    },
+    {
+      "technique": "bm25",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 13.1,
+      "extra": {
+        "pregunta_id": "a26",
+        "origen": "author",
+        "categoria": "cs.IR",
+        "idioma_documento": "en",
+        "correcto": "2606.16970#35",
+        "recuperados": [
+          "curso:informe#3",
+          "curso:informe#26",
+          "curso:informe#4",
+          "curso:informe#14",
+          "curso:informe#13",
+          "curso:informe#27",
+          "curso:proyecto-integrador-bd2#2",
+          "curso:informe#2",
+          "curso:informe#8",
+          "curso:informe#36"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": null
+      }
+    },
+    {
+      "technique": "vector",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 33.49,
+      "extra": {
+        "pregunta_id": "a26",
+        "origen": "author",
+        "categoria": "cs.IR",
+        "idioma_documento": "en",
+        "correcto": "2606.16970#35",
+        "recuperados": [
+          "2606.16970#35",
+          "2606.16970#30",
+          "2606.16970#34",
+          "2606.16970#14",
+          "2606.16970#28",
+          "2606.16970#36",
+          "2606.16970#42",
+          "2606.16970#16",
+          "2606.16970#37",
+          "2606.16970#17"
+        ],
+        "puesto": 1,
+        "puesto_vecino": 1,
+        "puesto_paper": 1
+      }
+    },
+    {
+      "technique": "hybrid",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 37.02,
+      "extra": {
+        "pregunta_id": "a26",
+        "origen": "author",
+        "categoria": "cs.IR",
+        "idioma_documento": "en",
+        "correcto": "2606.16970#35",
+        "recuperados": [
+          "2606.16970#35",
+          "curso:informe#3",
+          "2606.16970#30",
+          "curso:informe#26",
+          "2606.16970#34",
+          "curso:informe#4",
+          "2606.16970#14",
+          "curso:informe#14",
+          "2606.16970#28",
+          "curso:informe#13"
+        ],
+        "puesto": 1,
+        "puesto_vecino": 1,
+        "puesto_paper": 1
+      }
+    },
+    {
+      "technique": "bm25",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 8.25,
+      "extra": {
+        "pregunta_id": "a27",
+        "origen": "author",
+        "categoria": "cs.IR",
+        "idioma_documento": "en",
+        "correcto": "2606.27243#26",
+        "recuperados": [
+          "curso:informe#10",
+          "curso:informe#11",
+          "curso:informe#33",
+          "curso:informe#17",
+          "curso:informe#2",
+          "curso:informe#31",
+          "curso:informe#8",
+          "curso:informe#9",
+          "curso:informe#7",
+          "curso:informe#16"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": null
+      }
+    },
+    {
+      "technique": "vector",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 28.73,
+      "extra": {
+        "pregunta_id": "a27",
+        "origen": "author",
+        "categoria": "cs.IR",
+        "idioma_documento": "en",
+        "correcto": "2606.27243#26",
+        "recuperados": [
+          "2606.27243#25",
+          "2606.27243#26",
+          "2602.04926#39",
+          "2601.14348#28",
+          "2609.03450#35",
+          "2606.27243#24",
+          "2507.09924#24",
+          "2609.03450#34",
+          "2608.23862#32",
+          "2607.23038#22"
+        ],
+        "puesto": 2,
+        "puesto_vecino": 1,
+        "puesto_paper": 1
+      }
+    },
+    {
+      "technique": "hybrid",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 32.89,
+      "extra": {
+        "pregunta_id": "a27",
+        "origen": "author",
+        "categoria": "cs.IR",
+        "idioma_documento": "en",
+        "correcto": "2606.27243#26",
+        "recuperados": [
+          "2606.27243#25",
+          "2606.27243#24",
+          "curso:informe#10",
+          "2606.27243#26",
+          "curso:informe#11",
+          "2602.04926#39",
+          "curso:informe#33",
+          "2601.14348#28",
+          "curso:informe#17",
+          "2609.03450#35"
+        ],
+        "puesto": 4,
+        "puesto_vecino": 1,
+        "puesto_paper": 1
+      }
+    },
+    {
+      "technique": "bm25",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 8.91,
+      "extra": {
+        "pregunta_id": "a28",
+        "origen": "author",
+        "categoria": "cs.IR",
+        "idioma_documento": "en",
+        "correcto": "2607.24802#28",
+        "recuperados": [
+          "curso:informe#36",
+          "curso:informe#35",
+          "curso:informe#4",
+          "curso:informe#3",
+          "curso:informe#7",
+          "curso:informe#12",
+          "curso:informe#17",
+          "curso:informe#6",
+          "curso:informe#16",
+          "curso:informe#9"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": null
+      }
+    },
+    {
+      "technique": "vector",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 26.16,
+      "extra": {
+        "pregunta_id": "a28",
+        "origen": "author",
+        "categoria": "cs.IR",
+        "idioma_documento": "en",
+        "correcto": "2607.24802#28",
+        "recuperados": [
+          "2607.24802#28",
+          "2607.24802#19",
+          "2607.24802#1",
+          "2607.24802#20",
+          "2607.24802#22",
+          "2607.24802#0",
+          "2607.24802#25",
+          "2607.24802#6",
+          "2607.24802#3",
+          "2609.03470#20"
+        ],
+        "puesto": 1,
+        "puesto_vecino": 1,
+        "puesto_paper": 1
+      }
+    },
+    {
+      "technique": "hybrid",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 35.45,
+      "extra": {
+        "pregunta_id": "a28",
+        "origen": "author",
+        "categoria": "cs.IR",
+        "idioma_documento": "en",
+        "correcto": "2607.24802#28",
+        "recuperados": [
+          "2607.24802#28",
+          "curso:informe#36",
+          "2607.24802#19",
+          "curso:informe#35",
+          "2607.24802#1",
+          "curso:informe#4",
+          "2607.24802#20",
+          "curso:informe#3",
+          "2607.24802#22",
+          "curso:informe#7"
+        ],
+        "puesto": 1,
+        "puesto_vecino": 1,
+        "puesto_paper": 1
+      }
+    },
+    {
+      "technique": "bm25",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 13.04,
+      "extra": {
+        "pregunta_id": "a29",
+        "origen": "author",
+        "categoria": "cs.IR",
+        "idioma_documento": "en",
+        "correcto": "2607.27739#5",
+        "recuperados": [
+          "curso:informe#2",
+          "curso:informe#15",
+          "curso:informe#16",
+          "curso:informe#6",
+          "curso:informe#14",
+          "curso:informe#5",
+          "curso:informe#8",
+          "curso:informe#26",
+          "curso:informe#4",
+          "curso:informe#19"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": null
+      }
+    },
+    {
+      "technique": "vector",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 36.45,
+      "extra": {
+        "pregunta_id": "a29",
+        "origen": "author",
+        "categoria": "cs.IR",
+        "idioma_documento": "en",
+        "correcto": "2607.27739#5",
+        "recuperados": [
+          "2603.23375#54",
+          "2603.23375#17",
+          "2603.27719#23",
+          "2610.02534#58",
+          "2603.23375#53",
+          "2603.23375#72",
+          "2603.23375#55",
+          "2405.13795#43",
+          "2610.02534#49",
+          "2605.26578#30"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": null
+      }
+    },
+    {
+      "technique": "hybrid",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 33.83,
+      "extra": {
+        "pregunta_id": "a29",
+        "origen": "author",
+        "categoria": "cs.IR",
+        "idioma_documento": "en",
+        "correcto": "2607.27739#5",
+        "recuperados": [
+          "2603.23375#54",
+          "curso:informe#2",
+          "2603.23375#17",
+          "curso:informe#15",
+          "2603.27719#23",
+          "curso:informe#16",
+          "2610.02534#58",
+          "curso:informe#6",
+          "2603.23375#53",
+          "curso:informe#14"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": null
+      }
+    },
+    {
+      "technique": "bm25",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 12.01,
+      "extra": {
+        "pregunta_id": "a30",
+        "origen": "author",
+        "categoria": "cs.IR",
+        "idioma_documento": "en",
+        "correcto": "2608.01846#8",
+        "recuperados": [
+          "curso:informe#6",
+          "curso:informe#16",
+          "curso:informe#5",
+          "curso:informe#8",
+          "curso:informe#15",
+          "curso:informe#34",
+          "curso:informe#14",
+          "curso:informe#27",
+          "curso:informe#26",
+          "curso:informe#7"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": null
+      }
+    },
+    {
+      "technique": "vector",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 27.76,
+      "extra": {
+        "pregunta_id": "a30",
+        "origen": "author",
+        "categoria": "cs.IR",
+        "idioma_documento": "en",
+        "correcto": "2608.01846#8",
+        "recuperados": [
+          "2608.01846#6",
+          "2611.11346#33",
+          "2611.15445#26",
+          "2610.30941#18",
+          "2608.01846#8",
+          "2508.07595#21",
+          "2610.41319#18",
+          "2501.08686#31",
+          "2611.02758#18",
+          "2608.13833#56"
+        ],
+        "puesto": 5,
+        "puesto_vecino": 5,
+        "puesto_paper": 1
+      }
+    },
+    {
+      "technique": "hybrid",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 31.12,
+      "extra": {
+        "pregunta_id": "a30",
+        "origen": "author",
+        "categoria": "cs.IR",
+        "idioma_documento": "en",
+        "correcto": "2608.01846#8",
+        "recuperados": [
+          "2608.01846#6",
+          "curso:informe#6",
+          "2611.11346#33",
+          "curso:informe#16",
+          "2611.15445#26",
+          "curso:informe#5",
+          "2610.30941#18",
+          "curso:informe#8",
+          "2608.01846#8",
+          "curso:informe#15"
+        ],
+        "puesto": 9,
+        "puesto_vecino": 9,
+        "puesto_paper": 1
+      }
+    },
+    {
+      "technique": "bm25",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 8.58,
+      "extra": {
+        "pregunta_id": "a31",
+        "origen": "author",
+        "categoria": "cs.IR",
+        "idioma_documento": "en",
+        "correcto": "2608.10528#7",
+        "recuperados": [
+          "curso:informe#18",
+          "curso:informe#16",
+          "curso:informe#8",
+          "curso:informe#15",
+          "curso:informe#19",
+          "curso:informe#6",
+          "curso:informe#5",
+          "curso:informe#17",
+          "curso:informe#7",
+          "curso:informe#2"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": null
+      }
+    },
+    {
+      "technique": "vector",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 32.36,
+      "extra": {
+        "pregunta_id": "a31",
+        "origen": "author",
+        "categoria": "cs.IR",
+        "idioma_documento": "en",
+        "correcto": "2608.10528#7",
+        "recuperados": [
+          "2610.40122#11",
+          "2610.40122#89",
+          "2610.40122#95",
+          "2609.03482#50",
+          "2609.03482#49",
+          "2605.27810#80",
+          "2610.40122#23",
+          "2610.40122#88",
+          "2609.38807#10",
+          "2605.31097#16"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": null
+      }
+    },
+    {
+      "technique": "hybrid",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 50.63,
+      "extra": {
+        "pregunta_id": "a31",
+        "origen": "author",
+        "categoria": "cs.IR",
+        "idioma_documento": "en",
+        "correcto": "2608.10528#7",
+        "recuperados": [
+          "2610.40122#11",
+          "curso:informe#18",
+          "2610.40122#89",
+          "curso:informe#16",
+          "2610.40122#95",
+          "curso:informe#8",
+          "2609.03482#50",
+          "curso:informe#15",
+          "2609.03482#49",
+          "curso:informe#19"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": null
+      }
+    },
+    {
+      "technique": "bm25",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 16.09,
+      "extra": {
+        "pregunta_id": "a32",
+        "origen": "author",
+        "categoria": "cs.IR",
+        "idioma_documento": "en",
+        "correcto": "2608.15624#77",
+        "recuperados": [
+          "curso:informe#4",
+          "curso:informe#5",
+          "curso:informe#17",
+          "curso:informe#3",
+          "curso:proyecto-integrador-bd2#3",
+          "curso:informe#16",
+          "curso:proyecto-integrador-bd2#2",
+          "curso:informe#33",
+          "curso:informe#2",
+          "curso:informe#25"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": null
+      }
+    },
+    {
+      "technique": "vector",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 44.53,
+      "extra": {
+        "pregunta_id": "a32",
+        "origen": "author",
+        "categoria": "cs.IR",
+        "idioma_documento": "en",
+        "correcto": "2608.15624#77",
+        "recuperados": [
+          "2608.15624#57",
+          "2608.22381#65",
+          "2610.23470#52",
+          "2608.15624#16",
+          "2607.23006#46",
+          "2610.20857#45",
+          "2604.18508#49",
+          "2608.15624#77",
+          "2602.23766#86",
+          "2604.18508#48"
+        ],
+        "puesto": 8,
+        "puesto_vecino": 8,
+        "puesto_paper": 1
+      }
+    },
+    {
+      "technique": "hybrid",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 42.77,
+      "extra": {
+        "pregunta_id": "a32",
+        "origen": "author",
+        "categoria": "cs.IR",
+        "idioma_documento": "en",
+        "correcto": "2608.15624#77",
+        "recuperados": [
+          "2608.15624#57",
+          "curso:informe#4",
+          "2608.22381#65",
+          "curso:informe#5",
+          "2610.23470#52",
+          "curso:informe#17",
+          "2608.15624#16",
+          "curso:informe#3",
+          "2607.23006#46",
+          "curso:proyecto-integrador-bd2#3"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": 1
+      }
+    },
+    {
+      "technique": "bm25",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 20.62,
+      "extra": {
+        "pregunta_id": "a33",
+        "origen": "author",
+        "categoria": "cs.IR",
+        "idioma_documento": "en",
+        "correcto": "2608.23920#46",
+        "recuperados": [
+          "curso:informe#35",
+          "curso:informe#2",
+          "curso:informe#11",
+          "curso:informe#33",
+          "curso:informe#26",
+          "curso:informe#1",
+          "curso:informe#10",
+          "curso:informe#15",
+          "curso:informe#25",
+          "curso:informe#32"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": null
+      }
+    },
+    {
+      "technique": "vector",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 28.24,
+      "extra": {
+        "pregunta_id": "a33",
+        "origen": "author",
+        "categoria": "cs.IR",
+        "idioma_documento": "en",
+        "correcto": "2608.23920#46",
+        "recuperados": [
+          "2608.23920#96",
+          "2609.31927#209",
+          "2609.15319#8",
+          "2511.16134#45",
+          "2608.23920#8",
+          "2608.23920#40",
+          "2608.23920#47",
+          "2609.35774#52",
+          "2607.25180#39",
+          "2608.18752#26"
+        ],
+        "puesto": null,
+        "puesto_vecino": 7,
+        "puesto_paper": 1
+      }
+    },
+    {
+      "technique": "hybrid",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 49.76,
+      "extra": {
+        "pregunta_id": "a33",
+        "origen": "author",
+        "categoria": "cs.IR",
+        "idioma_documento": "en",
+        "correcto": "2608.23920#46",
+        "recuperados": [
+          "2608.23920#8",
+          "2608.23920#7",
+          "2608.23920#96",
+          "curso:informe#35",
+          "2609.31927#209",
+          "curso:informe#2",
+          "2609.15319#8",
+          "curso:informe#11",
+          "2511.16134#45",
+          "curso:informe#33"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": 1
+      }
+    },
+    {
+      "technique": "bm25",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 15.25,
+      "extra": {
+        "pregunta_id": "a34",
+        "origen": "author",
+        "categoria": "cs.IR",
+        "idioma_documento": "en",
+        "correcto": "2608.27746#7",
+        "recuperados": [
+          "curso:informe#18",
+          "curso:informe#7",
+          "curso:informe#8",
+          "curso:informe#34",
+          "curso:informe#16",
+          "curso:proyecto-integrador-bd2#0",
+          "curso:informe#19",
+          "curso:informe#17",
+          "curso:informe#33",
+          "curso:informe#26"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": null
+      }
+    },
+    {
+      "technique": "vector",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 29.92,
+      "extra": {
+        "pregunta_id": "a34",
+        "origen": "author",
+        "categoria": "cs.IR",
+        "idioma_documento": "en",
+        "correcto": "2608.27746#7",
+        "recuperados": [
+          "2608.27746#12",
+          "2608.27746#61",
+          "2608.27746#62",
+          "2610.23346#11",
+          "2610.23346#12",
+          "2608.27746#5",
+          "2608.27746#13",
+          "2610.18622#10",
+          "2608.27746#4",
+          "2608.27746#10"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": 1
+      }
+    },
+    {
+      "technique": "hybrid",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 40.06,
+      "extra": {
+        "pregunta_id": "a34",
+        "origen": "author",
+        "categoria": "cs.IR",
+        "idioma_documento": "en",
+        "correcto": "2608.27746#7",
+        "recuperados": [
+          "2608.27746#12",
+          "curso:informe#18",
+          "2608.27746#61",
+          "curso:informe#7",
+          "2608.27746#62",
+          "curso:informe#8",
+          "2610.23346#11",
+          "curso:informe#34",
+          "2610.23346#12",
+          "curso:informe#16"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": 1
+      }
+    },
+    {
+      "technique": "bm25",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 9.23,
+      "extra": {
+        "pregunta_id": "a35",
+        "origen": "author",
+        "categoria": "cs.IR",
+        "idioma_documento": "en",
+        "correcto": "2610.27232#1",
+        "recuperados": [
+          "curso:proyecto-integrador-bd2#9",
+          "curso:informe#15",
+          "curso:informe#33",
+          "curso:informe#19",
+          "curso:informe#16",
+          "curso:informe#11",
+          "curso:informe#25",
+          "curso:informe#26",
+          "curso:informe#27",
+          "curso:informe#9"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": null
+      }
+    },
+    {
+      "technique": "vector",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 36.4,
+      "extra": {
+        "pregunta_id": "a35",
+        "origen": "author",
+        "categoria": "cs.IR",
+        "idioma_documento": "en",
+        "correcto": "2610.27232#1",
+        "recuperados": [
+          "2610.28642#1",
+          "2608.11980#9",
+          "2608.22734#47",
+          "2608.11980#3",
+          "2610.28642#41",
+          "2608.29179#28",
+          "2609.13678#37",
+          "2608.06213#45",
+          "2609.29973#0",
+          "2608.07816#1"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": null
+      }
+    },
+    {
+      "technique": "hybrid",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 31.18,
+      "extra": {
+        "pregunta_id": "a35",
+        "origen": "author",
+        "categoria": "cs.IR",
+        "idioma_documento": "en",
+        "correcto": "2610.27232#1",
+        "recuperados": [
+          "2610.28642#1",
+          "curso:proyecto-integrador-bd2#9",
+          "2608.11980#9",
+          "curso:informe#15",
+          "2608.22734#47",
+          "curso:informe#33",
+          "2608.11980#3",
+          "curso:informe#19",
+          "2610.28642#41",
+          "curso:informe#16"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": null
+      }
+    },
+    {
+      "technique": "bm25",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 14.35,
+      "extra": {
+        "pregunta_id": "a36",
+        "origen": "author",
+        "categoria": "cs.IR",
+        "idioma_documento": "en",
+        "correcto": "2610.28922#6",
+        "recuperados": [
+          "curso:proyecto-integrador-bd2#9",
+          "curso:proyecto-integrador-bd2#8",
+          "curso:proyecto-integrador-bd2#10",
+          "curso:informe#32",
+          "curso:informe#6",
+          "curso:proyecto-integrador-bd2#1",
+          "curso:proyecto-integrador-bd2#0",
+          "curso:informe#26",
+          "curso:proyecto-integrador-bd2#11",
+          "curso:informe#8"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": null
+      }
+    },
+    {
+      "technique": "vector",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 32.0,
+      "extra": {
+        "pregunta_id": "a36",
+        "origen": "author",
+        "categoria": "cs.IR",
+        "idioma_documento": "en",
+        "correcto": "2610.28922#6",
+        "recuperados": [
+          "2608.22734#37",
+          "2610.39984#33",
+          "2609.07143#32",
+          "2603.10697#10",
+          "2605.07129#34",
+          "2601.17787#9",
+          "2606.28340#6",
+          "2604.09492#15",
+          "2611.16795#76",
+          "2611.16795#3"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": null
+      }
+    },
+    {
+      "technique": "hybrid",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 32.13,
+      "extra": {
+        "pregunta_id": "a36",
+        "origen": "author",
+        "categoria": "cs.IR",
+        "idioma_documento": "en",
+        "correcto": "2610.28922#6",
+        "recuperados": [
+          "2608.22734#37",
+          "curso:proyecto-integrador-bd2#9",
+          "2610.39984#33",
+          "curso:proyecto-integrador-bd2#8",
+          "2609.07143#32",
+          "curso:proyecto-integrador-bd2#10",
+          "2603.10697#10",
+          "curso:informe#32",
+          "2605.07129#34",
+          "curso:informe#6"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": null
+      }
+    },
+    {
+      "technique": "bm25",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 8.98,
+      "extra": {
+        "pregunta_id": "a37",
+        "origen": "author",
+        "categoria": "cs.IR",
+        "idioma_documento": "en",
+        "correcto": "2610.29464#5",
+        "recuperados": [
+          "curso:proyecto-integrador-bd2#2",
+          "curso:informe#34",
+          "curso:informe#27",
+          "curso:informe#16",
+          "curso:informe#31",
+          "curso:informe#17",
+          "curso:informe#2",
+          "curso:informe#5",
+          "curso:informe#26",
+          "curso:informe#24"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": null
+      }
+    },
+    {
+      "technique": "vector",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 20.11,
+      "extra": {
+        "pregunta_id": "a37",
+        "origen": "author",
+        "categoria": "cs.IR",
+        "idioma_documento": "en",
+        "correcto": "2610.29464#5",
+        "recuperados": [
+          "2610.29464#5",
+          "2610.29464#1",
+          "2610.29464#31",
+          "2610.29464#0",
+          "2610.29464#32",
+          "2610.29464#6",
+          "2610.29464#41",
+          "2610.29464#4",
+          "2610.29464#25",
+          "2610.29464#60"
+        ],
+        "puesto": 1,
+        "puesto_vecino": 1,
+        "puesto_paper": 1
+      }
+    },
+    {
+      "technique": "hybrid",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 20.99,
+      "extra": {
+        "pregunta_id": "a37",
+        "origen": "author",
+        "categoria": "cs.IR",
+        "idioma_documento": "en",
+        "correcto": "2610.29464#5",
+        "recuperados": [
+          "2610.29464#5",
+          "curso:proyecto-integrador-bd2#2",
+          "2610.29464#1",
+          "curso:informe#34",
+          "2610.29464#31",
+          "curso:informe#27",
+          "2610.29464#0",
+          "curso:informe#16",
+          "2610.29464#32",
+          "curso:informe#31"
+        ],
+        "puesto": 1,
+        "puesto_vecino": 1,
+        "puesto_paper": 1
+      }
+    },
+    {
+      "technique": "bm25",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 16.51,
+      "extra": {
+        "pregunta_id": "a38",
+        "origen": "author",
+        "categoria": "cs.IR",
+        "idioma_documento": "en",
+        "correcto": "2610.30178#5",
+        "recuperados": [
+          "curso:informe#4",
+          "curso:informe#8",
+          "curso:informe#15",
+          "curso:informe#16",
+          "curso:informe#34",
+          "curso:informe#6",
+          "curso:informe#18",
+          "curso:informe#0",
+          "curso:proyecto-integrador-bd2#10",
+          "curso:informe#17"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": null
+      }
+    },
+    {
+      "technique": "vector",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 32.58,
+      "extra": {
+        "pregunta_id": "a38",
+        "origen": "author",
+        "categoria": "cs.IR",
+        "idioma_documento": "en",
+        "correcto": "2610.30178#5",
+        "recuperados": [
+          "2610.30178#3",
+          "2610.30178#5",
+          "2610.30178#18",
+          "2610.30178#16",
+          "2610.30178#4",
+          "2610.30178#2",
+          "2610.30178#17",
+          "2610.30178#0",
+          "2610.30178#6",
+          "2610.30178#21"
+        ],
+        "puesto": 2,
+        "puesto_vecino": 2,
+        "puesto_paper": 1
+      }
+    },
+    {
+      "technique": "hybrid",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 51.94,
+      "extra": {
+        "pregunta_id": "a38",
+        "origen": "author",
+        "categoria": "cs.IR",
+        "idioma_documento": "en",
+        "correcto": "2610.30178#5",
+        "recuperados": [
+          "2610.30178#3",
+          "curso:informe#4",
+          "2610.30178#5",
+          "curso:informe#8",
+          "2610.30178#18",
+          "curso:informe#15",
+          "2610.30178#16",
+          "curso:informe#16",
+          "2610.30178#4",
+          "curso:informe#34"
+        ],
+        "puesto": 3,
+        "puesto_vecino": 3,
+        "puesto_paper": 1
+      }
+    },
+    {
+      "technique": "bm25",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 47.13,
+      "extra": {
+        "pregunta_id": "a39",
+        "origen": "author",
+        "categoria": "cs.IR",
+        "idioma_documento": "en",
+        "correcto": "2610.30612#55",
+        "recuperados": [
+          "curso:informe#7",
+          "curso:informe#15",
+          "curso:proyecto-integrador-bd2#8",
+          "curso:informe#14",
+          "curso:informe#8",
+          "curso:informe#10",
+          "curso:informe#9",
+          "curso:informe#6",
+          "curso:informe#2",
+          "curso:informe#33"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": null
+      }
+    },
+    {
+      "technique": "vector",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 31.47,
+      "extra": {
+        "pregunta_id": "a39",
+        "origen": "author",
+        "categoria": "cs.IR",
+        "idioma_documento": "en",
+        "correcto": "2610.30612#55",
+        "recuperados": [
+          "2610.30612#72",
+          "2608.00452#20",
+          "2610.30612#57",
+          "2610.30612#2",
+          "2610.30612#69",
+          "2610.30612#0",
+          "2608.12569#39",
+          "2610.30612#14",
+          "2610.30612#54",
+          "2610.30612#1"
+        ],
+        "puesto": null,
+        "puesto_vecino": 9,
+        "puesto_paper": 1
+      }
+    },
+    {
+      "technique": "hybrid",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 49.96,
+      "extra": {
+        "pregunta_id": "a39",
+        "origen": "author",
+        "categoria": "cs.IR",
+        "idioma_documento": "en",
+        "correcto": "2610.30612#55",
+        "recuperados": [
+          "2610.30612#72",
+          "curso:informe#7",
+          "2608.00452#20",
+          "curso:informe#15",
+          "2610.30612#57",
+          "curso:proyecto-integrador-bd2#8",
+          "2610.30612#2",
+          "curso:informe#14",
+          "2610.30612#69",
+          "curso:informe#8"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": 1
+      }
+    },
+    {
+      "technique": "bm25",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 29.77,
+      "extra": {
+        "pregunta_id": "a40",
+        "origen": "author",
+        "categoria": "cs.IR",
+        "idioma_documento": "en",
+        "correcto": "2611.08566#3",
+        "recuperados": [
+          "curso:informe#36",
+          "curso:informe#35",
+          "curso:informe#22",
+          "curso:informe#19",
+          "curso:informe#16",
+          "curso:informe#14",
+          "curso:informe#18",
+          "curso:informe#8",
+          "curso:informe#1",
+          "curso:informe#15"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": null
+      }
+    },
+    {
+      "technique": "vector",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 90.77,
+      "extra": {
+        "pregunta_id": "a40",
+        "origen": "author",
+        "categoria": "cs.IR",
+        "idioma_documento": "en",
+        "correcto": "2611.08566#3",
+        "recuperados": [
+          "2611.08566#0",
+          "2611.08566#2",
+          "2611.08566#1",
+          "2610.36890#22",
+          "2609.23849#25",
+          "2601.05536#76",
+          "2607.24417#30",
+          "2511.00290#43",
+          "2607.27577#36",
+          "2608.16073#27"
+        ],
+        "puesto": null,
+        "puesto_vecino": 2,
+        "puesto_paper": 1
+      }
+    },
+    {
+      "technique": "hybrid",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 42.78,
+      "extra": {
+        "pregunta_id": "a40",
+        "origen": "author",
+        "categoria": "cs.IR",
+        "idioma_documento": "en",
+        "correcto": "2611.08566#3",
+        "recuperados": [
+          "2611.08566#0",
+          "curso:informe#36",
+          "2611.08566#2",
+          "curso:informe#35",
+          "2611.08566#1",
+          "curso:informe#22",
+          "2610.36890#22",
+          "curso:informe#19",
+          "2609.23849#25",
+          "curso:informe#16"
+        ],
+        "puesto": null,
+        "puesto_vecino": 3,
+        "puesto_paper": 1
+      }
+    },
+    {
+      "technique": "bm25",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 13.05,
+      "extra": {
+        "pregunta_id": "a41",
+        "origen": "author",
+        "categoria": "curso",
+        "idioma_documento": "es",
+        "correcto": "curso:informe#14",
+        "recuperados": [
+          "curso:informe#14",
+          "curso:informe#13",
+          "curso:proyecto-integrador-bd2#1",
+          "curso:proyecto-integrador-bd2#2",
+          "curso:informe#0",
+          "curso:informe#12",
+          "curso:informe#19",
+          "curso:informe#26",
+          "curso:informe#4",
+          "curso:informe#3"
+        ],
+        "puesto": 1,
+        "puesto_vecino": 1,
+        "puesto_paper": 1
+      }
+    },
+    {
+      "technique": "vector",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 27.38,
+      "extra": {
+        "pregunta_id": "a41",
+        "origen": "author",
+        "categoria": "curso",
+        "idioma_documento": "es",
+        "correcto": "curso:informe#14",
+        "recuperados": [
+          "2602.21566#7",
+          "2609.08160#164",
+          "2609.08160#165",
+          "2602.21566#61",
+          "2609.08160#194",
+          "2609.08160#133",
+          "2608.15927#54",
+          "2609.00035#16",
+          "2609.20489#87",
+          "2609.08160#185"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": null
+      }
+    },
+    {
+      "technique": "hybrid",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 32.91,
+      "extra": {
+        "pregunta_id": "a41",
+        "origen": "author",
+        "categoria": "curso",
+        "idioma_documento": "es",
+        "correcto": "curso:informe#14",
+        "recuperados": [
+          "2602.21566#7",
+          "curso:informe#14",
+          "2609.08160#164",
+          "curso:informe#13",
+          "2609.08160#165",
+          "curso:proyecto-integrador-bd2#1",
+          "2602.21566#61",
+          "curso:proyecto-integrador-bd2#2",
+          "2609.08160#194",
+          "curso:informe#0"
+        ],
+        "puesto": 2,
+        "puesto_vecino": 2,
+        "puesto_paper": 2
+      }
+    },
+    {
+      "technique": "bm25",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 22.78,
+      "extra": {
+        "pregunta_id": "a42",
+        "origen": "author",
+        "categoria": "curso",
+        "idioma_documento": "es",
+        "correcto": "curso:informe#16",
+        "recuperados": [
+          "curso:informe#16",
+          "curso:informe#34",
+          "curso:proyecto-integrador-bd2#0",
+          "curso:proyecto-integrador-bd2#3",
+          "curso:informe#35",
+          "curso:informe#32",
+          "curso:informe#15",
+          "curso:informe#19",
+          "curso:informe#22",
+          "curso:informe#31"
+        ],
+        "puesto": 1,
+        "puesto_vecino": 1,
+        "puesto_paper": 1
+      }
+    },
+    {
+      "technique": "vector",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 23.02,
+      "extra": {
+        "pregunta_id": "a42",
+        "origen": "author",
+        "categoria": "curso",
+        "idioma_documento": "es",
+        "correcto": "curso:informe#16",
+        "recuperados": [
+          "curso:informe#32",
+          "curso:informe#33",
+          "curso:informe#16",
+          "curso:informe#26",
+          "curso:informe#15",
+          "curso:informe#31",
+          "curso:informe#34",
+          "curso:informe#0",
+          "curso:informe#35",
+          "curso:informe#14"
+        ],
+        "puesto": 3,
+        "puesto_vecino": 3,
+        "puesto_paper": 1
+      }
+    },
+    {
+      "technique": "hybrid",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 39.62,
+      "extra": {
+        "pregunta_id": "a42",
+        "origen": "author",
+        "categoria": "curso",
+        "idioma_documento": "es",
+        "correcto": "curso:informe#16",
+        "recuperados": [
+          "curso:informe#16",
+          "curso:informe#32",
+          "curso:informe#34",
+          "curso:informe#15",
+          "curso:informe#33",
+          "curso:informe#35",
+          "curso:informe#31",
+          "curso:proyecto-integrador-bd2#3",
+          "curso:informe#0",
+          "curso:informe#26"
+        ],
+        "puesto": 1,
+        "puesto_vecino": 1,
+        "puesto_paper": 1
+      }
+    },
+    {
+      "technique": "bm25",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 30.92,
+      "extra": {
+        "pregunta_id": "a43",
+        "origen": "author",
+        "categoria": "curso",
+        "idioma_documento": "es",
+        "correcto": "curso:proyecto-integrador-bd2#6",
+        "recuperados": [
+          "curso:proyecto-integrador-bd2#5",
+          "curso:informe#0",
+          "curso:proyecto-integrador-bd2#0",
+          "curso:proyecto-integrador-bd2#6",
+          "curso:informe#32",
+          "curso:proyecto-integrador-bd2#9",
+          "curso:proyecto-integrador-bd2#7",
+          "curso:informe#33",
+          "curso:informe#4",
+          "curso:informe#12"
+        ],
+        "puesto": 4,
+        "puesto_vecino": 1,
+        "puesto_paper": 1
+      }
+    },
+    {
+      "technique": "vector",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 47.84,
+      "extra": {
+        "pregunta_id": "a43",
+        "origen": "author",
+        "categoria": "curso",
+        "idioma_documento": "es",
+        "correcto": "curso:proyecto-integrador-bd2#6",
+        "recuperados": [
+          "2609.34404#33",
+          "2609.31696#150",
+          "2608.23176#8",
+          "2511.02062#9",
+          "2609.31696#146",
+          "2511.02062#29",
+          "2511.02062#7",
+          "2504.16397#81",
+          "2511.02062#6",
+          "2609.01316#3"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": null
+      }
+    },
+    {
+      "technique": "hybrid",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 30.68,
+      "extra": {
+        "pregunta_id": "a43",
+        "origen": "author",
+        "categoria": "curso",
+        "idioma_documento": "es",
+        "correcto": "curso:proyecto-integrador-bd2#6",
+        "recuperados": [
+          "2609.34404#33",
+          "curso:proyecto-integrador-bd2#5",
+          "2609.31696#150",
+          "curso:informe#0",
+          "2608.23176#8",
+          "curso:proyecto-integrador-bd2#0",
+          "2511.02062#9",
+          "curso:proyecto-integrador-bd2#6",
+          "2609.31696#146",
+          "curso:informe#32"
+        ],
+        "puesto": 8,
+        "puesto_vecino": 2,
+        "puesto_paper": 2
+      }
+    },
+    {
+      "technique": "bm25",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 26.4,
+      "extra": {
+        "pregunta_id": "a44",
+        "origen": "author",
+        "categoria": "curso",
+        "idioma_documento": "es",
+        "correcto": "curso:proyecto-integrador-bd2#7",
+        "recuperados": [
+          "curso:proyecto-integrador-bd2#8",
+          "curso:informe#0",
+          "curso:proyecto-integrador-bd2#7",
+          "curso:proyecto-integrador-bd2#0",
+          "curso:informe#33",
+          "curso:informe#32",
+          "curso:informe#12",
+          "curso:informe#35",
+          "curso:informe#19",
+          "curso:informe#36"
+        ],
+        "puesto": 3,
+        "puesto_vecino": 1,
+        "puesto_paper": 1
+      }
+    },
+    {
+      "technique": "vector",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 64.9,
+      "extra": {
+        "pregunta_id": "a44",
+        "origen": "author",
+        "categoria": "curso",
+        "idioma_documento": "es",
+        "correcto": "curso:proyecto-integrador-bd2#7",
+        "recuperados": [
+          "2606.03502#31",
+          "2607.24015#39",
+          "2609.05684#16",
+          "2603.12824#35",
+          "2601.16409#51",
+          "2610.41360#53",
+          "2607.12717#74",
+          "2603.02001#76",
+          "2604.02553#89",
+          "2610.36958#41"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": null
+      }
+    },
+    {
+      "technique": "hybrid",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 55.87,
+      "extra": {
+        "pregunta_id": "a44",
+        "origen": "author",
+        "categoria": "curso",
+        "idioma_documento": "es",
+        "correcto": "curso:proyecto-integrador-bd2#7",
+        "recuperados": [
+          "2606.03502#31",
+          "curso:proyecto-integrador-bd2#8",
+          "2607.24015#39",
+          "curso:informe#0",
+          "2609.05684#16",
+          "curso:proyecto-integrador-bd2#7",
+          "2603.12824#35",
+          "curso:proyecto-integrador-bd2#0",
+          "2601.16409#51",
+          "curso:informe#33"
+        ],
+        "puesto": 6,
+        "puesto_vecino": 2,
+        "puesto_paper": 2
+      }
+    },
+    {
+      "technique": "bm25",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 25.2,
+      "extra": {
+        "pregunta_id": "a45",
+        "origen": "author",
+        "categoria": "curso",
+        "idioma_documento": "es",
+        "correcto": "curso:proyecto-integrador-bd2#9",
+        "recuperados": [
+          "curso:proyecto-integrador-bd2#9",
+          "curso:proyecto-integrador-bd2#8",
+          "curso:proyecto-integrador-bd2#7",
+          "curso:informe#4",
+          "curso:informe#32",
+          "curso:proyecto-integrador-bd2#11",
+          "curso:informe#33",
+          "curso:proyecto-integrador-bd2#10",
+          "curso:informe#36",
+          "curso:informe#5"
+        ],
+        "puesto": 1,
+        "puesto_vecino": 1,
+        "puesto_paper": 1
+      }
+    },
+    {
+      "technique": "vector",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 34.15,
+      "extra": {
+        "pregunta_id": "a45",
+        "origen": "author",
+        "categoria": "curso",
+        "idioma_documento": "es",
+        "correcto": "curso:proyecto-integrador-bd2#9",
+        "recuperados": [
+          "2610.08232#47",
+          "2609.05063#45",
+          "2305.13843#84",
+          "2608.07816#53",
+          "2608.30333#2",
+          "2611.04140#18",
+          "2609.01652#29",
+          "2305.13843#82",
+          "2611.08519#11",
+          "2608.11015#75"
+        ],
+        "puesto": null,
+        "puesto_vecino": null,
+        "puesto_paper": null
+      }
+    },
+    {
+      "technique": "hybrid",
+      "operation": "pregunta",
+      "dataset_size": 98585,
+      "milliseconds": 84.33,
+      "extra": {
+        "pregunta_id": "a45",
+        "origen": "author",
+        "categoria": "curso",
+        "idioma_documento": "es",
+        "correcto": "curso:proyecto-integrador-bd2#9",
+        "recuperados": [
+          "2610.08232#47",
+          "curso:proyecto-integrador-bd2#9",
+          "2609.05063#45",
+          "curso:proyecto-integrador-bd2#8",
+          "2305.13843#84",
+          "curso:proyecto-integrador-bd2#7",
+          "2608.07816#53",
+          "curso:informe#4",
+          "2608.30333#2",
+          "curso:informe#32"
+        ],
+        "puesto": 2,
+        "puesto_vecino": 2,
+        "puesto_paper": 2
+      }
+    },
+    {
+      "technique": "bm25",
+      "operation": "todas",
+      "dataset_size": 98585,
+      "milliseconds": 13.1,
+      "extra": {
+        "preguntas": 45,
+        "p95_ms": 29.1,
+        "recall_5": 0.1111,
+        "recall_10": 0.1111,
+        "mrr": 0.0796,
+        "recall_5_vecino": 0.1111,
+        "recall_10_vecino": 0.1111,
+        "mrr_vecino": 0.1111,
+        "recall_5_paper": 0.1111,
+        "recall_10_paper": 0.1111,
+        "mrr_paper": 0.1111
+      }
+    },
+    {
+      "technique": "bm25",
+      "operation": "cs.DB",
+      "dataset_size": 98585,
+      "milliseconds": 11.69,
+      "extra": {
+        "preguntas": 24,
+        "p95_ms": 21.55,
+        "recall_5": 0.0,
+        "recall_10": 0.0,
+        "mrr": 0.0,
+        "recall_5_vecino": 0.0,
+        "recall_10_vecino": 0.0,
+        "mrr_vecino": 0.0,
+        "recall_5_paper": 0.0,
+        "recall_10_paper": 0.0,
+        "mrr_paper": 0.0
+      }
+    },
+    {
+      "technique": "bm25",
+      "operation": "cs.IR",
+      "dataset_size": 98585,
+      "milliseconds": 13.72,
+      "extra": {
+        "preguntas": 16,
+        "p95_ms": 34.11,
+        "recall_5": 0.0,
+        "recall_10": 0.0,
+        "mrr": 0.0,
+        "recall_5_vecino": 0.0,
+        "recall_10_vecino": 0.0,
+        "mrr_vecino": 0.0,
+        "recall_5_paper": 0.0,
+        "recall_10_paper": 0.0,
+        "mrr_paper": 0.0
+      }
+    },
+    {
+      "technique": "bm25",
+      "operation": "curso (es)",
+      "dataset_size": 98585,
+      "milliseconds": 25.2,
+      "extra": {
+        "preguntas": 5,
+        "p95_ms": 30.02,
+        "recall_5": 1.0,
+        "recall_10": 1.0,
+        "mrr": 0.7167,
+        "recall_5_vecino": 1.0,
+        "recall_10_vecino": 1.0,
+        "mrr_vecino": 1.0,
+        "recall_5_paper": 1.0,
+        "recall_10_paper": 1.0,
+        "mrr_paper": 1.0
+      }
+    },
+    {
+      "technique": "bm25",
+      "operation": "escritas a mano",
+      "dataset_size": 98585,
+      "milliseconds": 13.1,
+      "extra": {
+        "preguntas": 45,
+        "p95_ms": 29.1,
+        "recall_5": 0.1111,
+        "recall_10": 0.1111,
+        "mrr": 0.0796,
+        "recall_5_vecino": 0.1111,
+        "recall_10_vecino": 0.1111,
+        "mrr_vecino": 0.1111,
+        "recall_5_paper": 0.1111,
+        "recall_10_paper": 0.1111,
+        "mrr_paper": 0.1111
+      }
+    },
+    {
+      "technique": "vector",
+      "operation": "todas",
+      "dataset_size": 98585,
+      "milliseconds": 27.15,
+      "extra": {
+        "preguntas": 45,
+        "p95_ms": 47.18,
+        "recall_5": 0.4222,
+        "recall_10": 0.5333,
+        "mrr": 0.3247,
+        "recall_5_vecino": 0.4889,
+        "recall_10_vecino": 0.6444,
+        "mrr_vecino": 0.4118,
+        "recall_5_paper": 0.7556,
+        "recall_10_paper": 0.8,
+        "mrr_paper": 0.718
+      }
+    },
+    {
+      "technique": "vector",
+      "operation": "cs.DB",
+      "dataset_size": 98585,
+      "milliseconds": 24.99,
+      "extra": {
+        "preguntas": 24,
+        "p95_ms": 34.99,
+        "recall_5": 0.4583,
+        "recall_10": 0.625,
+        "mrr": 0.3939,
+        "recall_5_vecino": 0.5417,
+        "recall_10_vecino": 0.7083,
+        "mrr_vecino": 0.4842,
+        "recall_5_paper": 0.875,
+        "recall_10_paper": 0.9583,
+        "mrr_paper": 0.8046
+      }
+    },
+    {
+      "technique": "vector",
+      "operation": "cs.IR",
+      "dataset_size": 98585,
+      "milliseconds": 31.73,
+      "extra": {
+        "preguntas": 16,
+        "p95_ms": 56.09,
+        "recall_5": 0.4375,
+        "recall_10": 0.5,
+        "mrr": 0.3016,
+        "recall_5_vecino": 0.5,
+        "recall_10_vecino": 0.6875,
+        "mrr_vecino": 0.4112,
+        "recall_5_paper": 0.75,
+        "recall_10_paper": 0.75,
+        "mrr_paper": 0.75
+      }
+    },
+    {
+      "technique": "vector",
+      "operation": "curso (es)",
+      "dataset_size": 98585,
+      "milliseconds": 34.15,
+      "extra": {
+        "preguntas": 5,
+        "p95_ms": 61.49,
+        "recall_5": 0.2,
+        "recall_10": 0.2,
+        "mrr": 0.0667,
+        "recall_5_vecino": 0.2,
+        "recall_10_vecino": 0.2,
+        "mrr_vecino": 0.0667,
+        "recall_5_paper": 0.2,
+        "recall_10_paper": 0.2,
+        "mrr_paper": 0.2
+      }
+    },
+    {
+      "technique": "vector",
+      "operation": "escritas a mano",
+      "dataset_size": 98585,
+      "milliseconds": 27.15,
+      "extra": {
+        "preguntas": 45,
+        "p95_ms": 47.18,
+        "recall_5": 0.4222,
+        "recall_10": 0.5333,
+        "mrr": 0.3247,
+        "recall_5_vecino": 0.4889,
+        "recall_10_vecino": 0.6444,
+        "mrr_vecino": 0.4118,
+        "recall_5_paper": 0.7556,
+        "recall_10_paper": 0.8,
+        "mrr_paper": 0.718
+      }
+    },
+    {
+      "technique": "hybrid",
+      "operation": "todas",
+      "dataset_size": 98585,
+      "milliseconds": 34.38,
+      "extra": {
+        "preguntas": 45,
+        "p95_ms": 55.46,
+        "recall_5": 0.3778,
+        "recall_10": 0.5111,
+        "mrr": 0.2923,
+        "recall_5_vecino": 0.5111,
+        "recall_10_vecino": 0.5556,
+        "mrr_vecino": 0.3816,
+        "recall_5_paper": 0.8,
+        "recall_10_paper": 0.8222,
+        "mrr_paper": 0.7095
+      }
+    },
+    {
+      "technique": "hybrid",
+      "operation": "cs.DB",
+      "dataset_size": 98585,
+      "milliseconds": 32.76,
+      "extra": {
+        "preguntas": 24,
+        "p95_ms": 53.6,
+        "recall_5": 0.3333,
+        "recall_10": 0.4583,
+        "mrr": 0.2848,
+        "recall_5_vecino": 0.4583,
+        "recall_10_vecino": 0.5,
+        "mrr_vecino": 0.3497,
+        "recall_5_paper": 0.7917,
+        "recall_10_paper": 0.8333,
+        "mrr_paper": 0.7053
+      }
+    },
+    {
+      "technique": "hybrid",
+      "operation": "cs.IR",
+      "dataset_size": 98585,
+      "milliseconds": 37.55,
+      "extra": {
+        "preguntas": 16,
+        "p95_ms": 50.96,
+        "recall_5": 0.375,
+        "recall_10": 0.4375,
+        "mrr": 0.2517,
+        "recall_5_vecino": 0.4375,
+        "recall_10_vecino": 0.5,
+        "mrr_vecino": 0.3611,
+        "recall_5_paper": 0.75,
+        "recall_10_paper": 0.75,
+        "mrr_paper": 0.75
+      }
+    },
+    {
+      "technique": "hybrid",
+      "operation": "curso (es)",
+      "dataset_size": 98585,
+      "milliseconds": 39.62,
+      "extra": {
+        "preguntas": 5,
+        "p95_ms": 78.64,
+        "recall_5": 0.6,
+        "recall_10": 1.0,
+        "mrr": 0.4583,
+        "recall_5_vecino": 1.0,
+        "recall_10_vecino": 1.0,
+        "mrr_vecino": 0.6,
+        "recall_5_paper": 1.0,
+        "recall_10_paper": 1.0,
+        "mrr_paper": 0.6
+      }
+    },
+    {
+      "technique": "hybrid",
+      "operation": "escritas a mano",
+      "dataset_size": 98585,
+      "milliseconds": 34.38,
+      "extra": {
+        "preguntas": 45,
+        "p95_ms": 55.46,
+        "recall_5": 0.3778,
+        "recall_10": 0.5111,
+        "mrr": 0.2923,
+        "recall_5_vecino": 0.5111,
+        "recall_10_vecino": 0.5556,
+        "mrr_vecino": 0.3816,
+        "recall_5_paper": 0.8,
+        "recall_10_paper": 0.8222,
+        "mrr_paper": 0.7095
+      }
+    }
+  ]
+}

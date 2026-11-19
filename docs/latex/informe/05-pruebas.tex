@@ -1,23 +1,14 @@
 \section{Pruebas}
 
 El proyecto tiene \totalpruebas{} pruebas automáticas, que cubren el
-\coberturapruebas{}\,\% de las líneas y ramas del motor. El código pasa además
-\texttt{ruff} y \texttt{mypy} en modo estricto. Aparte de las pruebas por caso (estructura
-vacía, un solo elemento, división y fusión de nodos, desbordamiento de página), se usaron
-tres formas de verificación:
-
-\begin{itemize}[nosep, leftmargin=*]
-  \item \emph{Validadores de estructura.} Cada índice tiene una función que lo recorre
-        completo y comprueba sus invariantes. En el B+ revisa el orden de las claves, la
-        ocupación mínima y que todas las hojas estén al mismo nivel; en el hash, que cada
-        bucket tenga $2^{gd-ld}$ punteros; en el R-Tree, que cada MBR sea el mínimo.
-  \item \emph{Comparación contra un modelo.} A cada estructura se le aplican miles de
-        operaciones aleatorias y el resultado se compara con una lista ordenada o con una
-        búsqueda por fuerza bruta. Las consultas espaciales se ejecutan con y sin R-Tree y
-        deben devolver lo mismo.
-  \item \emph{Comparación con PostGIS.} Las 1\,800 consultas del experimento espacial
-        devuelven las mismas filas que PostGIS.
-\end{itemize}
-
-Las pruebas de almacenamiento usan páginas de 256 bytes para que con pocos registros ya
-haya varias páginas y se ejerciten las divisiones.
+\coberturapruebas{}\,\% de las líneas y ramas del motor, y el código pasa \texttt{ruff} y
+\texttt{mypy} en modo estricto; la integración continua las corre en Python~3.11 y~3.12,
+compila las interfaces y levanta el compose completo. Además de los casos de cada
+estructura (vacía, un elemento, división y fusión de nodos, desbordamiento de página), cada
+índice tiene un validador que recorre la estructura y comprueba sus invariantes, y se
+comparan contra un modelo con miles de operaciones al azar: una lista ordenada, la búsqueda
+por fuerza bruta o la misma consulta sin índice, que debe devolver lo mismo. Las 1\,800
+consultas del experimento espacial devuelven las mismas filas que PostGIS, el índice
+invertido sale idéntico byte a byte con un bloque de SPIMI o con muchos, y los servicios de
+la Parte~5 se prueban contra el API real del gestor. Las pruebas de almacenamiento usan
+páginas de 256 bytes para que con pocos registros ya haya varias páginas.

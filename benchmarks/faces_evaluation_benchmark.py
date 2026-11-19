@@ -5,7 +5,7 @@ galería y sondas en el gestor (HNSW contra búsqueda exacta) y latencia de cada
     .venv/bin/python -m faces models --salida data/models/faces
     .venv/bin/python -m benchmarks.faces_evaluation_benchmark --lfw data/datasets/lfw \\
         --models data/models/faces --fars 0.01 0.001 0.0001 0.00001 \\
-        --thresholds 0.363 0.45 0.5 --gallery-size 1000 --target-fpir 0.01
+        --thresholds 0.363 0.45 0.47 0.5 --gallery-size 1000 --target-fpir 0.01
 
 Cada foto de LFW se describe una vez con el pipeline del servicio, tomando el rostro más
 cercano al centro (ver `benchmarks.faces_evaluation.embeddings`). Con esos embeddings:
@@ -101,10 +101,11 @@ NEAREST = (
 MISSING_FACE_SCORE = -1.0
 MIN_GALLERY_PHOTOS = 2
 PERCENTILES = (50, 95, 99)
-ROC_THRESHOLDS = tuple(round(value, 4) for value in np.arange(-0.1, 0.9, 0.005))
-OPEN_SET_THRESHOLDS = tuple(round(value, 3) for value in np.arange(0.25, 0.701, 0.01))
+# La parte de la curva que importa: de un FAR de 0,1 al más bajo que se puede medir.
+ROC_THRESHOLDS = tuple(round(value, 4) for value in np.arange(0.2, 0.6, 0.0025))
+OPEN_SET_THRESHOLDS = tuple(round(value, 3) for value in np.arange(0.3, 0.601, 0.01))
 DEFAULT_FARS = (0.01, 0.001, 0.0001, 0.00001)
-DEFAULT_THRESHOLDS = (0.363, 0.45, 0.5)
+DEFAULT_THRESHOLDS = (0.363, 0.45, 0.47, 0.5)
 DEFAULT_GALLERY_SIZE = 1000
 DEFAULT_TARGET_FPIR = 0.01
 DEFAULT_WORKERS = 1

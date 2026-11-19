@@ -25,12 +25,15 @@ subida tengan por vecina a la misma canción con el **mismo desfase** `t_subida 
    por otro desfase de la misma canción; se repite con el siguiente desfase hasta que
    ninguno alcanza.
 
-Puntaje = similitud media de la racha · cobertura, y la cobertura es la fracción de las
-ventanas que las dos grabaciones podrían compartir: `ventanas de la racha / min(ventanas de
-la subida, ventanas del original)`. Dividir solo por las de la subida castigaría un sample de
-10 s dentro de una canción de 3 min, justo lo que se busca; dividir solo por las del original,
-un fragmento corto de un original largo. Con el mínimo, una copia que cubre todo lo que
-podía cubrir vale 1, sea la subida más larga o más corta que el original.
+Puntaje = evidencia de largo · evidencia de parecido. La de largo son las ventanas de la
+racha sobre `FULL_EVIDENCE_WINDOWS` (7: una copia de 20 s), a lo sumo 1; la de parecido, la
+similitud media de la racha llevada de `[SIMILARITY_FLOOR, 1]` a `[0, 1]`. El puntaje no
+depende de cuánto duran la subida ni el original: un sample de 15 s vale lo mismo solo que en
+medio de un remix de tres. La cobertura (`ventanas de la racha / min(ventanas de la subida,
+ventanas del original)`) se sigue informando, pero ya no puntúa: la evaluación de #77
+(benchmarks/README.md, §17) midió que, al dividir cada racha por todo lo que las dos
+grabaciones podían compartir, dejaba bajo el umbral la mayoría de los fragmentos de los
+remixes de dos y tres canciones aunque su canción estuviera entre las coincidencias.
 
 Todo es puro y determinista: el orden de las entradas no cambia la respuesta, y los empates
 se rompen por similitud, desfase, id de canción y posición, en ese orden.
@@ -41,6 +44,17 @@ from __future__ import annotations
 from collections import defaultdict
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
+
+# Ventanas de una racha que bastan para la evidencia de largo completa: 7 ventanas de 5 s cada
+# 2,5 s son 20 s de audio, el fragmento más largo de la evaluación (#77) y más de lo que dura un
+# sample. Menos ventanas valen su fracción: una racha de 2 (7,5 s) da 2/7.
+FULL_EVIDENCE_WINDOWS = 7
+# Similitud media desde la que una racha empieza a parecer una copia. En la evaluación (#77)
+# las rachas de las canciones copiadas tenían una similitud media de 0,92 a 0,99 y las de
+# canciones que no se copiaron se repartían de 0,7 a 0,95: por debajo de 0,85 una racha es lo
+# que dan dos canciones distintas del FMA. Sobre el piso, la evidencia crece lineal hasta 1,
+# sin un salto que haga cambiar el veredicto por una centésima de similitud.
+SIMILARITY_FLOOR = 0.85
 
 # Un voto cuenta para su desfase y para los dos vecinos: una copia desplazada media ventana
 # respecto de la rejilla del catálogo cae entre dos tramos y vota por los dos.
@@ -169,8 +183,8 @@ def score_runs(
     original_windows: Mapping[int, int],
     threshold: float,
 ) -> list[Match]:
-    """Las rachas con su puntaje, de mayor a menor; `original_windows` da las ventanas de cada
-    canción en el catálogo.
+    """Las rachas con su puntaje (`run_score`) y su cobertura, de mayor a menor;
+    `original_windows` da las ventanas de cada canción en el catálogo, para la cobertura.
 
     Raises:
         KeyError: si falta la canción de alguna racha en `original_windows`.
@@ -178,9 +192,17 @@ def score_runs(
     matches = []
     for run in runs:
         covered = coverage(run.windows, upload_windows, original_windows[run.song_id])
-        score = run.mean_similarity * covered
+        score = run_score(run.windows, run.mean_similarity)
         matches.append(Match(run, covered, score, score >= threshold))
     return sorted(matches, key=_match_order)
+
+
+def run_score(run_windows: int, mean_similarity: float) -> float:
+    """El puntaje de una racha, de 0 a 1: su largo hasta `FULL_EVIDENCE_WINDOWS` por su
+    similitud media sobre `SIMILARITY_FLOOR`."""
+    length = min(1.0, run_windows / FULL_EVIDENCE_WINDOWS)
+    likeness = (mean_similarity - SIMILARITY_FLOOR) / (1.0 - SIMILARITY_FLOOR)
+    return length * min(1.0, max(0.0, likeness))
 
 
 def _votes_by_song(windows: Sequence[QueryWindow], hop: float) -> dict[int, list[_Vote]]:
@@ -324,5 +346,5 @@ def _run_of(song_id: int, chain: list[_Vote], windows: Sequence[QueryWindow], ho
     )
 
 
-def _match_order(match: Match) -> tuple[float, int, int]:
-    return (-match.score, match.run.song_id, match.run.first_window)
+def _match_order(match: Match) -> tuple[float, float, int, int]:
+    return (-match.score, -match.run.mean_similarity, match.run.song_id, match.run.first_window)

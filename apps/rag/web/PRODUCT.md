@@ -1,7 +1,5 @@
 # Product
 
-<!-- impeccable:product-schema 1 -->
-
 > Escrito a partir del enunciado (Anexo A, opción A), del issue #88 y del README del servicio
 > (`apps/rag/README.md`). Lo que no sale de esas fuentes está marcado como **supuesto**.
 

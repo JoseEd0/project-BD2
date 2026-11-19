@@ -184,12 +184,13 @@ class Table:
 
     @property
     def definition(self) -> TableDefinition:
-        """La definición con los índices que pueden responder ahora: un índice diferido
-        por una carga no aparece, así que nadie que planifique con ella lo elige."""
-        if not self._deferred:
-            return self._definition
+        """La definición con los índices que pueden responder ahora: uno diferido por una
+        carga, o que no se pudo volver a abrir, no aparece, así que nadie que planifique con
+        ella lo elige."""
         indexes = self._definition.indexes
-        live = tuple(index for index in indexes if index.name not in self._deferred)
+        if len(self._indexes) == len(indexes):
+            return self._definition
+        live = tuple(index for index in indexes if index.name in self._indexes)
         return replace(self._definition, indexes=live)
 
     @property
@@ -547,12 +548,16 @@ class Table:
 
         Antes de dejar de mantener un índice se deja en el disco la marca de que está
         viejo: si el proceso termina antes de `build_deferred_indexes`, al abrir la tabla
-        el índice se reconstruye con sus filas en vez de responder con filas de menos.
+        el índice se reconstruye con sus filas en vez de responder con filas de menos. Con
+        la marca puesta, lo que el índice guardaba ya no sirve y se descarta: una tabla
+        vaciada con `DELETE` deja en él lápidas, y su construcción de una vez empieza desde
+        un índice sin nada.
         """
         for definition in self._definition.indexes:
             if self._defers(definition):
                 mark_durably(stale_marker(self._index_path(definition.name)))
-                self._deferred[definition.name] = self._indexes.pop(definition.name)
+                self._indexes.pop(definition.name).close()
+                self._deferred[definition.name] = self._emptied_index(definition)
         return tuple(self._deferred)
 
     def build_deferred_indexes(self) -> None:
@@ -872,14 +877,18 @@ class Table:
     def _rebuilt_index(self, definition: IndexDefinition) -> SecondaryIndex:
         """El índice desde cero. La marca se borra solo después de escribirlo: un corte a
         mitad de la reconstrucción la deja, y la próxima apertura vuelve a empezar."""
-        self.discard_index_files(definition)
-        index = self._open_index(definition)
+        index = self._emptied_index(definition)
         try:
             self._build_from_rows(index, definition.name)
         except Exception:
             index.close()
             raise
         return index
+
+    def _emptied_index(self, definition: IndexDefinition) -> SecondaryIndex:
+        """El índice abierto sin nada, en lugar de los archivos que tuviera."""
+        self.discard_index_files(definition)
+        return self._open_index(definition)
 
     def _build_from_rows(self, index: SecondaryIndex, name: str) -> None:
         """Llena el índice vacío con las filas de la tabla, lo escribe en el disco y solo

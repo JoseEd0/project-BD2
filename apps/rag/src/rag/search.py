@@ -107,11 +107,13 @@ class SearchHit(BaseModel):
 
 
 class Retriever:
-    """Busca fragmentos en el gestor con el cliente y el modelo de embeddings del servicio."""
+    """Busca fragmentos en el gestor con el cliente y el modelo de embeddings del servicio;
+    `rrf_k` es la constante de la fusión híbrida."""
 
-    def __init__(self, engine: AsyncClient, embedder: Embedder) -> None:
+    def __init__(self, engine: AsyncClient, embedder: Embedder, rrf_k: int = RRF_K) -> None:
         self._engine = engine
         self._embedder = embedder
+        self._rrf_k = rrf_k
 
     async def search(self, query: str, mode: SearchMode, k: int) -> list[SearchHit]:
         """Los `k` fragmentos más relevantes para `query` según `mode`, de mejor a peor."""
@@ -130,7 +132,8 @@ class Retriever:
         )
         rows = {row["chunk_id"]: row for row in (*semantic, *lexical)}
         fused = reciprocal_rank_fusion(
-            [[row["chunk_id"] for row in lexical], [row["chunk_id"] for row in semantic]], RRF_K
+            [[row["chunk_id"] for row in lexical], [row["chunk_id"] for row in semantic]],
+            self._rrf_k,
         )[:k]
         scores = [
             (
@@ -183,7 +186,7 @@ class Retriever:
         sql = f"SELECT {PAPER_COLUMNS} FROM {PAPERS_TABLE} WHERE paper_id IN ({placeholders})"
         with timed(PAPERS_STAGE):
             rows = await self._engine.fetch_all(sql, ordered)
-        return {row["paper_id"]: _paper(row) for row in rows}
+        return {row["paper_id"]: paper_of(row) for row in rows}
 
 
 def plain_text_query(question: str) -> str:
@@ -201,7 +204,8 @@ def _mode_score(rows: Sequence[Record], rank: int | None) -> ModeScore | None:
     return ModeScore(rank=rank, score=rows[rank - 1]["score"])
 
 
-def _paper(row: Record) -> Paper:
+def paper_of(row: Record) -> Paper:
+    """El `Paper` de una fila de `rag_papers` con `PAPER_COLUMNS`."""
     authors = row["authors"] or ""
     return Paper.model_validate(
         {**row, "authors": authors.split(AUTHOR_SEPARATOR) if authors else []}

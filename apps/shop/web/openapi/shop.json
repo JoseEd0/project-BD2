@@ -1,0 +1,1682 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "shop",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/productos/{product_id}": {
+      "get": {
+        "summary": "Product",
+        "operationId": "product_productos__product_id__get",
+        "parameters": [
+          {
+            "name": "product_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Product Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Product"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/busqueda/texto": {
+      "get": {
+        "summary": "Text Search",
+        "description": "Productos cuyo título o descripción contienen las palabras de `q`, por BM25, y que\ncumplen el filtro de departamento y precio.",
+        "operationId": "text_search_busqueda_texto_get",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "title": "Q"
+            }
+          },
+          {
+            "name": "limite",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limite"
+            }
+          },
+          {
+            "name": "departamento",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Departamento"
+            }
+          },
+          {
+            "name": "precio_min",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Precio Min"
+            }
+          },
+          {
+            "name": "precio_max",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Precio Max"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ScoredProduct"
+                  },
+                  "title": "Response Text Search Busqueda Texto Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/busqueda/imagenes": {
+      "get": {
+        "summary": "Image Search",
+        "description": "Productos cuya foto se parece a lo que describe `q`, con CLIP: el embedding del texto\ncontra el HNSW de los embeddings de las fotos.",
+        "operationId": "image_search_busqueda_imagenes_get",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "title": "Q"
+            }
+          },
+          {
+            "name": "limite",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limite"
+            }
+          },
+          {
+            "name": "departamento",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Departamento"
+            }
+          },
+          {
+            "name": "precio_min",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Precio Min"
+            }
+          },
+          {
+            "name": "precio_max",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Precio Max"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ScoredProduct"
+                  },
+                  "title": "Response Image Search Busqueda Imagenes Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tiendas/cercanas": {
+      "get": {
+        "summary": "Nearby Stores",
+        "description": "Las tiendas más cercanas a `(lat, lon)`, con su distancia en metros (Haversine).",
+        "operationId": "nearby_stores_tiendas_cercanas_get",
+        "parameters": [
+          {
+            "name": "lat",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "maximum": 90.0,
+              "minimum": -90.0,
+              "title": "Lat"
+            }
+          },
+          {
+            "name": "lon",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "maximum": 180.0,
+              "minimum": -180.0,
+              "title": "Lon"
+            }
+          },
+          {
+            "name": "limite",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limite"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/NearbyStore"
+                  },
+                  "title": "Response Nearby Stores Tiendas Cercanas Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/productos/{product_id}/tiendas": {
+      "get": {
+        "summary": "Stores With Stock",
+        "description": "Las tiendas que tienen `product_id` en stock, de la más cercana a `(lat, lon)` a la\nmás lejana, con sus unidades: el hash del inventario y la distancia del R-Tree.",
+        "operationId": "stores_with_stock_productos__product_id__tiendas_get",
+        "parameters": [
+          {
+            "name": "product_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Product Id"
+            }
+          },
+          {
+            "name": "lat",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "maximum": 90.0,
+              "minimum": -90.0,
+              "title": "Lat"
+            }
+          },
+          {
+            "name": "lon",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "maximum": 180.0,
+              "minimum": -180.0,
+              "title": "Lon"
+            }
+          },
+          {
+            "name": "limite",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limite"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StoreWithStock"
+                  },
+                  "title": "Response Stores With Stock Productos  Product Id  Tiendas Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/productos/{product_id}/foto": {
+      "get": {
+        "summary": "Product Photo",
+        "description": "La foto del producto (JPEG), con caché del navegador.\n\nRaises:\n    ProductPhotoNotFoundError: si el producto no existe o no tiene foto, o si el API no\n        tiene `SHOP_DATA_DIR`.",
+        "operationId": "product_photo_productos__product_id__foto_get",
+        "parameters": [
+          {
+            "name": "product_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Product Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/busqueda/foto": {
+      "post": {
+        "summary": "Photo Search",
+        "description": "Productos cuya foto se parece a la subida, con la torre de imagen de CLIP y el HNSW\nde `shop_clip`.\n\nRaises:\n    UploadTooLargeError: si pesa más de `SHOP_PHOTO_MAX_BYTES`.\n    TooManyPixelsError: si mide más de `SHOP_PHOTO_MAX_PIXELS`.\n    UnreadablePhotoError: si está vacía o no es una imagen.",
+        "operationId": "photo_search_busqueda_foto_post",
+        "parameters": [
+          {
+            "name": "limite",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limite"
+            }
+          },
+          {
+            "name": "departamento",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Departamento"
+            }
+          },
+          {
+            "name": "precio_min",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Precio Min"
+            }
+          },
+          {
+            "name": "precio_max",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Precio Max"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_photo_search_busqueda_foto_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ScoredProduct"
+                  },
+                  "title": "Response Photo Search Busqueda Foto Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/departamentos": {
+      "get": {
+        "summary": "Departments",
+        "description": "Los departamentos con al menos `SHOP_DEPARTMENT_MIN_PRODUCTS` productos, del que más\ntiene al que menos.",
+        "operationId": "departments_departamentos_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Department"
+                  },
+                  "type": "array",
+                  "title": "Response Departments Departamentos Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/usuarios": {
+      "get": {
+        "summary": "Featured Customers",
+        "description": "Los `SHOP_FEATURED_USERS` usuarios con más compras, con cuántas tenían al cargar.",
+        "operationId": "featured_customers_usuarios_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Customer"
+                  },
+                  "type": "array",
+                  "title": "Response Featured Customers Usuarios Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/productos/{product_id}/recomendaciones": {
+      "get": {
+        "summary": "Product Recommendations",
+        "description": "Productos para quien mira `product_id`: comprados junto con él, parecidos en la foto\ny en la descripción y, con `lat` y `lon`, en stock cerca. Con `usuario`, sin lo que ya\ncompró.",
+        "operationId": "product_recommendations_productos__product_id__recomendaciones_get",
+        "parameters": [
+          {
+            "name": "product_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Product Id"
+            }
+          },
+          {
+            "name": "limite",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limite"
+            }
+          },
+          {
+            "name": "lat",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "maximum": 90.0,
+                  "minimum": -90.0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Lat"
+            }
+          },
+          {
+            "name": "lon",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "maximum": 180.0,
+                  "minimum": -180.0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Lon"
+            }
+          },
+          {
+            "name": "radio",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "maximum": 50000.0,
+                  "exclusiveMinimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Radio"
+            }
+          },
+          {
+            "name": "usuario",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Usuario"
+            }
+          },
+          {
+            "name": "visual",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "clip",
+                    "sift"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Visual"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Recommendations"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/usuarios/{user_id}/recomendaciones": {
+      "get": {
+        "summary": "User Recommendations",
+        "description": "Productos para `user_id` a partir de sus compras recientes de la partición de\nentrenamiento, sin las que ya hizo.",
+        "operationId": "user_recommendations_usuarios__user_id__recomendaciones_get",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "User Id"
+            }
+          },
+          {
+            "name": "limite",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limite"
+            }
+          },
+          {
+            "name": "lat",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "maximum": 90.0,
+                  "minimum": -90.0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Lat"
+            }
+          },
+          {
+            "name": "lon",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "maximum": 180.0,
+                  "minimum": -180.0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Lon"
+            }
+          },
+          {
+            "name": "radio",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "maximum": 50000.0,
+                  "exclusiveMinimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Radio"
+            }
+          },
+          {
+            "name": "visual",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "clip",
+                    "sift"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Visual"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Recommendations"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/usuarios/{user_id}/compras": {
+      "get": {
+        "summary": "Purchases",
+        "description": "Lo que compró `user_id` en la partición del recomendador, de lo más reciente a lo más\nantiguo: lo que describe al usuario y lo que sus recomendaciones dejan fuera.",
+        "operationId": "purchases_usuarios__user_id__compras_get",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "User Id"
+            }
+          },
+          {
+            "name": "limite",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limite"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProductSummary"
+                  },
+                  "title": "Response Purchases Usuarios  User Id  Compras Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Purchase",
+        "description": "Registra la compra en el gestor e invalida las recomendaciones del usuario, del\nproducto y de los que ya había comprado, cuyos pares cambian.",
+        "operationId": "purchase_usuarios__user_id__compras_post",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "User Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PurchaseRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PurchaseRecorded"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Body_photo_search_busqueda_foto_post": {
+        "properties": {
+          "foto": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "Foto",
+            "description": "La foto: JPEG, PNG o WebP."
+          }
+        },
+        "type": "object",
+        "required": [
+          "foto"
+        ],
+        "title": "Body_photo_search_busqueda_foto_post"
+      },
+      "Customer": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "compras": {
+            "type": "integer",
+            "title": "Compras"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "compras"
+        ],
+        "title": "Customer",
+        "description": "Un usuario del dataset con cuántas compras tiene."
+      },
+      "Department": {
+        "properties": {
+          "departamento": {
+            "type": "string",
+            "title": "Departamento"
+          },
+          "productos": {
+            "type": "integer",
+            "title": "Productos"
+          }
+        },
+        "type": "object",
+        "required": [
+          "departamento",
+          "productos"
+        ],
+        "title": "Department",
+        "description": "Un departamento del catálogo con cuántos productos tiene."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "Location": {
+        "properties": {
+          "lat": {
+            "type": "number",
+            "title": "Lat"
+          },
+          "lon": {
+            "type": "number",
+            "title": "Lon"
+          }
+        },
+        "type": "object",
+        "required": [
+          "lat",
+          "lon"
+        ],
+        "title": "Location"
+      },
+      "NearbyStore": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "tipo": {
+            "type": "string",
+            "title": "Tipo"
+          },
+          "ubicacion": {
+            "$ref": "#/components/schemas/Location"
+          },
+          "metros": {
+            "type": "number",
+            "title": "Metros"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "nombre",
+          "tipo",
+          "ubicacion",
+          "metros"
+        ],
+        "title": "NearbyStore"
+      },
+      "Product": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "titulo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Titulo"
+          },
+          "marca": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Marca"
+          },
+          "departamento": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Departamento"
+          },
+          "categoria": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Categoria"
+          },
+          "ruta_categoria": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ruta Categoria"
+          },
+          "precio": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Precio"
+          },
+          "valoracion": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valoracion"
+          },
+          "valoraciones": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valoraciones"
+          },
+          "imagen": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Imagen"
+          },
+          "descripcion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Descripcion"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "titulo",
+          "marca",
+          "departamento",
+          "categoria",
+          "ruta_categoria",
+          "precio",
+          "valoracion",
+          "valoraciones",
+          "imagen",
+          "descripcion"
+        ],
+        "title": "Product",
+        "description": "La ficha completa: viñetas y descripción."
+      },
+      "ProductSummary": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "titulo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Titulo"
+          },
+          "marca": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Marca"
+          },
+          "departamento": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Departamento"
+          },
+          "categoria": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Categoria"
+          },
+          "ruta_categoria": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ruta Categoria"
+          },
+          "precio": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Precio"
+          },
+          "valoracion": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valoracion"
+          },
+          "valoraciones": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valoraciones"
+          },
+          "imagen": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Imagen"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "titulo",
+          "marca",
+          "departamento",
+          "categoria",
+          "ruta_categoria",
+          "precio",
+          "valoracion",
+          "valoraciones",
+          "imagen"
+        ],
+        "title": "ProductSummary",
+        "description": "Un producto en una lista de resultados. `imagen` es la ruta de la foto en el gestor."
+      },
+      "PurchaseRecorded": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "usuario": {
+            "type": "string",
+            "title": "Usuario"
+          },
+          "producto": {
+            "type": "string",
+            "title": "Producto"
+          },
+          "instante": {
+            "type": "integer",
+            "title": "Instante"
+          },
+          "particion": {
+            "type": "string",
+            "title": "Particion"
+          },
+          "pares_sumados": {
+            "type": "integer",
+            "title": "Pares Sumados"
+          },
+          "pares_nuevos": {
+            "type": "integer",
+            "title": "Pares Nuevos"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "usuario",
+          "producto",
+          "instante",
+          "particion",
+          "pares_sumados",
+          "pares_nuevos"
+        ],
+        "title": "PurchaseRecorded"
+      },
+      "PurchaseRequest": {
+        "properties": {
+          "producto": {
+            "type": "string",
+            "maxLength": 10,
+            "minLength": 1,
+            "title": "Producto"
+          }
+        },
+        "type": "object",
+        "required": [
+          "producto"
+        ],
+        "title": "PurchaseRequest"
+      },
+      "Reason": {
+        "properties": {
+          "senal": {
+            "type": "string",
+            "title": "Senal"
+          },
+          "aporte": {
+            "type": "number",
+            "title": "Aporte"
+          },
+          "texto": {
+            "type": "string",
+            "title": "Texto"
+          }
+        },
+        "type": "object",
+        "required": [
+          "senal",
+          "aporte",
+          "texto"
+        ],
+        "title": "Reason",
+        "description": "Lo que aportó una señal: su puntaje normalizado, por su peso, y su frase."
+      },
+      "Recommendation": {
+        "properties": {
+          "producto": {
+            "$ref": "#/components/schemas/ProductSummary"
+          },
+          "puntaje": {
+            "type": "number",
+            "title": "Puntaje"
+          },
+          "motivos": {
+            "items": {
+              "$ref": "#/components/schemas/Reason"
+            },
+            "type": "array",
+            "title": "Motivos"
+          },
+          "explicacion": {
+            "type": "string",
+            "title": "Explicacion"
+          }
+        },
+        "type": "object",
+        "required": [
+          "producto",
+          "puntaje",
+          "motivos",
+          "explicacion"
+        ],
+        "title": "Recommendation"
+      },
+      "Recommendations": {
+        "properties": {
+          "origen": {
+            "type": "string",
+            "title": "Origen"
+          },
+          "arranque_en_frio": {
+            "type": "boolean",
+            "title": "Arranque En Frio"
+          },
+          "pesos": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "type": "object",
+            "title": "Pesos"
+          },
+          "version_pesos": {
+            "type": "string",
+            "title": "Version Pesos"
+          },
+          "senales": {
+            "items": {
+              "$ref": "#/components/schemas/SignalQuery"
+            },
+            "type": "array",
+            "title": "Senales"
+          },
+          "recomendaciones": {
+            "items": {
+              "$ref": "#/components/schemas/Recommendation"
+            },
+            "type": "array",
+            "title": "Recomendaciones"
+          }
+        },
+        "type": "object",
+        "required": [
+          "origen",
+          "arranque_en_frio",
+          "pesos",
+          "version_pesos",
+          "senales",
+          "recomendaciones"
+        ],
+        "title": "Recommendations",
+        "description": "Las recomendaciones, con los pesos efectivos, si fue arranque en frío y las consultas\nde cada señal."
+      },
+      "ScoredProduct": {
+        "properties": {
+          "producto": {
+            "$ref": "#/components/schemas/ProductSummary"
+          },
+          "puntaje": {
+            "type": "number",
+            "title": "Puntaje"
+          }
+        },
+        "type": "object",
+        "required": [
+          "producto",
+          "puntaje"
+        ],
+        "title": "ScoredProduct",
+        "description": "Un producto encontrado, con el puntaje con que se ordenó (BM25 o coseno)."
+      },
+      "SignalQuery": {
+        "properties": {
+          "senal": {
+            "type": "string",
+            "title": "Senal"
+          },
+          "sql": {
+            "type": "string",
+            "title": "Sql"
+          },
+          "parametros": {
+            "items": {},
+            "type": "array",
+            "title": "Parametros"
+          },
+          "candidatos": {
+            "type": "integer",
+            "title": "Candidatos"
+          },
+          "milisegundos": {
+            "type": "number",
+            "title": "Milisegundos"
+          }
+        },
+        "type": "object",
+        "required": [
+          "senal",
+          "sql",
+          "parametros",
+          "candidatos",
+          "milisegundos"
+        ],
+        "title": "SignalQuery",
+        "description": "Una señal tal como corrió: el SQL exacto, sus parámetros (un vector, por su dimensión),\ncuántos candidatos dio y los milisegundos que tardó."
+      },
+      "StoreWithStock": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "tipo": {
+            "type": "string",
+            "title": "Tipo"
+          },
+          "ubicacion": {
+            "$ref": "#/components/schemas/Location"
+          },
+          "metros": {
+            "type": "number",
+            "title": "Metros"
+          },
+          "unidades": {
+            "type": "integer",
+            "title": "Unidades"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "nombre",
+          "tipo",
+          "ubicacion",
+          "metros",
+          "unidades"
+        ],
+        "title": "StoreWithStock",
+        "description": "Una tienda que tiene el producto, con cuántas unidades."
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}

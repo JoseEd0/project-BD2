@@ -29,6 +29,8 @@ from faces.api import create_app as create_faces_app
 from faces.api.settings import FacesSettings
 from rag.api import create_app as create_rag_app
 from rag.config import RagSettings
+from shop.api import create_app as create_shop_app
+from shop.settings import ShopSettings
 from songcheck.api import build_app as build_copyright_app
 from songcheck.settings import CopyrightSettings
 
@@ -38,6 +40,8 @@ REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
 # conecta a nada (`app.openapi()` no corre el `lifespan`), así que basta una que no existe.
 UNUSED_ENGINE_URL = "http://engine.invalid"
 UNUSED_ENGINE_KEY = "contract-export"
+# Los modelos se cargan al arrancar (`lifespan`), que exportar no corre.
+UNUSED_MODELS_DIR = "models.invalid"
 
 
 @contextmanager
@@ -65,7 +69,11 @@ def faces_app() -> Iterator[FastAPI]:
     """El API de rostros sin arrancar: sus modelos, el gestor y Redis se usan al arrancar,
     nunca al describir las rutas, así que las direcciones no tienen que existir."""
     settings = FacesSettings.model_validate(
-        {"engine_url": UNUSED_ENGINE_URL, "engine_key": UNUSED_ENGINE_KEY, "models_dir": "unused"}
+        {
+            "engine_url": UNUSED_ENGINE_URL,
+            "engine_key": UNUSED_ENGINE_KEY,
+            "models_dir": UNUSED_MODELS_DIR,
+        }
     )
     yield create_faces_app(settings)
 
@@ -75,9 +83,25 @@ def rag_app() -> Iterator[FastAPI]:
     """Sin arrancar, el servicio no abre el gestor ni carga sus modelos: la carpeta de
     modelos no tiene que existir."""
     settings = RagSettings.model_validate(
-        {"engine_url": UNUSED_ENGINE_URL, "engine_key": UNUSED_ENGINE_KEY, "models_dir": "modelos"}
+        {
+            "engine_url": UNUSED_ENGINE_URL,
+            "engine_key": UNUSED_ENGINE_KEY,
+            "models_dir": UNUSED_MODELS_DIR,
+        }
     )
     yield create_rag_app(settings)
+
+
+@contextmanager
+def shop_app() -> Iterator[FastAPI]:
+    settings = ShopSettings.model_validate(
+        {
+            "engine_url": UNUSED_ENGINE_URL,
+            "engine_key": UNUSED_ENGINE_KEY,
+            "models_dir": UNUSED_MODELS_DIR,
+        }
+    )
+    yield create_shop_app(settings)
 
 
 AppFactory = Callable[[], AbstractContextManager[FastAPI]]
@@ -99,6 +123,7 @@ CONTRACTS: dict[str, Contract] = {
     "copyright": Contract(copyright_app, Path("apps/copyright/web/openapi/copyright.json")),
     "faces": Contract(faces_app, Path("apps/faces/web/openapi/faces.json")),
     "rag": Contract(rag_app, Path("apps/rag/web/openapi/rag.json")),
+    "shop": Contract(shop_app, Path("apps/shop/web/openapi/shop.json")),
 }
 
 

@@ -1,0 +1,75 @@
+# La tienda (opción B): su API sin estado, su interfaz, su carga inicial y su túnel, montados
+# sobre lo común de deploy/app.compose.yaml (ver apps/README.md, «Desplegar una app»).
+#
+# El dataset (`python -m shop.dataset prepare`, en data/datasets/amazon_musical_instruments)
+# se monta de solo lectura en la carga en la misma ruta que en el gestor, /app/data/datasets,
+# que ya está entre sus MINIGESTOR_IMPORT_DIRS: la columna `imagen` guarda esa ruta y el
+# gestor abre las fotos para SIFT.
+
+services:
+  shop-api:
+    extends: { file: ../../deploy/app.compose.yaml, service: api }
+    build:
+      args:
+        APP_DIR: shop
+    image: minigestor-shop-api
+    environment: &shop-environment
+      SHOP_ENGINE_URL: http://engine:8000
+      SHOP_ENGINE_KEY: ${SHOP_ENGINE_KEY:-}
+      SHOP_MIGRATION_KEY: ${SHOP_MIGRATION_KEY:-}
+      SHOP_LOG_LEVEL: ${SHOP_LOG_LEVEL:-INFO}
+      # CLIP en ONNX, horneado en la imagen por apps/shop/docker-build.sh.
+      SHOP_MODELS_DIR: /opt/app/models
+    # Con la torre de texto de CLIP cargada, el API ocupa unos 430 MiB (medido).
+    mem_limit: ${SHOP_API_MEMORY:-1g}
+    networks: [data, shop]
+    depends_on:
+      engine:
+        condition: service_healthy
+
+  shop-web:
+    extends: { file: ../../deploy/app.compose.yaml, service: web }
+    build:
+      args:
+        # La interfaz propia llega con #83; mientras, la plantilla del kit web.
+        APP_DIR: web-kit/template
+    image: minigestor-shop-web
+    environment:
+      API_UPSTREAM: http://shop-api:8000
+    ports:
+      - ${SHOP_WEB_PORT:-8102}:8080
+      - ${SHOP_WEB_TLS_PORT:-8402}:8443
+    networks: [shop]
+    depends_on:
+      shop-api:
+        condition: service_healthy
+
+  shop-seed:
+    extends: { file: ../../deploy/app.compose.yaml, service: seed }
+    profiles: [seed]
+    image: minigestor-shop-api
+    environment:
+      <<: *shop-environment
+      SHOP_DATA_DIR: /app/data/datasets
+      # La caché de embeddings de CLIP vive en el tmpfs del contenedor: si el gestor ya
+      # tiene `shop_clip`, una carga repetida no los vuelve a calcular.
+      SHOP_EMBEDDINGS_DIR: /tmp/clip-embeddings
+    volumes:
+      - ${MINIGESTOR_DATASETS_DIR:-../../data/datasets}:/app/data/datasets:ro
+    mem_limit: ${SHOP_SEED_MEMORY:-3g}
+    networks: [data]
+    depends_on:
+      shop-api:
+        condition: service_healthy
+
+  shop-tunnel:
+    extends: { file: ../../deploy/app.compose.yaml, service: tunnel }
+    profiles: [tunnel]
+    command: ["tunnel", "--no-autoupdate", "--url", "http://shop-web:8080"]
+    networks: [shop]
+    depends_on:
+      shop-web:
+        condition: service_healthy
+
+networks:
+  shop: {}

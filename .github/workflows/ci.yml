@@ -168,12 +168,24 @@ jobs:
     env:
       WEB_URL: http://localhost:8080
       # El servicio de ejemplo del kit, montado como una aplicación (deploy/example), por HTTP y
-      # por HTTPS. Mientras ninguna app tenga su API, es el que prueba la topología.
+      # por HTTPS, que prueba la topología sin depender de ninguna app; y la tienda, con su carga.
       EXAMPLE_URL: http://localhost:8100
       EXAMPLE_TLS_URL: https://localhost:8400
+      SHOP_URL: http://localhost:8102
       COMPOSE_PROFILES: example
     steps:
       - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.10.11"
+          python-version: "3.12"
+          enable-cache: true
+      - name: Dataset diminuto de la tienda
+        # Cinco productos con fotos sintéticas, con la forma del de Amazon: la carga de la
+        # tienda se prueba de punta a punta sin bajar 1,5 GB.
+        run: |
+          uv sync --locked --package minigestor-shop
+          uv run --no-sync python -m apps.shop.tests.tiny_dataset data/datasets/amazon_musical_instruments
       - name: Claves y certificado
         # Las claves de cada servicio en .env, como en un despliegue: el gestor no queda abierto.
         run: |
@@ -240,6 +252,14 @@ jobs:
           docker compose run --rm example-seed
           docker compose run --rm example-seed
           curl --fail --silent --show-error "$EXAMPLE_URL/api/notas/1" | grep -q "carga inicial"
+      - name: La tienda carga su catálogo, una segunda vez sin repetir nada, y lo sirve
+        run: |
+          docker compose run --rm shop-seed
+          docker compose run --rm shop-seed 2>&1 | tee /tmp/segunda-carga
+          grep -q "shop_productos ya tiene sus 5 filas" /tmp/segunda-carga
+          curl --fail --silent --show-error "$SHOP_URL/api/health"
+          curl --fail --silent --show-error "$SHOP_URL/api/ready" | grep -q ready
+          curl --fail --silent --show-error "$SHOP_URL/api/productos/B000GUITAR" | grep -q "Electric Guitar"
       - name: Con --scale, nginx reparte entre las réplicas
         run: |
           docker compose up --detach --wait --scale example-api=3

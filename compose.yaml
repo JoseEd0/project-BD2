@@ -5,6 +5,7 @@ name: minigestor
 # Las redes y el volumen compartidos se declaran solo aquí.
 include:
   - deploy/example/compose.yaml
+  - apps/shop/compose.yaml
 
 x-engine: &engine
   image: minigestor-api

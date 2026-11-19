@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path, PurePosixPath
 
 import pytest
-from apps.shop.tests.shop_support import (
+from apps.shop.tests.tiny_dataset import (
     TINY_INVENTORY,
     TINY_PRODUCTS,
     TINY_PURCHASES,

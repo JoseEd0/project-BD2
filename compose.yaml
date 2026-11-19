@@ -6,6 +6,7 @@ name: minigestor
 include:
   - deploy/example/compose.yaml
   - apps/shop/compose.yaml
+  - apps/faces/compose.yaml
 
 x-engine: &engine
   image: minigestor-api

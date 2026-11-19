@@ -168,12 +168,13 @@ jobs:
     env:
       WEB_URL: http://localhost:8080
       # El servicio de ejemplo del kit, montado como una aplicación (deploy/example), por HTTP y
-      # por HTTPS, que prueba la topología sin depender de ninguna app; la tienda, con su carga; y
-      # los rostros, con los modelos en su imagen.
+      # por HTTPS, que prueba la topología sin depender de ninguna app; la tienda y copyright, con
+      # su carga; y los rostros, con los modelos en su imagen.
       EXAMPLE_URL: http://localhost:8100
       EXAMPLE_TLS_URL: https://localhost:8400
       SHOP_URL: http://localhost:8102
       FACES_URL: http://localhost:8104
+      COPYRIGHT_URL: http://localhost:8101
       COMPOSE_PROFILES: example
     steps:
       - uses: actions/checkout@v4
@@ -188,6 +189,10 @@ jobs:
         run: |
           uv sync --locked --package minigestor-shop
           uv run --no-sync python -m apps.shop.tests.tiny_dataset data/datasets/amazon_musical_instruments
+      - name: Catálogo diminuto de copyright
+        # Cuatro pistas generadas con su catalog.csv completo: la carga de copyright se prueba
+        # de punta a punta sin bajar las 8 000 de FMA. Solo usa la biblioteca estándar.
+        run: PYTHONPATH=apps/copyright/src python3 -m songcheck.sample --data-dir data/datasets
       - name: Claves y certificado
         # Las claves de cada servicio en .env, como en un despliegue: el gestor no queda abierto.
         run: |
@@ -285,6 +290,15 @@ jobs:
           curl --fail --silent --show-error "$SHOP_URL/api/health"
           curl --fail --silent --show-error "$SHOP_URL/api/ready" | grep -q ready
           curl --fail --silent --show-error "$SHOP_URL/api/productos/B000GUITAR" | grep -q "Electric Guitar"
+      - name: Copyright indexa su catálogo por tramos, una segunda vez sin repetir nada, y lo sirve
+        run: |
+          docker compose run --rm copyright-seed
+          docker compose run --rm copyright-seed 2>&1 | tee /tmp/segunda-carga-copyright
+          grep -q "cr_segmentos: ya tiene sus 12 filas" /tmp/segunda-carga-copyright
+          curl --fail --silent --show-error "$COPYRIGHT_URL/api/health"
+          curl --fail --silent --show-error "$COPYRIGHT_URL/api/ready" | grep -q ready
+          curl --fail --silent --show-error "$COPYRIGHT_URL/api/catalog" | python3 -c "import json, sys; catalog = json.load(sys.stdin); assert (catalog['songs'], catalog['segments'], catalog['segments_indexed']) == (4, 12, True), catalog"
+          curl --fail --silent --show-error "$COPYRIGHT_URL/api/songs/2" | grep -q "Barrido 2"
       - name: Con --scale, nginx reparte entre las réplicas
         run: |
           docker compose up --detach --wait --scale example-api=3

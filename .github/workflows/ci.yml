@@ -189,6 +189,10 @@ jobs:
       FACES_URL: http://localhost:8104
       COPYRIGHT_URL: http://localhost:8101
       COMPOSE_PROFILES: example
+      # El RAG («papers») por su web; su carga inicial siembra el corpus diminuto de sus tests
+      # (ruta relativa a apps/rag/), no el de arXiv.
+      PAPERS_URL: http://localhost:8103
+      PAPERS_DATASETS_DIR: ./tests/fixtures/datasets
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
@@ -312,6 +316,19 @@ jobs:
           curl --fail --silent --show-error "$COPYRIGHT_URL/api/ready" | grep -q ready
           curl --fail --silent --show-error "$COPYRIGHT_URL/api/catalog" | python3 -c "import json, sys; catalog = json.load(sys.stdin); assert (catalog['songs'], catalog['segments'], catalog['segments_indexed']) == (4, 12, True), catalog"
           curl --fail --silent --show-error "$COPYRIGHT_URL/api/songs/2" | grep -q "Barrido 2"
+      - name: Papers siembra su corpus y busca por su web en los tres modos
+        run: |
+          docker compose run --rm papers-seed
+          docker compose run --rm papers-seed 2>&1 | tee /tmp/segunda-siembra
+          grep -q "rag_chunks ya tiene sus 7 filas" /tmp/segunda-siembra
+          curl --fail --silent --show-error "$PAPERS_URL/api/health" | grep -q ok
+          curl --fail --silent --show-error "$PAPERS_URL/api/ready" | grep -q ready
+          for mode in bm25 vector hybrid; do
+            curl --fail --silent --show-error "$PAPERS_URL/api/search" \
+              --header "content-type: application/json" \
+              --data "{\"query\": \"BM25 term frequency\", \"mode\": \"$mode\", \"k\": 3}" \
+              | python3 -c "import json, sys; hits = json.load(sys.stdin)['results']; assert hits and hits[0]['paper']['title'], hits"
+          done
       - name: Con --scale, nginx reparte entre las réplicas
         run: |
           docker compose up --detach --wait --scale example-api=3

@@ -8,6 +8,7 @@ include:
   - apps/shop/compose.yaml
   - apps/faces/compose.yaml
   - apps/copyright/compose.yaml
+  - apps/rag/compose.yaml
 
 x-engine: &engine
   image: minigestor-api

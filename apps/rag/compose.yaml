@@ -1,0 +1,82 @@
+# El RAG sobre papers («papers»): su API, su interfaz (la plantilla del kit web hasta que
+# exista la suya, #88), su carga inicial y su túnel. Lo incluye el compose raíz; las redes
+# `data` y `cache` y el gestor se declaran allí. Ver apps/README.md, «Desplegar una app».
+
+services:
+  papers-api:
+    extends: { file: ../../deploy/app.compose.yaml, service: api }
+    build:
+      args:
+        APP_DIR: rag
+    image: minigestor-papers-api
+    environment: &papers-environment
+      RAG_ENGINE_URL: http://engine:8000
+      RAG_ENGINE_KEY: ${RAG_ENGINE_KEY:-}
+      RAG_MIGRATION_KEY: ${RAG_MIGRATION_KEY:-}
+      RAG_LOG_LEVEL: ${RAG_LOG_LEVEL:-INFO}
+      # El modelo lo deja en la imagen apps/rag/docker-build.sh.
+      RAG_MODELS_DIR: /opt/app/models
+      # Una pregunta es una sola secuencia corta: más hilos por réplica no la aceleran y
+      # quitan CPU a las otras réplicas y al gestor.
+      RAG_EMBEDDING_THREADS: ${RAG_EMBEDDING_THREADS:-2}
+    # El modelo int8 (113 MiB) y la sesión de onnxruntime no caben en los 512m por omisión.
+    mem_limit: ${PAPERS_API_MEMORY:-1g}
+    networks: [data, papers, cache]
+    depends_on:
+      engine:
+        condition: service_healthy
+
+  papers-web:
+    extends: { file: ../../deploy/app.compose.yaml, service: web }
+    build:
+      args:
+        APP_DIR: web-kit/template
+    image: minigestor-papers-web
+    environment:
+      API_UPSTREAM: http://papers-api:8000
+      # Cada búsqueda calcula un embedding y, desde #86, cada pregunta llama al LLM.
+      API_RATE_LIMIT: ${PAPERS_API_RATE_LIMIT:-5r/s}
+      API_RATE_BURST: ${PAPERS_API_RATE_BURST:-10}
+    ports:
+      - ${PAPERS_WEB_PORT:-8103}:8080
+      - ${PAPERS_WEB_TLS_PORT:-8403}:8443
+    networks: [papers]
+    depends_on:
+      papers-api:
+        condition: service_healthy
+
+  # `python -m rag.seed`: lee el corpus de `rag.corpus build` (montado de solo lectura),
+  # calcula los embeddings que falten y carga rag_papers y rag_chunks. Idempotente.
+  papers-seed:
+    extends: { file: ../../deploy/app.compose.yaml, service: seed }
+    profiles: [seed]
+    image: minigestor-papers-api
+    environment:
+      <<: *papers-environment
+      RAG_EMBEDDING_THREADS: ${RAG_SEED_EMBEDDING_THREADS:-4}
+      RAG_DATA_DIR: /data/datasets
+      # Los embeddings ya calculados en el anfitrión (`python -m rag.seed` fuera de Docker)
+      # están en el corpus montado y se leen de ahí; si falta alguno, se calculan en /tmp.
+      RAG_EMBEDDING_CACHE_DIR: ${RAG_SEED_EMBEDDING_CACHE_DIR:-/tmp/embeddings}
+      # La carga de los ~100 000 fragmentos termina construyendo sus dos índices.
+      RAG_ENGINE_LOAD_TIMEOUT_SECONDS: ${RAG_ENGINE_LOAD_TIMEOUT_SECONDS:-3600}
+    volumes:
+      # Relativa a apps/rag/ o absoluta.
+      - ${PAPERS_DATASETS_DIR:-../../data/datasets}:/data/datasets:ro
+    mem_limit: ${PAPERS_SEED_MEMORY:-2g}
+    networks: [data]
+    depends_on:
+      papers-api:
+        condition: service_healthy
+
+  papers-tunnel:
+    extends: { file: ../../deploy/app.compose.yaml, service: tunnel }
+    profiles: [tunnel]
+    command: ["tunnel", "--no-autoupdate", "--url", "http://papers-web:8080"]
+    networks: [papers]
+    depends_on:
+      papers-web:
+        condition: service_healthy
+
+networks:
+  papers: {}

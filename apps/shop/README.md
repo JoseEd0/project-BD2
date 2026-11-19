@@ -8,8 +8,9 @@ por su API REST ([`apps/README.md`](../README.md)).
 El paquete `shop` trae **el dataset** (#79): compras reales para que la evaluación del
 recomendador (Hit@10, NDCG@10) sea honesta, fichas y fotos de los productos, y tiendas
 reales de Lima; y **el catálogo en el gestor** (#80): el esquema, la carga, las dos
-representaciones visuales (SIFT de la Parte 4 y CLIP en ONNX) y un API de lectura. El
-recomendador y su página llegan en #81 a #83.
+representaciones visuales (SIFT de la Parte 4 y CLIP en ONNX) y un API de lectura; y **el
+recomendador** (#81): cuatro señales del gestor fundidas y explicadas, con caché en Redis.
+La evaluación y su página llegan en #82 y #83.
 
 | Módulo | Qué hace |
 |---|---|
@@ -23,8 +24,9 @@ recomendador y su página llegan en #81 a #83.
 | [`clip/`](src/shop/clip/) | CLIP en ONNX: modelos fijados, preprocesado, tokenizador, las dos torres, caché y lotes |
 | [`catalog/schema.py`](src/shop/catalog/schema.py) | las tablas e índices del catálogo, como migraciones repetibles |
 | [`catalog/rows.py`](src/shop/catalog/rows.py) | de los CSV a las filas de la carga masiva |
-| [`seed/`](src/shop/seed/) | `python -m shop.seed`: la carga, repetible y reanudable |
-| [`api/`](src/shop/api/) | `shop.api:create_app`: ficha, búsqueda de texto, fotos por texto y tiendas cercanas |
+| [`seed/`](src/shop/seed/) | `python -m shop.seed`: la carga, repetible y reanudable, y los pares de compras conjuntas |
+| [`recommend/`](src/shop/recommend/) | las cuatro señales, la fusión, las explicaciones, las compras y la caché |
+| [`api/`](src/shop/api/) | `shop.api:create_app`: ficha, búsquedas, tiendas cercanas, recomendaciones y compras |
 | [`settings.py`](src/shop/settings.py) | la configuración `SHOP_*` del API y de la carga |
 
 ## Por qué Amazon Reviews 2023, instrumentos musicales
@@ -259,6 +261,8 @@ gestor tiene su tabla e índice:
 | `shop_compras` | **archivo secuencial** por `id`, la posición de la compra en orden cronológico | 511 836 |
 | `shop_tiendas` | heap con B+ sobre `id`; **R-Tree** sobre `ubicacion POINT` | 209 |
 | `shop_inventario` | heap; **hash extendible** sobre `producto` | 209 000 |
+| `shop_historial` (#81) | heap; **B+ no agrupado** sobre `usuario` y sobre `producto` | 511 836 |
+| `shop_compras_conjuntas` (#81) | heap; **hash extendible** sobre `producto`; materializada por la carga | 406 668 |
 
 Decisiones:
 
@@ -378,7 +382,7 @@ viaja como parámetro (`$1`), nunca dentro del SQL.
 | `GET /tiendas/cercanas?lat=&lon=&limite=` | `ORDER BY distancia(ubicacion, $1) LIMIT $2`, k vecinos con el R-Tree, en metros |
 
 `limite` va de 1 a `SHOP_MAX_SEARCH_LIMIT` (100; por omisión `SHOP_SEARCH_LIMIT`, 10). Las
-recomendaciones son de #81.
+rutas del recomendador están en [El recomendador](#el-recomendador-81).
 
 ### Con Docker
 
@@ -410,9 +414,13 @@ uv run pytest tests/shop -q    # la carga y el API contra el gestor real, en el 
 Los de [`tests/shop/`](../../tests/shop/) usan un dataset de cinco productos con fotos
 sintéticas y una torre de imagen de mentira (la de verdad se prueba en `apps/shop`):
 cargan todo, comprueban los `NULL`, el orden de las compras y una consulta de cada clase
-(`MATCH`, `SIMILAR_TO` sobre SIFT y sobre CLIP, `distancia`), que una segunda carga no
-repite nada, que una carga cortada sigue en su fila siguiente, que la caché evita volver a
-calcular CLIP y que sin el directorio de importación el gestor no lee las fotos.
+(`MATCH`, `SIMILAR_TO` sobre SIFT y sobre CLIP, `distancia`), que los pares materializados
+coinciden con el autojoin al vuelo, que una segunda carga no repite nada, que una carga cortada sigue en su fila siguiente, que la caché evita volver a
+calcular CLIP y que sin el directorio de importación el gestor no lee las fotos. Los del
+recomendador (`test_shop_recommendations_end_to_end.py`) prueban cada señal con su SQL, el
+arranque en frío, la cercanía, SIFT, las recomendaciones de un usuario, una compra que suma
+pares e invalida la caché (fakeredis) y un Redis que no responde; los de `apps/shop`, la
+fusión, las frases y la caché por separado.
 
 ### Medido: cargar todo el dataset
 
@@ -483,6 +491,107 @@ Conclusiones:
 - **Lo que esta medida no dice**: es una sola ejecución, con otros procesos en el equipo, y
   el gestor y la carga en la misma máquina, sin red de por medio. En Docker en macOS el gestor
   corre en una máquina virtual y los tiempos serán otros.
+
+## El recomendador (#81)
+
+Cuatro señales, cada una **una consulta del gestor** cuyo SQL exacto viaja en la respuesta
+(`senales[].sql` y `parametros`), y una fusión que las explica. Solo las compras de la
+partición `train` (`SHOP_RECOMMENDATION_SPLIT`) alimentan el recomendador, para que la
+evaluación de #82 sobre validación y prueba sea honesta; la partición es un parámetro de
+cada consulta.
+
+| Señal | Consulta | Índices |
+|---|---|---|
+| compras conjuntas | `SELECT otro, veces FROM shop_compras_conjuntas WHERE producto = $1 AND particion = $2 ORDER BY veces DESC, otro LIMIT $3` | hash de `producto` |
+| visual (CLIP) | `SELECT id, SIMILARITY_SCORE() AS puntaje FROM shop_clip WHERE SIMILAR_TO(embedding, $1, k = $2) USING HNSW` | HNSW (coseno) |
+| visual (SIFT, `visual=sift`) | `SELECT id, SIMILARITY_SCORE() AS puntaje FROM shop_productos WHERE SIMILAR_TO(imagen, $1, k = $2) USING HNSW` | HNSW de la bolsa de palabras |
+| texto | `SELECT id, SCORE() AS puntaje FROM shop_productos WHERE MATCH(texto, $1) USING BM25 ORDER BY puntaje DESC LIMIT $2`, con el título | invertido en inglés |
+| cercanía | `SELECT i.producto, t.nombre, distancia(t.ubicacion, $1) AS metros FROM shop_inventario i JOIN shop_tiendas t ON i.tienda = t.id WHERE i.producto IN (...) AND distancia(t.ubicacion, $1) < $2 ORDER BY metros` | hash del inventario y R-Tree |
+
+Para un usuario, las mismas sobre sus últimas `SHOP_USER_PROFILE_PRODUCTS` (10) compras de
+entrenamiento: las compras conjuntas con `producto IN (...)` y `GROUP BY otro` (`SUM(veces)`),
+CLIP con la media de sus embeddings y BM25 con sus títulos. El título va en minúsculas y sin
+paréntesis, para que `MATCH` no lo lea como una consulta booleana. La ubicación llega en la
+petición (`lat`, `lon`, `radio`): los usuarios del dataset no tienen una.
+
+**La cercanía pone el inventario primero en el `JOIN`.** El planificador elige el camino de
+acceso de cada tabla por su condición: así el inventario entra por su hash (`producto IN`) y
+las tiendas por el R-Tree, en unos 9 ms. Con las tiendas primero, el inventario se recorre
+entero: 2,2 s medidos para 12 tiendas a 3 km. Por eso la cercanía no propone candidatos:
+refuerza los de las otras tres señales (saber qué hay cerca no dice qué le gusta a nadie).
+
+### Compras conjuntas: al vuelo o materializadas
+
+El autojoin de las compras con `GROUP BY` (el hash externo y el *grace hash join* de la
+Parte 1) es la definición de «comprado junto con»:
+
+```sql
+SELECT b.producto AS otro, COUNT(*) AS veces FROM shop_compras a
+JOIN shop_compras b ON a.usuario = b.usuario
+WHERE a.producto = $1 AND a.particion = $2 AND b.particion = $2 AND b.producto <> $1
+GROUP BY b.producto ORDER BY veces DESC, otro LIMIT $3
+```
+
+Sobre el dataset entero tarda 165 s por producto sobre `shop_compras` (`EXPLAIN ANALYZE`,
+con el equipo cargado): el archivo secuencial no admite índices secundarios y el
+planificador aplica el `WHERE` después del `JOIN`, así que reúne 7,6 millones de filas.
+Sobre `shop_historial`, las mismas compras en un heap con B+ sobre `usuario` y `producto`, donde el lado izquierdo
+entra por el B+ pero el derecho se recorre entero (511 836 filas, unos 4 s solo el
+recorrido). Ninguna cabe en una petición en línea.
+
+El gestor no tiene `INSERT ... SELECT` ni `CREATE TABLE ... AS`, y una respuesta trae como
+mucho 10 000 filas, así que la carga **materializa** los pares en `shop_compras_conjuntas`
+con esa misma consulta por lotes de productos (`a.producto IN (...)` y
+`HAVING COUNT(*) >= $2`): cada lote es un `GROUP BY` del gestor cuyo resultado va directo a la
+carga masiva; si no cabe en una respuesta se parte en dos, y si cupo con holgura el siguiente
+es el doble ([`seed/copurchases.py`](src/shop/seed/copurchases.py)). Con soporte mínimo 2
+(`SHOP_COPURCHASE_MIN_SUPPORT`) son 406 668 pares (contados sobre `interactions.csv`); un
+par comprado por un solo cliente es casi siempre casualidad y con soporte 1 serían 4,7
+millones. La consulta de cada petición queda en una búsqueda por hash.
+
+El costo es que la tabla es una foto: un producto que nadie compró con otro al menos dos
+veces no tiene compras conjuntas (arranque en frío) aunque tenga compras. Una compra nueva
+(`POST /usuarios/{id}/compras`) la mantiene en la misma transacción: suma un cliente a cada
+par que ya estaba y crea con 1 los que no; si la carga había dejado fuera un par por el
+soporte, ese 1 es una cota inferior hasta que se vuelva a calcular. `shop_materializaciones`
+anota con qué partición y soporte se calculó: una carga repetida no la recalcula y una con
+otros parámetros la rehace.
+
+### Fusión y explicación
+
+Cada señal se normaliza **por min-max** dentro de su lista y se multiplica por su peso
+(`SHOP_COPURCHASE_WEIGHT` 0,4, `SHOP_VISUAL_WEIGHT` 0,25, `SHOP_TEXT_WEIGHT` 0,25,
+`SHOP_NEARBY_WEIGHT` 0,1; #82 los ajusta en la validación). Se eligió min-max sobre una
+fusión por rango (RRF) porque la distancia entre puntajes dice algo: un par de 120 clientes no
+está «un puesto» por delante de uno de 3. La cercanía entra como `1 - metros / radio`, sin
+normalizar, para que la tienda más cercana no valga lo mismo a 100 m que a 4 km. Sin compras
+conjuntas, **arranque en frío**: su peso pasa a imagen y texto en proporción a los suyos. Se
+excluyen el producto de partida y lo que el usuario ya compró en la partición (antes de
+normalizar); un empate lo gana el producto que aparece en más señales y después el de menor
+id. Cada recomendación trae `motivos`, uno por señal que aportó, de mayor a menor aporte:
+«comprado junto con este producto por 12 clientes», «se ve parecido», «descripción
+parecida», «en stock a 1,2 km en Centro Comercial Larcomar».
+
+| Ruta | Qué hace |
+|---|---|
+| `GET /productos/{id}/recomendaciones?limite=&lat=&lon=&radio=&usuario=&visual=` | para quien mira un producto; con `usuario`, sin lo que ya compró; `visual` es `clip` (por omisión) o `sift` |
+| `GET /usuarios/{id}/recomendaciones?limite=&lat=&lon=&radio=&visual=` | a partir de sus compras recientes de entrenamiento |
+| `POST /usuarios/{id}/compras` `{"producto": "…"}` | registra la compra (compras, historial, contador del usuario y pares, en una transacción) e invalida la caché |
+
+Las rutas siguen en español, como las de #80 y los campos de las respuestas.
+
+### Caché en Redis
+
+Cada respuesta se guarda (`SHOP_REDIS_URL`, TTL `SHOP_CACHE_TTL_SECONDS`, 600 s) con una clave
+de ruta, parámetros, versión de los pesos y la **generación** del producto y del usuario de que
+depende. Una compra suma 1 a la generación del usuario, del producto comprado y de los que el
+usuario ya tenía (sus pares cambiaron): las claves viejas dejan de pedirse y caducan solas. A
+diferencia de borrar claves, no hay carrera: una respuesta que se calculaba mientras llegó la
+compra se guarda con la generación anterior y nadie la vuelve a leer. La cabecera `X-Cache`
+dice `hit`, `miss` o `bypass`. Redis es opcional: sin URL no hay caché, y si no responde
+(plazo `SHOP_REDIS_TIMEOUT_SECONDS`, 0,25 s, sin reintentos) se contesta sin ella, se avisa
+una vez en el log y no se vuelve a probar hasta `SHOP_CACHE_RETRY_SECONDS` (5 s). En el
+compose, `shop-api` está en la red interna `cache` con el `redis` común.
 
 ## Licencias
 

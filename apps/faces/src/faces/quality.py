@@ -42,6 +42,7 @@ class RejectionReason(StrEnum):
     LOOKING_DOWN = "looking_down"
     POSE_UNCLEAR = "pose_unclear"
     POSE_ALREADY_TAKEN = "pose_already_taken"
+    POSE_NOT_IN_PLAN = "pose_not_in_plan"
     DIFFERENT_PERSON = "different_person"
 
 
@@ -80,6 +81,7 @@ REJECTION_MESSAGES: dict[RejectionReason, str] = {
     RejectionReason.LOOKING_DOWN: "Estás mirando hacia abajo. Levanta un poco la barbilla.",
     RejectionReason.POSE_UNCLEAR: "No queda claro si miras de frente o de lado.",
     RejectionReason.POSE_ALREADY_TAKEN: "Esa toma ya la tenemos.",
+    RejectionReason.POSE_NOT_IN_PLAN: "Esa pose no es una de las que pedimos.",
     RejectionReason.DIFFERENT_PERSON: (
         "Esta toma parece de otra persona. Todas las tomas tienen que ser de quien se "
         "registra; si eres tú, cancela y empieza de nuevo."

@@ -19,6 +19,7 @@ from benchmarks.plots.drawing import (
     horizontal_limits,
     load,
     points_of,
+    segment_values,
     short_label,
     spread_labels,
     ticks_between,
@@ -32,13 +33,17 @@ from benchmarks.plots.model import (
     BarFigure,
     BarGroup,
     BarPanel,
+    BreakdownFigure,
+    BreakdownPanel,
     Figure,
     Line,
+    Segment,
+    StackedBar,
     Style,
     Technique,
     compare,
 )
-from benchmarks.plots.style import BASELINE_CLEARANCE, BLUE, format_number
+from benchmarks.plots.style import BASELINE_CLEARANCE, BLUE, ORANGE, format_number
 
 RESULTS = Path(__file__).parents[2] / "benchmarks" / RESULTS_DIRECTORY
 # Holgura, en píxeles, al comprobar que un texto cabe: lo que redondea el dibujo.
@@ -324,3 +329,47 @@ def test_a_gallery_label_is_readable_and_fits_its_cell():
 def test_a_clip_is_captioned_with_what_its_title_has_in_parentheses():
     assert title_detail("six (33903159, toma 0)") == "33903159, toma 0"
     assert title_detail("sin detalle") == ""
+
+
+BREAKDOWN_REPORT = {
+    "name": "desglose",
+    "measurements": [
+        {"technique": "t1", "operation": "carga", "dataset_size": 9, "milliseconds": 0.0, "extra": {"s": 2.0, "i": 1.0}},
+        {"technique": "t2", "operation": "carga", "dataset_size": 9, "milliseconds": 0.0, "extra": {"s": 4.0}},
+    ],
+}
+BREAKDOWN = BreakdownFigure(
+    filename="desglose",
+    report="desglose",
+    title="Desglose",
+    subtitle="Subtítulo",
+    panels=(
+        BreakdownPanel(
+            "Tiempo",
+            TOTAL_TIME,
+            (
+                StackedBar("uno", "t1", "carga"),
+                StackedBar("dos", "t2", "carga"),
+                StackedBar("nadie", "t3", "carga"),
+            ),
+            (Segment("guardar", "s", BLUE), Segment("indexar", "i", ORANGE)),
+        ),
+    ),
+)
+
+
+def test_a_stacked_bar_takes_each_segment_and_skips_what_was_not_measured():
+    (panel,) = BREAKDOWN.panels
+    assert segment_values(BREAKDOWN_REPORT, panel) == [("uno", [2.0, 1.0]), ("dos", [4.0, 0.0])]
+
+
+def test_a_breakdown_labels_each_bar_with_its_total(tmp_path: Path):
+    pytest.importorskip("matplotlib")
+    from matplotlib import pyplot
+
+    canvas = compose(BREAKDOWN, BREAKDOWN_REPORT)
+    (axis,) = canvas.axes
+    assert sorted(text.get_text() for text in axis.texts) == ["3.00 ms", "4.00 ms"]
+    assert [label.get_text() for label in axis.get_yticklabels()] == ["uno", "dos"]
+    pyplot.close(canvas)
+    assert draw(BREAKDOWN, BREAKDOWN_REPORT, tmp_path).stat().st_size > 10_000

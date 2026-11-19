@@ -12,6 +12,8 @@ from typing import Any, TypeVar
 from benchmarks.plots.model import (
     BarFigure,
     BarPanel,
+    BreakdownFigure,
+    BreakdownPanel,
     CurveFigure,
     CurvePanel,
     Figure,
@@ -27,6 +29,12 @@ from benchmarks.plots.style import (
     BAR_PANEL_HEIGHT,
     BAR_PANEL_WIDTH,
     BASELINE_CLEARANCE,
+    BREAKDOWN_BAR_SHARE,
+    BREAKDOWN_LABEL_GAP,
+    BREAKDOWN_LABEL_ROOM,
+    BREAKDOWN_MIN_HEIGHT,
+    BREAKDOWN_PANEL_WIDTH,
+    BREAKDOWN_ROW_HEIGHT,
     CURVE_PANEL_HEIGHT,
     CURVE_PANEL_WIDTH,
     DASHES,
@@ -202,7 +210,7 @@ def _top(group: tuple[float, int], gap: float) -> float:
     return total / count + (count - 1) * gap / 2
 
 
-AnyFigure = Figure | BarFigure | CurveFigure | GalleryFigure
+AnyFigure = Figure | BarFigure | CurveFigure | GalleryFigure | BreakdownFigure
 
 
 def compose(figure: AnyFigure, report: dict[str, Any]) -> Any:
@@ -213,6 +221,8 @@ def compose(figure: AnyFigure, report: dict[str, Any]) -> Any:
         return _compose_curves(figure, report)
     if isinstance(figure, GalleryFigure):
         return _compose_gallery(figure, report)
+    if isinstance(figure, BreakdownFigure):
+        return _compose_breakdown(figure, report)
     return _compose_lines(figure, report)
 
 
@@ -379,6 +389,88 @@ def _draw_bar_panel(
     axis.tick_params(axis="both", colors=MUTED_INK, length=0, labelsize=LABEL_SIZE)
     axis.set_ylabel(panel.axis, color=SECONDARY_INK, fontsize=LABEL_SIZE)
     axis.set_title(title, color=INK, fontsize=PANEL_TITLE_SIZE, loc="left", pad=TITLE_PAD)
+
+
+def segment_values(
+    report: dict[str, Any], panel: BreakdownPanel
+) -> list[tuple[str, list[float]]]:
+    """Por barra medida, su rótulo y el valor de cada tramo (0 si su medida no lo tiene)."""
+    found = []
+    for bar in panel.bars:
+        extra = next(
+            (
+                item["extra"]
+                for item in report["measurements"]
+                if (item["technique"], item["operation"]) == (bar.technique, bar.operation)
+            ),
+            None,
+        )
+        if extra is None:
+            continue
+        values = [float(extra.get(segment.field, 0.0)) for segment in panel.segments]
+        found.append((bar.label, values))
+    return found
+
+
+def _compose_breakdown(figure: BreakdownFigure, report: dict[str, Any]) -> Any:
+    plt = _start_drawing()
+    bars = max(len(panel.bars) for panel in figure.panels)
+    legend_columns = len(
+        {segment.label for panel in figure.panels for segment in panel.segments}
+    )
+    header = _header_height(figure.subtitle, 1)
+    width = BREAKDOWN_PANEL_WIDTH * len(figure.panels)
+    height = max(BREAKDOWN_ROW_HEIGHT * bars, BREAKDOWN_MIN_HEIGHT) + header
+    canvas, grid = plt.subplots(
+        1, len(figure.panels), figsize=(width, height), dpi=DPI, squeeze=False
+    )
+    canvas.set_facecolor(SURFACE)
+    for axis, panel in zip(grid[0], figure.panels, strict=True):
+        _draw_breakdown_panel(axis, panel, report)
+    _draw_header(canvas, figure, height, legend_columns)
+    canvas.tight_layout(rect=(0.0, 0.0, 1.0, 1.0 - header / height), w_pad=PANEL_GAP)
+    return canvas
+
+
+def _draw_breakdown_panel(axis: Any, panel: BreakdownPanel, report: dict[str, Any]) -> None:
+    measured = segment_values(report, panel)
+    positions = list(range(len(measured)))[::-1]
+    starts = [0.0] * len(measured)
+    for index, segment in enumerate(panel.segments):
+        widths = [values[index] for _, values in measured]
+        axis.barh(
+            positions,
+            widths,
+            left=starts,
+            height=BREAKDOWN_BAR_SHARE,
+            color=segment.color,
+            label=segment.label,
+            zorder=3,
+        )
+        starts = [start + width for start, width in zip(starts, widths, strict=True)]
+    longest = max(starts, default=0.0)
+    for position, total in zip(positions, starts, strict=True):
+        axis.text(
+            total + longest * BREAKDOWN_LABEL_GAP,
+            position,
+            panel.measure.label(total),
+            va="center",
+            color=SECONDARY_INK,
+            fontsize=BAR_LABEL_SIZE + 1,
+        )
+    axis.set_facecolor(SURFACE)
+    limit = longest * BREAKDOWN_LABEL_ROOM or 1.0
+    axis.set_xlim(0.0, limit)
+    axis.set_xticks([tick for tick in axis.get_xticks() if 0.0 <= tick <= limit])
+    axis.set_yticks(positions, [label for label, _ in measured])
+    axis.grid(visible=True, axis="x", color=GRID, linewidth=0.8, linestyle="solid", zorder=0)
+    axis.set_axisbelow(True)
+    for side in ("top", "right", "left"):
+        axis.spines[side].set_visible(False)
+    axis.spines["bottom"].set_color(AXIS)
+    axis.tick_params(axis="both", colors=MUTED_INK, length=0, labelsize=LABEL_SIZE)
+    axis.set_xlabel(panel.measure.axis, color=SECONDARY_INK, fontsize=LABEL_SIZE)
+    axis.set_title(panel.title, color=INK, fontsize=PANEL_TITLE_SIZE, loc="left", pad=TITLE_PAD)
 
 
 def draw(figure: AnyFigure, report: dict[str, Any], output: Path) -> Path:

@@ -108,6 +108,19 @@ def test_a_song_comes_with_its_indexed_segments(service: TestClient):
     ]
 
 
+def test_the_original_audio_is_streamed_whole_or_by_range(service: TestClient, tmp_path: Path):
+    original = (tmp_path / "2.wav").read_bytes()
+    whole = service.get("/songs/2/audio")
+    assert (whole.status_code, whole.content) == (200, original)
+    assert whole.headers["accept-ranges"] == "bytes"
+    assert whole.headers["content-type"].startswith("audio/")
+    tail = service.get("/songs/2/audio", headers={"Range": "bytes=100-"})
+    assert (tail.status_code, tail.content) == (206, original[100:])
+    assert tail.headers["content-range"] == f"bytes 100-{len(original) - 1}/{len(original)}"
+    missing = service.get("/songs/404/audio")
+    assert (missing.status_code, missing.json()["kind"]) == (404, "ResourceNotFoundError")
+
+
 def test_an_unknown_song_is_a_404_and_a_bad_page_a_422(service: TestClient):
     missing = service.get("/songs/404")
     assert (missing.status_code, missing.json()["kind"]) == (404, "ResourceNotFoundError")

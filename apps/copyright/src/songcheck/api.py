@@ -9,9 +9,15 @@ las migraciones al arrancar.
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import AsyncExitStack
+from typing import Annotated
+
 import httpx
-from fastapi import APIRouter, FastAPI, Query
+from fastapi import APIRouter, FastAPI, Header, Query
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from starlette.background import BackgroundTask
 
 from appkit import (
     Engine,
@@ -37,6 +43,11 @@ MAX_PAGE_SIZE = 100
 ENGINE_STAGE = "gestor"
 SONG_COLUMNS = "id, titulo, artista, genero, duracion"
 SONG_BY_ID = f"SELECT {SONG_COLUMNS} FROM {SONGS_TABLE} WHERE id = $1"
+SONG_PATH = f"SELECT ruta FROM {SONGS_TABLE} WHERE id = $1"
+AUDIO_RESPONSES: dict[int | str, dict[str, object]] = {
+    200: {"content": {"audio/*": {}}, "description": "El audio entero."},
+    206: {"content": {"audio/*": {}}, "description": "El trozo que pidió `Range`."},
+}
 SEGMENTS_OF_SONG = (
     f"SELECT inicio, fin FROM {SEGMENTS_TABLE} WHERE id BETWEEN $1 AND $2 ORDER BY id"
 )
@@ -119,6 +130,41 @@ async def read_song(song_id: int, engine: Engine) -> SongDetail:
             Segment(start_seconds=item["inicio"], end_seconds=item["fin"]) for item in segments
         ],
     )
+
+
+@router.get("/songs/{song_id}/audio", response_class=StreamingResponse, responses=AUDIO_RESPONSES)
+async def song_audio(
+    song_id: int,
+    engine: Engine,
+    byte_range: Annotated[str | None, Header(alias="Range")] = None,
+) -> StreamingResponse:
+    """El audio original de la canción, reenviado del gestor por trozos. Con `Range` responde
+    `206` con solo ese trozo, así que un reproductor puede saltar al instante de una
+    coincidencia sin bajar la pista entera; `404` si la canción no está en el catálogo."""
+    with timed(ENGINE_STAGE):
+        path = await engine.scalar(SONG_PATH, [song_id])
+    if path is None:
+        raise ResourceNotFoundError(f"no hay una canción {song_id} en el catálogo")
+    resources = AsyncExitStack()
+    stream = await resources.enter_async_context(engine.stream_file(path, byte_range=byte_range))
+    return StreamingResponse(
+        _forwarded(stream.chunks, resources),
+        status_code=stream.status_code,
+        headers=dict(stream.headers),
+        background=BackgroundTask(resources.aclose),
+    )
+
+
+async def _forwarded(
+    chunks: AsyncIterator[bytes], resources: AsyncExitStack
+) -> AsyncIterator[bytes]:
+    """Los trozos del gestor; la respuesta del gestor se cierra también si quien escucha
+    corta a mitad (un reproductor que salta cancela la petición en curso)."""
+    try:
+        async for chunk in chunks:
+            yield chunk
+    finally:
+        await resources.aclose()
 
 
 @router.get("/catalog")

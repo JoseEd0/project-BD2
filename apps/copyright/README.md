@@ -172,6 +172,7 @@ errores uniformes y las migraciones al arrancar.
 |---|---|
 | `GET /songs?query=&genre=&limit=&offset=` | canciones: con `query`, las que mejor responden por BM25 sobre título y artista (con su `score`); sin ella, en orden de id; `genre` filtra por género exacto. `limit` de 1 a 100 (20) |
 | `GET /songs/{id}` | una canción con los tramos con que está indexada; `404` si no está |
+| `GET /songs/{id}/audio` | el audio original, reenviado del gestor por trozos; con `Range`, `206` y solo ese trozo, para escucharlo desde el instante de una coincidencia |
 | `GET /catalog` | canciones, tramos, ventana y salto, si el HNSW ya existe y canciones por género |
 | `POST /detections` | las canciones del catálogo que suenan dentro del audio subido (campo `file`); ver abajo |
 

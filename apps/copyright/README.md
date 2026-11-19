@@ -195,7 +195,7 @@ curl http://localhost:8101/api/catalog
 ```
 
 Para probar el despliegue sin bajar FMA, `songcheck.sample` escribe un catálogo de juguete
-—cuatro barridos de 12 s y su `catalog.csv`— con solo la biblioteca estándar:
+—cuatro melodías al azar de 12 s y su `catalog.csv`— con solo la biblioteca estándar:
 
 ```bash
 PYTHONPATH=apps/copyright/src python3 -m songcheck.sample --data-dir data/datasets

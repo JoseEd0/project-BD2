@@ -16,7 +16,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from songcheck.fma.archive import track_path
 from songcheck.fma.prepare import FmaSources
-from songcheck.sample import sweep_wav
+from songcheck.sample import melody_wav
 
 LOCALHOST = "127.0.0.1"
 POLL_SECONDS = 0.01
@@ -25,7 +25,6 @@ AUDIO_PATH = "/fma_small.zip"
 METADATA_PATH = "/fma_metadata.zip"
 # Cuatro segundos en PCM de 16 bits a 16 kHz pesan 128 KB, más que el mínimo de una pista.
 TRACK_SECONDS = 4.0
-BASE_HZ = 220.0
 HEADER = [
     ["", "artist", "set", "set", "track", "track"],
     ["", "name", "split", "subset", "genre_top", "title"],
@@ -55,9 +54,9 @@ SILENT_TRACK = 99134
 SILENT_BYTES = 1_500
 
 
-def wav_bytes(seconds: float, frequency: float) -> bytes:
+def wav_bytes(seconds: float, seed: int) -> bytes:
     """Un WAV, que libsndfile reconoce por su cabecera aunque se llame `.mp3`."""
-    return sweep_wav(seconds, frequency)
+    return melody_wav(seconds, seed)
 
 
 def tracks_csv(tracks: Sequence[ToyTrack]) -> bytes:
@@ -80,7 +79,7 @@ def audio_members(tracks: Sequence[ToyTrack]) -> dict[str, bytes]:
         if track.track_id == SILENT_TRACK:
             members[name] = b"\0" * SILENT_BYTES
         else:
-            members[name] = wav_bytes(track.seconds, BASE_HZ + track.track_id % 500)
+            members[name] = wav_bytes(track.seconds, track.track_id)
     return members
 
 

@@ -334,7 +334,7 @@ jobs:
           curl --fail --silent --show-error "$COPYRIGHT_URL/api/health"
           curl --fail --silent --show-error "$COPYRIGHT_URL/api/ready" | grep -q ready
           curl --fail --silent --show-error "$COPYRIGHT_URL/api/catalog" | python3 -c "import json, sys; catalog = json.load(sys.stdin); assert (catalog['songs'], catalog['segments'], catalog['segments_indexed']) == (4, 12, True), catalog"
-          curl --fail --silent --show-error "$COPYRIGHT_URL/api/songs/2" | grep -q "Barrido 2"
+          curl --fail --silent --show-error "$COPYRIGHT_URL/api/songs/2" | grep -q "Melodía 2"
       - name: Papers siembra su corpus y busca por su web en los tres modos
         run: |
           docker compose run --rm papers-seed

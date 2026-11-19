@@ -94,7 +94,7 @@ export default function EnrollPage() {
     case "finishing":
       return <FinishingStep problem={state.problem} onRetry={() => dispatch({ type: "finish-retried" })} />;
     case "done":
-      return <DoneStep person={state.person} message={state.message} saved={saved} />;
+      return <DoneStep person={state.person} saved={saved} />;
     case "blocked":
       return <BlockedStep reason={state.reason} message={state.message} onRestart={() => dispatch({ type: "restart" })} />;
   }

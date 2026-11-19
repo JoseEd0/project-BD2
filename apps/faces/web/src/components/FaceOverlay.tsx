@@ -34,12 +34,16 @@ export function FaceOverlay({ answer, view, mirrored, stale }: FaceOverlayProps)
   if (answer === null) {
     return null;
   }
-  const faces = answer.result.faces.map((face, index) => {
+  const faces = answer.result.faces.flatMap((face, index) => {
     const box = frameRectToView(face.box, answer.size, view, mirrored);
+    const centerX = box.x + box.width / 2;
+    if (centerX < 0 || centerX > view.width) {
+      return [];
+    }
     const caption = faceCaption(face);
     const labelWidth = (caption.text.length + (caption.score?.length ?? 0) + 1) * LABEL_CHAR_WIDTH + LABEL_PADDING;
     const place = placeLabel(box, { width: labelWidth, height: LABEL_HEIGHT }, view, LABEL_GAP);
-    return { key: face.track ?? `i${index}`, face, box, caption, place };
+    return [{ key: face.track ?? `i${index}`, face, box, caption, place }];
   });
   return (
     <div className={stale ? "face-layer is-stale" : "face-layer"} data-testid="face-layer">

@@ -38,16 +38,18 @@ export function FinishingStep({ problem, onRetry }: { readonly problem: ApiProbl
 
 export interface DoneStepProps {
   readonly person: Person;
-  readonly message: string;
   readonly saved: boolean;
 }
 
-/** El código se muestra esta única vez: es la llave para borrar el registro. */
-export function DoneStep({ person, message, saved }: DoneStepProps) {
+/**
+ * El código se muestra esta única vez: es la llave para borrar el registro. El mensaje del
+ * servicio lo trae en medio del texto, así que aquí se muestra solo en su recuadro.
+ */
+export function DoneStep({ person, saved }: DoneStepProps) {
   return (
     <TextScreen
       title={`Listo, ${person.display_name}`}
-      intro={message}
+      intro="Ya te reconocemos. Prueba la cámara ahora mismo."
       back={{ to: "/", label: "Volver al inicio" }}
       actions={
         <>

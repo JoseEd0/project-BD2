@@ -643,7 +643,7 @@ ul {
 
 .home-hero {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: var(--space-4);
   justify-content: space-between;
 }
@@ -652,8 +652,8 @@ ul {
   display: grid;
   grid-template-rows: repeat(3, 1fr);
   gap: 5px;
-  padding: 6px 6px 14px;
-  width: 4.5rem;
+  padding: 5px 5px 12px;
+  width: 3.25rem;
   flex: none;
   border-radius: 6px;
   background: var(--flash);

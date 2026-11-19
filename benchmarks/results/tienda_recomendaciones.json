@@ -1,0 +1,143 @@
+{
+  "name": "tienda_recomendaciones",
+  "parameters": {
+    "gestor": "uvicorn en otro proceso, con el catálogo de #80 ya cargado",
+    "productos": 100,
+    "al_vuelo_historial": 5,
+    "al_vuelo_secuencial": 1,
+    "semilla": 81,
+    "ubicacion": {
+      "lat": -12.0464,
+      "lon": -77.0428
+    },
+    "maquina": {
+      "procesador": "Apple M4 Pro",
+      "nucleos": 12,
+      "sistema": "macOS-27.0.1-arm64-arm-64bit",
+      "python": "3.12.11",
+      "carga_media_1_min": 10.22
+    },
+    "carga_media_al_terminar": 7.6
+  },
+  "measurements": [
+    {
+      "technique": "materializar los pares (carga)",
+      "operation": "compras conjuntas",
+      "dataset_size": 369087,
+      "milliseconds": 793557.648,
+      "extra": {
+        "segundos": 793.558,
+        "consultas": 70,
+        "ya_estaba": false
+      }
+    },
+    {
+      "technique": "al vuelo sobre shop_historial (B+)",
+      "operation": "compras conjuntas",
+      "dataset_size": 5,
+      "milliseconds": 2929.444,
+      "extra": {
+        "p50_ms": 2929.444,
+        "p95_ms": 3385.219,
+        "p95_menos_p50_ms": 455.775,
+        "segundos": 2.929
+      }
+    },
+    {
+      "technique": "al vuelo sobre shop_compras (secuencial)",
+      "operation": "compras conjuntas",
+      "dataset_size": 1,
+      "milliseconds": 67347.447,
+      "extra": {
+        "p50_ms": 67347.447,
+        "p95_ms": 67347.447,
+        "p95_menos_p50_ms": 0.0,
+        "segundos": 67.347
+      }
+    },
+    {
+      "technique": "recomendación completa",
+      "operation": "caché fría",
+      "dataset_size": 100,
+      "milliseconds": 68.924,
+      "extra": {
+        "p50_ms": 68.924,
+        "p95_ms": 142.796,
+        "p95_menos_p50_ms": 73.872,
+        "segundos": 0.069
+      }
+    },
+    {
+      "technique": "recomendación completa",
+      "operation": "caché caliente",
+      "dataset_size": 100,
+      "milliseconds": 1.923,
+      "extra": {
+        "p50_ms": 1.923,
+        "p95_ms": 3.367,
+        "p95_menos_p50_ms": 1.444,
+        "segundos": 0.002
+      }
+    },
+    {
+      "technique": "cercania",
+      "operation": "caché fría",
+      "dataset_size": 100,
+      "milliseconds": 31.236,
+      "extra": {
+        "p50_ms": 31.236,
+        "p95_ms": 84.296,
+        "p95_menos_p50_ms": 53.06,
+        "segundos": 0.031
+      }
+    },
+    {
+      "technique": "compras",
+      "operation": "caché fría",
+      "dataset_size": 100,
+      "milliseconds": 4.524,
+      "extra": {
+        "p50_ms": 4.524,
+        "p95_ms": 7.661,
+        "p95_menos_p50_ms": 3.137,
+        "segundos": 0.005
+      }
+    },
+    {
+      "technique": "texto",
+      "operation": "caché fría",
+      "dataset_size": 100,
+      "milliseconds": 23.6,
+      "extra": {
+        "p50_ms": 23.6,
+        "p95_ms": 41.455,
+        "p95_menos_p50_ms": 17.855,
+        "segundos": 0.024
+      }
+    },
+    {
+      "technique": "visual",
+      "operation": "caché fría",
+      "dataset_size": 100,
+      "milliseconds": 19.513,
+      "extra": {
+        "p50_ms": 19.513,
+        "p95_ms": 28.175,
+        "p95_menos_p50_ms": 8.662,
+        "segundos": 0.02
+      }
+    },
+    {
+      "technique": "materializada (B+ de shop_compras_conjuntas)",
+      "operation": "compras conjuntas",
+      "dataset_size": 100,
+      "milliseconds": 4.524,
+      "extra": {
+        "p50_ms": 4.524,
+        "p95_ms": 7.661,
+        "p95_menos_p50_ms": 3.137,
+        "segundos": 0.005
+      }
+    }
+  ]
+}

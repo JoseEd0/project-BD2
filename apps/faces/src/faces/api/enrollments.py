@@ -60,6 +60,7 @@ from faces.shots import AcceptedShot, RejectedShot, analyze_shot
 from minigestor_client import ConflictError
 
 Clock = Callable[[], float]
+SESSION_STAGE = "sesion"
 SAVE_STAGE = "guardar"
 
 
@@ -135,12 +136,8 @@ class EnrollmentService:
             ShotInProgressError: si otra toma de la sesión se guardó a la vez.
             UnreadableImageError, TooManyPixelsError: si la foto no se puede analizar.
         """
-        pending = await self._pending(enrollment_id)
-        if pending.attempts >= self._rules.max_attempts:
-            raise TooManyAttemptsError(TOO_MANY_ATTEMPTS)
-        await self._store.count_attempt(enrollment_id)
-        pending = PendingEnrollment(pending.registration, pending.attempts + 1)
-        shots = await self._store.pending_shots(enrollment_id)
+        with timed(SESSION_STAGE):
+            pending, shots = await self._spend_attempt(enrollment_id)
         analysis = await analyzed(
             self._pool, partial(analyze_shot, data=photo, config=self._rules.quality)
         )
@@ -165,8 +162,9 @@ class EnrollmentService:
             AlreadyEnrolledError, LookalikeError: si alguien parecido se registró mientras
                 tanto; la sesión se descarta.
         """
-        pending = await self._pending(enrollment_id)
-        shots = await self._store.pending_shots(enrollment_id)
+        with timed(SESSION_STAGE):
+            pending = await self._pending(enrollment_id)
+            shots = await self._store.pending_shots(enrollment_id)
         covered = [shot.pose for shot in shots]
         if not self._rules.plan.is_complete(covered):
             raise EnrollmentIncompleteError(self._missing_message(covered))
@@ -198,6 +196,16 @@ class EnrollmentService:
             raise ConsentRequiredError(CONSENT_REQUIRED)
         if acceptance.version != self._rules.consent.version:
             raise ConsentOutdatedError(CONSENT_OUTDATED)
+
+    async def _spend_attempt(
+        self, enrollment_id: str
+    ) -> tuple[PendingEnrollment, list[StoredShot]]:
+        pending = await self._pending(enrollment_id)
+        if pending.attempts >= self._rules.max_attempts:
+            raise TooManyAttemptsError(TOO_MANY_ATTEMPTS)
+        await self._store.count_attempt(enrollment_id)
+        shots = await self._store.pending_shots(enrollment_id)
+        return PendingEnrollment(pending.registration, pending.attempts + 1), shots
 
     async def _pending(self, enrollment_id: str) -> PendingEnrollment:
         pending = await self._store.enrollment(enrollment_id, self._now())

@@ -97,8 +97,9 @@ class DetectedMatch(BaseModel):
     """Una racha de ventanas de la subida alineada con una canción del catálogo.
 
     `coverage` es la fracción de las ventanas que la subida y el original podrían compartir
-    (las audibles de la subida o las del original, las que sean menos) que cubre la racha;
-    `score` es `mean_similarity · coverage`.
+    (las audibles de la subida o las del original, las que sean menos) que cubre la racha, y
+    no entra en el puntaje; `score` es la evidencia de la racha, de 0 a 1: sus ventanas hasta
+    las de una copia de 20 s por su similitud media sobre 0,85 (`detection.run_score`).
     """
 
     song: SongReference

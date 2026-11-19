@@ -7,6 +7,8 @@ import random
 import pytest
 
 from songcheck.detection import (
+    FULL_EVIDENCE_WINDOWS,
+    SIMILARITY_FLOOR,
     Neighbour,
     QueryWindow,
     Run,
@@ -15,6 +17,7 @@ from songcheck.detection import (
     VotingParameters,
     aligned_runs,
     coverage,
+    run_score,
     score_runs,
 )
 
@@ -237,17 +240,53 @@ def test_matches_are_scored_flagged_by_the_threshold_and_sorted():
     windows = copy_of(COPIED, range(10), original_first=0)
     windows += copy_of(OTHER, range(10, 12), original_first=0)
     runs = aligned_runs(windows, PARAMETERS)
-    matches = score_runs(runs, len(windows), {COPIED: 10, OTHER: 11}, threshold=0.5)
+    matches = score_runs(runs, len(windows), {COPIED: 10, OTHER: 11}, threshold=0.3)
     assert [match.run.song_id for match in matches] == [COPIED, OTHER]
     copied, other = matches
+    likeness = (SIMILARITY - SIMILARITY_FLOOR) / (1 - SIMILARITY_FLOOR)
     assert (copied.coverage, copied.score, copied.above_threshold) == (
         1.0,
-        pytest.approx(SIMILARITY),
+        pytest.approx(likeness),
         True,
     )
     assert other.coverage == pytest.approx(2 / 11)
-    assert other.score == pytest.approx(SIMILARITY * 2 / 11)
+    assert other.score == pytest.approx(likeness * 2 / FULL_EVIDENCE_WINDOWS)
     assert not other.above_threshold
+
+
+def test_a_run_scores_its_length_up_to_a_full_copy_times_its_likeness():
+    assert run_score(FULL_EVIDENCE_WINDOWS, 1.0) == 1.0
+    assert run_score(FULL_EVIDENCE_WINDOWS * 3, 1.0) == 1.0
+    assert run_score(2, 1.0) == pytest.approx(2 / FULL_EVIDENCE_WINDOWS)
+    halfway = SIMILARITY_FLOOR + (1 - SIMILARITY_FLOOR) / 2
+    assert run_score(FULL_EVIDENCE_WINDOWS, halfway) == pytest.approx(0.5)
+    assert run_score(FULL_EVIDENCE_WINDOWS, SIMILARITY_FLOOR) == 0.0
+    assert run_score(FULL_EVIDENCE_WINDOWS, SIMILARITY_FLOOR - 0.2) == 0.0
+
+
+def test_a_sample_scores_the_same_alone_or_inside_a_long_remix():
+    """La cobertura cambia con lo que rodea a la copia; el puntaje, no."""
+    alone = copy_of(COPIED, range(4), original_first=2)
+    inside = alone + copy_of(OTHER, range(4, 40), original_first=0)
+    scores = []
+    coverages = []
+    for windows in (alone, inside):
+        runs = [run for run in aligned_runs(windows, PARAMETERS) if run.song_id == COPIED]
+        (match,) = score_runs(runs, len(windows), {COPIED: 11}, threshold=0.5)
+        scores.append(match.score)
+        coverages.append(match.coverage)
+    assert scores[0] == pytest.approx(scores[1])
+    assert coverages[0] > coverages[1]
+
+
+def test_matches_with_the_same_score_are_sorted_by_similarity():
+    windows = [
+        window(position, segment(COPIED, position, 0.8), segment(OTHER, position, 0.84))
+        for position in range(3)
+    ]
+    matches = score_runs(aligned_runs(windows, PARAMETERS), 3, {COPIED: 11, OTHER: 11}, 0.5)
+    assert [match.score for match in matches] == [0.0, 0.0]
+    assert [match.run.song_id for match in matches] == [OTHER, COPIED]
 
 
 def test_a_run_of_a_song_without_its_window_count_is_a_key_error():

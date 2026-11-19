@@ -32,11 +32,11 @@ import random
 import tempfile
 import time
 from collections import Counter, defaultdict
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 import cv2
 import faiss
@@ -86,13 +86,24 @@ DIGITS = 3
 FRACTION_DIGITS = 5
 
 
+class HttpResponse(Protocol):
+    """Lo que se lee de una respuesta, la dé httpx o el cliente de pruebas de Starlette."""
+
+    @property
+    def headers(self) -> Mapping[str, str]: ...
+
+    def json(self) -> Any: ...
+
+    def raise_for_status(self) -> object: ...
+
+
 @dataclass
 class Timings:
     """Milisegundos por etapa de las peticiones de un grupo."""
 
     stages: dict[str, list[float]] = field(default_factory=lambda: defaultdict(list))
 
-    def add(self, response: httpx.Response, total_ms: float) -> None:
+    def add(self, response: HttpResponse, total_ms: float) -> None:
         timing = parse_server_timing(response.headers.get(SERVER_TIMING_HEADER))
         for stage in STAGES:
             self.stages[stage].append(total_ms if stage == "total" else timing.get(stage, 0.0))
@@ -156,7 +167,7 @@ def faces_service(models: Path, data: Path, thresholds: Sequence[float]) -> Iter
         engine.state.service.close()
 
 
-def timed_post(client: TestClient, path: str, **arguments: Any) -> tuple[httpx.Response, float]:
+def timed_post(client: TestClient, path: str, **arguments: Any) -> tuple[HttpResponse, float]:
     started = time.perf_counter()
     response = client.post(path, **arguments)
     elapsed = (time.perf_counter() - started) * MILLISECONDS_PER_SECOND

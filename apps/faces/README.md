@@ -449,7 +449,7 @@ Con [`benchmarks/faces_service_benchmark.py`](../../benchmarks/faces_service_ben
 gestor real en el mismo proceso (sin red: es el piso de lo que tardará con Docker). Cada
 tiempo es una petición completa. Resultados crudos en
 [`rostros_servicio.json`](../../benchmarks/results/rostros_servicio.json); análisis en
-[`benchmarks/README.md`](../../benchmarks/README.md#10-servicio-de-rostros--registro-reconocimiento-y-conjunto-abierto).
+[`benchmarks/README.md`](../../benchmarks/README.md#11-servicio-de-rostros--registro-reconocimiento-y-conjunto-abierto).
 
 | Petición (1 000 registradas) | p50 | p95 | Análisis p50 | Galería p50 |
 |---|---:|---:|---:|---:|

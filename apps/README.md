@@ -27,7 +27,7 @@ apps/
 | Copyright en audio | `apps/copyright/` | `copyright-api`, `copyright-web` | 8101 / 8401 | pendiente: sin API todavía |
 | Tienda con recomendaciones | `apps/shop/` | `shop-api`, `shop-web` | 8102 / 8402 | sí; la interfaz es la plantilla hasta #83 |
 | Preguntas a papers (RAG) | `apps/rag/` | `papers-api`, `papers-web` | 8103 / 8403 | pendiente: sin API todavía |
-| Reconocimiento de rostros | `apps/faces/` | `faces-api`, `faces-web` | 8104 / 8404 | sí: el API (registro, reconocimiento, borrado); la web es la plantilla hasta #93 |
+| Reconocimiento de rostros | `apps/faces/` | `faces-api`, `faces-web` | 8104 / 8404 | sí; la interfaz es la plantilla hasta #93 |
 | Ejemplo del kit (perfil `example`) | `deploy/example/` | `example-api`, `example-web` | 8100 / 8400 | sí, para probar la topología |
 
 Las interfaces comparten lógica (cliente tipado, salud, `Server-Timing`, tema, PWA) a través

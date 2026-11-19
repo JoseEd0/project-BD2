@@ -113,6 +113,7 @@ export default function ResearchPage() {
             <EmptyConversation onAsk={(question) => askQuestion(question)} disabled={busy} />
           ) : (
             <div className="turns">
+              <h1 className="visually-hidden">Conversación con los papers</h1>
               {turns.map((turn) => (
                 <TurnView
                   key={turn.id}

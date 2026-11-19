@@ -9,6 +9,9 @@ description = "Reconocimiento facial en vivo: detección, alineación y embeddin
 requires-python = ">=3.11"
 dependencies = [
     "minigestor-kit",
+    "fastapi>=0.115",
+    # Las fotos llegan como multipart/form-data.
+    "python-multipart>=0.0.9",
     "numpy>=1.26",
     # FaceDetectorYN lee YuNet 2023mar desde OpenCV 4.8; la misma cota que el gestor.
     "opencv-python-headless>=4.10",

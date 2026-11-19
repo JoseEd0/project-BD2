@@ -4,6 +4,7 @@ reales, contra el gestor real, con las fotos de `apps/faces/tests/fixtures/`."""
 from __future__ import annotations
 
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 import pytest
@@ -57,11 +58,16 @@ def identify(service: TestClient, photo: bytes) -> dict[str, Any]:
     return dict(response.json())
 
 
-def enroll_collins(service: TestClient) -> str:
-    """Registra a Collins con dos tomas de frente, de dos retratos suyos."""
+def collins_session(service: TestClient) -> str:
+    """Una sesión con dos tomas de frente de Collins, de dos retratos suyos, sin terminar."""
     enrollment = start(service)
     assert send(service, enrollment, jpeg(selfie(SINGLE_PORTRAIT)))["accepted"]
     assert send(service, enrollment, jpeg(selfie(OTHER_PORTRAIT)))["accepted"]
+    return enrollment
+
+
+def enroll_collins(service: TestClient) -> str:
+    enrollment = collins_session(service)
     finished = service.post(f"/enrollments/{enrollment}/finish")
     assert finished.status_code == 201, finished.text
     return str(finished.json()["person"]["person_id"])
@@ -223,6 +229,23 @@ def test_a_session_finishes_once(service: TestClient, engine_rows: Rows):
     again = service.post(f"/enrollments/{enrollment}/finish")
     assert (again.status_code, again.json()["kind"]) == (404, "EnrollmentNotFoundError")
     assert len(engine_rows("SELECT id FROM face_personas")) == 1
+
+
+def test_two_sessions_of_the_same_face_finishing_at_once_enroll_one_person(
+    service: TestClient, engine_rows: Rows
+):
+    sessions = [collins_session(service) for _ in range(2)]
+    with ThreadPoolExecutor(max_workers=len(sessions)) as threads:
+        responses = list(
+            threads.map(
+                lambda enrollment: service.post(f"/enrollments/{enrollment}/finish"), sessions
+            )
+        )
+    outcomes = sorted((response.status_code, response.json().get("kind")) for response in responses)
+    assert outcomes == [(201, None), (409, "AlreadyEnrolledError")]
+    assert len(engine_rows("SELECT id FROM face_personas")) == 1
+    assert engine_rows("SELECT id FROM face_sesiones") == []
+    assert engine_rows("SELECT id FROM face_tomas") == []
 
 
 def test_a_cancelled_session_leaves_nothing(service: TestClient, engine_rows: Rows):

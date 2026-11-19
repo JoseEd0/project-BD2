@@ -84,7 +84,7 @@ def _services(
     pool = AnalysisPool(
         [FacePipeline(models, settings.pipeline()) for _ in range(settings.analysis_workers)]
     )
-    gallery = Gallery(store, settings.thresholds(), settings.search_neighbours)
+    gallery = Gallery(store.gallery, settings.thresholds(), settings.search_neighbours)
     consent = consent_text(settings.retention_days)
     rules = EnrollmentRules(
         consent=consent,

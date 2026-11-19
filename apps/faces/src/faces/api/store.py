@@ -13,7 +13,8 @@ cualquier réplica del API atiende cualquier petición. Cada consulta va con par
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import AsyncIterator, Sequence
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Any
 
@@ -124,11 +125,43 @@ class StoredShot:
     measurements: ShotMeasurements
 
 
+class GalleryQueries:
+    """Las lecturas de la galería: con el cliente, o dentro de la transacción que termina un
+    registro."""
+
+    def __init__(self, engine: AsyncClient | AsyncTransaction) -> None:
+        self._engine = engine
+
+    async def nearest(self, embedding: Embedding, neighbours: int) -> list[Neighbour]:
+        """Los `neighbours` embeddings de la galería más parecidos, por el HNSW."""
+        rows = await self._engine.fetch_all(NEAREST_EMBEDDINGS, [embedding, neighbours])
+        return [Neighbour(str(row["persona"]), float(row["score"])) for row in rows]
+
+    async def person_name(self, person_id: str, now: int) -> str | None:
+        name = await self._engine.scalar(SELECT_PERSON_NAME, [person_id, now])
+        return None if name is None else str(name)
+
+
+class EnrollmentClaim:
+    """Una sesión de registro ya consumida, con su transacción abierta: lo que lee `gallery`
+    y lo que escribe `create_person` se confirman juntos al salir del bloque."""
+
+    def __init__(self, transaction: AsyncTransaction) -> None:
+        self._transaction = transaction
+        self.gallery = GalleryQueries(transaction)
+
+    async def create_person(self, person: Registration, shots: Sequence[StoredShot]) -> None:
+        """Crea la persona con un embedding por toma."""
+        await self._transaction.execute(INSERT_PERSON, person.values())
+        await _insert_embeddings(self._transaction, person.id, shots)
+
+
 class FaceStore:
     """Las consultas del servicio sobre el gestor."""
 
     def __init__(self, engine: AsyncClient) -> None:
         self._engine = engine
+        self.gallery = GalleryQueries(engine)
 
     async def create_enrollment(self, registration: Registration) -> None:
         await self._engine.execute(INSERT_ENROLLMENT, [*registration.values(), 0])
@@ -163,32 +196,28 @@ class FaceStore:
     async def discard_enrollment(self, enrollment_id: str) -> None:
         """Borra la sesión y sus tomas; no hace nada si ya no estaba."""
         async with self._engine.transaction() as transaction:
-            await transaction.execute(DELETE_PENDING_SHOTS, [enrollment_id])
-            await transaction.execute(DELETE_ENROLLMENT, [enrollment_id])
+            await _consume_enrollment(transaction, enrollment_id)
 
-    async def enroll(
-        self, enrollment_id: str, person: Registration, shots: Sequence[StoredShot]
-    ) -> None:
-        """En una sola transacción: consume la sesión, borra sus tomas y crea la persona con
-        un embedding por toma. Si algo falla, no queda nada a medias.
+    @asynccontextmanager
+    async def claim_enrollment(self, enrollment_id: str) -> AsyncIterator[EnrollmentClaim]:
+        """Abre una transacción, consume en ella la sesión y sus tomas, y la confirma al salir
+        del bloque; si el bloque falla, la deshace y la sesión sigue ahí.
+
+        El `DELETE` de la sesión bloquea `face_sesiones` en exclusiva hasta el final: dos
+        registros que terminan a la vez se turnan aquí, y el segundo busca duplicados con el
+        primero ya confirmado.
 
         Raises:
             EnrollmentGoneError: si la sesión ya no estaba; no se crea nadie.
         """
         async with self._engine.transaction() as transaction:
-            if await transaction.execute(DELETE_ENROLLMENT, [enrollment_id]) == 0:
+            if not await _consume_enrollment(transaction, enrollment_id):
                 raise EnrollmentGoneError(enrollment_id)
-            await transaction.execute(DELETE_PENDING_SHOTS, [enrollment_id])
-            await transaction.execute(INSERT_PERSON, person.values())
-            await _insert_embeddings(transaction, person.id, shots)
+            yield EnrollmentClaim(transaction)
 
     async def person(self, person_id: str, now: int) -> Registration | None:
         row = await self._engine.fetch_one(SELECT_PERSON, [person_id, now])
         return None if row is None else _registration(row)
-
-    async def person_name(self, person_id: str, now: int) -> str | None:
-        name = await self._engine.scalar(SELECT_PERSON_NAME, [person_id, now])
-        return None if name is None else str(name)
 
     async def embedding_count(self, person_id: str) -> int:
         return int(await self._engine.scalar(COUNT_EMBEDDINGS, [person_id]) or 0)
@@ -199,11 +228,6 @@ class FaceStore:
             await transaction.execute(DELETE_EMBEDDINGS, [person_id])
             await transaction.execute(DELETE_PERSON, [person_id])
 
-    async def nearest(self, embedding: Embedding, neighbours: int) -> list[Neighbour]:
-        """Los `neighbours` embeddings de la galería más parecidos, por el HNSW."""
-        rows = await self._engine.fetch_all(NEAREST_EMBEDDINGS, [embedding, neighbours])
-        return [Neighbour(str(row["persona"]), float(row["score"])) for row in rows]
-
     async def expired_people(self, now: int) -> list[str]:
         rows = await self._engine.fetch_all(EXPIRED_PEOPLE, [now])
         return [str(row["id"]) for row in rows]
@@ -211,6 +235,14 @@ class FaceStore:
     async def expired_enrollments(self, now: int) -> list[str]:
         rows = await self._engine.fetch_all(EXPIRED_ENROLLMENTS, [now])
         return [str(row["id"]) for row in rows]
+
+
+async def _consume_enrollment(transaction: AsyncTransaction, enrollment_id: str) -> bool:
+    """Borra la sesión y sus tomas, en ese orden en toda transacción para no cruzar los
+    bloqueos de las dos tablas. Dice si la sesión estaba."""
+    existed = await transaction.execute(DELETE_ENROLLMENT, [enrollment_id]) > 0
+    await transaction.execute(DELETE_PENDING_SHOTS, [enrollment_id])
+    return existed
 
 
 async def _insert_embeddings(

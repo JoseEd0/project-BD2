@@ -160,7 +160,7 @@ class EnrollmentService:
             EnrollmentNotFoundError: si la sesión no existe, venció o ya se terminó.
             EnrollmentIncompleteError: si faltan poses del plan.
             AlreadyEnrolledError, LookalikeError: si alguien parecido se registró mientras
-                tanto; la sesión se descarta.
+                tanto, también en un registro que terminó a la vez; la sesión se descarta.
         """
         with timed(SESSION_STAGE):
             pending = await self._pending(enrollment_id)
@@ -168,7 +168,6 @@ class EnrollmentService:
         covered = [shot.pose for shot in shots]
         if not self._rules.plan.is_complete(covered):
             raise EnrollmentIncompleteError(self._missing_message(covered))
-        await self._reject_duplicates(enrollment_id, _embeddings(shots))
         now = self._now()
         person = Registration(
             id=uuid.uuid4().hex,
@@ -178,11 +177,9 @@ class EnrollmentService:
             created_at=now,
             expires_at=now + self._rules.retention_seconds,
         )
-        try:
-            with timed(SAVE_STAGE):
-                await self._store.enroll(enrollment_id, person, shots)
-        except EnrollmentGoneError as error:
-            raise EnrollmentNotFoundError(ENROLLMENT_NOT_FOUND) from error
+        duplicate = await self._enroll_unless_duplicate(enrollment_id, person, shots)
+        if duplicate is not None:
+            raise _duplicate_error(duplicate)
         return Enrolled(
             person=person_view(person, len(shots)),
             message=(
@@ -234,6 +231,23 @@ class EnrollmentService:
             return
         await self._store.discard_enrollment(enrollment_id)
         raise _duplicate_error(duplicate)
+
+    async def _enroll_unless_duplicate(
+        self, enrollment_id: str, person: Registration, shots: Sequence[StoredShot]
+    ) -> Duplicate | None:
+        """Consume la sesión y, si nadie de la galería es la misma persona, crea `person`,
+        todo en una transacción en la que la búsqueda de duplicados ve a los registros que
+        terminaron antes. Con un duplicado, la sesión se descarta igual."""
+        try:
+            async with self._store.claim_enrollment(enrollment_id) as claim:
+                gallery = self._gallery.reading_from(claim.gallery)
+                duplicate = await gallery.duplicate_of(_embeddings(shots), person.created_at)
+                if duplicate is None:
+                    with timed(SAVE_STAGE):
+                        await claim.create_person(person, shots)
+        except EnrollmentGoneError as error:
+            raise EnrollmentNotFoundError(ENROLLMENT_NOT_FOUND) from error
+        return duplicate
 
     async def _keep(self, enrollment_id: str, index: int, pose: Pose, shot: AcceptedShot) -> None:
         try:

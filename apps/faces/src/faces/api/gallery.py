@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from appkit import timed
-from faces.api.store import FaceStore
+from faces.api.store import GalleryQueries
 from faces.enrollment import (
     Candidate,
     IdentityThresholds,
@@ -51,10 +51,16 @@ class Duplicate:
 class Gallery:
     """Busca en el HNSW de `face_embeddings` y resuelve las personas vigentes."""
 
-    def __init__(self, store: FaceStore, thresholds: IdentityThresholds, neighbours: int) -> None:
-        self._store = store
+    def __init__(
+        self, queries: GalleryQueries, thresholds: IdentityThresholds, neighbours: int
+    ) -> None:
+        self._queries = queries
         self._thresholds = thresholds
         self._neighbours = neighbours
+
+    def reading_from(self, queries: GalleryQueries) -> Gallery:
+        """La misma galería, leída con `queries`: por ejemplo, dentro de una transacción."""
+        return Gallery(queries, self._thresholds, self._neighbours)
 
     async def identify(self, embedding: Embedding, now: int) -> Lookup:
         """La persona vigente más parecida con coseno de al menos el umbral de
@@ -70,18 +76,20 @@ class Gallery:
             return await self._duplicate_of(embeddings, now)
 
     async def _identify(self, embedding: Embedding, now: int) -> Lookup:
-        candidates = best_per_person(await self._store.nearest(embedding, self._neighbours))
+        candidates = best_per_person(await self._queries.nearest(embedding, self._neighbours))
         best_score = candidates[0].score if candidates else None
         for candidate in candidates:
             if candidate.score < self._thresholds.match:
                 break
-            name = await self._store.person_name(candidate.person_id, now)
+            name = await self._queries.person_name(candidate.person_id, now)
             if name is not None:
                 return Lookup(Match(candidate.person_id, name, candidate.score), best_score)
         return Lookup(None, best_score)
 
     async def _duplicate_of(self, embeddings: Sequence[Embedding], now: int) -> Duplicate | None:
-        shots = [await self._store.nearest(embedding, self._neighbours) for embedding in embeddings]
+        shots = [
+            await self._queries.nearest(embedding, self._neighbours) for embedding in embeddings
+        ]
         for candidate in resemblance_per_person(shots):
             duplicate = await self._duplicate(candidate, now)
             if duplicate is not None or candidate.score < self._thresholds.lookalike:
@@ -92,5 +100,5 @@ class Gallery:
         kind = resemblance_of(candidate.score, self._thresholds)
         if kind is None:
             return None
-        name = await self._store.person_name(candidate.person_id, now)
+        name = await self._queries.person_name(candidate.person_id, now)
         return None if name is None else Duplicate(kind, name, candidate.score)

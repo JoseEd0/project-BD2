@@ -1,0 +1,70 @@
+# El servicio de ejemplo del kit (`apps/kit/tests/kit_example.py`) con la plantilla de las
+# interfaces, montados exactamente como una aplicación: la misma imagen de API, la misma de
+# web, su red propia y su clave en el gestor. Prueba la topología de punta a punta sin
+# depender de ninguna app; la CI lo levanta con `--profile example`. Sirve además de
+# modelo de `apps/<app>/compose.yaml` (ver apps/README.md).
+
+services:
+  example-api:
+    extends: { file: ../app.compose.yaml, service: api }
+    profiles: [example]
+    build:
+      args:
+        APP_DIR: kit
+        APP_PACKAGE: appkit
+    image: minigestor-example-api
+    environment: &example-environment
+      # El ejemplo vive entre los tests del kit, no en un paquete: entra montado.
+      SERVICE_APP: kit_example:create_app
+      SERVICE_SEED_MODULE: kit_example
+      PYTHONPATH: /opt/example
+      EJEMPLO_ENGINE_URL: http://engine:8000
+      EJEMPLO_ENGINE_KEY: ${EJEMPLO_ENGINE_KEY:-}
+      EJEMPLO_MIGRATION_KEY: ${EJEMPLO_MIGRATION_KEY:-}
+      EJEMPLO_LOG_LEVEL: ${EJEMPLO_LOG_LEVEL:-INFO}
+    volumes: &example-volumes
+      - ../../apps/kit/tests/kit_example.py:/opt/example/kit_example.py:ro
+    networks: [data, example]
+    depends_on:
+      engine:
+        condition: service_healthy
+
+  example-web:
+    extends: { file: ../app.compose.yaml, service: web }
+    profiles: [example]
+    build:
+      args:
+        APP_DIR: web-kit/template
+    image: minigestor-example-web
+    environment:
+      API_UPSTREAM: http://example-api:8000
+    ports:
+      - ${EXAMPLE_WEB_PORT:-8100}:8080
+      - ${EXAMPLE_WEB_TLS_PORT:-8400}:8443
+    networks: [example]
+    depends_on:
+      example-api:
+        condition: service_healthy
+
+  example-seed:
+    extends: { file: ../app.compose.yaml, service: seed }
+    profiles: [example-seed]
+    image: minigestor-example-api
+    environment: *example-environment
+    volumes: *example-volumes
+    networks: [data]
+    depends_on:
+      example-api:
+        condition: service_healthy
+
+  example-tunnel:
+    extends: { file: ../app.compose.yaml, service: tunnel }
+    profiles: [example-tunnel]
+    command: ["tunnel", "--no-autoupdate", "--url", "http://example-web:8080"]
+    networks: [example]
+    depends_on:
+      example-web:
+        condition: service_healthy
+
+networks:
+  example: {}

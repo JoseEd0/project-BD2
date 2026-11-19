@@ -20,12 +20,19 @@ services:
       FACES_ENROLLMENT_TTL_SECONDS: ${FACES_ENROLLMENT_TTL_SECONDS:-900}
       FACES_MAX_UPLOAD_BYTES: ${FACES_MAX_UPLOAD_BYTES:-10485760}
       FACES_ANALYSIS_WORKERS: ${FACES_ANALYSIS_WORKERS:-2}
+      # Los rastros del reconocimiento en vivo, compartidos por las réplicas; la base 1 para no
+      # mezclarse con la caché de otra app. Si Redis no responde, se reconoce sin rastros.
+      FACES_REDIS_URL: ${FACES_REDIS_URL:-redis://redis:6379/1}
+      FACES_STREAM_MAX_FPS: ${FACES_STREAM_MAX_FPS:-15}
+      FACES_STREAM_MAX_CONNECTIONS: ${FACES_STREAM_MAX_CONNECTIONS:-16}
     # Cada pipeline de análisis carga YuNet y SFace (37 MiB en disco) y decodifica fotos de
     # celular de hasta 50 MP.
     mem_limit: ${FACES_API_MEMORY:-1g}
     networks: [data, faces, cache]
     depends_on:
       engine:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
   faces-web:
@@ -40,6 +47,7 @@ services:
       # Una foto de 10 MiB (FACES_MAX_UPLOAD_BYTES) más el sobre del multipart.
       API_MAX_BODY_SIZE: ${FACES_WEB_MAX_BODY_SIZE:-11m}
       # Cada foto cuesta de 20 a 100 ms de CPU en la API: menos peticiones por IP que el resto.
+      # El WebSocket de la cámara es una sola petición, la que abre la conexión.
       API_RATE_LIMIT: ${FACES_WEB_RATE_LIMIT:-5r/s}
       API_RATE_BURST: ${FACES_WEB_RATE_BURST:-20}
     ports:

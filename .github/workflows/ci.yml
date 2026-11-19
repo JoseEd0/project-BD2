@@ -313,6 +313,29 @@ jobs:
           test "$(docker compose logs faces-web faces-api | grep -c "$code")" = 0
           curl --fail --silent --show-error --form "image=@apps/faces/tests/fixtures/sts-114-crew.jpg" "$FACES_URL/api/identify" \
             | python3 -c "import json, sys; faces = json.load(sys.stdin)['faces']; assert len(faces) == 7 and all(face['status'] != 'known' for face in faces), faces"
+      - name: Rostros en vivo por WebSocket a través del nginx, con rastros en Redis
+        # Dos cuadros de un retrato de prueba por :8104: el nginx reenvía el cambio de
+        # protocolo, la API responde cada cuadro con su número y deja los rastros en Redis.
+        run: |
+          uv run --no-sync python - "$FACES_URL" apps/faces/tests/fixtures/collins-1998.jpg <<'EOF'
+          import asyncio, json, struct, sys
+          from websockets.asyncio.client import connect
+
+          async def main(url: str, photo: str) -> None:
+              image = open(photo, "rb").read()
+              async with connect(url.replace("http", "ws", 1) + "/api/ws/recognize") as socket:
+                  ready = json.loads(await socket.recv())
+                  assert ready["type"] == "ready" and ready["track_cache"], ready
+                  for number in (1, 2):
+                      await socket.send(struct.pack(">BI", 1, number) + image)
+                      result = json.loads(await socket.recv())
+                      assert result["type"] == "result" and result["frame"] == number, result
+                      assert len(result["faces"]) == 1 and result["faces"][0]["track"] == 1, result
+
+          asyncio.run(main(*sys.argv[1:]))
+          EOF
+          test -n "$(docker compose exec -T redis redis-cli -n 1 --scan --pattern 'faces:rastros:*')"
+          curl --fail --silent --show-error "$FACES_URL/api/health" | python3 -c "import json, sys; health = json.load(sys.stdin); assert 'degraded' not in health, health"
       - name: La carga inicial es idempotente
         run: |
           docker compose run --rm example-seed

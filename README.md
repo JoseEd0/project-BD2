@@ -8,8 +8,11 @@ está en [`Proyecto_Integrador_BD2.md`](./Proyecto_Integrador_BD2.md).
 |---|---|---|
 | **1. Relacional** | completa | heap file, archivo secuencial, B+ agrupado y no agrupado, hash extendible, ordenamiento y hashing externos, parser y ejecutor SQL, transacciones con detección de interbloqueos, API REST e interfaz |
 | **2. Espacial** | completa | R-Tree sobre disco, consultas por radio, k-NN y por polígono, distancias euclidiana y Haversine, extensión del SQL y panel de mapa |
+| **3. Texto** | completa | índice invertido construido con SPIMI, TF-IDF + coseno y BM25, consultas booleanas, `MATCH` y `SCORE()` en SQL y página de búsqueda |
+| **4. Multimedia** | completa | SIFT y MFCC, bolsa de palabras con TF-IDF, IVF y HNSW sobre FAISS, tres métricas, `SIMILAR_TO` en SQL, columnas `VECTOR(n)` y página de búsqueda |
+| **5. Aplicaciones de IA** | en curso | las cuatro opciones del Anexo A como servicios sobre el gestor: copyright en audio, tienda con recomendaciones, preguntas a papers (RAG) y reconocimiento facial |
 
-- **Informe** de las dos partes, con la parte experimental: [`docs/informe.pdf`](docs/informe.pdf)
+- **Informe** de las cinco partes, con la parte experimental: [`docs/informe.pdf`](docs/informe.pdf)
 - **Comparación experimental** completa, con gráficas y tablas: [`benchmarks/README.md`](benchmarks/README.md)
 
 Contenido de este documento:
@@ -21,6 +24,60 @@ Contenido de este documento:
 ---
 
 ## 1. Arquitectura del sistema
+
+El sistema son dos cosas: **el gestor**, un motor de base de datos escrito desde cero con su
+API REST y su consola, y **cuatro aplicaciones** (Parte 5) que lo usan como usarían
+cualquier base de datos, solo por HTTP.
+
+### Servicios
+
+```mermaid
+flowchart LR
+    usuario(["navegador o celular"])
+    subgraph apps["una red por aplicación"]
+        direction TB
+        web["&lt;app&gt;-web · nginx<br/>:8101–8104 HTTP · :8401–8404 HTTPS"]
+        api["&lt;app&gt;-api × N<br/>FastAPI sin estado"]
+        web -- "/api" --> api
+    end
+    consola["console · nginx<br/>:8080"]
+    subgraph internas["redes internas, sin puertos publicados"]
+        engine[("engine<br/>gestor + volumen")]
+        redis[("redis<br/>caché sin disco")]
+    end
+    usuario --> web
+    usuario --> consola
+    api -- "clave write<br/>(admin solo para migrar)" --> engine
+    api -.-> redis
+    consola -- "clave admin" --> engine
+```
+
+| Aplicación | Carpeta | Contenedores | Abrir en | Del gestor usa |
+|---|---|---|---|---|
+| Copyright en audio (opción C) | [`apps/copyright/`](apps/copyright/README.md) | `copyright-api`, `copyright-web` | http://localhost:8101 | tramos de audio con HNSW sobre MFCC, consulta por segmentos, B+ e invertido |
+| Tienda con recomendaciones (opción B) | [`apps/shop/`](apps/shop/README.md) | `shop-api`, `shop-web` | http://localhost:8102 | secuencial, invertido en inglés, HNSW de SIFT y de CLIP, R-Tree y hash |
+| Preguntas a papers, RAG (opción A) | [`apps/rag/`](apps/rag/README.md) | `papers-api`, `papers-web` | http://localhost:8103 | `VECTOR(384)` con HNSW, invertido con BM25 y búsqueda híbrida |
+| Reconocimiento facial (opción D) | [`apps/faces/`](apps/faces/README.md) | `faces-api`, `faces-web` | http://localhost:8104 (cámara: https://&lt;ip&gt;:8404) | `VECTOR(128)` con HNSW, transacciones y Redis para los rastros |
+| Consola del gestor (Partes 1 a 4) | [`frontend/`](frontend/README.md) | `console` | http://localhost:8080 | todo: SQL, plan, mapa, texto y multimedia |
+
+- **El gestor es el único servicio con estado** y vive en una red interna (`data`): no
+  publica puertos y solo llegan a él la consola y las API, cada una con su clave y su rol
+  (`admin` la consola; cada app `write` para atender y `admin` solo para sus migraciones).
+- **Cada aplicación es un producto aparte**: su API (FastAPI, sin estado, escala con
+  `--scale`) y su interfaz (un nginx que sirve la web y reenvía `/api` solo a su API, con
+  límites de tamaño y de peticiones). Una interfaz no puede hablar con el gestor ni con
+  otra aplicación.
+- **Ningún servicio importa el código del motor**: hablan con él con el cliente tipado
+  [`apps/client`](apps/client/README.md) y arman su API con [`apps/kit`](apps/kit/README.md)
+  (configuración, logs JSON, `X-Request-ID` de punta a punta, `/health`, `/ready` y
+  migraciones). Lo comprueba [`tests/test_service_boundaries.py`](tests/test_service_boundaries.py).
+- **Redis** es la caché sin disco de las aplicaciones, en su propia red interna (`cache`).
+  Hoy la usa rostros para los rastros de cada sesión en vivo; si se cae, el servicio sigue
+  sin caché y lo dice en `/health`.
+
+Cómo se conecta una aplicación nueva está en [`apps/README.md`](apps/README.md#desplegar-una-app).
+
+### El motor
 
 ```
               frontend/ (React + TypeScript + Leaflet)
@@ -47,7 +104,7 @@ Contenido de este documento:
 **Cada capa solo conoce a la de abajo**: el motor no sabe qué es una transacción, y ninguna
 capa del motor sabe que existe un API.
 
-### El camino de una consulta
+#### El camino de una consulta
 
 ```
 texto SQL → lexer → parser (AST) → validación de tipos → planificador → operadores → filas + plan
@@ -57,7 +114,7 @@ Toda consulta devuelve, además de sus filas, el **plan de ejecución**: el árb
 operadores con el camino de acceso que eligió el planificador. Con `EXPLAIN ANALYZE` cada
 operador lleva las filas que entregó y el tiempo que tardó.
 
-### Decisiones de diseño
+#### Decisiones de diseño
 
 | Decisión | Consecuencia |
 |---|---|
@@ -67,7 +124,7 @@ operador lleva las filas que entregó y el tiempo que tardó.
 | **Nada incrustado**: parámetros en `EngineConfig`, rutas y direcciones en variables de entorno | cambiar el tamaño de página cambia el orden de todos los árboles sin tocar su código |
 | **Se valida antes de leer** | una consulta con una columna inexistente o un tipo equivocado falla aunque la tabla esté vacía |
 
-### Qué resuelve cada requisito del enunciado
+#### Qué resuelve cada requisito del enunciado
 
 | Requisito | Técnica implementada | Módulo |
 |---|---|---|
@@ -91,7 +148,8 @@ operador lleva las filas que entregó y el tiempo que tardó.
 | `SIMILAR_TO` en SQL | índice sobre la columna de las rutas, `VectorSearchScan` con el resto del WHERE como filtro previo, búsqueda exacta si la métrica no es la del índice | [`index/similarity`](src/index/similarity/README.md), [`sql`](src/sql/README.md#búsqueda-por-similitud) |
 | Columnas `VECTOR(n)` con HNSW e IVF | embeddings calculados fuera del gestor, como pgvector: `SIMILAR_TO(emb, $1, k = 10)`, mantenidos por `INSERT`, `UPDATE`, `DELETE` y `ROLLBACK`, y cargados desde CSV | [`index/similarity`](src/index/similarity/README.md#columnas-vectorn), [`sql`](src/sql/README.md#búsqueda-por-similitud) |
 | Interfaz, panel de mapa, páginas de texto y multimedia | cuatro paneles visibles a la vez; mapa con Leaflet; TF-IDF y BM25 lado a lado con los términos resaltados; dos `SIMILAR_TO` lado a lado con su galería | [`frontend`](frontend/README.md) |
-| Comparación experimental | tres experimentos medidos, con resultados crudos y gráficas | [`benchmarks`](benchmarks/README.md) |
+| Aplicación de IA (Parte 5) | las cuatro opciones del Anexo A, cada una con su API y su interfaz sobre el gestor como servicio | [`apps`](apps/README.md) |
+| Comparación experimental | heap vs secuencial, B+ vs hash, R-Tree vs GiST, TF-IDF vs BM25 vs GIN, IVF vs HNSW y las medidas de cada aplicación, con resultados crudos y gráficas | [`benchmarks`](benchmarks/README.md) |
 
 ---
 
@@ -212,16 +270,72 @@ con excepciones del dominio, anotaciones de tipo en toda firma pública (`mypy` 
 ### 3.1 Con Docker
 
 Es la forma más rápida de verlo funcionar: no hace falta instalar Python, Node ni nada
-más que [Docker](https://docs.docker.com/get-docker/) con Compose 2.20 o posterior.
+más que [Docker](https://docs.docker.com/get-docker/) con Compose 2.20 o posterior. Los
+pasos 1 y 2 usan `python3` del sistema, sin dependencias.
 
 ```bash
 git clone https://github.com/JoseEd0/project-BD2.git
 cd project-BD2
-docker compose up --build
+
+python3 -m tools.compose_keys     # 1. una clave por servicio en .env (se puede repetir)
+deploy/certs.sh                   # 2. certificado en data/certs/ para el HTTPS de cada app
+docker compose up --build -d --wait   # 3. gestor, consola, Redis y las cuatro aplicaciones
 ```
 
-La primera vez construye las imágenes y carga el dataset de demostración, que tarda menos
-de un minuto. Después queda la consola del gestor en http://localhost:8080.
+La primera vez construye las imágenes (las de rostros, la tienda y el RAG traen sus modelos
+verificados) y carga el dataset de demostración, que tarda menos de un minuto. Después:
+
+| Abrir | Qué es |
+|---|---|
+| http://localhost:8080 | la consola del gestor (Partes 1 a 4): SQL, plan, mapa, texto y multimedia |
+| http://localhost:8101 | copyright en audio |
+| http://localhost:8102 | la tienda |
+| http://localhost:8103 | preguntas a papers (RAG) |
+| http://localhost:8104 | reconocimiento facial; desde el celular, `https://<ip del equipo>:8404` |
+
+Cada web sirve también por HTTPS en su puerto paralelo (`8101` → `8401`, …, `8104` →
+`8404`). La cámara y el micrófono solo funcionan en un origen seguro, y `localhost` lo es
+solo en el mismo equipo: por eso el celular entra por HTTPS. Con
+[mkcert](https://github.com/FiloSottile/mkcert) instalado, el certificado de
+`deploy/certs.sh` lo firma su CA local (instalada en el celular, no hay aviso); sin él, es
+autofirmado y el navegador pide aceptarlo una vez.
+
+**Claves.** `tools.compose_keys` crea en `.env` la clave de la consola (`admin`) y dos por
+aplicación: una `write` con la que atiende y una `admin` solo para sus migraciones; el gestor
+recibe sus huellas en `MINIGESTOR_API_KEYS`. Conserva las que ya hay. Sin `.env` el gestor
+queda abierto, lo que solo sirve para desarrollar.
+
+**Datos de cada aplicación (perfil `seed`).** Rostros arranca vacío: cada persona se
+registra desde la web. Las otras tres cargan su dataset con un trabajo que se puede repetir
+(la segunda vez no carga nada). Los datos se bajan antes en el anfitrión, en `data/datasets/`,
+que el gestor y la carga montan de solo lectura; para eso sí hace falta el entorno de
+Python del proyecto (`uv sync --all-packages`, ver 3.3):
+
+```bash
+# copyright: las 8 000 pistas de fma_small (7,4 GB) cortadas en tramos de 5 s
+uv run python -m songcheck.fma --data-dir data/datasets
+docker compose run --rm copyright-seed
+
+# tienda: Amazon Reviews 2023 con las tiendas de Lima (antes, lugares_lima.csv; ver 3.5)
+uv run python -m shop.dataset prepare --data-dir data/datasets
+docker compose run --rm shop-seed
+
+# RAG: 1 500 papers de arXiv con licencia abierta y el material del curso
+uv run python -m rag.corpus build --data-dir data/datasets \
+    --material Proyecto_Integrador_BD2.md --material docs/informe.pdf
+docker compose run --rm papers-seed
+```
+
+Los tiempos y el espacio de cada carga están en [`benchmarks/README.md`](benchmarks/README.md)
+(secciones 10, 12 y 13) y en el README de cada aplicación.
+
+**Desde cualquier red (perfil `tunnel`).** Da a cada web una URL HTTPS pública y temporal
+(Cloudflare Quick Tunnel), que sale en su log:
+
+```bash
+docker compose --profile tunnel up -d
+docker compose logs faces-tunnel | grep trycloudflare.com
+```
 
 `docker compose ps` muestra el sistema tal como es:
 
@@ -233,14 +347,16 @@ de un minuto. Después queda la consola del gestor en http://localhost:8080.
 | `demo` | `data` | — | carga la demo con `--solo-si-vacia` y termina |
 | `<app>-api` | `data`, `<app>` | ninguno | el API de cada aplicación; escala con `--scale` |
 | `<app>-web` | `<app>` | `810x` y `840x` | su interfaz: nginx que reenvía `/api` solo a su API |
+| `<app>-seed` (perfil `seed`) | `data` | — | la carga inicial de la aplicación |
+| `<app>-tunnel` (perfil `tunnel`) | `<app>` | — | la URL pública temporal de su web |
 
-Cada aplicación de la Parte 5 tiene su compose (`apps/<app>/compose.yaml`), incluido desde
-[`compose.yaml`](compose.yaml); cómo se conecta una está en
-[`apps/README.md`](apps/README.md#desplegar-una-app). Ninguna tiene su API todavía, así que
-la topología se prueba con el **servicio de ejemplo** del kit, montado igual que una app
-(`--profile example`, en `:8100` y `:8400`).
+Cada aplicación tiene su compose (`apps/<app>/compose.yaml`), incluido desde
+[`compose.yaml`](compose.yaml); cómo se conecta una nueva está en
+[`apps/README.md`](apps/README.md#desplegar-una-app). El **servicio de ejemplo** del kit se
+monta igual que una app (`--profile example`, en `:8100` y `:8400`) y sirve para probar la
+topología.
 
-**El gestor ya no publica el puerto 8000**: está en una red interna y solo la consola y las
+**El gestor no publica el puerto 8000**: está en una red interna y solo la consola y las
 API de las aplicaciones llegan a él. Para desarrollar con el API en el anfitrión (`npm run
 dev` de la consola, `/docs`), se suma [`deploy/compose.dev.yaml`](deploy/compose.dev.yaml):
 
@@ -248,38 +364,8 @@ dev` de la consola, `/docs`), se suma [`deploy/compose.dev.yaml`](deploy/compose
 docker compose -f compose.yaml -f deploy/compose.dev.yaml up   # el gestor en :8000
 ```
 
-**Claves.** Sin `.env`, el gestor queda abierto, como antes. Para un despliegue, cada
-servicio recibe su clave y su rol en el gestor (la consola `admin`; cada app `write` para
-atender y `admin` solo para migrar):
-
 ```bash
-python3 -m tools.compose_keys                 # crea o completa las claves en .env
-```
-
-**HTTPS para el celular.** La cámara y el micrófono solo funcionan en un origen seguro, y
-`localhost` lo es solo en el mismo equipo. Cada `<app>-web` sirve además por HTTPS en su
-puerto paralelo (`8101` → `8401`, …, `8104` → `8404`) si encuentra un certificado:
-
-```bash
-deploy/certs.sh                               # data/certs/: localhost, el equipo y sus IP
-docker compose up -d                          # https://<ip del equipo>:8404 desde el celular
-```
-
-Con [mkcert](https://github.com/FiloSottile/mkcert) instalado el certificado lo firma su CA
-local (instalada en el celular, no hay aviso); sin él, es autofirmado y el navegador pide
-aceptarlo una vez. Para probar desde cualquier red, el perfil `tunnel` da a cada web una URL
-HTTPS pública y temporal (Cloudflare Quick Tunnel), que sale en su log:
-
-```bash
-docker compose --profile tunnel up -d
-docker compose logs faces-tunnel | grep trycloudflare.com
-```
-
-```bash
-docker compose up -d --build                  # en segundo plano
-docker compose --profile example up -d        # más el servicio de ejemplo
-docker compose up -d --scale example-api=3    # tres réplicas detrás de su nginx
-docker compose run --rm <app>-seed            # la carga inicial de una app (perfil seed)
+docker compose up -d --scale faces-api=3      # tres réplicas detrás de su nginx
 docker compose logs -f engine                 # el registro del gestor
 docker compose down                           # apagar; la base se conserva
 docker compose down -v                        # apagar y borrar la base: el próximo arranque recarga la demo
@@ -561,7 +647,7 @@ uv run python -m rag.corpus figure --manifest benchmarks/results/rag_corpus.json
     --output benchmarks/figures/rag-fragmentos.png
 
 # ingesta del RAG: embeddings fp32 contra int8, la siembra del corpus entero en un gestor
-# propio y cada etapa de la carga (ver benchmarks/README.md §10)
+# propio y cada etapa de la carga (ver benchmarks/README.md §13)
 uv run python -m rag.models --salida data/models/rag --variante int8 --variante fp32
 .venv/bin/python -m benchmarks.rag_ingest_benchmark --data-dir data/datasets \
     --models data/models/rag --engine-dir data/engine-rag --threads 1 2 4 8 12 \

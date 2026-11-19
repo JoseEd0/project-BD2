@@ -3,8 +3,11 @@ reales, contra el gestor real, con las fotos de `apps/faces/tests/fixtures/`."""
 
 from __future__ import annotations
 
+import logging
+import re
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -21,6 +24,7 @@ from fastapi.testclient import TestClient
 from PIL import Image, ImageFilter
 from tests.faces.conftest import ADMIN_KEY, FakeClock, ServiceFactory
 
+from faces.api.routes import PERSON_ID_HEADER
 from faces.enrollment import POSE_GUIDANCE
 from faces.pose import Pose
 from faces.quality import REJECTION_MESSAGES, RejectionReason
@@ -30,6 +34,10 @@ NAME = "Eileen Collins"
 SECONDS_PER_DAY = 86_400
 BLUR_RADIUS = 4
 GROUP_ZOOM = 3
+NGINX_SITE = Path(__file__).parents[2] / "apps/web-kit/docker/nginx/templates/default.conf.template"
+# Las variables de nginx que escriben la línea de la petición, su query string o una cabecera.
+NGINX_REQUEST_VARIABLES = frozenset({"request", "request_uri", "args", "query_string"})
+NGINX_HEADER_VARIABLE_PREFIX = "http_"
 
 
 def consent_of(service: TestClient) -> dict[str, Any]:
@@ -56,6 +64,10 @@ def identify(service: TestClient, photo: bytes) -> dict[str, Any]:
     response = service.post("/identify", files={"image": ("consulta.jpg", photo, "image/jpeg")})
     assert response.status_code == 200, response.text
     return dict(response.json())
+
+
+def code_of(person_id: str) -> dict[str, str]:
+    return {PERSON_ID_HEADER: person_id}
 
 
 def collins_session(service: TestClient) -> str:
@@ -159,7 +171,7 @@ def test_enroll_identify_and_delete(service: TestClient, engine_rows: Rows):
     assert engine_rows("SELECT id FROM face_tomas") == []
     stored = engine_rows("SELECT persona, pose FROM face_embeddings")
     assert stored == [{"persona": person_id, "pose": "front"}] * 2
-    person = service.get(f"/people/{person_id}").json()
+    person = service.get("/person", headers=code_of(person_id)).json()
     assert (person["display_name"], person["shots"]) == (NAME, 2)
 
     collins = identify(service, jpeg(crew_member("collins")))
@@ -173,12 +185,12 @@ def test_enroll_identify_and_delete(service: TestClient, engine_rows: Rows):
     assert [face["display_name"] for face in crew["faces"] if face["status"] == "known"] == [NAME]
     assert crew["message"] == f"Reconocemos a {NAME}."
 
-    assert service.delete(f"/people/{person_id}").status_code == 204
-    assert service.delete(f"/people/{person_id}").status_code == 204
+    assert service.delete("/person", headers=code_of(person_id)).status_code == 204
+    assert service.delete("/person", headers=code_of(person_id)).status_code == 204
     assert engine_rows("SELECT id FROM face_embeddings") == []
     assert engine_rows("SELECT id FROM face_personas") == []
     assert identify(service, jpeg(crew_member("collins")))["faces"][0]["status"] == "unknown"
-    assert service.get(f"/people/{person_id}").status_code == 404
+    assert service.get("/person", headers=code_of(person_id)).status_code == 404
 
 
 def test_only_numbers_are_stored(service: TestClient, engine_app: Any):
@@ -248,6 +260,37 @@ def test_two_sessions_of_the_same_face_finishing_at_once_enroll_one_person(
     assert engine_rows("SELECT id FROM face_tomas") == []
 
 
+def test_the_person_code_stays_out_of_the_service_logs(
+    service: TestClient, caplog: pytest.LogCaptureFixture
+):
+    person_id = enroll_collins(service)
+    with caplog.at_level(logging.DEBUG):
+        assert service.get("/person", headers=code_of(person_id)).status_code == 200
+        assert service.delete("/person", headers=code_of(person_id)).status_code == 204
+    access = [record for record in caplog.records if record.name == "appkit.access"]
+    assert [getattr(record, "path", None) for record in access] == ["/person", "/person"]
+    for record in caplog.records:
+        assert person_id not in record.getMessage()
+        assert all(person_id not in str(value) for value in vars(record).values())
+
+
+def test_the_person_code_stays_out_of_the_nginx_log():
+    """El log de acceso del nginx de las apps escribe la ruta sin la query string ni las
+    cabeceras, y el código va en una cabecera."""
+    site = NGINX_SITE.read_text()
+    log_format = re.search(r"log_format app [^;]*;", site, re.DOTALL)
+    assert log_format is not None
+    variables = set(re.findall(r"\$(\w+)", log_format.group()))
+    assert "uri" in variables
+    assert not variables & NGINX_REQUEST_VARIABLES
+    assert not {name for name in variables if name.startswith(NGINX_HEADER_VARIABLE_PREFIX)}
+
+
+def test_the_person_code_is_required(service: TestClient):
+    response = service.get("/person")
+    assert (response.status_code, response.json()["kind"]) == (422, "RequestValidationError")
+
+
 def test_a_cancelled_session_leaves_nothing(service: TestClient, engine_rows: Rows):
     enrollment = start(service)
     send(service, enrollment, jpeg(selfie()))
@@ -289,7 +332,7 @@ def test_registrations_expire_and_are_purged(
         assert send(service, abandoned, jpeg(crew_member("other")))["accepted"]
         clock.advance(SECONDS_PER_DAY + 1)
         assert identify(service, jpeg(crew_member("collins")))["faces"][0]["status"] == "unknown"
-        assert service.get(f"/people/{person_id}").status_code == 404
+        assert service.get("/person", headers=code_of(person_id)).status_code == 404
         report = service.portal.call(service.app.state.faces.people.purge_expired)  # type: ignore[attr-defined]
     assert (report.people, report.enrollments) == (1, 1)
     for table in ("face_personas", "face_embeddings", "face_sesiones", "face_tomas"):

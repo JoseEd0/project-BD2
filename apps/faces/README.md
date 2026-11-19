@@ -59,8 +59,8 @@ uvicorn --factory faces.api:create_app --host 0.0.0.0 --port 8000
 | `DELETE /enrollments/{id}` | cancela: borra la sesión y sus tomas (`204`, también si ya no estaba) |
 | `POST /enrollments/{id}/finish` | `201` con la persona creada y su `person_id`, el código para ver o borrar el registro |
 | `POST /identify` | una foto → cada rostro, del más grande al más chico, con `known` (nombre y coseno), `unknown` (y el mejor coseno visto) o `too_small` |
-| `GET /people/{id}` | lo que se guarda de la persona, salvo sus embeddings (derecho de acceso) |
-| `DELETE /people/{id}` | borra la persona y todos sus embeddings (`204`, también si ya no estaba) |
+| `GET /person` | con el código en la cabecera `X-Person-Id`: lo que se guarda de la persona, salvo sus embeddings (derecho de acceso) |
+| `DELETE /person` | con el código en `X-Person-Id`: borra la persona y todos sus embeddings (`204`, también si ya no estaba) |
 | `GET /health`, `GET /ready` | las sondas de `appkit` |
 
 Cada respuesta lleva `X-Request-ID` y `Server-Timing` con las etapas `analisis` (decodificar,
@@ -83,6 +83,7 @@ es un mensaje en español para la persona y `kind` lo que la interfaz usa para d
 | `TooManyPixelsError` | 413 | la foto declara más de `FACES_MAX_IMAGE_PIXELS` |
 | `UnreadableImageError` | 400 | vacía, no es una imagen o está dañada |
 | `PersonNotFoundError` | 404 | no hay un registro con ese código, o venció |
+| `RequestValidationError` | 422 | `GET` o `DELETE /person` sin la cabecera `X-Person-Id` |
 
 ## El registro
 
@@ -261,9 +262,17 @@ y por escrito, y la persona tiene derecho a acceder a sus datos y a cancelarlos.
   números y texto (un test comprueba los tipos de columna de las cuatro tablas). De un
   embedding de SFace no se reconstruye la foto.
 - **Acceso y borrado.** Al terminar, la persona recibe su `person_id` (128 bits al azar),
-  que es la llave de `GET /people/{id}` y `DELETE /people/{id}`. El reconocimiento nunca lo
-  devuelve: muestra el nombre, no el código. Borrar quita la persona y sus embeddings en una
+  que es la llave de `GET /person` y `DELETE /person`. El reconocimiento nunca lo devuelve:
+  muestra el nombre, no el código. Borrar quita la persona y sus embeddings en una
   transacción, y es idempotente.
+- **El código no queda en los logs.** Va en la cabecera `X-Person-Id`, no en la ruta: el log
+  de acceso del servicio (`appkit.access`) y el del nginx escriben la ruta (`$uri`, sin la
+  query string) y ninguna cabecera, así que quien lea los logs no puede ver ni borrar un
+  registro. Se prefirió sacarlo de la ruta a enmascararlo en cada log: una ruta también
+  queda en el historial del navegador, en el log de errores de nginx, en el túnel y en
+  cualquier proxy que se sume, y enmascarar exigiría acordarse de cada uno. Lo prueban un
+  test del log del servicio, otro del `log_format` del nginx y la CI, que pide y borra un
+  registro por `:8104` y busca el código en los logs de `faces-web` y `faces-api`.
 - **Caducidad.** Cada registro vence a los `FACES_RETENTION_DAYS` (30) días. Al vencer deja
   de reconocerse y de verse **en ese momento** (las consultas filtran por `expira_en`), y
   cada réplica corre cada `FACES_PURGE_INTERVAL_SECONDS` (5 minutos) un borrado de lo
@@ -271,8 +280,6 @@ y por escrito, y la persona tiene derecho a acceder a sus datos y a cancelarlos.
   réplicas a la vez no hace daño, porque cada borrado es idempotente. Se eligió la purga
   periódica más el filtro y no solo borrar al leer: un registro que nadie vuelve a consultar
   también se borra, y la lectura del reconocimiento no escribe.
-- **Lo que falta.** El `person_id` aparece en la ruta de `DELETE /people/{id}`, y por tanto
-  en el log de acceso; el log queda en el servidor, bajo quien opera el servicio.
 
 ## Configuración
 
@@ -395,9 +402,9 @@ FACES_MODELS_DIR=data/models/faces uv run --no-sync python -m pytest -q apps/fac
   nada en el gestor), el nombre, el plan y su guía, tomas de otra persona, registrar →
   reconocer → borrar (y que las tablas quedan vacías y solo guardan números), «ya estás
   registrado como», «te pareces mucho» sin el nombre, terminar dos veces, dos sesiones de la
-  misma cara que terminan a la vez, cancelar, sesiones e intentos que se acaban, registros
-  que vencen y la purga, fotos demasiado pesadas, con demasiados píxeles, vacías o que no
-  son imágenes, y las migraciones repetidas.
+  misma cara que terminan a la vez, el código fuera de los logs, cancelar, sesiones e
+  intentos que se acaban, registros que vencen y la purga, fotos demasiado pesadas, con
+  demasiados píxeles, vacías o que no son imágenes, y las migraciones repetidas.
 
 Los que corren los modelos usan tres fotos de dominio público de la NASA
 ([`tests/fixtures/`](tests/fixtures/README.md)): un retrato, otro retrato de la misma

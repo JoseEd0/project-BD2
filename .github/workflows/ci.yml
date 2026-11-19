@@ -273,7 +273,8 @@ jobs:
           seq 120 | xargs -P 30 -I{} curl --silent --output /dev/null --write-out '%{http_code}\n' "$EXAMPLE_URL/api/health" | grep -q 429
       - name: Rostros por su web, con los modelos de la imagen
         # Una selfie hecha en el contenedor con un retrato de prueba (el anfitrión no tiene
-        # Pillow): se acepta de frente, se cancela, y la foto de grupo no se reconoce.
+        # Pillow): se acepta de frente, se cancela, y la foto de grupo no se reconoce. El código
+        # de una persona, que va en una cabecera, no queda en el log del nginx ni en el de la API.
         run: |
           curl --fail --silent --show-error "$FACES_URL/api/health"
           curl --fail --silent --show-error "$FACES_URL/api/ready" | grep -q ready
@@ -292,6 +293,11 @@ jobs:
             "$FACES_URL/api/enrollments/$enrollment/shots" \
             | python3 -c "import json, sys; shot = json.load(sys.stdin); assert shot['accepted'] and shot['pose'] == 'front', shot"
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' --request DELETE "$FACES_URL/api/enrollments/$enrollment")" = 204
+          code=$(python3 -c "import uuid; print(uuid.uuid4().hex)")
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' --header "X-Person-Id: $code" "$FACES_URL/api/person")" = 404
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' --header "X-Person-Id: $code" --request DELETE "$FACES_URL/api/person")" = 204
+          docker compose logs faces-web faces-api | grep -q '"path": *"/person"'
+          test "$(docker compose logs faces-web faces-api | grep -c "$code")" = 0
           curl --fail --silent --show-error --form "image=@apps/faces/tests/fixtures/sts-114-crew.jpg" "$FACES_URL/api/identify" \
             | python3 -c "import json, sys; faces = json.load(sys.stdin)['faces']; assert len(faces) == 7 and all(face['status'] != 'known' for face in faces), faces"
       - name: La carga inicial es idempotente

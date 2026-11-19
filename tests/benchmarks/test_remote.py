@@ -1,17 +1,15 @@
 """Las descargas de los datasets, sin tocar la red.
 
-El servidor se sustituye por un `urlopen` falso que entiende rangos, y el `.zip` remoto por
-uno armado aquí mismo que se sirve desde memoria.
+El servidor se sustituye por un `urlopen` falso que entiende rangos. La lectura de un `.zip`
+remoto por rangos se prueba con el kit (`apps/kit/tests/test_kit_ranges.py`).
 """
 
 import io
-import zipfile
 from http import HTTPStatus
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import Any
 
 import pytest
-from tests.benchmarks.remote_support import MemorySource, zip_with_members
 
 from benchmarks import remote
 
@@ -126,111 +124,6 @@ def test_a_download_that_never_completes_fails(
     monkeypatch.setattr(remote.urllib.request, "urlopen", always_cut)
     with pytest.raises(remote.DownloadError):
         remote.download("https://datos.example/archivo", tmp_path / "archivo.tar")
-
-
-class FakeConnection:
-    """Una conexión HTTP que sirve el contenido del servidor falso. `drops` cuenta cuántas
-    peticiones más se van a cortar antes de responder."""
-
-    opened: ClassVar[list["FakeConnection"]] = []
-    drops = 0
-
-    def __init__(self, host: str, timeout: float) -> None:
-        self.host = host
-        self.targets: list[str] = []
-        self.closed = False
-        self._pending: FakeResponse | None = None
-        FakeConnection.opened.append(self)
-
-    def request(self, method: str, target: str, headers: dict[str, str]) -> None:
-        if FakeConnection.drops:
-            FakeConnection.drops -= 1
-            raise ConnectionResetError("el servidor cerró la conexión")
-        self.targets.append(target)
-        first, _, last = headers["Range"].removeprefix("bytes=").partition("-")
-        body = CONTENT[int(first) : int(last) + 1]
-        self._pending = FakeResponse(body, HTTPStatus.PARTIAL_CONTENT, len(CONTENT))
-
-    def getresponse(self) -> FakeResponse:
-        assert self._pending is not None
-        return self._pending
-
-    def close(self) -> None:
-        self.closed = True
-
-
-@pytest.fixture
-def connections(server: FakeServer, monkeypatch: pytest.MonkeyPatch) -> type[FakeConnection]:
-    FakeConnection.opened = []
-    FakeConnection.drops = 0
-    monkeypatch.setattr(remote.http.client, "HTTPSConnection", FakeConnection)
-    return FakeConnection
-
-
-def test_ranges_reuse_one_open_connection(connections: type[FakeConnection]):
-    source = remote.HttpRangeSource("https://datos.example/archivo?v=1")
-    assert source.size == len(CONTENT)
-    assert source.fetch(10, 20) == CONTENT[10:20]
-    assert source.fetch(0, 3) == CONTENT[:3]
-    [connection] = connections.opened
-    assert connection.host == "datos.example"
-    assert connection.targets == ["/archivo?v=1", "/archivo?v=1"]
-
-
-def test_a_dropped_connection_is_reopened(connections: type[FakeConnection]):
-    source = remote.HttpRangeSource("https://datos.example/archivo")
-    connections.drops = 2
-    assert source.fetch(5, 9) == CONTENT[5:9]
-    assert len(connections.opened) == 3
-    assert [connection.closed for connection in connections.opened] == [True, True, False]
-
-
-def test_a_range_that_never_arrives_fails(connections: type[FakeConnection]):
-    source = remote.HttpRangeSource("https://datos.example/archivo")
-    connections.drops = remote.DOWNLOAD_ATTEMPTS
-    with pytest.raises(remote.DownloadError):
-        source.fetch(0, 10)
-
-
-def test_an_http_range_must_arrive_whole(connections: type[FakeConnection]):
-    source = remote.HttpRangeSource("https://datos.example/archivo")
-    with pytest.raises(remote.DownloadError):
-        source.fetch(len(CONTENT) - 5, len(CONTENT) + 5)
-
-
-MEMBERS = {
-    "fma_small/README.txt": b"FMA",
-    "fma_small/000/000002.mp3": b"ID3" + bytes(range(256)) * 30,
-    "fma_small/000/000005.mp3": b"ID3" + bytes(reversed(range(256))) * 20,
-    "fma_small/155/155066.mp3": b"ID3 final",
-}
-
-
-def test_a_zip_is_read_member_by_member_through_ranges():
-    source = MemorySource(zip_with_members(MEMBERS))
-    with zipfile.ZipFile(remote.RemoteFile(source)) as archive:
-        assert archive.namelist() == list(MEMBERS)
-        assert archive.read("fma_small/000/000005.mp3") == MEMBERS["fma_small/000/000005.mp3"]
-    assert source.fetches < len(source.content)
-
-
-def test_a_prefetched_member_is_read_with_a_single_request():
-    source = MemorySource(zip_with_members(MEMBERS))
-    file = remote.RemoteFile(source)
-    with zipfile.ZipFile(file) as archive:
-        for info in archive.infolist():
-            before = source.fetches
-            file.prefetch(info.header_offset, info.header_offset + 1024 + info.compress_size)
-            assert archive.read(info) == MEMBERS[info.filename]
-            assert source.fetches == before + 1
-
-
-def test_reading_past_the_end_gives_nothing():
-    file = remote.RemoteFile(MemorySource(b"abc"))
-    file.seek(0, io.SEEK_END)
-    assert file.read(10) == b""
-    file.seek(1)
-    assert file.read(10) == b"bc"
 
 
 def test_a_saved_file_creates_its_folder_and_leaves_nothing_staged(tmp_path: Path):

@@ -156,10 +156,22 @@ jobs:
     runs-on: ubuntu-latest
     env:
       WEB_URL: http://localhost:8080
+      # El servicio de ejemplo del kit, montado como una aplicación (deploy/example), por HTTP y
+      # por HTTPS. Mientras ninguna app tenga su API, es el que prueba la topología.
+      EXAMPLE_URL: http://localhost:8100
+      EXAMPLE_TLS_URL: https://localhost:8400
+      COMPOSE_PROFILES: example
     steps:
       - uses: actions/checkout@v4
+      - name: Claves y certificado
+        # Las claves de cada servicio en .env, como en un despliegue: el gestor no queda abierto.
+        run: |
+          python3 -m tools.compose_keys --service ejemplo:EJEMPLO_
+          deploy/certs.sh
       - name: Construir y levantar
-        run: docker compose up --build --detach --wait --wait-timeout 300
+        run: docker compose up --build --detach --wait --wait-timeout 600
+      - name: La topología
+        run: docker compose ps --all
       - name: La demo quedó cargada
         run: docker compose logs demo | grep -q "filas de la muestra ESCI"
       - name: El API responde a través de nginx
@@ -172,7 +184,7 @@ jobs:
             | python3 -c "import json, sys; assert len(json.load(sys.stdin)['rows']) == 3"
       - name: Las librerías multimedia cargan en la imagen del motor
         run: |
-          docker compose exec -T api python -c \
+          docker compose exec -T engine python -c \
             "import numpy, faiss, cv2, librosa; cv2.SIFT_create(); librosa.feature.mfcc(y=numpy.zeros(22050, 'float32'), sr=22050)"
       - name: Un audio de consulta se sube y se sirve por rangos a través de nginx
         run: |
@@ -184,6 +196,49 @@ jobs:
             "$WEB_URL/api/media/file" | grep -q 206
       - name: Con el API en marcha, la demo no se vuelve a cargar
         run: docker compose run --rm demo | grep -q "la demo no se vuelve a cargar"
+      - name: El gestor no se alcanza desde el anfitrión ni sin clave
+        run: |
+          ! curl --silent --max-time 3 http://localhost:8000/health
+          ! docker compose exec -T example-web wget -q -T 3 -O /dev/null http://engine:8000/health
+          docker compose exec -T example-api python -c "import urllib.error as e, urllib.request as u
+          try: u.urlopen('http://engine:8000/tables', timeout=3)
+          except e.HTTPError as error: assert error.code == 401, error.code
+          else: raise SystemExit('el gestor respondió sin clave')"
+      - name: El ejemplo escribe y lee por su web, con su clave y su rol
+        run: |
+          curl --fail --silent --show-error "$EXAMPLE_URL/api/notas" --header "content-type: application/json" \
+            --header "X-Request-ID: humo-escritura" --data '{"id": 7, "texto": "hola"}'
+          curl --fail --silent --show-error --cacert data/certs/cert.pem "$EXAMPLE_TLS_URL/api/notas/7" \
+            --header "X-Request-ID: humo-lectura" | grep -q hola
+      - name: El mismo X-Request-ID en el nginx, la API y el gestor
+        run: |
+          for service in example-web example-api engine; do
+            docker compose logs "$service" | grep -q '"request_id": *"humo-lectura"'
+          done
+          docker compose logs engine | grep '"humo-escritura"' | grep -q '"service": "ejemplo"'
+      - name: Cabeceras de seguridad, HSTS solo por HTTPS y límites del nginx
+        run: |
+          curl --silent --head "$EXAMPLE_URL/" | grep -qi "content-security-policy: .*'sha256-"
+          ! curl --silent --head "$EXAMPLE_URL/" | grep -qi strict-transport-security
+          curl --silent --head --cacert data/certs/cert.pem "$EXAMPLE_TLS_URL/" | grep -qi strict-transport-security
+          head -c 2000000 /dev/zero > /tmp/grande
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' --data-binary @/tmp/grande "$EXAMPLE_URL/api/notas")" = 413
+          seq 120 | xargs -P 30 -I{} curl --silent --output /dev/null --write-out '%{http_code}\n' "$EXAMPLE_URL/api/health" | grep -q 429
+      - name: La carga inicial es idempotente
+        run: |
+          docker compose run --rm example-seed
+          docker compose run --rm example-seed
+          curl --fail --silent --show-error "$EXAMPLE_URL/api/notas/1" | grep -q "carga inicial"
+      - name: Con --scale, nginx reparte entre las réplicas
+        run: |
+          docker compose up --detach --wait --scale example-api=3
+          # nginx vuelve a resolver el nombre de la API cada DNS_TTL (10 s).
+          sleep 12
+          for i in $(seq 1 30); do
+            curl --fail --silent --output /dev/null --header "X-Request-ID: reparto-$i" "$EXAMPLE_URL/api/notas/7"
+          done
+          docker compose logs example-api | grep '"appkit.access"' | grep '"reparto-' | awk '{print $1}' | sort | uniq -c | tee /tmp/reparto
+          test "$(wc -l < /tmp/reparto)" -eq 3
       - name: El perfil bench mide GiST contra su PostgreSQL
         run: |
           docker compose --profile bench run --rm bench python -m benchmarks.spatial_benchmark \
@@ -195,7 +250,7 @@ jobs:
             --dbname minigestor_bench --command "CREATE EXTENSION IF NOT EXISTS vector"
       - name: Registro de los servicios
         if: failure()
-        run: docker compose --profile bench logs
+        run: docker compose --profile example --profile bench logs
       - name: Apagar
         if: always()
-        run: docker compose --profile bench down --volumes
+        run: docker compose --profile example --profile bench down --volumes

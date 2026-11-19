@@ -11,6 +11,7 @@ sondear igual. Eso vive aquí y no copiado en cada app:
 | [`errors.py`](src/appkit/errors.py) | `ServiceError` y sus subclases; todo error responde `{error, kind, request_id}` |
 | [`engine.py`](src/appkit/engine.py) | el `AsyncClient` del gestor armado con la configuración; la dependencia `Engine` |
 | [`health.py`](src/appkit/health.py) | `/health` y `/ready`, que pregunta al gestor y guarda la respuesta unos segundos |
+| [`cache.py`](src/appkit/cache.py) | `OptionalRedis`: la caché en Redis de la que el servicio puede prescindir (*fail-open*) |
 | [`migrations.py`](src/appkit/migrations.py) | migraciones repetibles al arrancar |
 | [`service.py`](src/appkit/service.py) | `create_service_app`: la aplicación FastAPI con todo lo anterior puesto |
 | [`download.py`](src/appkit/download.py) | descargas verificadas de modelos y datasets (ver [`apps/README.md`](../README.md)) |
@@ -146,6 +147,30 @@ Toda respuesta de error es `{"error": "…", "kind": "…", "request_id": "…"}
   las réplicas no se vuelven una consulta al gestor cada una.
 
 Son los mismos nombres que usa el gestor y que consulta el kit web (`apps/web-kit`).
+
+Si una pieza opcional del servicio falta —las que recibe `create_service_app(...,
+degradables=[...])`, como su caché—, las dos respuestas lo dicen sin cambiar su estado, porque
+el servicio sigue atendiendo: `{"status": "ok", "version": "…", "degraded": {"redis": "sin
+caché: Redis no responde (…)"}}`.
+
+## Caché en Redis
+
+`OptionalRedis` es el Redis de una réplica que el servicio puede perder sin dejar de
+responder. `redis_factory(url, timeout_seconds)` crea clientes sin reintentos y con un plazo
+corto: si Redis se cae, una petición no espera más que ese plazo. Quien la usa pide
+`client()` —`None` si no hay caché o si falló hace poco—, atrapa `RedisError` y avisa con
+`failed(error)` o `succeeded()`:
+
+- el primer fallo de una racha va al log una sola vez (`WARNING`) y abre una ventana de
+  `retry_seconds` en la que `client()` da `None`, para no pagar el plazo en cada petición;
+- pasada la ventana se vuelve a probar, y al responder se avisa que volvió (`INFO`);
+- mientras tanto, `degradation()` da el motivo que muestran `/health` y `/ready`.
+
+Sin URL configurada el servicio corre sin caché y no está degradado: es su configuración. El
+cliente se abre con `async with cache.connected():` en el `lifespan` del servicio, porque
+queda atado al bucle de eventos que lo usa. Lo usa el reconocimiento en vivo de rostros
+([`faces`](../faces/README.md)); los tests lo prueban con `fakeredis` y con un puerto donde
+no escucha nadie.
 
 ## Migraciones
 

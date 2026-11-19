@@ -11,9 +11,10 @@ from __future__ import annotations
 
 import asyncio
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from http import HTTPStatus
+from typing import Any, Protocol
 
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
@@ -24,6 +25,17 @@ from minigestor_client import AsyncClient, MinigestorError
 READY = "ready"
 UNAVAILABLE = "unavailable"
 ENGINE_NOT_READY = "el gestor responde que no está listo"
+DEGRADED_FIELD = "degraded"
+
+
+class Degradable(Protocol):
+    """Una pieza de la que el servicio puede prescindir, como su caché: sin ella sigue
+    atendiendo, pero las sondas lo dicen."""
+
+    name: str
+
+    def degradation(self) -> str | None:
+        """Por qué el servicio corre sin esta pieza, o `None` si la tiene."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -70,19 +82,35 @@ class ReadinessProbe:
         return Readiness(True) if ready else Readiness(False, ENGINE_NOT_READY)
 
 
-def add_probes(app: FastAPI, version: str, readiness: Callable[[], ReadinessProbe]) -> None:
-    """Las rutas `/health` y `/ready`; `readiness` da la sonda, que existe desde el arranque."""
+def add_probes(
+    app: FastAPI,
+    version: str,
+    readiness: Callable[[], ReadinessProbe],
+    degradables: Sequence[Degradable] = (),
+) -> None:
+    """Las rutas `/health` y `/ready`; `readiness` da la sonda, que existe desde el arranque.
+    Si alguna de `degradables` falta, las dos respuestas lo dicen en `degraded` sin cambiar
+    su estado: el servicio sigue atendiendo."""
 
     @app.get(HEALTH_PATH, include_in_schema=False)
-    def health() -> dict[str, str]:
-        return {"status": "ok", "version": version}
+    def health() -> dict[str, Any]:
+        return {"status": "ok", "version": version, **_degradations(degradables)}
 
     @app.get(READY_PATH, include_in_schema=False)
     async def ready() -> JSONResponse:
         state = await readiness().check()
         if state.ready:
-            return JSONResponse({"status": READY})
+            return JSONResponse({"status": READY, **_degradations(degradables)})
         return JSONResponse(
             {"status": UNAVAILABLE, "reason": state.reason},
             status_code=HTTPStatus.SERVICE_UNAVAILABLE,
         )
+
+
+def _degradations(degradables: Sequence[Degradable]) -> dict[str, dict[str, str]]:
+    reasons = {
+        degradable.name: reason
+        for degradable in degradables
+        if (reason := degradable.degradation()) is not None
+    }
+    return {DEGRADED_FIELD: reasons} if reasons else {}

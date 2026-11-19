@@ -287,8 +287,15 @@ id,ruta,titulo,genero,artista
 - **Tres pistas de `fma_small` no tienen audio** (099134, 108925 y 133297 pesan menos de
   2 KB y no se pueden decodificar). Se descartan antes de elegir mirando el tamaño que
   anota el índice del `.zip`.
-- **Se reanuda.** Una pista que ya está en disco no se vuelve a pedir: cada una se escribe
-  aparte y se renombra al terminar, así que un corte no deja una a medias.
+- **Se reanuda y se verifica.** Una pista que ya está en disco con el tamaño y el CRC-32
+  que anota el índice del `.zip` no se vuelve a pedir; cada una se escribe aparte y se
+  renombra al terminar, así que un corte no deja una a medias, y `zipfile` comprueba el
+  CRC-32 de lo que llega.
+- **La lectura del FMA es del servicio de copyright** (`songcheck.fma`, en
+  [`apps/copyright/`](../apps/copyright/README.md)), que baja el catálogo entero: `tracks.csv`,
+  el índice del `.zip` y la descarga por rangos (`appkit.ranges`). Este guion solo elige el
+  subconjunto de la demo y escribe `canciones.csv`; las dos usan la misma carpeta
+  `pistas/`, así que lo que baja uno lo reutiliza el otro.
 - **La ruta** es la de `--salida` seguida de la de la pista, como en los datasets del
   experimento: relativa a la raíz del repositorio y dentro de `data/`.
 

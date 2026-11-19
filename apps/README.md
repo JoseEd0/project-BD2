@@ -10,6 +10,7 @@ propio puerto y con su propia identidad visual.
 apps/
   client/          minigestor_client: cliente tipado del API del gestor; openapi/engine.json
   kit/             appkit: configuración, logs, trazas, salud, errores, migraciones y descargas
+  copyright/       copyright en audio (opción C): catálogo de FMA indexado por tramos (`songcheck`)
   shop/            tienda con recomendaciones (opción B): dataset, catálogo en el gestor y CLIP
   rag/             RAG sobre papers (opción A): por ahora, el corpus de arXiv y sus fragmentos
   faces/           rostros (opción D): YuNet y SFace; API de registro, reconocimiento y borrado
@@ -24,7 +25,7 @@ apps/
 
 | Aplicación | Carpeta | Contenedores | HTTP / HTTPS | En el compose |
 |---|---|---|---|---|
-| Copyright en audio | `apps/copyright/` | `copyright-api`, `copyright-web` | 8101 / 8401 | pendiente: sin API todavía |
+| Copyright en audio | `apps/copyright/` | `copyright-api`, `copyright-web` | 8101 / 8401 | sí; la interfaz es la plantilla hasta #78 |
 | Tienda con recomendaciones | `apps/shop/` | `shop-api`, `shop-web` | 8102 / 8402 | sí; la interfaz es la plantilla hasta #83 |
 | Preguntas a papers (RAG) | `apps/rag/` | `papers-api`, `papers-web` | 8103 / 8403 | pendiente: sin API todavía |
 | Reconocimiento de rostros | `apps/faces/` | `faces-api`, `faces-web` | 8104 / 8404 | sí; la interfaz es la plantilla hasta #93 |
@@ -168,6 +169,12 @@ SHA-256 y su tamaño en un `appkit.download.RemoteFile` y lo baja con `fetch_ver
 - si el archivo ya está y su suma coincide, no se baja nada, así que el mismo comando sirve
   para la CI, la construcción de una imagen y una máquina de desarrollo.
 
+Un dataset que viene dentro de un `.zip` enorme del que solo hacen falta unos miembros se
+lee por rangos con `appkit.ranges` (`HttpRangeSource` y `RangeReader`): `zipfile` lee el
+índice del final y después solo los miembros pedidos, y los verifica con el CRC-32 que anota
+el índice. Así baja el servicio de copyright las 8 000 pistas de FMA
+([`copyright/README.md`](copyright/README.md)).
+
 ## Entorno
 
 ```bash
@@ -176,7 +183,8 @@ uv run pytest apps -q           # solo los tests de los servicios
 ```
 
 Los datos de cada servicio se bajan con su propio comando a la carpeta de datasets, que
-nunca se versiona; el de la tienda está en [`shop/README.md`](shop/README.md).
+nunca se versiona; el de la tienda está en [`shop/README.md`](shop/README.md) y el de
+copyright en [`copyright/README.md`](copyright/README.md).
 
 Los tests de [`faces/`](faces/README.md) y de [`shop/`](shop/README.md) que corren modelos
 los buscan en `FACES_MODELS_DIR` y `SHOP_MODELS_DIR`; sin la variable se saltan, y la CI la

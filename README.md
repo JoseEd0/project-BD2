@@ -140,15 +140,23 @@ apps/                servicios de la Parte 5, que usan el gestor solo por su API
   rag/               RAG sobre papers (opción A): corpus de arXiv con texto por página
   faces/             reconocimiento facial: YuNet, alineación con cinco puntos, SFace y LFW
   web-kit/           lógica sin estilos que comparten las interfaces de las aplicaciones
-    template/        plantilla de la interfaz de cada app: React + TypeScript, Docker y nginx
+    template/        plantilla de la interfaz de cada app: React + TypeScript
+    docker/          imagen común de las interfaces: build y nginx con CSP, HTTPS y límites
   <app>/web/         la interfaz de cada aplicación, con su propio puerto y diseño
 tools/               herramientas de desarrollo: exportar cada contrato OpenAPI junto a quien
                      lo consume
 docs/                informe.pdf y su fuente LaTeX
 Dockerfile           imagen del motor con su API
-compose.yaml         la aplicación completa en contenedores: api, web y la carga de la demo;
-                     en el perfil bench, PostgreSQL con PostGIS y pgvector para los experimentos
-deploy/postgres/     imagen de PostgreSQL con PostGIS y pgvector contra la que se miden GiST,
+compose.yaml         el sistema en contenedores: gestor en red interna, consola, Redis, la
+                     carga de la demo y el compose de cada app (`include`); en el perfil bench,
+                     PostgreSQL con PostGIS y pgvector para los experimentos
+deploy/
+  service/           imagen del API de cualquier aplicación (uv, sin privilegios, solo lectura)
+  app.compose.yaml   lo común de los servicios de cada app, que extiende su compose
+  example/           el servicio de ejemplo del kit montado como una app (perfil example)
+  compose.dev.yaml   publica el gestor en :8000 para desarrollar
+  certs.sh           certificado local para el HTTPS de cada app
+  postgres/          imagen de PostgreSQL con PostGIS y pgvector contra la que se miden GiST,
                      GIN, ivfflat y hnsw
 pyproject.toml       el gestor y el espacio de trabajo de uv; uv.lock fija las versiones
 ```
@@ -208,40 +216,76 @@ cd project-BD2
 docker compose up --build
 ```
 
-La primera vez construye las dos imágenes y carga el dataset de demostración, que tarda
-menos de un minuto. Después quedan:
+La primera vez construye las imágenes y carga el dataset de demostración, que tarda menos
+de un minuto. Después queda la consola del gestor en http://localhost:8080.
 
-| Qué | Dónde |
-|---|---|
-| la interfaz | http://localhost:8080 |
-| el API y su documentación interactiva | http://localhost:8000/docs |
+`docker compose ps` muestra el sistema tal como es:
 
-Los servicios de [`compose.yaml`](compose.yaml):
+| Contenedor | Red | Puerto en el anfitrión | Qué es |
+|---|---|---|---|
+| `engine` | `data` (interna) | ninguno | el gestor ([`Dockerfile`](Dockerfile)): la única réplica con estado, con su volumen |
+| `console` | `data`, `console` | `8080` | la consola de las Partes 1 a 4 ([`frontend/Dockerfile`](frontend/Dockerfile)), con `/api` reenviado al gestor |
+| `redis` | `cache` (interna) | ninguno | la caché de las aplicaciones, sin disco |
+| `demo` | `data` | — | carga la demo con `--solo-si-vacia` y termina |
+| `<app>-api` | `data`, `<app>` | ninguno | el API de cada aplicación; escala con `--scale` |
+| `<app>-web` | `<app>` | `810x` y `840x` | su interfaz: nginx que reenvía `/api` solo a su API |
 
-- **`demo`** carga el dataset con `demos/poblar_ecommerce.py --solo-si-vacia` y termina. Si
-  el volumen ya tiene una base, no hace nada, así que la demo se carga una sola vez.
-- **`api`** es el motor con su API ([`Dockerfile`](Dockerfile)). Arranca cuando `demo`
-  terminó bien.
-- **`web`** es la interfaz compilada y servida por nginx
-  ([`frontend/Dockerfile`](frontend/Dockerfile)). Reenvía `/api/` al motor, así que el
-  navegador habla con un solo origen. Arranca cuando el API responde a `/health`.
+Cada aplicación de la Parte 5 tiene su compose (`apps/<app>/compose.yaml`), incluido desde
+[`compose.yaml`](compose.yaml); cómo se conecta una está en
+[`apps/README.md`](apps/README.md#desplegar-una-app). Ninguna tiene su API todavía, así que
+la topología se prueba con el **servicio de ejemplo** del kit, montado igual que una app
+(`--profile example`, en `:8100` y `:8400`).
 
-La base vive en el volumen `minigestor-data` y sobrevive a los reinicios. Las tablas que
-se crean o se cargan desde la interfaz también quedan ahí.
-
-```bash
-docker compose up -d --build      # en segundo plano
-docker compose logs -f api        # el registro del API
-docker compose down               # apagar; la base se conserva
-docker compose down -v            # apagar y borrar la base: el próximo arranque recarga la demo
-```
-
-Si los puertos 8080 u 8000 están ocupados, se cambian con `MINIGESTOR_WEB_PORT` y
-`MINIGESTOR_API_PORT`, en la línea de comandos o en un `.env` junto a `compose.yaml`:
+**El gestor ya no publica el puerto 8000**: está en una red interna y solo la consola y las
+API de las aplicaciones llegan a él. Para desarrollar con el API en el anfitrión (`npm run
+dev` de la consola, `/docs`), se suma [`deploy/compose.dev.yaml`](deploy/compose.dev.yaml):
 
 ```bash
-MINIGESTOR_WEB_PORT=9080 MINIGESTOR_API_PORT=9000 docker compose up
+docker compose -f compose.yaml -f deploy/compose.dev.yaml up   # el gestor en :8000
 ```
+
+**Claves.** Sin `.env`, el gestor queda abierto, como antes. Para un despliegue, cada
+servicio recibe su clave y su rol en el gestor (la consola `admin`; cada app `write` para
+atender y `admin` solo para migrar):
+
+```bash
+python3 -m tools.compose_keys                 # crea o completa las claves en .env
+```
+
+**HTTPS para el celular.** La cámara y el micrófono solo funcionan en un origen seguro, y
+`localhost` lo es solo en el mismo equipo. Cada `<app>-web` sirve además por HTTPS en su
+puerto paralelo (`8101` → `8401`, …, `8104` → `8404`) si encuentra un certificado:
+
+```bash
+deploy/certs.sh                               # data/certs/: localhost, el equipo y sus IP
+docker compose up -d                          # https://<ip del equipo>:8404 desde el celular
+```
+
+Con [mkcert](https://github.com/FiloSottile/mkcert) instalado el certificado lo firma su CA
+local (instalada en el celular, no hay aviso); sin él, es autofirmado y el navegador pide
+aceptarlo una vez. Para probar desde cualquier red, el perfil `tunnel` da a cada web una URL
+HTTPS pública y temporal (Cloudflare Quick Tunnel), que sale en su log:
+
+```bash
+docker compose --profile tunnel up -d
+docker compose logs faces-tunnel | grep trycloudflare.com
+```
+
+```bash
+docker compose up -d --build                  # en segundo plano
+docker compose --profile example up -d        # más el servicio de ejemplo
+docker compose up -d --scale example-api=3    # tres réplicas detrás de su nginx
+docker compose run --rm <app>-seed            # la carga inicial de una app (perfil seed)
+docker compose logs -f engine                 # el registro del gestor
+docker compose down                           # apagar; la base se conserva
+docker compose down -v                        # apagar y borrar la base: el próximo arranque recarga la demo
+```
+
+Una petición se sigue por su `X-Request-ID` en `docker compose logs`: la línea del nginx de
+la app dice qué réplica respondió (`upstream`), y la del API y la del gestor llevan el mismo
+id. Si un puerto está ocupado se cambia con su variable (`MINIGESTOR_WEB_PORT=9080 docker
+compose up`); esas, los topes de memoria y cada variable de cada servicio están en
+[`.env.example`](.env.example).
 
 Para desarrollar (tests, recarga en caliente de la interfaz, los experimentos) se instala
 en local, como sigue.
@@ -409,7 +453,7 @@ están en [`.env.example`](.env.example); las de la interfaz, en
 | `FACES_MODELS_DIR` | carpeta de los modelos YuNet y SFace del servicio de rostros y de sus tests | — |
 | `BENCH_POSTGRES_DSN` | conexión al PostgreSQL contra el que se mide GiST | — |
 | `MINIGESTOR_WEB_PORT` | puerto de la interfaz con Docker | `8080` |
-| `MINIGESTOR_API_PORT` | puerto del API con Docker | `8000` |
+| `MINIGESTOR_API_PORT` | puerto del API con Docker y `deploy/compose.dev.yaml` | `8000` |
 | `SHOP_DATA_DIR` | carpeta de datasets de `python -m shop.dataset` si no se da `--data-dir` | — |
 | `MINIGESTOR_DATASETS_DIR` | carpeta de datos que el perfil `bench` monta como `data/datasets/` | `./data/datasets` |
 | `RAG_DATA_DIR` | carpeta donde el corpus del RAG deja `rag_papers/` sin `--data-dir` | — |
@@ -448,9 +492,12 @@ uv run python -m tools.export_openapi         # contratos OpenAPI al día (sin d
 Lo mismo corre en GitHub Actions ([`.github/workflows/ci.yml`](.github/workflows/ci.yml))
 en cada pull request y en cada cambio de `main`, con Python 3.11 y 3.12. Los tests que
 necesitan PostgreSQL o los extras de gráficas se saltan solos cuando no están. La CI
-levanta además la aplicación con `docker compose`: construye las dos imágenes, espera a que
-la demo se cargue y el API y la interfaz estén sanos, y hace una búsqueda de texto a través
-de nginx.
+levanta además el sistema con `docker compose`, con claves y certificado: espera a que la
+demo se cargue y todo esté sano, hace una búsqueda de texto por la consola y, con el servicio
+de ejemplo, comprueba que el gestor no se alcanza desde el anfitrión ni sin clave, que una
+nota se escribe y se lee por HTTP y HTTPS con el mismo `X-Request-ID` en el nginx, el API y
+el gestor, las cabeceras y los límites del nginx, que la carga inicial es idempotente y que
+con `--scale example-api=3` las peticiones se reparten entre las tres réplicas.
 Otro trabajo, el de las interfaces de las aplicaciones, vuelve a exportar los contratos
 OpenAPI y a generar los tipos de cada interfaz, y falla si no coinciden con los versionados;
 después prueba el kit y, para la plantilla y cada `apps/*/web`, construye, corre sus tests y

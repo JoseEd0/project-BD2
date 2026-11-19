@@ -8,11 +8,13 @@ from rag_llm_fakes import hit, sources
 from rag.prompt import (
     CHARACTERS_PER_TOKEN,
     SYSTEM_INSTRUCTIONS,
+    TRUNCATION_MARK,
     Source,
     build_prompt,
     estimated_tokens,
     render_document,
     select_sources,
+    truncated_passage,
 )
 
 INJECTION = (
@@ -75,23 +77,50 @@ def test_the_token_estimate_rounds_up():
     assert estimated_tokens("x" * int(CHARACTERS_PER_TOKEN * 10)) == 10
 
 
+NO_CAP = 100_000
+
+
 def test_no_hits_select_no_sources():
-    assert select_sources([], context_tokens=1000) == []
+    assert select_sources([], context_tokens=1000, passage_tokens=NO_CAP) == []
 
 
-def test_sources_keep_the_ranking_and_stop_at_the_first_that_does_not_fit():
+def test_a_source_that_does_not_fit_is_skipped_and_the_next_ones_still_enter():
     hits = [hit("a" * 300, rank=1), hit("b" * 3000, rank=2), hit("c" * 30, rank=3)]
     first_cost = estimated_tokens(render_document(Source(1, hits[0])))
-    selected = select_sources(hits, context_tokens=first_cost + 100)
-    assert [source.hit.rank for source in selected] == [1]
-    assert [source.n for source in selected] == [1]
+    selected = select_sources(hits, context_tokens=first_cost + 100, passage_tokens=NO_CAP)
+    assert [source.hit.rank for source in selected] == [1, 3]
+    assert [source.n for source in selected] == [1, 2]
+
+
+def test_an_oversized_first_chunk_does_not_leave_the_prompt_without_documents():
+    table = "| 0.91 | 0.87 | 0.42 |" * 1200
+    hits = [hit(table, rank=1), *(hit(f"passage {rank}", rank=rank) for rank in range(2, 5))]
+    selected = select_sources(hits, context_tokens=6000, passage_tokens=NO_CAP)
+    assert [source.hit.rank for source in selected] == [2, 3, 4]
+
+
+def test_an_oversized_chunk_is_cut_to_its_share_and_keeps_its_rank():
+    table = "row 0.91 0.87 0.42 " * 1200
+    hits = [hit(table, rank=1), hit("passage two", rank=2)]
+    first, second = select_sources(hits, context_tokens=6000, passage_tokens=1000)
+    assert (first.n, first.hit.rank, second.hit.rank) == (1, 1, 2)
+    assert first.hit.text.endswith(TRUNCATION_MARK)
+    assert table.startswith(first.hit.text.removesuffix(TRUNCATION_MARK))
+    assert estimated_tokens(first.hit.text) <= 1000
+    assert second.hit.text == "passage two"
+
+
+def test_a_passage_within_its_share_is_not_cut():
+    short = hit("A B+ tree links its leaves.")
+    assert truncated_passage(short, passage_tokens=1000) is short
 
 
 def test_every_source_fits_with_room_to_spare():
     hits = [hit(f"passage {rank}", rank=rank) for rank in range(1, 5)]
-    selected = select_sources(hits, context_tokens=10_000)
+    selected = select_sources(hits, context_tokens=10_000, passage_tokens=NO_CAP)
     assert [source.n for source in selected] == [1, 2, 3, 4]
 
 
-def test_a_budget_smaller_than_the_first_source_selects_nothing():
-    assert select_sources([hit("long passage " * 50)], context_tokens=1) == []
+def test_a_budget_smaller_than_every_source_selects_nothing():
+    selected = select_sources([hit("long passage " * 50)], context_tokens=1, passage_tokens=NO_CAP)
+    assert selected == []

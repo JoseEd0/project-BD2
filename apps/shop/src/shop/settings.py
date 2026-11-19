@@ -49,6 +49,20 @@ DEFAULT_CACHE_TTL_SECONDS = 600
 # Una caché que tarda más que esto deja de ahorrar: se responde sin ella.
 DEFAULT_REDIS_TIMEOUT_SECONDS = 0.25
 DEFAULT_CACHE_RETRY_SECONDS = 5.0
+# Un vecino de CLIP no sabe de departamentos ni de precios: con un filtro se piden diez veces
+# más y se filtran las fichas, así que un filtro que deja uno de cada diez aún llena la lista.
+DEFAULT_FILTERED_SEARCH_FACTOR = 10
+# Una foto de un celular pesa de 2 a 6 MB; la interfaz la reduce antes de subirla.
+DEFAULT_PHOTO_MAX_BYTES = 8 * 1024 * 1024
+# 40 megapíxeles: más que cualquier cámara de celular, y una «bomba» de descompresión no
+# llega a decodificarse.
+DEFAULT_PHOTO_MAX_PIXELS = 40_000_000
+# Las fotos se llaman como el SHA-256 de sus bytes: no cambian, solo una nueva carga podría
+# darle otra foto a un producto.
+DEFAULT_PHOTO_CACHE_SECONDS = 86_400
+DEFAULT_FEATURED_USERS = 12
+# Por debajo quedan las promociones colgadas del árbol de categorías («Prime Card Bonus»).
+DEFAULT_DEPARTMENT_MIN_PRODUCTS = 20
 # Un par comprado por un solo cliente es casi siempre casualidad; con 2, la tabla baja de
 # 4,7 millones de pares a 406 668 (medido en el dataset).
 DEFAULT_COPURCHASE_MIN_SUPPORT = 2
@@ -79,6 +93,14 @@ class ShopSettings(ServiceSettings):
         cache_ttl_seconds: cuánto vale una respuesta guardada.
         redis_timeout_seconds: plazo de conectar y de cada operación con Redis.
         cache_retry_seconds: tras un fallo de Redis, cuánto se responde sin probarlo.
+        data_dir: carpeta de datasets vista desde el API, para servir las fotos de
+            `<data_dir>/amazon_musical_instruments/images/`; sin ella, no hay fotos.
+        filtered_search_factor: cuántas veces más vecinos de CLIP se piden con un filtro.
+        photo_max_bytes: lo más que pesa una foto subida para buscar.
+        photo_max_pixels: lo más que mide una foto subida, en píxeles.
+        photo_cache_seconds: cuánto guarda el navegador la foto de un producto.
+        featured_users: usuarios que se ofrecen para «recomendado para ti».
+        department_min_products: productos que necesita un departamento para listarse.
     """
 
     model_config = SettingsConfigDict(env_prefix=ENV_PREFIX, frozen=True, extra="ignore")
@@ -101,6 +123,20 @@ class ShopSettings(ServiceSettings):
     cache_ttl_seconds: int = Field(default=DEFAULT_CACHE_TTL_SECONDS, ge=1)
     redis_timeout_seconds: float = Field(default=DEFAULT_REDIS_TIMEOUT_SECONDS, gt=0)
     cache_retry_seconds: float = Field(default=DEFAULT_CACHE_RETRY_SECONDS, ge=0)
+    data_dir: Path | None = None
+    filtered_search_factor: int = Field(default=DEFAULT_FILTERED_SEARCH_FACTOR, ge=1)
+    photo_max_bytes: int = Field(default=DEFAULT_PHOTO_MAX_BYTES, ge=1)
+    photo_max_pixels: int = Field(default=DEFAULT_PHOTO_MAX_PIXELS, ge=1)
+    photo_cache_seconds: int = Field(default=DEFAULT_PHOTO_CACHE_SECONDS, ge=0)
+    featured_users: int = Field(default=DEFAULT_FEATURED_USERS, ge=1)
+    department_min_products: int = Field(default=DEFAULT_DEPARTMENT_MIN_PRODUCTS, ge=1)
+
+    @property
+    def photos_root(self) -> Path | None:
+        """La carpeta del dataset, de la que cuelga `images/`; `None` sin `data_dir`."""
+        if self.data_dir is None:
+            return None
+        return self.data_dir / DATASET_DIRECTORY
 
     def fusion_weights(self) -> FusionWeights:
         return FusionWeights(

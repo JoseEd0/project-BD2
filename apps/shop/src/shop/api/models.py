@@ -50,6 +50,26 @@ class NearbyStore(BaseModel):
     metros: float
 
 
+class StoreWithStock(NearbyStore):
+    """Una tienda que tiene el producto, con cuántas unidades."""
+
+    unidades: int
+
+
+class Department(BaseModel):
+    """Un departamento del catálogo con cuántos productos tiene."""
+
+    departamento: str
+    productos: int
+
+
+class Customer(BaseModel):
+    """Un usuario del dataset con cuántas compras tiene."""
+
+    id: str
+    compras: int
+
+
 class SignalQuery(BaseModel):
     """Una señal tal como corrió: el SQL exacto, sus parámetros (un vector, por su dimensión),
     cuántos candidatos dio y los milisegundos que tardó."""

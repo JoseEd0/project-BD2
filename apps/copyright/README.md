@@ -224,14 +224,19 @@ idea de Shazam y de Content ID). Por cada canción candidata:
   ventanas ya no votan por otro desfase de la misma canción y se sigue con el siguiente. Una
   subida de una sola ventana pide rachas de una.
 
-**Puntaje = similitud media de la racha × cobertura**, y la cobertura es la fracción de las
-ventanas que las dos grabaciones podían compartir: `ventanas de la racha / min(ventanas
-audibles de la subida, ventanas del original)`. Dividir solo por la subida castigaría un
-sample de 10 s dentro de una canción de 3 min, justo lo que se busca; dividir solo por el
-original, un fragmento corto de un original largo. Con el mínimo, una copia que cubre todo
-lo que podía cubrir vale 1 sea la subida más larga o más corta que el original. Todo es puro
-y determinista: el orden de los vecinos no cambia la respuesta y los empates se rompen por
-similitud, desfase, canción y posición.
+**Puntaje = evidencia de largo × evidencia de parecido** (#146). La de largo son las
+ventanas de la racha sobre 7 (`FULL_EVIDENCE_WINDOWS`: una copia de 20 s), a lo sumo 1; la de
+parecido, la similitud media de la racha llevada de [0,85, 1] a [0, 1] (`SIMILARITY_FLOOR`:
+por debajo de 0,85, una racha es lo que dan dos canciones distintas del FMA). Así, una racha
+de 10 s con similitud 0,93 vale 3/7 × 0,53 = 0,23. El puntaje no depende de cuánto duran la
+subida ni el original: un sample de 15 s vale lo mismo solo que dentro de un remix de tres
+canciones. Hasta #146 era similitud media × **cobertura** (`ventanas de la racha /
+min(ventanas audibles de la subida, ventanas del original)`), que la respuesta sigue
+informando: la evaluación midió que, al dividir cada racha por todo lo que las dos
+grabaciones podían compartir, dejaba bajo el umbral la mayoría de los fragmentos de los
+remixes de dos y tres canciones ([abajo](#evaluación)). Todo es puro y determinista: el orden
+de los vecinos no cambia la respuesta y los empates se rompen por similitud, desfase, canción
+y posición.
 
 ### La respuesta
 
@@ -241,13 +246,13 @@ Su forma, con valores de ejemplo:
 {
   "format": "MP3", "duration_seconds": 180.0, "sample_rate": 44100, "channels": 2,
   "window_seconds": 5.0, "hop_seconds": 2.5, "windows": 71, "silent_windows": 0,
-  "threshold": 0.43, "detected": true,
+  "threshold": 0.21, "detected": true,
   "matches": [{
     "song": {"id": 2, "title": "Food", "artist": "AWOL"},
     "upload": {"start_seconds": 60.0, "end_seconds": 87.5},
     "original": {"start_seconds": 0.0, "end_seconds": 27.5},
     "offset_seconds": 60.0, "windows": 10, "mean_similarity": 0.997,
-    "coverage": 1.0, "score": 0.997, "above_threshold": true
+    "coverage": 1.0, "score": 0.98, "above_threshold": true
   }],
   "engine_timings": {"decode_ms": 128.0, "extraction_ms": 160.4, "search_ms": 1.5}
 }
@@ -274,16 +279,19 @@ las ventanas a la vez), `voting` y `songs`.
 | `MAX_UPLOAD_SECONDS` | el audio más largo | 600 s: 239 ventanas, dentro de las 256 del gestor |
 | `NEIGHBOURS_PER_WINDOW` | tramos que se piden por ventana | 10 |
 | `MIN_RUN_WINDOWS` | ventanas seguidas que hacen una coincidencia | 2 |
-| `MATCH_THRESHOLD` | puntaje desde el que una coincidencia es copia | 0,43, de la curva ROC (abajo) |
+| `MATCH_THRESHOLD` | puntaje desde el que una coincidencia es copia | 0,21, de la curva ROC (abajo) |
 | `MAX_MATCHES` | coincidencias que se devuelven | 10 |
 | `SILENCE_THRESHOLD_DBFS` | nivel bajo el cual una ventana no vota | −60 |
 
 **El umbral sale de la evaluación**: es el de máxima J de Youden en la curva ROC de 400
-remixes sin distorsión ([abajo](#evaluación)). El de #76 era 0,45, de 20 casos de control.
+remixes sin distorsión ([abajo](#evaluación)). El de #76 era 0,45, de 20 casos de control, y
+con el puntaje por cobertura la evaluación lo dejó en 0,43; el puntaje de #146 mide otra
+cosa y su umbral es 0,21.
 
 ### Medido
 
-Medido el 19-11-2026 en el mismo equipo, con carga media de 4,9 a 5,1, contra una copia del
+Medido el 19-11-2026, con el puntaje por cobertura de #76, en el mismo equipo, con carga media
+de 4,9 a 5,1, contra una copia del
 gestor con el catálogo entero de la que se borraron 40 canciones para usarlas como pistas no
 catalogadas. El detalle está en el
 [§14 de `benchmarks/README.md`](../../benchmarks/README.md#14-detección-de-copyright--latencia-de-post-detections-y-casos-de-control)
@@ -316,37 +324,44 @@ y los datos crudos en
 Un conjunto de prueba generado con la verdad conocida (#77): 200 remixes de 1 a 3 fragmentos
 de 5 a 20 s de canciones del catálogo, pegados con fundidos de 1 s, y 200 iguales con
 canciones que se borraron del catálogo; cada uno sin distorsión y con 12 distorsiones por
-separado. Medido el 19-11-2026 contra una copia del gestor con 7 794 canciones, con la
-máquina cargada (carga media de 6,9 a 24,4). El detalle está en el
+separado. Medido el 19-11-2026 contra una copia del gestor con 7 794 canciones (carga media
+de 4,7 a 7,6), con otra semilla que la que sirvió para elegir el puntaje. El detalle está en
+el
 [§17 de `benchmarks/README.md`](../../benchmarks/README.md#17-evaluación-de-la-detección-de-copyright--remixes-con-la-verdad-conocida)
 y los datos crudos en
 [`benchmarks/results/copyright_evaluacion_casos.json`](../../benchmarks/results/copyright_evaluacion_casos.json).
 
 ![Precisión, recall y F1 por distorsión](../../benchmarks/figures/copyright-evaluacion-deteccion.png)
 
-| Versión (umbral 0,43) | Recall | Precisión | F1 | AUC |
-|---|---:|---:|---:|---:|
-| sin distorsión | 0,55 | 0,43 | 0,48 | 0,62 |
-| MP3 a 64 kbit/s | 0,54 | 0,42 | 0,47 | 0,59 |
-| volumen −1 / −3 / −12 dB | 0,47 / 0,11 / 0,00 | 0,37 / 0,11 / 0,00 | 0,41 / 0,11 / 0,00 | 0,55 / 0,17 / 0,01 |
-| ruido a 30 / 20 / 10 dB de SNR | 0,34 / 0,18 / 0,03 | 0,31 / 0,16 / 0,02 | 0,32 / 0,17 / 0,03 | 0,40 / 0,21 / 0,04 |
-| pasa bajos a 4 kHz | 0,01 | 0,01 | 0,01 | 0,02 |
-| tempo ±5 % | 0,08 | 0,08-0,09 | 0,08-0,09 | 0,13 |
-| tono ±1 semitono | 0,05-0,07 | 0,06-0,07 | 0,06-0,07 | 0,11 |
+| Sin distorsión | Puntaje por cobertura (#76) | Evidencia de la racha (#146) |
+|---|---:|---:|
+| umbral (máxima J de Youden) | 0,43 | 0,21 |
+| AUC | 0,62 | **0,79** |
+| recall / precisión / F1 | 0,55 / 0,43 / 0,48 | **0,71 / 0,54 / 0,61** |
+| recall con 1 / 2 / 3 fragmentos por remix | 1,00 / 0,58 / 0,36 | 0,73 / 0,75 / 0,67 |
 
-- **El umbral, 0,43**, encuentra el 55 % de los fragmentos copiados y da alguna coincidencia
-  en el 29 % de los remixes sin copias. Ningún umbral separa mucho mejor.
+| Versión (umbral 0,21) | Recall | Precisión | F1 | AUC |
+|---|---:|---:|---:|---:|
+| sin distorsión | 0,71 | 0,54 | 0,61 | 0,79 |
+| MP3 a 64 kbit/s | 0,67 | 0,54 | 0,60 | 0,78 |
+| volumen −1 / −3 / −12 dB | 0,50 / 0,06 / 0,00 | 0,47 / 0,09 / 0,00 | 0,48 / 0,07 / 0,00 | 0,68 / 0,25 / 0,09 |
+| ruido a 30 / 20 / 10 dB de SNR | 0,36 / 0,12 / 0,03 | 0,47 / 0,20 / 0,04 | 0,41 / 0,15 / 0,03 | 0,55 / 0,30 / 0,14 |
+| pasa bajos a 4 kHz | 0,03 | 0,01 | 0,02 | 0,07 |
+| tempo ±5 % | 0,05-0,06 | 0,07-0,09 | 0,06-0,07 | 0,22-0,23 |
+| tono ±1 semitono | 0,04 | 0,06-0,07 | 0,05-0,06 | 0,22 |
+
+- **El umbral, 0,21**, encuentra el 71 % de los fragmentos copiados y da alguna coincidencia
+  en el 23 % de los remixes sin copias.
+- **Ya no castiga los remixes de varios fragmentos**; lo que pierde son las copias de menos
+  de 7,5 s, que solo se detectaban solas en una subida de una ventana (recall 0,21 → 0,08),
+  donde también una subida corta sin copias puntuaba alto.
 - **Dónde falla: el nivel.** El descriptor (MFCC con su c0, la energía, cuantizado en una
-  bolsa de palabras) cambia con el volumen: −3 dB dejan el recall en 0,11 y −12 dB en 0. El
-  ruido, el pasa bajos, el tempo y el tono también lo rompen; el MP3 a 64 kbit/s no.
-- **El puntaje castiga los remixes de varios fragmentos.** La canción copiada aparece entre
-  las coincidencias en todos los fragmentos de 10 s o más, pero la cobertura los divide por
-  todo lo que podían compartir: el recall es 1,00 con un fragmento, 0,58 con dos y 0,36 con
-  tres. Contar las ventanas de la racha cuando su similitud es alta subiría el área bajo la
-  curva de 0,62 a 0,78 sobre las mismas coincidencias; queda propuesto, igual que quitar c0
-  del descriptor, que lo haría inmune al volumen.
-- **Cuando la encuentra, la ubica**: IoU mediana de 0,91 en la subida y 0,87 en el original.
-  Revisar un minuto de audio cuesta unos 180 ms.
+  bolsa de palabras) cambia con el volumen: −3 dB dejan el recall en 0,06 y −12 dB en 0. El
+  ruido, el pasa bajos, el tempo y el tono también lo rompen; el MP3 a 64 kbit/s no. Quitar
+  c0 del descriptor (o restar la media cepstral) lo haría inmune al volumen; es un cambio del
+  motor de la Parte 4 y queda como trabajo futuro.
+- **Cuando la encuentra, la ubica**: IoU mediana de 0,90 en la subida y 0,86 en el original.
+  Revisar un minuto de audio cuesta unos 170 ms.
 
 ## Docker
 

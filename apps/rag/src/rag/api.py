@@ -138,6 +138,9 @@ async def facets(engine: Engine) -> Facets:
 @router.post(
     "/answers",
     response_class=EventStreamResponse,
+    # La clase de la respuesta no declara su estado por omisión: sin él, FastAPI no puede
+    # escribir el contrato OpenAPI de la ruta.
+    status_code=HTTPStatus.OK,
     responses={HTTPStatus.OK.value: {"content": {EVENT_STREAM_MEDIA_TYPE: {}}}},
 )
 async def answers(

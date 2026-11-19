@@ -27,6 +27,8 @@ from api.main import create_app
 from config import EngineConfig
 from faces.api import create_app as create_faces_app
 from faces.api.settings import FacesSettings
+from rag.api import create_app as create_rag_app
+from rag.config import RagSettings
 from songcheck.api import build_app as build_copyright_app
 from songcheck.settings import CopyrightSettings
 
@@ -68,6 +70,16 @@ def faces_app() -> Iterator[FastAPI]:
     yield create_faces_app(settings)
 
 
+@contextmanager
+def rag_app() -> Iterator[FastAPI]:
+    """Sin arrancar, el servicio no abre el gestor ni carga sus modelos: la carpeta de
+    modelos no tiene que existir."""
+    settings = RagSettings.model_validate(
+        {"engine_url": UNUSED_ENGINE_URL, "engine_key": UNUSED_ENGINE_KEY, "models_dir": "modelos"}
+    )
+    yield create_rag_app(settings)
+
+
 AppFactory = Callable[[], AbstractContextManager[FastAPI]]
 
 
@@ -86,6 +98,7 @@ CONTRACTS: dict[str, Contract] = {
     "engine": Contract(engine_app, Path("apps/client/openapi/engine.json")),
     "copyright": Contract(copyright_app, Path("apps/copyright/web/openapi/copyright.json")),
     "faces": Contract(faces_app, Path("apps/faces/web/openapi/faces.json")),
+    "rag": Contract(rag_app, Path("apps/rag/web/openapi/rag.json")),
 }
 
 

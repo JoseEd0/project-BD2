@@ -1,0 +1,715 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "rag",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/search": {
+      "post": {
+        "summary": "Search",
+        "description": "Los `k` fragmentos más relevantes para `query`, con su paper, sus páginas y sus\npuntajes, de mejor a peor, solo de los papers que cumplen `filters`; y el SQL de cada\nconsulta que corrió en el gestor.",
+        "operationId": "search_search_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SearchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/facets": {
+      "get": {
+        "summary": "Facets",
+        "description": "Los años y las categorías primarias del corpus con cuántos papers tiene cada uno: los\nvalores que admiten los filtros de `/search` y `/answers`.",
+        "operationId": "facets_facets_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Facets"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/answers": {
+      "post": {
+        "summary": "Answers",
+        "description": "La respuesta a `question` en Server-Sent Events: `sources`, `delta`… y `done` (o\n`error`). Ver `rag.answering`. La búsqueda y el tope de gasto se resuelven antes de\nempezar: sus errores son respuestas JSON con su estado.",
+        "operationId": "answers_answers_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnswerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "text/event-stream": {}
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/papers/{paper_id}/pages/{page}": {
+      "get": {
+        "summary": "Paper Page",
+        "description": "La página `page` del documento: el paper, su total de páginas, los pasajes del corpus\nque caen en ella y la URL para abrir el archivo en esa página.",
+        "operationId": "paper_page_papers__paper_id__pages__page__get",
+        "parameters": [
+          {
+            "name": "paper_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._:/-]{1,64}$",
+              "title": "Paper Id"
+            }
+          },
+          {
+            "name": "page",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "title": "Page"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/papers/{paper_id}/file": {
+      "get": {
+        "summary": "Paper File",
+        "description": "El archivo del documento (PDF o Markdown) desde el corpus montado, con `Range`.",
+        "operationId": "paper_file_papers__paper_id__file_get",
+        "parameters": [
+          {
+            "name": "paper_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._:/-]{1,64}$",
+              "title": "Paper Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "206": {
+            "description": "el rango pedido con `Range`"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AnswerRequest": {
+        "properties": {
+          "question": {
+            "type": "string",
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Question"
+          },
+          "filters": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SearchFilters"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "question"
+        ],
+        "title": "AnswerRequest"
+      },
+      "CategoryFacet": {
+        "properties": {
+          "category": {
+            "type": "string",
+            "title": "Category"
+          },
+          "papers": {
+            "type": "integer",
+            "title": "Papers"
+          }
+        },
+        "type": "object",
+        "required": [
+          "category",
+          "papers"
+        ],
+        "title": "CategoryFacet"
+      },
+      "ExecutedQuery": {
+        "properties": {
+          "stage": {
+            "type": "string",
+            "title": "Stage"
+          },
+          "sql": {
+            "type": "string",
+            "title": "Sql"
+          },
+          "parameters": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Parameters"
+          }
+        },
+        "type": "object",
+        "required": [
+          "stage",
+          "sql",
+          "parameters"
+        ],
+        "title": "ExecutedQuery",
+        "description": "Una consulta que la búsqueda corrió en el gestor: la etapa, su SQL con parámetros\n`$n` y cada parámetro como se muestra (JSON; un embedding, como `VECTOR(384)`)."
+      },
+      "Facets": {
+        "properties": {
+          "years": {
+            "items": {
+              "$ref": "#/components/schemas/YearFacet"
+            },
+            "type": "array",
+            "title": "Years"
+          },
+          "categories": {
+            "items": {
+              "$ref": "#/components/schemas/CategoryFacet"
+            },
+            "type": "array",
+            "title": "Categories"
+          }
+        },
+        "type": "object",
+        "required": [
+          "years",
+          "categories"
+        ],
+        "title": "Facets",
+        "description": "Los años (sin los documentos que no tienen uno) y las categorías primarias, en orden."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "ModeScore": {
+        "properties": {
+          "rank": {
+            "type": "integer",
+            "title": "Rank"
+          },
+          "score": {
+            "type": "number",
+            "title": "Score"
+          }
+        },
+        "type": "object",
+        "required": [
+          "rank",
+          "score"
+        ],
+        "title": "ModeScore",
+        "description": "El puesto (desde 1) y el puntaje de un fragmento en la lista de un método: BM25, o\nel coseno de los embeddings."
+      },
+      "PageResponse": {
+        "properties": {
+          "paper": {
+            "$ref": "#/components/schemas/Paper"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "pages": {
+            "type": "integer",
+            "title": "Pages"
+          },
+          "file_url": {
+            "type": "string",
+            "title": "File Url"
+          },
+          "viewer_url": {
+            "type": "string",
+            "title": "Viewer Url"
+          },
+          "passages": {
+            "items": {
+              "$ref": "#/components/schemas/Passage"
+            },
+            "type": "array",
+            "title": "Passages"
+          }
+        },
+        "type": "object",
+        "required": [
+          "paper",
+          "page",
+          "pages",
+          "file_url",
+          "viewer_url",
+          "passages"
+        ],
+        "title": "PageResponse",
+        "description": "Una página de un documento: el paper, el total de páginas (secciones en un Markdown),\nel archivo y la URL para abrirlo en esa página (relativas a la raíz del API) y los\npasajes que caen en ella."
+      },
+      "Paper": {
+        "properties": {
+          "paper_id": {
+            "type": "string",
+            "title": "Paper Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "authors": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Authors"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "file_path": {
+            "type": "string",
+            "title": "File Path"
+          },
+          "media_type": {
+            "type": "string",
+            "title": "Media Type"
+          },
+          "license": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "License"
+          }
+        },
+        "type": "object",
+        "required": [
+          "paper_id",
+          "title",
+          "authors",
+          "year",
+          "url",
+          "file_path",
+          "media_type",
+          "license"
+        ],
+        "title": "Paper",
+        "description": "El documento de un fragmento, lo que necesita una cita."
+      },
+      "Passage": {
+        "properties": {
+          "chunk_id": {
+            "type": "string",
+            "title": "Chunk Id"
+          },
+          "ordinal": {
+            "type": "integer",
+            "title": "Ordinal"
+          },
+          "page_start": {
+            "type": "integer",
+            "title": "Page Start"
+          },
+          "page_end": {
+            "type": "integer",
+            "title": "Page End"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          }
+        },
+        "type": "object",
+        "required": [
+          "chunk_id",
+          "ordinal",
+          "page_start",
+          "page_end",
+          "text"
+        ],
+        "title": "Passage",
+        "description": "Un fragmento del corpus que empieza, termina o pasa por la página pedida."
+      },
+      "SearchFilters": {
+        "properties": {
+          "year_from": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 2100.0,
+                "minimum": 1900.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year From"
+          },
+          "year_to": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 2100.0,
+                "minimum": 1900.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year To"
+          },
+          "categories": {
+            "items": {
+              "type": "string",
+              "maxLength": 32,
+              "minLength": 1
+            },
+            "type": "array",
+            "maxItems": 16,
+            "title": "Categories",
+            "default": []
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "SearchFilters",
+        "description": "Los papers que pueden aportar fragmentos: publicados entre `year_from` y `year_to`\n(ambos incluidos; un documento sin año queda fuera si se pide alguno) y de alguna de las\n`categories` (la categoría primaria). Un campo vacío no filtra; uno desconocido es un\nerror, para que un filtro mal escrito no busque en todo el corpus."
+      },
+      "SearchHit": {
+        "properties": {
+          "rank": {
+            "type": "integer",
+            "title": "Rank"
+          },
+          "chunk_id": {
+            "type": "string",
+            "title": "Chunk Id"
+          },
+          "paper": {
+            "$ref": "#/components/schemas/Paper"
+          },
+          "page_start": {
+            "type": "integer",
+            "title": "Page Start"
+          },
+          "page_end": {
+            "type": "integer",
+            "title": "Page End"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "score": {
+            "type": "number",
+            "title": "Score"
+          },
+          "bm25": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModeScore"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "vector": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModeScore"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "rank",
+          "chunk_id",
+          "paper",
+          "page_start",
+          "page_end",
+          "text",
+          "score",
+          "bm25",
+          "vector"
+        ],
+        "title": "SearchHit",
+        "description": "Un fragmento recuperado. `score` es el del modo pedido (BM25, coseno o RRF); `bm25`\ny `vector` dicen cómo lo vio cada método, o `None` si no lo trajo."
+      },
+      "SearchMode": {
+        "type": "string",
+        "enum": [
+          "bm25",
+          "vector",
+          "hybrid"
+        ],
+        "title": "SearchMode"
+      },
+      "SearchRequest": {
+        "properties": {
+          "query": {
+            "type": "string",
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Query"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/SearchMode",
+            "default": "hybrid"
+          },
+          "k": {
+            "type": "integer",
+            "maximum": 50.0,
+            "minimum": 1.0,
+            "title": "K",
+            "default": 10
+          },
+          "filters": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SearchFilters"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "query"
+        ],
+        "title": "SearchRequest"
+      },
+      "SearchResponse": {
+        "properties": {
+          "query": {
+            "type": "string",
+            "title": "Query"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/SearchMode"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/SearchHit"
+            },
+            "type": "array",
+            "title": "Results"
+          },
+          "queries": {
+            "items": {
+              "$ref": "#/components/schemas/ExecutedQuery"
+            },
+            "type": "array",
+            "title": "Queries"
+          }
+        },
+        "type": "object",
+        "required": [
+          "query",
+          "mode",
+          "results",
+          "queries"
+        ],
+        "title": "SearchResponse"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "YearFacet": {
+        "properties": {
+          "year": {
+            "type": "integer",
+            "title": "Year"
+          },
+          "papers": {
+            "type": "integer",
+            "title": "Papers"
+          }
+        },
+        "type": "object",
+        "required": [
+          "year",
+          "papers"
+        ],
+        "title": "YearFacet"
+      }
+    }
+  }
+}

@@ -10,14 +10,15 @@ from benchmarks.plots import (
     ingest,
     multimedia,
     segments,
+    shop,
     spatial,
     storage,
     text_search,
     vectors,
 )
-from benchmarks.plots.model import BarFigure, CurveFigure, Figure, GalleryFigure
+from benchmarks.plots.model import BarFigure, BreakdownFigure, CurveFigure, Figure, GalleryFigure
 
-FIGURES: tuple[Figure | BarFigure | CurveFigure | GalleryFigure, ...] = (
+FIGURES: tuple[Figure | BarFigure | CurveFigure | GalleryFigure | BreakdownFigure, ...] = (
     *storage.FIGURES,
     *indexes.FIGURES,
     *spatial.FIGURES,
@@ -27,4 +28,5 @@ FIGURES: tuple[Figure | BarFigure | CurveFigure | GalleryFigure, ...] = (
     *faces.FIGURES,
     *segments.FIGURES,
     *ingest.FIGURES,
+    *shop.FIGURES,
 )

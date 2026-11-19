@@ -1,104 +1,113 @@
 \section{Diseño arquitectónico}
 
-El sistema está organizado en capas (figura~\ref{fig:capas}). Cada capa usa solamente a las
+\subsection{El motor}
+
+El motor está organizado en capas (figura~\ref{fig:capas}) y cada capa usa solamente a las
 que tiene debajo: el motor de consultas no conoce el API y el API no conoce la interfaz.
-Las estructuras que evalúa el enunciado (páginas, árbol B+, hash extendible, algoritmos
-externos, parser SQL y R-Tree) están implementadas en el proyecto. Las librerías externas
-se usan solo para el servidor web (FastAPI), la interfaz (React y Leaflet), las gráficas y
-las pruebas.
+Cada bloque es una carpeta de \texttt{src/}. Las librerías externas se usan solo para lo
+que el enunciado no evalúa: el servidor web (FastAPI), la interfaz (React y Leaflet), la
+extracción de características (OpenCV y librosa), las gráficas y las pruebas, además de
+FAISS en la Parte~4.
 
 \begin{figure}[H]
 \centering
+\begin{minipage}[c]{0.43\textwidth}
+\centering
 \begin{tikzpicture}[
-  capa/.style={draw=acento, fill=acentoSuave, rounded corners=2pt, minimum height=6.2mm,
-               minimum width=9.6cm, font=\footnotesize},
-  base/.style={draw=exito, fill=exitoSuave, rounded corners=2pt, minimum height=6.2mm,
-               minimum width=9.6cm, font=\footnotesize},
-  nota/.style={font=\scriptsize\itshape, color=gris, anchor=west},
-  node distance=1.4mm]
-  \node[capa] (ui)  {\texttt{frontend/} \quad React, TypeScript, Leaflet};
-  \node[capa, below=of ui]  (api) {\texttt{api/} \quad REST (FastAPI), una sesión por pestaña};
+  capa/.style={draw=acento, fill=acentoSuave, rounded corners=2pt, minimum height=5.4mm,
+               text width=6.7cm, align=left, font=\scriptsize},
+  base/.style={draw=exito, fill=exitoSuave, rounded corners=2pt, minimum height=5.4mm,
+               text width=6.7cm, align=left, font=\scriptsize},
+  node distance=1.0mm]
+  \node[capa] (ui)  {\texttt{frontend/} \quad consola: React, TypeScript, Leaflet};
+  \node[capa, below=of ui]  (api) {\texttt{api/} \quad REST (FastAPI), sesiones, claves};
   \node[capa, below=of api] (txn) {\texttt{txn/} \quad transacciones, bloqueos, rollback};
-  \node[capa, below=of txn] (qry) {\texttt{sql/} + \texttt{query/} \quad parser, catálogo,
+  \node[capa, below=of txn] (qry) {\texttt{sql/} + \texttt{query/} \quad parser,
                                    planificador, operadores};
-  \node[capa, below=of qry] (idx) {\texttt{index/} \quad B+ agrupado y no agrupado, hash
-                                   extendible, R-Tree};
-  \node[capa, below=of idx] (ext) {\texttt{external/} \quad external sort, external hash,
-                                   bucles anidados};
-  \node[base, below=of ext] (sto) {\texttt{storage/} \quad registros, páginas, buffer pool,
-                                   heap, secuencial};
-  \node[base, below=of sto] (spa) {\texttt{spatial/} \quad geometría y métricas de distancia};
-  \node[nota] at ([xshift=2mm]ui.east)  {interfaz web};
-  \node[nota] at ([xshift=2mm]api.east) {peticiones HTTP};
-  \node[nota] at ([xshift=2mm]txn.east) {concurrencia};
-  \node[nota] at ([xshift=2mm]qry.east) {consultas SQL};
-  \node[nota] at ([xshift=2mm]idx.east) {índices};
-  \node[nota] at ([xshift=2mm]sto.east) {archivos en disco};
+  \node[capa, below=of qry] (idx) {\texttt{index/} \quad B+, hash, R-Tree, invertido,
+                                   IVF, HNSW};
+  \node[capa, below=of idx] (ext) {\texttt{external/} \quad sort, hash y bucles externos};
+  \node[base, below=of ext] (sto) {\texttt{storage/} \quad páginas, buffer pool, heap,
+                                   secuencial};
+  \node[base, below=of sto] (aux) {\texttt{spatial/}, \texttt{text/}, \texttt{multimedia/}
+                                   \quad distancias, analizador, SIFT y MFCC};
 \end{tikzpicture}
-\caption{Capas del sistema. Cada bloque es una carpeta del repositorio.}
+\end{minipage}\hfill
+\begin{minipage}[c]{0.55\textwidth}
+\centering
+\includegraphics[width=\linewidth]{figuras/interfaz.png}
+\end{minipage}
+\caption{Izquierda: capas del motor. Derecha: la consola después de consultar las 10
+tiendas más cercanas a un punto, con el resultado en el mapa, los MBR de las hojas del
+R-Tree y el plan de ejecución, que indica que se visitaron 3 de los 19 nodos del índice.}
 \label{fig:capas}
 \end{figure}
 
-Hay cuatro decisiones de diseño que se aplican en todo el código:
+Todas las estructuras leen y escriben páginas de 4\,096 bytes a través del mismo paginador,
+con un solo buffer pool LRU de 2\,048 páginas (8~MiB); ningún archivo se carga completo en
+memoria. Los registros son de tamaño fijo, salvo las columnas \texttt{TEXT}, que se guardan
+fuera de la fila en un archivo de valores de longitud variable. La serialización, el
+manejo de páginas y las métricas de distancia están cada una en un solo módulo que usan
+tanto los índices como la búsqueda secuencial, por eso una consulta devuelve lo mismo con
+índice o sin él. Los parámetros (tamaño de página, umbrales, $k_1$ y $b$ de BM25, $M$ de
+HNSW) son campos de \texttt{EngineConfig}, y las rutas, claves y puertos se leen de
+variables de entorno.
 
-\begin{itemize}[nosep, leftmargin=*]
-  \item \emph{Acceso por páginas.} Todas las estructuras leen y escriben páginas de
-        4\,096 bytes a través del mismo paginador. Todos los archivos abiertos comparten un
-        solo buffer pool LRU de 2\,048 páginas (8~MiB). Ningún archivo se carga completo en
-        memoria.
-  \item \emph{Registros de tamaño fijo.} Así la posición de un registro dentro de su página
-        se calcula directamente, y la capacidad de cada nodo sale de dividir el tamaño de
-        la página entre el de una entrada.
-  \item \emph{Código compartido.} La serialización de registros, el manejo de páginas y las
-        métricas de distancia están cada una en un solo módulo, que usan tanto los índices
-        como la búsqueda secuencial. Por eso una consulta devuelve lo mismo con índice o
-        sin él.
-  \item \emph{Parámetros configurables.} El tamaño de página, los umbrales y el número de
-        particiones son campos de la clase \texttt{EngineConfig}. Las rutas y los puertos
-        se leen de variables de entorno, y los parámetros de los experimentos se pasan por
-        línea de comandos.
-\end{itemize}
+Una sentencia pasa por el lexer, el parser (que genera el AST), la validación de nombres y
+tipos, el planificador, que elige el camino de acceso, y los operadores, que siguen el
+modelo de iteradores (Volcano). Junto con las filas se devuelve el plan, y con
+\texttt{EXPLAIN ANALYZE} también las filas y el tiempo de cada operador. La consola tiene
+los cuatro paneles que pide el enunciado (archivos, consultas, resultados y plan), el mapa
+de la Parte~2 y una página para cada búsqueda de las Partes~3 y~4, que muestran el SQL
+exacto que se ejecuta.
 
-\paragraph{Ejecución de una consulta.} Una sentencia pasa por las etapas de la
-figura~\ref{fig:etapas}: el lexer y el parser generan el AST, se validan nombres y tipos,
-el planificador elige el camino de acceso y los operadores producen las filas. Junto con
-el resultado se devuelve el plan de ejecución, y con \texttt{EXPLAIN ANALYZE} también las
-filas y el tiempo de cada operador.
+\subsection{Las aplicaciones de la Parte 5}
+
+Las cuatro aplicaciones del Anexo~A se hicieron como productos separados que usan el gestor
+como se usaría una base de datos externa: solo por su API REST, con un cliente tipado
+(\texttt{minigestor\_client}) y parámetros \texttt{\$n} en lugar de concatenar SQL. Una
+prueba recorre \texttt{apps/} y falla si un servicio importa código del motor. La
+figura~\ref{fig:servicios} muestra el despliegue con Docker Compose.
 
 \begin{figure}[H]
 \centering
 \begin{tikzpicture}[
-  paso/.style={draw=acento, fill=acentoSuave, rounded corners=2pt, minimum height=7mm,
-               font=\scriptsize, align=center, inner sep=3pt},
-  node distance=3.5mm]
-  \node[paso] (a) {texto\\SQL};
-  \node[paso, right=of a] (b) {lexer\\tokens};
-  \node[paso, right=of b] (c) {parser\\AST};
-  \node[paso, right=of c] (d) {validación\\de tipos};
-  \node[paso, right=of d] (e) {planificador\\camino de acceso};
-  \node[paso, right=of e] (f) {operadores\\(iteradores)};
-  \node[paso, right=of f] (g) {filas\\+ plan};
-  \foreach \x/\y in {a/b, b/c, c/d, d/e, e/f, f/g} \draw[flecha] (\x) -- (\y);
+  caja/.style={draw=acento, fill=acentoSuave, rounded corners=2pt, minimum height=6mm,
+               font=\scriptsize, align=center, inner sep=2.5pt},
+  dato/.style={draw=exito, fill=exitoSuave, rounded corners=2pt, minimum height=6mm,
+               font=\scriptsize, align=center, inner sep=2.5pt},
+  red/.style={draw=gris, dashed, rounded corners=3pt, inner sep=4pt},
+  etiqueta/.style={font=\scriptsize\itshape, color=gris}]
+  \node[caja] (nav) at (0,0) {navegador\\o celular};
+  \node[caja] (web) at (3.4,0.6) {\texttt{<app>-web}: nginx\\8101--8104 (HTTP)\\8401--8404 (HTTPS)};
+  \node[caja] (con) at (3.4,-1.0) {\texttt{console}: nginx\\8080};
+  \node[caja] (api) at (7.2,0.6) {\texttt{<app>-api} $\times N$\\FastAPI sin estado};
+  \node[dato] (eng) at (11.2,-0.3) {\texttt{engine}\\gestor y su volumen};
+  \node[dato] (red) at (11.2,1.3) {\texttt{redis}\\caché sin disco};
+  \draw[flecha] (nav) -- (web);
+  \draw[flecha] (nav) -- (con);
+  \draw[flecha] (web) -- node[above, etiqueta]{\texttt{/api}} (api);
+  \draw[flecha] (api) -- node[below left, etiqueta, pos=0.4]{clave \texttt{write}} (eng);
+  \draw[flecha] (api) -- (red);
+  \draw[flecha] (con) -- node[below, etiqueta]{clave \texttt{admin}} (eng);
+  \node[red, fit=(eng)(red), label={[etiqueta]below:redes internas}] {};
 \end{tikzpicture}
-\caption{Etapas por las que pasa una sentencia SQL.}
-\label{fig:etapas}
+\caption{Despliegue de la Parte 5. Cada aplicación (copyright 8101, tienda 8102, papers
+8103 y rostros 8104) tiene su API y su interfaz; el gestor y Redis están en redes internas
+sin puertos publicados.}
+\label{fig:servicios}
 \end{figure}
 
-\paragraph{API e interfaz.} El API REST ejecuta sentencias SQL, lista las tablas, muestra
-la estructura física de una tabla y de sus índices, y permite crear tablas a partir de un
-archivo CSV. Cada pestaña del navegador tiene su propia sesión, lo que permite probar los
-bloqueos con dos pestañas. La interfaz (figura~\ref{fig:interfaz}) tiene los cuatro paneles
-que pide el enunciado (archivos, consultas, resultados y plan de ejecución) y, para la
-Parte~2, un mapa que muestra el resultado, el centro y el radio de la consulta y los MBR
-del R-Tree.
-
-\begin{figure}[H]
-  \centering
-  \includegraphics[width=0.94\textwidth]{figuras/interfaz.png}
-  \caption{Interfaz después de consultar las 10 tiendas más cercanas a un punto. A la
-           izquierda están las tablas con su organización y sus índices; arriba, el editor
-           SQL y las consultas de ejemplo; al centro, el resultado en el mapa con los MBR de
-           las hojas del R-Tree; a la derecha, el plan de ejecución, que indica que se
-           visitaron 3 de los 19 nodos del índice.}
-  \label{fig:interfaz}
-\end{figure}
+El gestor es el único contenedor con estado y no publica puertos: solo llegan a él la
+consola y las API de las aplicaciones. Cada servicio tiene su propia clave con un rol: la
+consola es \texttt{admin}, y cada API atiende con una clave \texttt{write} y usa una
+\texttt{admin} solo para crear sus tablas al arrancar (\texttt{CREATE \ldots{} IF NOT
+EXISTS}). Cada interfaz es un nginx que está solo en la red de su aplicación y reenvía
+\texttt{/api} a su API, con límites de tamaño del cuerpo y de peticiones por segundo; así,
+una interfaz no puede hablar con el gestor ni con otra aplicación. Las API no guardan
+estado y escalan con réplicas detrás de su nginx; el RAG y rostros usan además un Redis
+sin disco como caché. Cada aplicación tiene un trabajo de carga inicial (perfil
+\texttt{seed}) que es repetible: una segunda ejecución no vuelve a cargar nada. Para
+cargar sus datos usan una ruta de carga masiva en NDJSON que confirma lotes de 1\,000 filas
+y construye los índices al final; con 10\,000 filas sin vector es 4.5 veces más rápida que
+un \texttt{INSERT} por petición.

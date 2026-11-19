@@ -782,6 +782,48 @@ estimación de cardinalidad en el primer puesto en ninguno de los modos.
   BM25 aporta las coincidencias exactas (nombres de sistemas, siglas) en inglés. La híbrida
   junta las dos sin calibrar sus puntajes.
 
+# La evaluación
+
+`rag.evaluation` (#87) y tres guiones de `benchmarks/`; las cifras, las figuras, los comandos
+y las listas de revisión a mano están en
+[`benchmarks/README.md` §16](../../benchmarks/README.md#16-evaluación-del-rag--recuperación-de-preguntas-en-español-y-respuestas-con-claude).
+
+| Pieza | Qué hace |
+|---|---|
+| `evaluation/dataset.py` | el esquema de una pregunta (`origin` `author` o `batch`, el fragmento correcto o ninguno si el corpus no la responde) y la muestra de fragmentos de prosa por estrato con semilla |
+| `evaluation/metrics.py` | Recall@k y MRR con tres criterios de acierto (el fragmento, también su vecino, el paper) y el acuerdo (kappa de Cohen) entre el juez y una revisión a mano |
+| `evaluation/generation.py` | una petición de la **Batch API** por fragmento: Claude Sonnet 5.5 escribe una pregunta en español y la cita que la responde, con salida estructurada; el filtro (la cita está en el fragmento, es una pregunta en español, no nombra «el fragmento», no se repite) y la espera del lote |
+| `evaluation/judge.py` | el **juez de fidelidad**: Claude Haiku 5.5 separa la respuesta en afirmaciones y dice de cada una si los fragmentos que recibió el modelo la sostienen, y si la respuesta dice que no está en los documentos |
+| `benchmarks/rag_questions.py` | `sample`, `submit` (estima el costo y no envía si pasa de `--budget-usd`), `collect` y `accept` |
+| `benchmarks/rag_evaluation_benchmark.py` | la recuperación en los tres modos y, con `--answers` y `--judge`, las respuestas y su juicio, con el costo estimado antes de llamar al modelo y un tope duro |
+| `benchmarks/rag_judge_agreement.py` | la muestra para revisar a mano y el acuerdo del juez con esa revisión |
+
+**Medido** (63 preguntas escritas a mano, 45 con un fragmento correcto y 18 sin respuesta en
+el corpus; gestor sembrado con vectores int8):
+
+| Modo | Recall@5 | Recall@10 | MRR@10 | Recall@10, paper |
+|---|---:|---:|---:|---:|
+| BM25 | 0,111 | 0,111 | 0,080 | 0,111 |
+| vectorial | **0,422** | **0,533** | **0,325** | 0,800 |
+| híbrido (RRF) | 0,378 | 0,511 | 0,292 | **0,822** |
+
+BM25 no encuentra ningún fragmento de los papers con preguntas en español (el índice es en
+inglés) y acierta las 5 del material del curso; el vectorial encuentra el paper correcto en 8
+de cada 10; el híbrido, que es el de `POST /answers`, queda por debajo del vectorial en los
+papers porque RRF suma la lista de BM25, que en español es ruido, y por encima en el curso.
+int8 contra fp32 no se midió: exige recalcular los 98 585 embeddings y sembrar otro gestor.
+
+La selección de fragmentos para el prompt se detiene en el primero que no cabe en
+`RAG_ANSWER_CONTEXT_TOKENS`: una pregunta cuyo primer fragmento es una tabla sin espacios de
+24 424 caracteres (hay 3 así en el corpus) se queda sin ningún documento.
+
+**Pendiente de la clave**: las preguntas de la Batch API, las respuestas de Claude (citas
+válidas, si citan el fragmento correcto, «no está en los documentos» en las 18 sin
+respuesta, costo y latencia hasta el primer texto), el juez y su acuerdo con la revisión a
+mano. Con `--answers simulated` el camino entero corrió sin clave (63 preguntas; el evento
+`sources` sale a los 33 ms de mediana), pero esas respuestas no dicen nada de la calidad.
+Costo estimado de la evaluación completa, unas 133 preguntas: **≈ 2,5 USD** (cota 6,4).
+
 # Tests
 
 `apps/rag/tests/` no usa la red: el OAI-PMH y el servidor de PDF son de mentira y los PDF
@@ -854,3 +896,13 @@ uv run python -m rag.models --salida data/models/rag --variante int8 --variante 
 RAG_MODELS_DIR=data/models/rag uv run pytest apps/rag tests/rag -q
 RAG_ANTHROPIC_API_KEY=… uv run pytest -m anthropic apps/rag -q     # cuesta unos centavos
 ```
+
+Los de la evaluación (`test_rag_eval_*.py`, sin red ni clave): Recall@k, MRR y kappa con
+casos calculados a mano y los tres criterios de acierto; el esquema de una pregunta, que
+escribir el conjunto dé los mismos bytes, el filtro de prosa, la muestra con semilla (cuotas,
+vueltas en un estrato con pocos papers, exclusiones) y que el conjunto versionado tenga lo
+prometido; las peticiones de la Batch API (`custom_id` válido, esquema, el fragmento
+escapado), su costo a mitad de precio, la lectura de cada clase de resultado, cada motivo del
+filtro, y crear, esperar y leer un lote con el SDK real sobre un transporte de mentira; y el
+juez: la petición, el veredicto válido, ilegible o rechazado, el costo, un error de la API y
+el tope.

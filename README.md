@@ -138,7 +138,7 @@ apps/                servicios de la Parte 5, que usan el gestor solo por su API
   shop/              tienda con recomendaciones (opción B): dataset de Amazon Reviews 2023
                      con tiendas de Lima
   rag/               RAG sobre papers (opción A): corpus de arXiv con texto por página
-  faces/             reconocimiento facial: YuNet, alineación con cinco puntos, SFace y LFW
+  faces/             reconocimiento facial: YuNet, SFace y LFW; registro, reconocimiento y borrado
   web-kit/           lógica sin estilos que comparten las interfaces de las aplicaciones
     template/        plantilla de la interfaz de cada app: React + TypeScript
     docker/          imagen común de las interfaces: build y nginx con CSP, HTTPS y límites
@@ -192,7 +192,7 @@ proyecto:
 | [`apps/`](apps/) | aplicaciones de la Parte 5: su API y su interfaz | [README](apps/README.md) |
 | [`apps/shop/`](apps/shop/) | tienda con recomendaciones: dataset de compras reales, fotos, tiendas de Lima e inventario | [README](apps/shop/README.md) |
 | [`apps/rag/`](apps/rag/) | RAG sobre papers: cosecha de arXiv por licencia, texto por página, fragmentos | [README](apps/rag/README.md) |
-| [`apps/faces/`](apps/faces/) | rostros: decodificación segura, detección con YuNet, embedding con SFace, descarga de modelos y de LFW | [README](apps/faces/README.md) |
+| [`apps/faces/`](apps/faces/) | rostros: decodificación segura, detección con YuNet, embedding con SFace, descarga de modelos y de LFW; API de registro con consentimiento y controles de calidad, reconocimiento y borrado | [README](apps/faces/README.md) |
 | [`apps/web-kit/`](apps/web-kit/) | kit de las interfaces: cliente tipado, salud, tiempos por etapa, tema, PWA y la plantilla de cada app | [README](apps/web-kit/README.md) |
 | [`benchmarks/`](benchmarks/) | comparación experimental, con resultados y gráficas | [README](benchmarks/README.md) |
 | [`demos/`](demos/) | datasets de demostración y simulación de concurrencia | [README](demos/README.md) |

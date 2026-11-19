@@ -12,7 +12,7 @@ apps/
   kit/             appkit: configuración, logs, trazas, salud, errores, migraciones y descargas
   shop/            tienda con recomendaciones (opción B): dataset, catálogo en el gestor y CLIP
   rag/             RAG sobre papers (opción A): por ahora, el corpus de arXiv y sus fragmentos
-  faces/           rostros (opción D): detección con YuNet, alineación y embedding con SFace
+  faces/           rostros (opción D): YuNet y SFace; API de registro, reconocimiento y borrado
   web-kit/         @minigestor/web-kit: lógica sin estilos que comparten las interfaces
     template/      plantilla de la interfaz de una app: Vite y React
     docker/        la imagen común de las interfaces: build y nginx endurecido
@@ -27,7 +27,7 @@ apps/
 | Copyright en audio | `apps/copyright/` | `copyright-api`, `copyright-web` | 8101 / 8401 | pendiente: sin API todavía |
 | Tienda con recomendaciones | `apps/shop/` | `shop-api`, `shop-web` | 8102 / 8402 | sí; la interfaz es la plantilla hasta #83 |
 | Preguntas a papers (RAG) | `apps/rag/` | `papers-api`, `papers-web` | 8103 / 8403 | pendiente: sin API todavía |
-| Reconocimiento de rostros | `apps/faces/` | `faces-api`, `faces-web` | 8104 / 8404 | pendiente: sin API todavía |
+| Reconocimiento de rostros | `apps/faces/` | `faces-api`, `faces-web` | 8104 / 8404 | sí: el API (registro, reconocimiento, borrado); la web es la plantilla hasta #93 |
 | Ejemplo del kit (perfil `example`) | `deploy/example/` | `example-api`, `example-web` | 8100 / 8400 | sí, para probar la topología |
 
 Las interfaces comparten lógica (cliente tipado, salud, `Server-Timing`, tema, PWA) a través

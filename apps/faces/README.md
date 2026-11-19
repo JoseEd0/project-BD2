@@ -1,10 +1,18 @@
 # Rostros (`faces`)
 
-Servicio de la opción D del Anexo A: reconocimiento facial en vivo. Esta primera pieza es el
-**pipeline del modelo** —de los bytes de una foto a los embeddings de sus rostros— y la
-descarga de los modelos y del dataset LFW. El API, el registro y la búsqueda en el HNSW del
-gestor llegan en los issues siguientes (#90, #91); como todo servicio, no importa el
-código del gestor (ver [`apps/README.md`](../README.md)).
+Servicio de la opción D del Anexo A: reconocimiento facial en vivo. Cualquiera se registra
+desde su celular —con su consentimiento, en tres tomas guiadas— y se prueba al momento. Tiene
+dos partes:
+
+- el **pipeline del modelo**: de los bytes de una foto a los embeddings de sus rostros, con
+  YuNet y SFace, y la descarga de los modelos y de LFW (#89);
+- el **API** (`faces.api:create_app`): consentimiento, registro con controles de calidad,
+  reconocimiento, consulta y borrado de un registro (#90). Guarda todo en el gestor —los
+  embeddings en una columna `VECTOR(128)` con un HNSW coseno— y habla con él solo por
+  [`minigestor_client`](../client/README.md), armado con [`appkit`](../kit/README.md).
+
+El reconocimiento en tiempo real por WebSocket llega en #91 y la PWA del celular en #93.
+Como todo servicio, no importa el código del gestor (ver [`apps/README.md`](../README.md)).
 
 ```
 src/faces/
@@ -13,10 +21,297 @@ src/faces/
   detection.py     YuNet: caja, cinco puntos y confianza; escala de detección; «un solo rostro»
   recognition.py   SFace: alineación con los cinco puntos y embedding de norma 1
   pipeline.py      FacePipeline: decodificar → detectar → alinear → describir
+  pose.py          giro, cabeceo e inclinación de la cabeza con los cinco puntos; la pose de una toma
+  quality.py       medidas de una toma y sus controles, cada uno con su mensaje
+  shots.py         de una foto a una toma aceptada o rechazada, y a los rostros de una consulta
+  enrollment.py    plan de poses, nombre, parecido con la galería y umbrales de coseno
+  consent.py       el texto del consentimiento y su versión
   models.py        los dos modelos de OpenCV Zoo, fijados por commit y SHA-256
   lfw.py           LFW y sus pares oficiales: descarga, extracción y lectura de pliegues
   errors.py        InvalidImageError, ImageTooLargeError, NoFaceError, MultipleFacesError...
   __main__.py      python -m faces models | lfw
+  api/
+    app.py         create_app: el servicio de appkit con sus migraciones, servicios y purga
+    settings.py    FacesSettings: variables FACES_*
+    store.py       las tablas face_* y sus consultas con parámetros
+    analysis.py    los pipelines de la réplica, uno por hilo
+    gallery.py     buscar en el HNSW: reconocer y detectar duplicados
+    enrollments.py el registro: consentimiento, tomas, terminar
+    identification.py  reconocer los rostros de una foto
+    people.py      ver y borrar un registro; borrar lo vencido
+    routes.py      las rutas HTTP
+    models.py      los cuerpos JSON
+    errors.py      los errores del API, con su estado y su mensaje
+```
+
+## API
+
+```bash
+uvicorn --factory faces.api:create_app --host 0.0.0.0 --port 8000
+```
+
+| Ruta | Qué hace |
+|---|---|
+| `GET /consent` | el texto vigente del consentimiento, sus partes (qué se guarda, para qué, cuánto tiempo, derechos) y su `version` |
+| `POST /enrollments` | `{display_name, consent: {version, accepted: true}}` → `201` con la sesión: su `enrollment_id`, las poses del plan, las que faltan, los intentos que quedan, cuándo vence y qué hacer ahora |
+| `POST /enrollments/{id}/shots` | una foto (`multipart`, campo `image`) → `200` con `accepted: true` y la pose que cubrió, o `accepted: false` con `reason` y el `message` que dice qué corregir; siempre con las medidas de la toma (`quality`) y el estado de la sesión |
+| `GET /enrollments/{id}` | el estado de la sesión |
+| `DELETE /enrollments/{id}` | cancela: borra la sesión y sus tomas (`204`, también si ya no estaba) |
+| `POST /enrollments/{id}/finish` | `201` con la persona creada y su `person_id`, el código para ver o borrar el registro |
+| `POST /identify` | una foto → cada rostro, del más grande al más chico, con `known` (nombre y coseno), `unknown` (y el mejor coseno visto) o `too_small` |
+| `GET /people/{id}` | lo que se guarda de la persona, salvo sus embeddings (derecho de acceso) |
+| `DELETE /people/{id}` | borra la persona y todos sus embeddings (`204`, también si ya no estaba) |
+| `GET /health`, `GET /ready` | las sondas de `appkit` |
+
+Cada respuesta lleva `X-Request-ID` y `Server-Timing` con las etapas `analisis` (decodificar,
+detectar, medir y embeber), `sesion` (leer la sesión y sus tomas), `galeria` (el HNSW y los
+nombres) y `guardar`. Los errores tienen la forma común `{error, kind, request_id}`; `error`
+es un mensaje en español para la persona y `kind` lo que la interfaz usa para decidir:
+
+| `kind` | Estado | Cuándo |
+|---|---|---|
+| `ConsentRequiredError` | 400 | sin consentimiento, o con `accepted: false`: no se guarda nada |
+| `ConsentOutdatedError` | 409 | se aceptó otra versión del texto |
+| `InvalidNameError` | 422 | nombre vacío, de más de 60 caracteres o con caracteres invisibles |
+| `EnrollmentNotFoundError` | 404 | la sesión no existe, venció, se canceló o ya se terminó |
+| `TooManyAttemptsError` | 429 | se gastaron los intentos de la sesión |
+| `ShotInProgressError` | 409 | dos tomas de la misma sesión a la vez |
+| `EnrollmentIncompleteError` | 409 | terminar sin todas las poses: dice cuáles faltan y qué hacer |
+| `AlreadyEnrolledError` | 409 | «Ya estás registrado como «X»»: la sesión se descarta |
+| `LookalikeError` | 409 | se parece demasiado a alguien registrado, sin decir a quién: la sesión se descarta |
+| `UploadTooLargeError` | 413 | la foto pesa más de `FACES_MAX_UPLOAD_BYTES` |
+| `TooManyPixelsError` | 413 | la foto declara más de `FACES_MAX_IMAGE_PIXELS` |
+| `UnreadableImageError` | 400 | vacía, no es una imagen o está dañada |
+| `PersonNotFoundError` | 404 | no hay un registro con ese código, o venció |
+
+## El registro
+
+```
+GET /consent ─▶ POST /enrollments ─▶ POST …/shots (de frente) ─▶ …/shots (izquierda) ─▶ …/shots (derecha) ─▶ POST …/finish
+                 nombre + versión      cada toma: aceptada con su pose, o rechazada con qué corregir        una transacción
+```
+
+1. La interfaz muestra el texto de `GET /consent` y la persona lo acepta. Sin el objeto
+   `consent` con `accepted: true` y la versión vigente **no se crea nada** en el gestor.
+2. `POST /enrollments` abre una sesión que vence a los `FACES_ENROLLMENT_TTL_SECONDS` (15
+   minutos) y admite `FACES_MAX_SHOT_ATTEMPTS` (20) tomas, aceptadas o no.
+3. Cada toma pasa por los controles de calidad (abajo). Si pasa, se clasifica su pose y se
+   compara con el plan (`FACES_ENROLLMENT_POSES`, por omisión de frente, girada a la
+   izquierda y a la derecha, en cualquier orden): una pose que ya está, una que el plan no
+   pide o un giro a medio camino se rechazan con la guía de la que falta («Gira un poco la
+   cabeza hacia tu izquierda»). Después se exige que sea **la misma persona** que las tomas
+   anteriores (coseno de al menos `FACES_SESSION_THRESHOLD` con cada una: nadie completa el
+   registro de otro) y que no esté ya registrada (ver *Duplicados*). Entonces se guarda su
+   embedding en `face_tomas`, nunca la foto.
+4. `POST …/finish` exige todas las poses del plan, vuelve a buscar duplicados (alguien pudo
+   registrarse mientras tanto) y, **en una sola transacción** del gestor, borra la sesión y
+   sus tomas y crea la persona con un embedding por toma. Si la sesión ya no está —otra
+   petición la terminó o la canceló— la transacción se deshace y no se crea nadie: un
+   registro se termina una sola vez.
+
+Más de una cara en el cuadro no siempre es un error: un rostro de menos de la mitad del
+ancho del más grande (`background_face_ratio`) es alguien al fondo, como un compañero en un
+aula, y no cuenta. Dos personas de tamaño parecido sí: «Aparece más de un rostro».
+
+## Controles de calidad
+
+Cada toma se mide ([`quality.py`](src/faces/quality.py)) y se juzga con funciones puras,
+cada una con su umbral en `QualityConfig` y su mensaje. El orden importa: primero lo que se
+corrige con el entorno, después la pose; una foto oscura pierde bordes, así que la luz se
+juzga antes que la nitidez, y en una foto oscura o borrosa los puntos de la pose no son
+fiables. La cara se mide en el **recorte alineado** de 112 x 112 que ve SFace, sin las
+esquinas de fondo (filas 25-95 %, columnas 20-80 %).
+
+| Control | Medida | Rechaza si | `reason` | Mensaje |
+|---|---|---|---|---|
+| un rostro | rostros que no son fondo | 0 / más de 1 | `no_face` / `multiple_faces` | «No encontramos ningún rostro…» / «Aparece más de un rostro…» |
+| encuadre | fracción de la caja fuera de la foto | > 0,02 | `face_cut_off` | «Tu cara se sale del cuadro. Aléjate un poco y céntrala…» |
+| tamaño | ancho de la caja | < 80 px | `face_too_small` | «Tu cara se ve muy pequeña. Acércate…» |
+| luz | gris medio de la cara | < 50 | `too_dark` | «Hay poca luz sobre tu cara…» |
+| | gris medio / fracción ≥ 250 | > 200 / > 0,15 | `overexposed` | «Hay demasiada luz sobre tu cara…» |
+| nitidez | varianza del laplaciano | < 40 | `blurry` | «La foto salió borrosa. Quédate quieto…» |
+| pose | inclinación | > 15° | `head_tilted` | «Endereza la cabeza.» |
+| | giro de lado | > 40° | `turned_too_far` | «Gira menos…» |
+| | cabeceo | > 25° / < −25° | `looking_down` / `looking_up` | «Levanta…» / «Baja un poco la barbilla.» |
+| plan | pose de la toma | ya cubierta / fuera del plan / entre 10° y 15° | `pose_already_taken` / `pose_not_in_plan` / `pose_unclear` | el motivo y qué pose toca |
+| misma persona | coseno con cada toma anterior | < 0,363 | `different_person` | «Esta toma parece de otra persona…» |
+
+**Cómo se eligieron.** Con las fotos de prueba transformadas (abajo) y con las medidas de
+las 2 164 tomas de un solo rostro que el benchmark envió al registrar personas de LFW (fotos
+de prensa de 250 px; percentiles en `rostros_servicio.json`, operación «medidas de las
+tomas»):
+
+- **Tamaño (80 px).** SFace ve el rostro a 112 x 112; con menos de 80 px el recorte se
+  amplía más de 1,4 veces. En LFW el ancho de la caja tiene percentil 1 de 77 px y mediana
+  94: se rechaza el 2 %. Una selfie a un brazo de distancia da unos 200 px; el retrato
+  original de las pruebas, 65 px.
+- **Luz (50 a 200).** El gris medio de la cara en LFW va de 74 (percentil 0,5) a 186
+  (99,5): ninguna foto de prensa bien expuesta queda fuera. Oscurecer la selfie de prueba al
+  25 % la deja por debajo de 50; aclararla un 50 % quema la piel.
+- **Nitidez (40).** La varianza del laplaciano en LFW tiene percentil 1 de 42 y mediana 205;
+  la selfie de prueba da de 600 a 800, y con un desenfoque gaussiano de radio 4 cae por
+  debajo de 40. Con radio 2 (unos 60) todavía pasa: es una foto blanda pero útil.
+- **Pose (40°, 25°, 15°).** En LFW el giro estimado va de −44° a 35° (percentiles 0,5 y
+  99,5), el cabeceo de −18° a 22° y la inclinación de −13° a 15°.
+- **Encuadre (0,02).** YuNet ajusta la caja de una cara cortada al borde y rara vez la deja
+  salir; cortar la foto un 20 % por encima del mentón deja un 8 % de la caja afuera. Un
+  corte por arriba (la frente) no se detecta: la caja se encoge. No afecta al embedding, que
+  se alinea con ojos, nariz y boca.
+
+**Qué se prueba con fotos.** Desenfocar, oscurecer, sobreexponer, girar la foto 35°
+(inclinación), achicar el rostro, cortar la barbilla, la foto de grupo y una imagen gris se
+rechazan cada una con su motivo y su mensaje exactos; una selfie con alguien chico al fondo
+pasa. El giro y el cabeceo no se pueden simular deformando una foto de frente —YuNet ubica
+los puntos donde esperaría una cara de frente—, así que se prueban con los cinco puntos de
+una cara promedio girada en 3D, donde la estimación sale exacta.
+
+## Pose de la cabeza
+
+[`pose.py`](src/faces/pose.py) estima tres ángulos con los cinco puntos y una cara promedio
+proyectada sin perspectiva: la **inclinación** es el ángulo de la línea de los ojos; con la
+cara enderezada, el **cabeceo** sale de la altura de la nariz entre los ojos y la boca (de
+frente queda al 57,4 % del camino, la mediana de LFW), y el **giro de lado** del corrimiento
+de la nariz respecto del punto medio de los ojos, sabiendo cuánto sobresale (0,55 veces la
+distancia entre los ojos) y cuánto le quitó el cabeceo. «Izquierda» es la de la persona: en
+una foto sin espejar, su nariz se corre a la derecha de la imagen.
+
+Una toma es **de frente** con un giro de hasta 10°, **girada** desde 15° y hasta 40°; entre
+10° y 15° no es ni una ni otra, y se pide girar más o mirar de frente, para que las tomas
+giradas aporten de verdad otra vista. Los límites están en `PoseLimits`.
+
+## Duplicados y umbrales
+
+Un coseno de SFace se compara contra umbrales distintos según la pregunta:
+
+| Umbral | Valor | Pregunta | Por qué ese valor |
+|---|---:|---|---|
+| `FACES_SESSION_THRESHOLD` | 0,363 | ¿esta toma es de la misma persona que las anteriores? (1:1) | el de verificación que publica OpenCV para SFace; en los pares de LFW, un 0,17 % de falsos aceptados y un 1,2 % de falsos rechazos |
+| `FACES_MATCH_THRESHOLD` | 0,45 | ¿quién de la galería es? (1:N) | con 1 000 personas registradas, 0,363 reconoce como alguien al 46,5 % de los desconocidos; 0,45 al 1,5 %, a costa de no reconocer al 5 % de los registrados (medido abajo) |
+| `FACES_LOOKALIKE_THRESHOLD` | 0,45 | ¿se parece demasiado a alguien para registrarlo aparte? | el mismo que reconocer: por encima, el reconocimiento ya los confundiría. Bloqueó a 17 de 1 513 desconocidos (1,1 %) mientras la galería crecía hasta 1 000 personas |
+| `FACES_DUPLICATE_THRESHOLD` | 0,50 | ¿ya está registrado? (y se dice como quién) | 4 de esos 1 513 desconocidos (0,26 %) pasaron 0,50; ninguno mientras la galería tenía menos de 250 personas |
+
+La diferencia entre 1:1 y 1:N es el tamaño de la galería: un desconocido se compara con
+todos, así que la probabilidad de que alguno pase el umbral crece con cada persona
+registrada. Por eso el umbral de verificación de OpenCV no sirve para reconocer.
+
+**Política.** Antes de guardar una toma, y otra vez al terminar, se buscan en el HNSW los
+vecinos de cada toma del registro y se promedia, por persona, su mejor coseno con cada toma
+(quien no salió entre los vecinos de una toma cuenta con el coseno del último vecino, una
+cota superior). Promediar exige que todas las tomas se parezcan, no solo la mejor. Con la
+persona más parecida:
+
+- **≥ 0,50** → `409 AlreadyEnrolledError`: «Ya estás registrado como «X»», con su nombre;
+- **entre 0,45 y 0,50** → `409 LookalikeError`: «Te pareces mucho a alguien que ya está
+  registrado…», **sin** decir a quién, porque puede ser otra persona;
+- debajo, se registra.
+
+En los dos primeros casos la sesión y sus tomas se borran: no hay nada más que hacer con
+ellas. Una persona vencida que aún no se borró no cuenta. Todos los umbrales son
+configuración; #92 los calibrará con los pares de LFW a un FAR fijo.
+
+**Lo que no cubre.** Dos registros de la misma persona que terminan a la vez pueden pasar
+los dos: la búsqueda de duplicados y la escritura no están en la misma transacción (el HNSW
+no participa del bloqueo de una búsqueda). Es una carrera de milisegundos que solo puede
+provocar quien se registra dos veces a propósito.
+
+## Estado de las sesiones
+
+Una sesión de registro dura varias peticiones y el API corre en N réplicas (#72), así que
+**su estado vive en el gestor**, en `face_sesiones` y `face_tomas`, y no en la memoria del
+proceso: cualquier réplica atiende cualquier toma. Se descartaron:
+
+- **tokens firmados sin estado**: el token tendría que llevar los embeddings de las tomas ya
+  aceptadas —datos biométricos— al navegador y de vuelta, cifrados y con una clave que
+  rotar; y no se podría revocar: un token de una sesión terminada serviría para registrarse
+  otra vez hasta que venciera;
+- **Redis** (llega en #91 para la caché de rastros): sería un segundo lugar con datos
+  biométricos que borrar y vigilar, solo para unas pocas filas por registro.
+
+En el gestor, la sesión se borra con todo lo demás —al cancelar, al terminar, al vencer—, y
+terminarla es una transacción: consumir la sesión y crear la persona pasan juntos o no
+pasan. El costo es una lectura y una escritura más por toma (`sesion` en `Server-Timing`).
+
+| Tabla | Una fila por | Columnas | Índices |
+|---|---|---|---|
+| `face_personas` | persona registrada | `id`, `nombre`, `version_consentimiento`, `consentido_en`, `creado_en`, `expira_en` | clave primaria |
+| `face_embeddings` | toma de una persona | `id`, `persona`, `toma`, `pose`, `embedding VECTOR(128)` y las medidas de la toma | `persona` (hash), `embedding` (HNSW coseno) |
+| `face_sesiones` | registro a medias | las de `face_personas` e `intentos` | clave primaria |
+| `face_tomas` | toma aceptada de un registro a medias | como `face_embeddings`, con `sesion` | `sesion` (hash) |
+
+Los tiempos son segundos desde la época (`BIGINT`, UTC). Las tablas se crean con
+migraciones `IF NOT EXISTS` al arrancar ([`store.py`](src/faces/api/store.py)).
+
+## Privacidad (Ley 29733)
+
+Un rostro es un dato biométrico, y la Ley 29733 de Protección de Datos Personales lo cuenta
+entre los **datos sensibles**: su tratamiento pide consentimiento previo, expreso, informado
+y por escrito, y la persona tiene derecho a acceder a sus datos y a cancelarlos.
+
+- **Consentimiento informado y versionado.** `GET /consent` dice qué se guarda (el nombre,
+  un embedding por toma, la versión y fecha del consentimiento), qué no (las fotos), para
+  qué y cuánto tiempo. La versión sale del propio texto con el plazo ya escrito: si cambia
+  una palabra o el plazo, cambia la versión y un registro con la anterior se rechaza. Cada
+  persona guarda la versión que aceptó y cuándo.
+- **Sin fotos.** Una foto se analiza en memoria y se descarta: en el gestor solo hay
+  números y texto (un test comprueba los tipos de columna de las cuatro tablas). De un
+  embedding de SFace no se reconstruye la foto.
+- **Acceso y borrado.** Al terminar, la persona recibe su `person_id` (128 bits al azar),
+  que es la llave de `GET /people/{id}` y `DELETE /people/{id}`. El reconocimiento nunca lo
+  devuelve: muestra el nombre, no el código. Borrar quita la persona y sus embeddings en una
+  transacción, y es idempotente.
+- **Caducidad.** Cada registro vence a los `FACES_RETENTION_DAYS` (30) días. Al vencer deja
+  de reconocerse y de verse **en ese momento** (las consultas filtran por `expira_en`), y
+  cada réplica corre cada `FACES_PURGE_INTERVAL_SECONDS` (5 minutos) un borrado de lo
+  vencido —personas con sus embeddings y sesiones con sus tomas—; correrlo en varias
+  réplicas a la vez no hace daño, porque cada borrado es idempotente. Se eligió la purga
+  periódica más el filtro y no solo borrar al leer: un registro que nadie vuelve a consultar
+  también se borra, y la lectura del reconocimiento no escribe.
+- **Lo que falta.** El `person_id` aparece en la ruta de `DELETE /people/{id}`, y por tanto
+  en el log de acceso; el log queda en el servidor, bajo quien opera el servicio.
+
+## Configuración
+
+Además de lo común de `appkit` (`FACES_ENGINE_URL`, `FACES_ENGINE_KEY`,
+`FACES_MIGRATION_KEY`, `FACES_LOG_LEVEL`… ver [`kit/README.md`](../kit/README.md)):
+
+| Variable | Para qué | Por omisión |
+|---|---|---|
+| `FACES_MODELS_DIR` | carpeta de YuNet y SFace | **obligatoria** |
+| `FACES_RETENTION_DAYS` | días que dura un registro | `30` |
+| `FACES_ENROLLMENT_TTL_SECONDS` | cuánto dura una sesión de registro | `900` |
+| `FACES_MAX_SHOT_ATTEMPTS` | tomas por sesión, aceptadas o no | `20` |
+| `FACES_ENROLLMENT_POSES` | el plan, en JSON: cuántas tomas y de qué pose | `["front", "left", "right"]` |
+| `FACES_MAX_UPLOAD_BYTES` | tamaño máximo de una foto | `10485760` (10 MiB) |
+| `FACES_MAX_IMAGE_PIXELS` | píxeles que puede declarar una foto | `50000000` |
+| `FACES_MAX_QUERY_FACES` | rostros que busca `POST /identify` | `10` |
+| `FACES_SEARCH_NEIGHBOURS` | vecinos que se piden al HNSW | `10` |
+| `FACES_SESSION_THRESHOLD`, `FACES_MATCH_THRESHOLD`, `FACES_LOOKALIKE_THRESHOLD`, `FACES_DUPLICATE_THRESHOLD` | los umbrales de coseno | `0.363`, `0.45`, `0.45`, `0.5` |
+| `FACES_ANALYSIS_WORKERS` | fotos que la réplica analiza a la vez | `2` |
+| `FACES_PURGE_INTERVAL_SECONDS` | cada cuánto se borra lo vencido | `300` |
+
+Cada réplica carga `FACES_ANALYSIS_WORKERS` pipelines al arrancar y analiza las fotos en
+hilos, sin detener el bucle de eventos; con todos ocupados, la siguiente espera turno.
+
+## Docker
+
+[`compose.yaml`](compose.yaml), incluido desde el raíz, levanta `faces-api` (redes `data`,
+`faces` y `cache`, sin puertos, escalable con `--scale faces-api=N`) y `faces-web` en
+`:8104` y `:8404` con HTTPS. La imagen del API trae los modelos verificados
+([`docker-build.sh`](docker-build.sh)) y el compose fija `FACES_MODELS_DIR=/opt/app/models`.
+Con dos pipelines y recién arrancada, una réplica usa unos 290 MiB; su tope es
+`FACES_API_MEMORY` (1 GiB), por las fotos de celular de hasta 50 MP. La web es por ahora la
+plantilla del kit (la PWA es #93); su nginx permite la cámara (`camera=(self)`), acepta
+subidas de 11 MB (`FACES_WEB_MAX_BODY_SIZE`: una foto de 10 MiB y el multipart) y baja el
+límite a 5 peticiones por segundo por IP con ráfaga de 20, porque cada foto cuesta CPU. No
+hay carga inicial (`faces.seed`): el servicio arranca vacío y sus tablas las crean las
+migraciones. La CI levanta el compose y, por `:8104`, comprueba las sondas, el
+consentimiento, una toma aceptada de frente con un retrato de prueba y el reconocimiento de
+la foto de grupo.
+
+```bash
+python -m tools.compose_keys && deploy/certs.sh
+docker compose up -d --build                     # http://localhost:8104, https://<ip>:8404
+docker compose --profile tunnel up -d faces-tunnel && docker compose logs faces-tunnel | grep trycloudflare.com
 ```
 
 ## Pipeline
@@ -81,9 +376,22 @@ LFW se extrae en una carpeta aparte que se mueve al final, con el filtro `data` 
 ## Tests
 
 ```bash
-uv run --no-sync python -m pytest -q apps/faces                       # sin modelos: se saltan los que los usan
-FACES_MODELS_DIR=data/models/faces uv run --no-sync python -m pytest -q apps/faces
+uv run --no-sync python -m pytest -q apps/faces          # sin modelos: se saltan los que los usan
+FACES_MODELS_DIR=data/models/faces uv run --no-sync python -m pytest -q apps/faces tests/faces
 ```
+
+- [`tests/`](tests/) prueba el pipeline y las reglas sin el gestor: la pose contra los cinco
+  puntos de una cara promedio girada en 3D (exacta con giro, cabeceo e inclinación, solos o
+  juntos), cada control de calidad con sus umbrales y su mensaje, el plan de poses, el
+  nombre, el parecido con la galería, el consentimiento y la configuración.
+- [`tests/faces/`](../../tests/faces/), en el árbol del gestor porque construye su API, prueba
+  el servicio de punta a punta contra el **gestor real en el mismo proceso**, con un reloj
+  que el test adelanta: consentimiento ausente, rechazado o de otra versión (y que no queda
+  nada en el gestor), el nombre, el plan y su guía, tomas de otra persona, registrar →
+  reconocer → borrar (y que las tablas quedan vacías y solo guardan números), «ya estás
+  registrado como», «te pareces mucho» sin el nombre, terminar dos veces, cancelar, sesiones
+  e intentos que se acaban, registros que vencen y la purga, fotos demasiado pesadas, con
+  demasiados píxeles, vacías o que no son imágenes, y las migraciones repetidas.
 
 Los que corren los modelos usan tres fotos de dominio público de la NASA
 ([`tests/fixtures/`](tests/fixtures/README.md)): un retrato, otro retrato de la misma
@@ -92,13 +400,17 @@ varios (siete, ordenados por área), la girada por EXIF, en gris, con canal alfa
 y de 96 px, además de bytes que no son imagen, un JPEG cortado, un formato no aceptado y
 una cabecera que declara más píxeles que el tope. El embedding tiene norma 1; la misma
 persona en dos fotos da un coseno de 0,74 a 0,83 y cualquier otra, menos de 0,18 (el umbral
-que publica OpenCV para SFace es 0,363).
+que publica OpenCV para SFace es 0,363). Para el registro, una «selfie» es el retrato
+recortado y ampliado a 570 x 660 (rostro de unos 190 px), y la foto de grupo da otras
+personas —y a la propia Collins, comandante del STS-114— recortadas de la misma manera.
 
 En la CI, `FACES_MODELS_DIR` está definida y los modelos se bajan con su suma antes de
 pytest (y se guardan en la caché de Actions): un test que no los encuentre falla en vez de
 saltarse.
 
 ## Rendimiento medido
+
+### El pipeline
 
 Con [`benchmarks/faces_benchmark.py`](../../benchmarks/faces_benchmark.py), sobre las 13 233
 fotos de LFW (250 x 250 px) y 500 de ellas ampliadas y vueltas a codificar en JPEG; un hilo
@@ -129,3 +441,27 @@ exigir uno solo.
   26,9 ms y la de 2 000 px de 39,2 a 21,9 ms; el total de 4 000 px, de 161,9 a 95,6 ms.
 - Con fotos de celular de 12 MP domina **decodificar**: 55 ms de los 96. Una foto de 500 a
   1 000 px, del tamaño de un cuadro de cámara, tarda de 23 a 40 ms con su rostro.
+
+### El servicio
+
+Con [`benchmarks/faces_service_benchmark.py`](../../benchmarks/faces_service_benchmark.py):
+1 000 personas de LFW registradas **por el API**, una toma de frente cada una, contra el
+gestor real en el mismo proceso (sin red: es el piso de lo que tardará con Docker). Cada
+tiempo es una petición completa. Resultados crudos en
+[`rostros_servicio.json`](../../benchmarks/results/rostros_servicio.json); análisis en
+[`benchmarks/README.md`](../../benchmarks/README.md#10-servicio-de-rostros--registro-reconocimiento-y-conjunto-abierto).
+
+| Petición (1 000 registradas) | p50 | p95 | Análisis p50 | Galería p50 |
+|---|---:|---:|---:|---:|
+| registrar una toma aceptada | 27,7 ms | 75,8 ms | 17,2 ms | 2,4 ms |
+| registrar una toma rechazada | 23,2 ms | 56,6 ms | 17,1 ms | — |
+| terminar el registro | 17,2 ms | 93,5 ms | — | 2,0 ms |
+| reconocer a una persona registrada | 23,1 ms | 25,9 ms | 17,3 ms | 4,6 ms |
+| reconocer a una desconocida | 21,6 ms | 24,5 ms | 17,1 ms | 3,4 ms |
+
+Con 100 personas, reconocer tarda 22,2 y 20,5 ms: la galería (el HNSW y el nombre de la
+persona) cuesta de 2 a 5 ms con cualquier tamaño medido, y el resto es analizar la foto.
+Con 1 000 personas, el umbral de 0,45 acepta como alguien al 1,5 % de los desconocidos y
+deja sin reconocer al 5 % de los registrados; el de OpenCV (0,363) aceptaría al 46,5 %.
+
+![Reconocer una foto por el API](../../benchmarks/figures/rostros-servicio-reconocer.png)

@@ -357,7 +357,7 @@
           "above_threshold"
         ],
         "title": "DetectedMatch",
-        "description": "Una racha de ventanas de la subida alineada con una canción del catálogo.\n\n`coverage` es la fracción de las ventanas que la subida y el original podrían compartir\n(las audibles de la subida o las del original, las que sean menos) que cubre la racha;\n`score` es `mean_similarity · coverage`."
+        "description": "Una racha de ventanas de la subida alineada con una canción del catálogo.\n\n`coverage` es la fracción de las ventanas que la subida y el original podrían compartir\n(las audibles de la subida o las del original, las que sean menos) que cubre la racha, y\nno entra en el puntaje; `score` es la evidencia de la racha, de 0 a 1: sus ventanas hasta\nlas de una copia de 20 s por su similitud media sobre 0,85 (`detection.run_score`)."
       },
       "Detection": {
         "properties": {

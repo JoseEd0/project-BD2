@@ -5,7 +5,7 @@ catálogo de canciones originales** (#75): las 8 000 pistas de `fma_small` del F
 Archive, cortadas en tramos de 5 s e indexadas en el gestor con el HNSW de la Parte 4 sobre
 sus MFCC; el trabajo de carga que lo deja listo y un API de lectura; y **la detección**
 (#76): `POST /detections` recibe un audio y devuelve las canciones del catálogo que suenan
-dentro, alineadas por votación por desfase. La evaluación llega en #77; la interfaz, un estudio de escucha con la línea de tiempo de los tramos, vive en [`web/`](web/README.md). Como todo servicio de la
+dentro, alineadas por votación por desfase. La evaluación (#77) está [abajo](#evaluación); la interfaz, un estudio de escucha con la línea de tiempo de los tramos, vive en [`web/`](web/README.md). Como todo servicio de la
 Parte 5, usa el gestor solo por su API REST ([`apps/README.md`](../README.md)).
 
 El paquete se llama `songcheck` y no `copyright`, que es un nombre interno de Python.
@@ -241,7 +241,7 @@ Su forma, con valores de ejemplo:
 {
   "format": "MP3", "duration_seconds": 180.0, "sample_rate": 44100, "channels": 2,
   "window_seconds": 5.0, "hop_seconds": 2.5, "windows": 71, "silent_windows": 0,
-  "threshold": 0.45, "detected": true,
+  "threshold": 0.43, "detected": true,
   "matches": [{
     "song": {"id": 2, "title": "Food", "artist": "AWOL"},
     "upload": {"start_seconds": 60.0, "end_seconds": 87.5},
@@ -274,12 +274,12 @@ las ventanas a la vez), `voting` y `songs`.
 | `MAX_UPLOAD_SECONDS` | el audio más largo | 600 s: 239 ventanas, dentro de las 256 del gestor |
 | `NEIGHBOURS_PER_WINDOW` | tramos que se piden por ventana | 10 |
 | `MIN_RUN_WINDOWS` | ventanas seguidas que hacen una coincidencia | 2 |
-| `MATCH_THRESHOLD` | puntaje desde el que una coincidencia es copia | 0,45, provisional |
+| `MATCH_THRESHOLD` | puntaje desde el que una coincidencia es copia | 0,43, de la curva ROC (abajo) |
 | `MAX_MATCHES` | coincidencias que se devuelven | 10 |
 | `SILENCE_THRESHOLD_DBFS` | nivel bajo el cual una ventana no vota | −60 |
 
-**El umbral es provisional**: sale de 20 casos de cada tipo contra el catálogo entero (abajo);
-la curva ROC de la evaluación (#77) lo calibra.
+**El umbral sale de la evaluación**: es el de máxima J de Youden en la curva ROC de 400
+remixes sin distorsión ([abajo](#evaluación)). El de #76 era 0,45, de 20 casos de control.
 
 ### Medido
 
@@ -310,6 +310,43 @@ y los datos crudos en
   o tres de las 11 ventanas que podía compartir y la cobertura lo deja en el rango de las
   canciones no copiadas. Las tres pistas no catalogadas que pasan tienen rachas de 6 a 8
   ventanas con otra canción del FMA y hay que escucharlas para saber si comparten material.
+
+### Evaluación
+
+Un conjunto de prueba generado con la verdad conocida (#77): 200 remixes de 1 a 3 fragmentos
+de 5 a 20 s de canciones del catálogo, pegados con fundidos de 1 s, y 200 iguales con
+canciones que se borraron del catálogo; cada uno sin distorsión y con 12 distorsiones por
+separado. Medido el 19-11-2026 contra una copia del gestor con 7 794 canciones, con la
+máquina cargada (carga media de 6,9 a 24,4). El detalle está en el
+[§16 de `benchmarks/README.md`](../../benchmarks/README.md#16-evaluación-de-la-detección-de-copyright--remixes-con-la-verdad-conocida)
+y los datos crudos en
+[`benchmarks/results/copyright_evaluacion_casos.json`](../../benchmarks/results/copyright_evaluacion_casos.json).
+
+![Precisión, recall y F1 por distorsión](../../benchmarks/figures/copyright-evaluacion-deteccion.png)
+
+| Versión (umbral 0,43) | Recall | Precisión | F1 | AUC |
+|---|---:|---:|---:|---:|
+| sin distorsión | 0,55 | 0,43 | 0,48 | 0,62 |
+| MP3 a 64 kbit/s | 0,54 | 0,42 | 0,47 | 0,59 |
+| volumen −1 / −3 / −12 dB | 0,47 / 0,11 / 0,00 | 0,37 / 0,11 / 0,00 | 0,41 / 0,11 / 0,00 | 0,55 / 0,17 / 0,01 |
+| ruido a 30 / 20 / 10 dB de SNR | 0,34 / 0,18 / 0,03 | 0,31 / 0,16 / 0,02 | 0,32 / 0,17 / 0,03 | 0,40 / 0,21 / 0,04 |
+| pasa bajos a 4 kHz | 0,01 | 0,01 | 0,01 | 0,02 |
+| tempo ±5 % | 0,08 | 0,08-0,09 | 0,08-0,09 | 0,13 |
+| tono ±1 semitono | 0,05-0,07 | 0,06-0,07 | 0,06-0,07 | 0,11 |
+
+- **El umbral, 0,43**, encuentra el 55 % de los fragmentos copiados y da alguna coincidencia
+  en el 29 % de los remixes sin copias. Ningún umbral separa mucho mejor.
+- **Dónde falla: el nivel.** El descriptor (MFCC con su c0, la energía, cuantizado en una
+  bolsa de palabras) cambia con el volumen: −3 dB dejan el recall en 0,11 y −12 dB en 0. El
+  ruido, el pasa bajos, el tempo y el tono también lo rompen; el MP3 a 64 kbit/s no.
+- **El puntaje castiga los remixes de varios fragmentos.** La canción copiada aparece entre
+  las coincidencias en todos los fragmentos de 10 s o más, pero la cobertura los divide por
+  todo lo que podían compartir: el recall es 1,00 con un fragmento, 0,58 con dos y 0,36 con
+  tres. Contar las ventanas de la racha cuando su similitud es alta subiría el área bajo la
+  curva de 0,62 a 0,78 sobre las mismas coincidencias; queda propuesto, igual que quitar c0
+  del descriptor, que lo haría inmune al volumen.
+- **Cuando la encuentra, la ubica**: IoU mediana de 0,91 en la subida y 0,87 en el original.
+  Revisar un minuto de audio cuesta unos 180 ms.
 
 ## Docker
 

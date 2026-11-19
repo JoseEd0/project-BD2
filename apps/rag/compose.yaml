@@ -2,6 +2,20 @@
 # exista la suya, #88), su carga inicial y su túnel. Lo incluye el compose raíz; las redes
 # `data` y `cache` y el gestor se declaran allí. Ver apps/README.md, «Desplegar una app».
 
+x-papers-environment: &papers-environment
+  RAG_ENGINE_URL: http://engine:8000
+  RAG_ENGINE_KEY: ${RAG_ENGINE_KEY:-}
+  RAG_MIGRATION_KEY: ${RAG_MIGRATION_KEY:-}
+  RAG_LOG_LEVEL: ${RAG_LOG_LEVEL:-INFO}
+  # El modelo lo deja en la imagen apps/rag/docker-build.sh.
+  RAG_MODELS_DIR: /opt/app/models
+  # Una pregunta es una sola secuencia corta: más hilos por réplica no la aceleran y quitan
+  # CPU a las otras réplicas y al gestor.
+  RAG_EMBEDDING_THREADS: ${RAG_EMBEDDING_THREADS:-2}
+  # El corpus de `rag.corpus build`, montado de solo lectura: la carga lo lee y el API sirve
+  # de ahí los PDF citados.
+  RAG_DATA_DIR: /data/datasets
+
 services:
   papers-api:
     extends: { file: ../../deploy/app.compose.yaml, service: api }
@@ -9,16 +23,18 @@ services:
       args:
         APP_DIR: rag
     image: minigestor-papers-api
-    environment: &papers-environment
-      RAG_ENGINE_URL: http://engine:8000
-      RAG_ENGINE_KEY: ${RAG_ENGINE_KEY:-}
-      RAG_MIGRATION_KEY: ${RAG_MIGRATION_KEY:-}
-      RAG_LOG_LEVEL: ${RAG_LOG_LEVEL:-INFO}
-      # El modelo lo deja en la imagen apps/rag/docker-build.sh.
-      RAG_MODELS_DIR: /opt/app/models
-      # Una pregunta es una sola secuencia corta: más hilos por réplica no la aceleran y
-      # quitan CPU a las otras réplicas y al gestor.
-      RAG_EMBEDDING_THREADS: ${RAG_EMBEDDING_THREADS:-2}
+    environment:
+      <<: *papers-environment
+      # Las respuestas con Claude (#86). La clave solo llega a este contenedor; sin ella
+      # /answers responde 503 y la búsqueda sigue. `simulated` responde sin red (la CI).
+      RAG_LLM_PROVIDER: ${RAG_LLM_PROVIDER:-anthropic}
+      RAG_ANTHROPIC_API_KEY: ${RAG_ANTHROPIC_API_KEY:-}
+      RAG_ANSWER_EFFORT: ${RAG_ANSWER_EFFORT:-low}
+      RAG_ANSWER_MAX_TOKENS: ${RAG_ANSWER_MAX_TOKENS:-2048}
+      RAG_DAILY_BUDGET_USD: ${RAG_DAILY_BUDGET_USD:-5}
+    volumes:
+      # Relativa a apps/rag/ o absoluta.
+      - ${PAPERS_DATASETS_DIR:-../../data/datasets}:/data/datasets:ro
     # El modelo int8 (113 MiB) y la sesión de onnxruntime no caben en los 512m por omisión.
     mem_limit: ${PAPERS_API_MEMORY:-1g}
     networks: [data, papers, cache]
@@ -34,7 +50,8 @@ services:
     image: minigestor-papers-web
     environment:
       API_UPSTREAM: http://papers-api:8000
-      # Cada búsqueda calcula un embedding y, desde #86, cada pregunta llama al LLM.
+      # Cada búsqueda calcula un embedding y cada pregunta llama al LLM. `/api/answers` es
+      # SSE: la API responde con `X-Accel-Buffering: no` y nginx pasa cada evento al llegar.
       API_RATE_LIMIT: ${PAPERS_API_RATE_LIMIT:-5r/s}
       API_RATE_BURST: ${PAPERS_API_RATE_BURST:-10}
     ports:
@@ -54,7 +71,6 @@ services:
     environment:
       <<: *papers-environment
       RAG_EMBEDDING_THREADS: ${RAG_SEED_EMBEDDING_THREADS:-4}
-      RAG_DATA_DIR: /data/datasets
       # Los embeddings ya calculados en el anfitrión (`python -m rag.seed` fuera de Docker)
       # están en el corpus montado y se leen de ahí; si falta alguno, se calculan en /tmp.
       RAG_EMBEDDING_CACHE_DIR: ${RAG_SEED_EMBEDDING_CACHE_DIR:-/tmp/embeddings}

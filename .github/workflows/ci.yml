@@ -196,6 +196,8 @@ jobs:
       # (ruta relativa a apps/rag/), no el de arXiv.
       PAPERS_URL: http://localhost:8103
       PAPERS_DATASETS_DIR: ./tests/fixtures/datasets
+      # Sin clave de Anthropic en la CI: /api/answers responde con el modelo simulado.
+      RAG_LLM_PROVIDER: simulated
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
@@ -377,6 +379,24 @@ jobs:
               --data "{\"query\": \"BM25 term frequency\", \"mode\": \"$mode\", \"k\": 3}" \
               | python3 -c "import json, sys; hits = json.load(sys.stdin)['results']; assert hits and hits[0]['paper']['title'], hits"
           done
+      - name: Papers responde por SSE a través de nginx, con citas, y sirve la página citada
+        run: |
+          curl --fail --silent --show-error --no-buffer --dump-header /tmp/respuesta.headers \
+            "$PAPERS_URL/api/answers" --header "content-type: application/json" \
+            --data '{"question": "How does BM25 saturate term frequency?"}' > /tmp/respuesta.sse
+          grep -qi "content-type: text/event-stream" /tmp/respuesta.headers
+          python3 -c "import json
+          frames = [frame.split('\n') for frame in open('/tmp/respuesta.sse').read().split('\n\n') if frame]
+          events = [(name.removeprefix('event: '), json.loads(data.removeprefix('data: '))) for name, data in frames]
+          assert [name for name, _ in events][0] == 'sources' and events[-1][0] == 'done', events
+          done = events[-1][1]
+          assert done['complete'] and done['answered_from_documents'] and not done['invalid_citations'], done
+          assert done['citations'][0]['paper_id'] == '2501.00002', done"
+          curl --fail --silent --show-error "$PAPERS_URL/api/papers/2501.00002/pages/1" \
+            | python3 -c "import json, sys; page = json.load(sys.stdin); assert page['passages'] and page['viewer_url'].endswith('#page=1'), page"
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' "$PAPERS_URL/api/papers/2501.00002/pages/99")" = 404
+          # El corpus está montado (404, no 503): el diminuto no trae los PDF.
+          curl --silent "$PAPERS_URL/api/papers/2501.00002/file" | grep -q ResourceNotFoundError
       - name: Con --scale, nginx reparte entre las réplicas
         run: |
           docker compose up --detach --wait --scale example-api=3

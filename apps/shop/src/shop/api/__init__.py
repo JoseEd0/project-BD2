@@ -14,12 +14,18 @@ from contextlib import asynccontextmanager
 
 import httpx
 from fastapi import FastAPI
-from redis.asyncio import Redis
 
-from appkit import configure_logging, create_service_app, load_settings
+from appkit import (
+    OptionalRedis,
+    RedisFactory,
+    configure_logging,
+    create_service_app,
+    load_settings,
+    redis_factory,
+)
 from shop.catalog.schema import SCHEMA
 from shop.clip import ClipTextEncoder, ClipTokenizer, locate_models
-from shop.recommend.cache import ResponseCache, redis_client
+from shop.recommend.cache import ResponseCache
 from shop.settings import ShopSettings
 
 from .recommendations import router as recommendations_router
@@ -34,11 +40,11 @@ def create_app(
     *,
     text_encoder: TextEmbedder | None = None,
     engine_transport: httpx.AsyncBaseTransport | None = None,
-    cache_client: Redis | None = None,
+    redis: RedisFactory | None = None,
 ) -> FastAPI:
     """La aplicación de la tienda. Sin argumentos lee la configuración del entorno, que es
-    como la arranca uvicorn; `text_encoder`, `engine_transport` y `cache_client` (un Redis en
-    lugar del de `SHOP_REDIS_URL`) son para los tests.
+    como la arranca uvicorn; `text_encoder`, `engine_transport` y `redis` (otro Redis en lugar
+    del de `SHOP_REDIS_URL`) son para los tests y los benchmarks.
 
     Raises:
         appkit.SettingsError: si falta o no vale una variable `SHOP_*`.
@@ -48,22 +54,16 @@ def create_app(
         settings = load_settings(ShopSettings)
         configure_logging(settings.log_level)
     configured = settings
+    cache = OptionalRedis(redis or _redis_of(settings), settings.cache_retry_seconds)
 
     @asynccontextmanager
     async def load_text_encoder(app: FastAPI) -> AsyncIterator[None]:
         app.state.text_encoder = text_encoder or _clip_text_encoder(configured)
-        redis = cache_client or _redis(configured)
-        app.state.cache = ResponseCache(
-            redis,
-            configured.cache_ttl_seconds,
-            _cache_version(configured),
-            configured.cache_retry_seconds,
-        )
-        try:
+        async with cache.connected():
+            app.state.cache = ResponseCache(
+                cache, configured.cache_ttl_seconds, _cache_version(configured)
+            )
             yield
-        finally:
-            if redis is not None and cache_client is None:
-                await redis.aclose()
 
     app = create_service_app(
         settings,
@@ -72,6 +72,7 @@ def create_app(
         migrations=SCHEMA,
         lifespan=load_text_encoder,
         engine_transport=engine_transport,
+        degradables=[cache],
     )
     app.state.settings = settings
     app.include_router(router)
@@ -79,10 +80,10 @@ def create_app(
     return app
 
 
-def _redis(settings: ShopSettings) -> Redis | None:
+def _redis_of(settings: ShopSettings) -> RedisFactory | None:
     if settings.redis_url is None:
         return None
-    return redis_client(str(settings.redis_url), settings.redis_timeout_seconds)
+    return redis_factory(str(settings.redis_url), settings.redis_timeout_seconds)
 
 
 def _cache_version(settings: ShopSettings) -> str:

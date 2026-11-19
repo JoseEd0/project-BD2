@@ -6,25 +6,22 @@ una generación (`INCR`): las claves viejas dejan de pedirse y caducan solas con
 diferencia de borrar claves, no hay carrera: una respuesta que se estaba calculando cuando
 llegó la compra se guarda con la generación anterior, y nadie vuelve a leerla.
 
-La caché es opcional. Sin `SHOP_REDIS_URL` no se usa; si Redis no responde, se responde sin
-ella, se avisa una vez en el log y no se vuelve a probar hasta pasado `retry_seconds`, para
-no pagar el plazo de Redis en cada petición mientras está caído.
+La caché es opcional y la maneja `appkit.OptionalRedis`: sin `SHOP_REDIS_URL` no se usa; si
+Redis no responde, se responde sin ella, se avisa una vez y no se vuelve a probar hasta su
+ventana de reintento, y `/health` lo muestra como degradado.
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
-import logging
-import time
-from collections.abc import Callable, Iterable
+from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import Enum
 
-from redis.asyncio import Redis
-from redis.asyncio.retry import Retry
-from redis.backoff import NoBackoff
 from redis.exceptions import RedisError
+
+from appkit import OptionalRedis
 
 KEY_PREFIX = "shop"
 PRODUCT_ENTITY = "producto"
@@ -33,11 +30,6 @@ USER_ENTITY = "usuario"
 # volviera a 0, una respuesta vieja guardada con la generación 0 podría servirse otra vez.
 GENERATION_TTL_FACTOR = 2
 DIGEST_CHARACTERS = 16
-NO_RETRIES = 0
-
-logger = logging.getLogger(__name__)
-
-Clock = Callable[[], float]
 
 
 class CacheStatus(Enum):
@@ -68,38 +60,31 @@ class CacheLookup:
     key: str | None
 
 
-class ResponseCache:
-    """Respuestas guardadas en `client` durante `ttl_seconds`, bajo la versión `version`
-    (la de los pesos y la configuración del recomendador)."""
+BYPASS = CacheLookup(CacheStatus.BYPASS, None, None)
 
-    def __init__(
-        self,
-        client: Redis | None,
-        ttl_seconds: int,
-        version: str,
-        retry_seconds: float,
-        clock: Clock = time.monotonic,
-    ) -> None:
-        self._client = client
+
+class ResponseCache:
+    """Respuestas guardadas en `redis` durante `ttl_seconds`, bajo la versión `version` (la
+    de los pesos y la configuración del recomendador)."""
+
+    def __init__(self, redis: OptionalRedis, ttl_seconds: int, version: str) -> None:
+        self._redis = redis
         self._ttl_seconds = ttl_seconds
         self._version = version
-        self._retry_seconds = retry_seconds
-        self._clock = clock
-        self._unavailable_until: float | None = None
 
     async def lookup(self, entry: CacheEntry) -> CacheLookup:
         """La respuesta de `entry` si está guardada; si Redis no está, sin caché."""
-        client = self._available()
+        client = self._redis.client()
         if client is None:
-            return CacheLookup(CacheStatus.BYPASS, None, None)
+            return BYPASS
         try:
             generations = await client.mget([_generation_key(*entity) for entity in entry.entities])
             key = self._key(entry, generations)
             payload = await client.get(key)
         except RedisError as error:
-            self._fail(error)
-            return CacheLookup(CacheStatus.BYPASS, None, None)
-        self._recovered()
+            self._redis.failed(error)
+            return BYPASS
+        self._redis.succeeded()
         if payload is None:
             return CacheLookup(CacheStatus.MISS, None, key)
         stored = payload.encode() if isinstance(payload, str) else payload
@@ -107,17 +92,17 @@ class ResponseCache:
 
     async def store(self, lookup: CacheLookup, payload: bytes) -> None:
         """Guarda `payload` con la clave de `lookup`; sin clave, no hace nada."""
-        client = self._available()
+        client = self._redis.client()
         if client is None or lookup.key is None:
             return
         try:
             await client.set(lookup.key, payload, ex=self._ttl_seconds)
         except RedisError as error:
-            self._fail(error)
+            self._redis.failed(error)
 
     async def invalidate(self, products: Iterable[str], users: Iterable[str]) -> None:
         """Deja sin efecto las respuestas que dependen de `products` o de `users`."""
-        client = self._available()
+        client = self._redis.client()
         if client is None:
             return
         entities = [(PRODUCT_ENTITY, product) for product in products]
@@ -130,7 +115,7 @@ class ResponseCache:
                     pipeline.expire(_generation_key(*entity), lifetime)
                 await pipeline.execute()
         except RedisError as error:
-            self._fail(error)
+            self._redis.failed(error)
 
     def _key(self, entry: CacheEntry, generations: Iterable[object]) -> str:
         dependencies = ":".join(
@@ -140,39 +125,6 @@ class ResponseCache:
         encoded = json.dumps(entry.parameters, sort_keys=True, default=str).encode()
         digest = hashlib.sha256(encoded).hexdigest()[:DIGEST_CHARACTERS]
         return f"{KEY_PREFIX}:{self._version}:{entry.route}:{dependencies}:{digest}"
-
-    def _available(self) -> Redis | None:
-        if self._client is None:
-            return None
-        if self._unavailable_until is not None and self._clock() < self._unavailable_until:
-            return None
-        return self._client
-
-    def _fail(self, error: RedisError) -> None:
-        if self._unavailable_until is None:
-            logger.warning(
-                "la caché de Redis no responde (%s): se responde sin ella y se reintenta "
-                "cada %.0f s",
-                error,
-                self._retry_seconds,
-            )
-        self._unavailable_until = self._clock() + self._retry_seconds
-
-    def _recovered(self) -> None:
-        if self._unavailable_until is not None:
-            logger.info("la caché de Redis volvió a responder")
-            self._unavailable_until = None
-
-
-def redis_client(url: str, timeout_seconds: float) -> Redis:
-    """Un cliente de Redis que falla enseguida: sin reintentos y con `timeout_seconds` para
-    conectar y para cada operación."""
-    return Redis.from_url(
-        url,
-        socket_timeout=timeout_seconds,
-        socket_connect_timeout=timeout_seconds,
-        retry=Retry(NoBackoff(), NO_RETRIES),
-    )
 
 
 def _generation_key(kind: str, identifier: str) -> str:

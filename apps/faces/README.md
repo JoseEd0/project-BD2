@@ -539,7 +539,7 @@ Con [`benchmarks/faces_stream_benchmark.py`](../../benchmarks/faces_stream_bench
 contra el compose en el mismo equipo: cuadros JPEG de 640 x 480 con una persona registrada,
 a 10 por segundo, 300 por pasada. Resultados crudos en
 [`rostros_tiempo_real.json`](../../benchmarks/results/rostros_tiempo_real.json); análisis en
-[`benchmarks/README.md`](../../benchmarks/README.md#14-rostros-en-vivo--latencia-por-cuadro-por-websocket).
+[`benchmarks/README.md`](../../benchmarks/README.md#15-rostros-en-vivo--latencia-por-cuadro-por-websocket).
 
 ![Rostros en vivo: latencia de un cuadro](../../benchmarks/figures/rostros-tiempo-real.png)
 

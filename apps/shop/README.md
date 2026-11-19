@@ -10,7 +10,7 @@ recomendador (Hit@10, NDCG@10) sea honesta, fichas y fotos de los productos, y t
 reales de Lima; y **el catálogo en el gestor** (#80): el esquema, la carga, las dos
 representaciones visuales (SIFT de la Parte 4 y CLIP en ONNX) y un API de lectura; y **el
 recomendador** (#81): cuatro señales del gestor fundidas y explicadas, con caché en Redis.
-La evaluación y su página llegan en #82 y #83.
+La interfaz, **Cajón** (#83), vive en [`web/`](web/README.md); la evaluación llega en #82.
 
 | Módulo | Qué hace |
 |---|---|
@@ -371,8 +371,9 @@ carga masiva NDJSON, el `CREATE INDEX` de SIFT, y CLIP (embeddings con su caché
 
 `uvicorn --factory shop.api:create_app`, hecha con `appkit.create_service_app`: `/health`,
 `/ready`, migraciones al arrancar, `X-Request-ID` y `Server-Timing` (`clip` y `gestor`).
-Carga la torre de texto de CLIP al arrancar (`SHOP_MODELS_DIR`). Todo el texto del usuario
-viaja como parámetro (`$1`), nunca dentro del SQL.
+Carga las dos torres de CLIP al arrancar (`SHOP_MODELS_DIR`): la de texto para buscar fotos
+con palabras y la de imagen para buscar con una foto; con las dos, el proceso ocupa unos
+640 MiB (medido). Todo el texto del usuario viaja como parámetro (`$1`), nunca dentro del SQL.
 
 | Ruta | Consulta del gestor |
 |---|---|
@@ -380,16 +381,48 @@ viaja como parámetro (`$1`), nunca dentro del SQL.
 | `GET /busqueda/texto?q=&limite=` | `MATCH(texto, $1) USING BM25` sobre el invertido en inglés; `q` admite `AND`, `OR`, `NOT` y paréntesis |
 | `GET /busqueda/imagenes?q=&limite=` | el embedding de `q` con la torre de texto, y `SIMILAR_TO(embedding, $1, k = $2)` sobre el HNSW de CLIP |
 | `GET /tiendas/cercanas?lat=&lon=&limite=` | `ORDER BY distancia(ubicacion, $1) LIMIT $2`, k vecinos con el R-Tree, en metros |
+| `POST /busqueda/foto?limite=` (multipart, `foto`) | el embedding de la foto con la torre de imagen, y el mismo `SIMILAR_TO` sobre el HNSW de CLIP |
+| `GET /productos/{id}/foto` | `imagen` por el B+ de `id`; la foto se sirve desde el dataset, con `Cache-Control` |
+| `GET /productos/{id}/tiendas?lat=&lon=&limite=` | las tiendas con stock: el inventario por su hash (`producto = $1`) unido a las tiendas, por `distancia` |
+| `GET /departamentos` | `GROUP BY departamento HAVING COUNT(*) >= $1`, una vez por proceso |
+| `GET /usuarios` | los `SHOP_FEATURED_USERS` (12) clientes con más compras, una vez por proceso |
+| `GET /usuarios/{id}/compras?limite=` | su historial en la partición del recomendador, por el B+ de `usuario` |
 
 `limite` va de 1 a `SHOP_MAX_SEARCH_LIMIT` (100; por omisión `SHOP_SEARCH_LIMIT`, 10). Las
-rutas del recomendador están en [El recomendador](#el-recomendador-81).
+tres búsquedas aceptan además `departamento`, `precio_min` y `precio_max`, que van al `WHERE`
+como parámetros (`api/filters.py`); un producto sin precio no pasa un filtro de precio. El
+HNSW de CLIP no sabe de departamentos ni de precios (viven en `shop_productos`), así que con
+un filtro se piden `SHOP_FILTERED_SEARCH_FACTOR` (10) veces más vecinos y el filtro va en el
+`WHERE` de las fichas: un filtro muy estrecho puede devolver menos de `limite`. Las rutas del
+recomendador están en [El recomendador](#el-recomendador-81).
+
+**Las fotos.** La columna `imagen` guarda la ruta de la foto vista desde el gestor; el API no
+la abre tal cual: toma solo su nombre, que tiene que ser un SHA-256 (así las guarda
+`shop.dataset.images`), y la busca bajo `<SHOP_DATA_DIR>/amazon_musical_instruments/images/`.
+Una ruta manipulada no sale de esa carpeta, y sin `SHOP_DATA_DIR` la ruta responde 404. Una
+foto subida para buscar se acepta hasta `SHOP_PHOTO_MAX_BYTES` (8 MiB, `413`) y
+`SHOP_PHOTO_MAX_PIXELS` (40 megapíxeles, `413`); lo que no es una imagen es un `400`
+(`UnreadablePhotoError`). Se gira según su EXIF antes de pasar por CLIP.
+
+**Los departamentos y los clientes destacados** recorren una tabla entera (un `GROUP BY` sobre
+24 587 fichas tardó 3,2 s la primera vez) y solo cambian
+con una carga nueva: cada proceso del API los pide la primera vez y los recuerda
+(`api/facets.py`); la segunda petición tarda menos de 2 ms.
+
+Medido en local con el catálogo entero (Apple M4 Pro, gestor en otro proceso), tres veces cada
+una: buscar con una foto, 20 a 24 ms (CLIP 10 ms y el gestor 9 ms; la primera, 91 ms); fotos
+por texto con filtro, 60 ms; texto con filtro, 16 ms; las tiendas con stock de un producto,
+6 ms; la foto de un producto, 3 ms.
 
 ### Con Docker
 
 [`compose.yaml`](compose.yaml), incluido desde el raíz, sigue «Desplegar una app» de
-[`apps/README.md`](../README.md): `shop-api` (redes `data` y `shop`), `shop-web` en 8102 y
-8402 (la plantilla del kit web hasta que llegue la interfaz, #83), `shop-seed` (perfil
-`seed`) y `shop-tunnel` (perfil `tunnel`). [`docker-build.sh`](docker-build.sh) baja y
+[`apps/README.md`](../README.md): `shop-api` (redes `data`, `shop` y `cache`, con la carpeta de
+datasets montada de solo lectura para servir las fotos), `shop-web` en 8102 y 8402 (la
+interfaz, [`web/`](web/README.md): su nginx admite 60 peticiones por segundo con ráfagas de
+200 porque una ficha pide decenas de fotos, subidas de hasta 9 MB, la ubicación del navegador
+y las teselas de OpenStreetMap en la CSP), `shop-seed` (perfil `seed`) y `shop-tunnel`
+(perfil `tunnel`). [`docker-build.sh`](docker-build.sh) baja y
 verifica CLIP al construir la imagen, que arranca sin red.
 
 ```bash
@@ -402,7 +435,9 @@ curl http://localhost:8102/api/productos/B07YM5ZHS9
 `shop-seed` monta la carpeta de datasets de solo lectura en `/app/data/datasets`, la misma
 ruta que el gestor; su caché de embeddings vive en el `tmpfs` del contenedor. La CI levanta
 el compose, carga dos veces el dataset diminuto de los tests
-([`tests/tiny_dataset.py`](tests/tiny_dataset.py)) y lee un producto por el puerto 8102.
+([`tests/tiny_dataset.py`](tests/tiny_dataset.py)), lee un producto por el puerto 8102,
+comprueba que la interfaz es la suya (con su CSP y su `Permissions-Policy`), baja la foto de
+un producto y busca con ella.
 
 ### Tests
 
@@ -420,7 +455,11 @@ calcular CLIP y que sin el directorio de importación el gestor no lee las fotos
 recomendador (`test_shop_recommendations_end_to_end.py`) prueban cada señal con su SQL, el
 arranque en frío, la cercanía, SIFT, las recomendaciones de un usuario, una compra que suma
 pares e invalida la caché (fakeredis) y un Redis que no responde; los de `apps/shop`, la
-fusión, las frases y la caché por separado.
+fusión, las frases y la caché por separado. Los del API (`test_shop_api_end_to_end.py`) cubren
+además los filtros (y que su texto es un parámetro), buscar con una foto en JPEG y en PNG, los
+rechazos de una foto vacía, que no es imagen, pesada o enorme, servir la foto de un producto
+(y que una ruta manipulada no sale de la carpeta), las tiendas con stock, los departamentos,
+los clientes destacados y su historial.
 
 ### Medido: cargar todo el dataset
 

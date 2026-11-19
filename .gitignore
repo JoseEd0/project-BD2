@@ -114,6 +114,7 @@ config.local.*
 *.jsonl
 !**/samples/*.csv
 !demos/samples/esci/*.csv
+!apps/rag/tests/fixtures/datasets/rag_papers/*.jsonl
 *.jpg
 *.jpeg
 *.png

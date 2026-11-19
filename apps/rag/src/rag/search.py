@@ -33,8 +33,9 @@ MAX_RESULTS = 50
 # Cuántos fragmentos aporta cada lista a la fusión. Con 50, un fragmento que una de las dos
 # deja en el puesto 50 todavía suma 1/110 frente al 1/61 del primero.
 HYBRID_CANDIDATES = 50
-# Candidatos que el HNSW recorre por consulta: más que `HYBRID_CANDIDATES`, porque FAISS no
-# devuelve más vecinos que su `ef_search`.
+# Candidatos que el HNSW recorre por consulta. Más que los `HYBRID_CANDIDATES` que pide la
+# búsqueda híbrida: con `ef_search` igual a k, los últimos vecinos salen sin margen y el
+# recall de la cola cae.
 HNSW_EF_SEARCH = 128
 
 EMBEDDING_STAGE = "embedding"

@@ -1,0 +1,63 @@
+# Rostros (opción D): su API, que es la única que habla con el gestor, y su interfaz, que
+# por ahora es la plantilla del kit web (la PWA llega en #93). Se incluye desde el
+# compose.yaml raíz; las redes data y cache están declaradas allí.
+
+services:
+  faces-api:
+    extends: { file: ../../deploy/app.compose.yaml, service: api }
+    build:
+      args:
+        APP_DIR: faces
+    image: minigestor-faces-api
+    environment:
+      FACES_ENGINE_URL: http://engine:8000
+      FACES_ENGINE_KEY: ${FACES_ENGINE_KEY:-}
+      FACES_MIGRATION_KEY: ${FACES_MIGRATION_KEY:-}
+      FACES_LOG_LEVEL: ${FACES_LOG_LEVEL:-INFO}
+      # Los modelos que apps/faces/docker-build.sh dejó en la imagen al construirla.
+      FACES_MODELS_DIR: /opt/app/models
+      FACES_RETENTION_DAYS: ${FACES_RETENTION_DAYS:-30}
+      FACES_ENROLLMENT_TTL_SECONDS: ${FACES_ENROLLMENT_TTL_SECONDS:-900}
+      FACES_MAX_UPLOAD_BYTES: ${FACES_MAX_UPLOAD_BYTES:-10485760}
+      FACES_ANALYSIS_WORKERS: ${FACES_ANALYSIS_WORKERS:-2}
+    # Cada pipeline de análisis carga YuNet y SFace (37 MiB en disco) y decodifica fotos de
+    # celular de hasta 50 MP.
+    mem_limit: ${FACES_API_MEMORY:-1g}
+    networks: [data, faces, cache]
+    depends_on:
+      engine:
+        condition: service_healthy
+
+  faces-web:
+    extends: { file: ../../deploy/app.compose.yaml, service: web }
+    build:
+      args:
+        APP_DIR: web-kit/template
+    image: minigestor-faces-web
+    environment:
+      API_UPSTREAM: http://faces-api:8000
+      WEB_PERMISSIONS_POLICY: camera=(self), microphone=(), geolocation=()
+      # Una foto de 10 MiB (FACES_MAX_UPLOAD_BYTES) más el sobre del multipart.
+      API_MAX_BODY_SIZE: ${FACES_WEB_MAX_BODY_SIZE:-11m}
+      # Cada foto cuesta de 20 a 100 ms de CPU en la API: menos peticiones por IP que el resto.
+      API_RATE_LIMIT: ${FACES_WEB_RATE_LIMIT:-5r/s}
+      API_RATE_BURST: ${FACES_WEB_RATE_BURST:-20}
+    ports:
+      - ${FACES_WEB_PORT:-8104}:8080
+      - ${FACES_WEB_TLS_PORT:-8404}:8443
+    networks: [faces]
+    depends_on:
+      faces-api:
+        condition: service_healthy
+
+  faces-tunnel:
+    extends: { file: ../../deploy/app.compose.yaml, service: tunnel }
+    profiles: [tunnel]
+    command: ["tunnel", "--no-autoupdate", "--url", "http://faces-web:8080"]
+    networks: [faces]
+    depends_on:
+      faces-web:
+        condition: service_healthy
+
+networks:
+  faces: {}

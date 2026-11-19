@@ -77,11 +77,16 @@ export default function ResearchPage() {
     [ask, filters],
   );
 
-  const show = useCallback((turn: Turn, nextTab: WorkbenchTab) => {
-    setActiveId(turn.id);
-    setTab(nextTab);
-    setSheetOpen(true);
-  }, []);
+  // En pantalla ancha la mesa ya está a la vista: la hoja solo se abre en la angosta, y no
+  // aparece sola si la ventana se angosta después.
+  const show = useCallback(
+    (turn: Turn, nextTab: WorkbenchTab) => {
+      setActiveId(turn.id);
+      setTab(nextTab);
+      setSheetOpen(narrow);
+    },
+    [narrow],
+  );
 
   const onCite = useCallback(
     (turn: Turn, source: AnswerSource) => {

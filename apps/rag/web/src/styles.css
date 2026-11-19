@@ -1183,10 +1183,21 @@ button.key::after {
   gap: var(--space-2);
 }
 
+/* La navegación de páginas queda a mano mientras se baja por la página. */
 .fiche__nav {
+  position: sticky;
+  inset-block-start: calc(var(--space-5) * -1);
+  z-index: 2;
   display: flex;
   align-items: center;
   gap: var(--space-2);
+  margin-block: calc(var(--space-2) * -1);
+  padding-block: var(--space-2);
+  background: var(--ground);
+}
+
+.sheet .fiche__nav {
+  inset-block-start: calc(var(--space-4) * -1);
 }
 
 .fiche__position {

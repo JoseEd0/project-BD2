@@ -22,7 +22,7 @@ from fastapi import FastAPI
 
 from appkit.engine import engine_client
 from appkit.errors import install_error_handlers
-from appkit.health import ReadinessProbe, add_probes
+from appkit.health import Degradable, ReadinessProbe, add_probes
 from appkit.migrations import check_repeatable, migrate
 from appkit.settings import ServiceSettings
 from appkit.tracing import RequestTracingMiddleware
@@ -40,6 +40,7 @@ def create_service_app(
     migrations: Sequence[str] = (),
     lifespan: Lifespan | None = None,
     engine_transport: httpx.AsyncBaseTransport | None = None,
+    degradables: Sequence[Degradable] = (),
 ) -> FastAPI:
     """La aplicación del servicio `name`, con middleware de trazas, errores uniformes,
     `/health`, `/ready` y el ciclo de vida del cliente del gestor.
@@ -47,7 +48,9 @@ def create_service_app(
     `migrations` son las sentencias del esquema (ver `appkit.migrations`), con la clave de
     migraciones si está configurada. `lifespan` es el arranque y apagado propios del servicio:
     corre con el cliente ya abierto y las migraciones aplicadas, y termina antes de cerrarlo.
-    `engine_transport` reemplaza la red hacia el gestor, para los tests.
+    `engine_transport` reemplaza la red hacia el gestor, para los tests. `degradables` son
+    las piezas opcionales del servicio (su caché, por ejemplo), que las sondas muestran como
+    degradadas cuando faltan.
 
     Raises:
         NonRepeatableMigrationError: si alguna migración no es repetible, antes de arrancar.
@@ -72,7 +75,7 @@ def create_service_app(
     app = FastAPI(title=name, version=version, lifespan=service_lifespan)
     app.add_middleware(RequestTracingMiddleware, service=name)
     install_error_handlers(app)
-    add_probes(app, version, lambda: app.state.readiness)
+    add_probes(app, version, lambda: app.state.readiness, degradables)
     return app
 
 

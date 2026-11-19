@@ -5,9 +5,15 @@ build-backend = "hatchling.build"
 [project]
 name = "minigestor-rag"
 version = "0.1.0"
-description = "RAG sobre papers: corpus de arXiv con texto por página y fragmentos"
+description = "RAG sobre papers: corpus de arXiv, ingesta en el gestor y recuperación híbrida"
 requires-python = ">=3.11"
-dependencies = ["minigestor-kit", "pypdf>=6.0"]
+dependencies = [
+    "minigestor-kit",
+    "numpy>=1.26",
+    "onnxruntime>=1.20",
+    "pypdf>=6.0",
+    "tokenizers>=0.20",
+]
 
 [project.optional-dependencies]
 plots = ["matplotlib>=3.8"]

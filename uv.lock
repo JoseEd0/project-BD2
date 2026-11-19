@@ -1549,7 +1549,11 @@ version = "0.1.0"
 source = { editable = "apps/rag" }
 dependencies = [
     { name = "minigestor-kit" },
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
+    { name = "numpy", version = "2.5.5", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+    { name = "onnxruntime" },
     { name = "pypdf" },
+    { name = "tokenizers" },
 ]
 
 [package.optional-dependencies]
@@ -1561,7 +1565,10 @@ plots = [
 requires-dist = [
     { name = "matplotlib", marker = "extra == 'plots'", specifier = ">=3.8" },
     { name = "minigestor-kit", editable = "apps/kit" },
+    { name = "numpy", specifier = ">=1.26" },
+    { name = "onnxruntime", specifier = ">=1.20" },
     { name = "pypdf", specifier = ">=6.0" },
+    { name = "tokenizers", specifier = ">=0.20" },
 ]
 provides-extras = ["plots"]
 

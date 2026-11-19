@@ -18,6 +18,7 @@ from benchmarks.faces_service_benchmark import (
     ENROLLED,
     FALSE_DUPLICATES,
     IDENTIFY,
+    MEASUREMENTS,
     OPEN_SET,
     REJECTIONS,
     SHOT,
@@ -107,4 +108,5 @@ def test_the_whole_experiment_runs_on_a_tiny_gallery(tmp_path: Path):
     assert find("umbral 0.363", OPEN_SET, 2)["fnir"] == 0.0
     assert find("LFW", REJECTIONS, 2)["rechazadas"] == 0
     assert find("umbral 0.5", FALSE_DUPLICATES, 2)["bloqueados"] == 0
+    assert find("sharpness", MEASUREMENTS, 2)["p50"] > 0
     assert isinstance(report, Report)

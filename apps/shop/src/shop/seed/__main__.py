@@ -29,6 +29,8 @@ from .manifest import ManifestError
 from .report import SeedReport
 
 FAILURE_EXIT_CODE = 1
+# Una línea por petición al gestor taparía el avance de la carga.
+HTTP_LOGGER = "httpx"
 SEED_FAILURES = (
     SeedError,
     ManifestError,
@@ -49,6 +51,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
         print(f"error: {error}", file=sys.stderr)
         return FAILURE_EXIT_CODE
     configure_logging(settings.log_level)
+    logging.getLogger(HTTP_LOGGER).setLevel(logging.WARNING)
     try:
         report = asyncio.run(_seed(settings))
     except SEED_FAILURES as error:

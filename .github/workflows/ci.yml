@@ -351,6 +351,14 @@ jobs:
           curl --fail --silent --show-error "$SHOP_URL/api/health"
           curl --fail --silent --show-error "$SHOP_URL/api/ready" | grep -q ready
           curl --fail --silent --show-error "$SHOP_URL/api/productos/B000GUITAR" | grep -q "Electric Guitar"
+      - name: La tienda recomienda con sus cuatro señales y guarda la respuesta en Redis
+        run: |
+          url="$SHOP_URL/api/productos/B000GUITAR/recomendaciones?lat=-12.047&lon=-77.043"
+          curl --fail --silent --show-error --dump-header /tmp/primera "$url" \
+            | grep -q "comprado junto con este producto por 2 clientes"
+          grep -qi "x-cache: miss" /tmp/primera
+          curl --fail --silent --show-error --dump-header /tmp/segunda --output /dev/null "$url"
+          grep -qi "x-cache: hit" /tmp/segunda
       - name: Copyright indexa su catálogo por tramos, una segunda vez sin repetir nada, y lo sirve
         run: |
           docker compose run --rm copyright-seed

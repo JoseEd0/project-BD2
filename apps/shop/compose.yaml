@@ -20,11 +20,16 @@ services:
       SHOP_LOG_LEVEL: ${SHOP_LOG_LEVEL:-INFO}
       # CLIP en ONNX, horneado en la imagen por apps/shop/docker-build.sh.
       SHOP_MODELS_DIR: /opt/app/models
+      # La caché de recomendaciones; si Redis no responde, el API contesta sin ella.
+      SHOP_REDIS_URL: ${SHOP_REDIS_URL:-redis://redis:6379/0}
+      SHOP_CACHE_TTL_SECONDS: ${SHOP_CACHE_TTL_SECONDS:-600}
     # Con la torre de texto de CLIP cargada, el API ocupa unos 430 MiB (medido).
     mem_limit: ${SHOP_API_MEMORY:-1g}
-    networks: [data, shop]
+    networks: [data, shop, cache]
     depends_on:
       engine:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
   shop-web:

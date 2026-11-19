@@ -55,7 +55,7 @@ Un servicio usa el gestor como una app usa PostgreSQL: con un driver y una clave
 navegador ─► :810x <app>-web (nginx) ─► <app>-api ×N ─┐  red <app>
                                                       ▼  red data (interna)
                          :8080 console ─────────────► engine ── volumen minigestor-data
-                                         <app>-api ─► redis  (red cache, interna; papers y faces)
+                                         <app>-api ─► redis  (red cache, interna; tienda, papers y faces)
 ```
 
 El gestor (`engine`) no publica puertos y vive en la red interna `data`; solo la consola y
@@ -91,7 +91,7 @@ construcciones.
          SHOP_ENGINE_KEY: ${SHOP_ENGINE_KEY:-}
          SHOP_MIGRATION_KEY: ${SHOP_MIGRATION_KEY:-}
          SHOP_LOG_LEVEL: ${SHOP_LOG_LEVEL:-INFO}
-       networks: [data, shop]          # papers y faces, además: cache
+       networks: [data, shop, cache]   # cache: la tienda, papers y faces
        depends_on: { engine: { condition: service_healthy } }
 
      shop-web:

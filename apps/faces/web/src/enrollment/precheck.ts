@@ -87,11 +87,14 @@ export const SHOT_GATE: ShotGateOptions = {
  */
 export class ShotGate {
   private stable = 0;
-  private lastHintAt = Number.NEGATIVE_INFINITY;
+  private lastHintAt: number;
   private nextShotAt = Number.NEGATIVE_INFINITY;
   private inFlight = false;
 
-  constructor(private readonly options: ShotGateOptions = SHOT_GATE) {}
+  /** `now` es cuando empieza a mirar: el socket tiene `hintMaxAgeMs` para dar su primera caja. */
+  constructor(now: number, private readonly options: ShotGateOptions = SHOT_GATE) {
+    this.lastHintAt = now;
+  }
 
   /** Una respuesta del socket con su veredicto local. */
   observe(issue: PrecheckIssue | null, now: number): void {

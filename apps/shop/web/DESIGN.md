@@ -108,13 +108,16 @@ nunca cae derecho). Objetivos táctiles de 44 px.
   recomendación, con sus sellos y su frase. Todo el producto es un enlace.
 - **Fila de recomendaciones**: título con el sello de su señal, cuántos candidatos dio y en
   cuántos ms, y «Ver SQL» (desplegable con la consulta exacta y sus parámetros); los
-  productos en una fila con desplazamiento horizontal y botones anterior/siguiente.
-- **Ficha**: foto grande, etiqueta grande (precio, ASIN, marca, valoración, departamento),
-  «Comprar» aislado de lo demás (es la acción con consecuencias), la descripción en viñetas.
-  Debajo, el mapa de stock y las filas.
+  productos en una fila con desplazamiento horizontal y pestañas anterior/siguiente de
+  tolex (solo con ratón; con el teclado se recorren los enlaces).
+- **Ficha**: a la izquierda, la foto y su etiqueta grande colgada debajo (precio primero,
+  título, marca, valoración, n.º de catálogo) y la descripción en viñetas, plegada; a la
+  derecha, «Comprar» aislado de lo demás (es la acción con consecuencias) y el mapa de stock,
+  visibles sin desplazarse en 1440 x 900. En el celular, uno debajo del otro. Debajo, las filas.
 - **Mapa de stock** (Leaflet): tiendas con el producto, un punto por tienda con su número y la
-  lista equivalente al lado (nombre, rubro, distancia, unidades); la ubicación del usuario y
-  el radio de cercanía; «Usar mi ubicación» y «Elegir en el mapa».
+  lista equivalente debajo (nombre, rubro, distancia, unidades); la ubicación del usuario y
+  el radio de cercanía; «Usar mi ubicación» y «Elegir en el mapa». El encuadre se ajusta a las
+  tiendas (hasta zoom 16) y, en el tema oscuro, las teselas se apagan y desaturan.
 - **Tiempos y caché**: un desplegable callado con la barra apilada por etapa y su tabla; la
   caché como una palabra al lado (`caché: acierto`, `fallo`, `sin caché`).
 - **Estados**: cada vacío dice por qué y qué probar (buscar en inglés, quitar filtros, cambiar

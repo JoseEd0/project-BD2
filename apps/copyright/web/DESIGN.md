@@ -41,8 +41,9 @@ datos y nada más**: una canción original, un color; no se usan como acento ni 
 **Resaltadores** (`--ink-a` … `--ink-f`), en el orden en que aparecen las canciones:
 amarillo `#FFDD33`, rosa `#FF8CC6`, verde `#78DE8A`, naranja `#FFB056`, celeste `#79CBFF`,
 violeta `#C7A4FF`. Son claros a propósito: el texto encima siempre es `--ink` del tema claro
-(contraste > 8:1 en los seis), también en oscuro. Sobre la forma de onda se pintan con
-`mix-blend-mode: multiply` en claro y al 55 % de opacidad en oscuro.
+(contraste > 8:1 en los seis), también en oscuro. Van **debajo** de la forma de onda, como el
+resaltador queda bajo la tinta impresa: la forma de onda se sigue leyendo encima, en los
+dos temas.
 
 **Nunca solo color**: cada canción lleva una letra (A, B, C…) en el trazo, en la lista y en
 el reproductor. Una coincidencia **bajo el umbral** no es un trazo lleno: es un rayado del

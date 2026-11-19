@@ -16,6 +16,8 @@
     "contracts:types": "node ../../web-kit/scripts/generate-types.ts openapi src/api/generated"
   },
   "dependencies": {
+    "@fontsource-variable/atkinson-hyperlegible-mono": "5.3.0",
+    "@fontsource-variable/atkinson-hyperlegible-next": "5.3.0",
     "@minigestor/web-kit": "file:../../web-kit",
     "@tanstack/react-query": "5.105.3",
     "openapi-fetch": "0.17.0",

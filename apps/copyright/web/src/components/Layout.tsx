@@ -1,21 +1,35 @@
 import { Suspense } from "react";
-import { Link, Outlet } from "react-router";
+import { Outlet } from "react-router";
 
-import { APP } from "../identity";
+import { useServiceHealth } from "../api/useServiceHealth";
+import { ServiceBadge } from "./ServiceBadge";
 import { ThemeChoice } from "./ThemeChoice";
+import { Wordmark } from "./Wordmark";
 
 export function Layout() {
+  const { data: health } = useServiceHealth();
   return (
     <div className="shell">
-      <header>
-        <Link to="/">{APP.name}</Link>
-        <ThemeChoice />
+      <a className="skip-link" href="#contenido">
+        Ir al contenido
+      </a>
+      <header className="masthead">
+        <div className="masthead__inner">
+          <Wordmark />
+          <div className="masthead__tools">
+            <ServiceBadge health={health} />
+            <ThemeChoice />
+          </div>
+        </div>
       </header>
-      <main id="contenido">
-        <Suspense fallback={<p role="status">Cargando…</p>}>
+      <main id="contenido" className="workspace" tabIndex={-1}>
+        <Suspense fallback={<p role="status" className="loading-line">Abriendo el estudio…</p>}>
           <Outlet />
         </Suspense>
       </main>
+      <footer className="colophon">
+        Catálogo: Free Music Archive, <cite>fma_small</cite> (licencias Creative Commons de cada artista).
+      </footer>
     </div>
   );
 }

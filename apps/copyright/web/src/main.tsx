@@ -1,3 +1,5 @@
+import "@fontsource-variable/atkinson-hyperlegible-next/wght.css";
+import "@fontsource-variable/atkinson-hyperlegible-mono/wght.css";
 import "./styles.css";
 
 import { StrictMode } from "react";

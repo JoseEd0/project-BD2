@@ -1,7 +1,7 @@
 import { THEME_PREFERENCES, useThemePreference, type ThemePreference } from "@minigestor/web-kit";
 
 const PREFERENCE_LABELS: Record<ThemePreference, string> = {
-  system: "Sistema",
+  system: "Auto",
   light: "Claro",
   dark: "Oscuro",
 };
@@ -10,10 +10,10 @@ const PREFERENCE_LABELS: Record<ThemePreference, string> = {
 export function ThemeChoice() {
   const { preference, choosePreference } = useThemePreference();
   return (
-    <fieldset>
+    <fieldset className="segmented segmented--on-edition">
       <legend className="visually-hidden">Tema</legend>
       {THEME_PREFERENCES.map((option) => (
-        <label key={option}>
+        <label key={option} className="segmented__option">
           <input
             type="radio"
             name="theme"
@@ -21,7 +21,7 @@ export function ThemeChoice() {
             checked={preference === option}
             onChange={() => choosePreference(option)}
           />
-          {PREFERENCE_LABELS[option]}
+          <span>{PREFERENCE_LABELS[option]}</span>
         </label>
       ))}
     </fieldset>

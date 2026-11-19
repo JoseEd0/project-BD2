@@ -1,6 +1,6 @@
-# El RAG sobre papers («papers»): su API, su interfaz (la plantilla del kit web hasta que
-# exista la suya, #88), su carga inicial y su túnel. Lo incluye el compose raíz; las redes
-# `data` y `cache` y el gestor se declaran allí. Ver apps/README.md, «Desplegar una app».
+# El RAG sobre papers («papers»): su API, su interfaz (`apps/rag/web`), su carga inicial y
+# su túnel. Lo incluye el compose raíz; las redes `data` y `cache` y el gestor se declaran
+# allí. Ver apps/README.md, «Desplegar una app».
 
 x-papers-environment: &papers-environment
   RAG_ENGINE_URL: http://engine:8000
@@ -46,7 +46,7 @@ services:
     extends: { file: ../../deploy/app.compose.yaml, service: web }
     build:
       args:
-        APP_DIR: web-kit/template
+        APP_DIR: rag/web
     image: minigestor-papers-web
     environment:
       API_UPSTREAM: http://papers-api:8000

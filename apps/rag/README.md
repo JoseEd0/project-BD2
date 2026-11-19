@@ -652,7 +652,7 @@ clave: 5 ms sobre los 98 585 fragmentos, contra 1,5 s filtrando por `paper_id`, 
 | Servicio | Qué es |
 |---|---|
 | `papers-api` | la imagen de `deploy/service/Dockerfile` con el modelo int8 dentro (`apps/rag/docker-build.sh` lo baja y comprueba al construir; arranca sin red); el corpus montado de solo lectura (`PAPERS_DATASETS_DIR`) para servir los PDF; `RAG_ANTHROPIC_API_KEY` del `.env`, solo aquí; redes `data`, `papers` y `cache`; 2 hilos de onnxruntime por réplica y 1 GiB |
-| `papers-web` | por ahora la plantilla del kit web (#88 trae la suya), en `8103` / `8403`; 5 peticiones/s por IP con ráfaga de 10 |
+| `papers-web` | la interfaz de [`web/`](web/README.md) servida por el nginx del kit web, en `8103` / `8403`; 5 peticiones/s por IP con ráfaga de 10 |
 | `papers-seed` | perfil `seed`: `python -m rag.seed` con el corpus montado de solo lectura (`PAPERS_DATASETS_DIR`, por omisión `data/datasets`) |
 | `papers-tunnel` | perfil `tunnel`: una URL pública temporal para la web |
 

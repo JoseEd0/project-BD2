@@ -335,6 +335,12 @@ jobs:
           curl --fail --silent --show-error "$COPYRIGHT_URL/api/ready" | grep -q ready
           curl --fail --silent --show-error "$COPYRIGHT_URL/api/catalog" | python3 -c "import json, sys; catalog = json.load(sys.stdin); assert (catalog['songs'], catalog['segments'], catalog['segments_indexed']) == (4, 12, True), catalog"
           curl --fail --silent --show-error "$COPYRIGHT_URL/api/songs/2" | grep -q "Melodía 2"
+      - name: Copyright detecta por su web un tramo copiado de una pista de la muestra
+        # De 2,5 s al final de la pista 2, subido con nombre de MP3: se reconoce por el
+        # contenido (WAV) y la votación lo alinea con su original, 2,5 s antes.
+        run: |
+          python3 -c "import wave; source = wave.open('data/datasets/fma_small/pistas/muestra/000002.wav'); source.setpos(int(2.5 * source.getframerate())); copy = wave.open('/tmp/extracto.wav', 'wb'); copy.setparams(source.getparams()); copy.writeframes(source.readframes(source.getnframes())); copy.close()"
+          curl --fail --silent --show-error --form "file=@/tmp/extracto.wav;filename=extracto.mp3" "$COPYRIGHT_URL/api/detections" | python3 -c "import json, sys; detection = json.load(sys.stdin); best = detection['matches'][0]; assert (detection['format'], detection['detected'], best['song']['id'], best['offset_seconds']) == ('WAV', True, 2, -2.5), detection"
       - name: Papers siembra su corpus y busca por su web en los tres modos
         run: |
           docker compose run --rm papers-seed

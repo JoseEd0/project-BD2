@@ -11,6 +11,7 @@ from benchmarks.plots import (
     indexes,
     ingest,
     multimedia,
+    rag,
     segments,
     shop,
     spatial,
@@ -33,4 +34,5 @@ FIGURES: tuple[Figure | BarFigure | CurveFigure | GalleryFigure | BreakdownFigur
     *ingest.FIGURES,
     *shop.FIGURES,
     *copyright_catalog.FIGURES,
+    *rag.FIGURES,
 )

@@ -49,8 +49,10 @@ PRODUCT_EXISTS = f"SELECT id FROM {PRODUCTS} WHERE id = $1"
 PARTNERS_OF_PRODUCT = f"SELECT otro FROM {COPURCHASES} WHERE producto = $1 AND particion = $2"
 PAIR_COLUMNS = 4
 
-MATERIALIZATION_OF = f"SELECT particion, soporte, filas FROM {MATERIALIZATIONS} WHERE tabla = $1"
-RECORD_MATERIALIZATION = f"INSERT INTO {MATERIALIZATIONS} VALUES ($1, $2, $3, $4)"
+MATERIALIZATION_OF = (
+    f"SELECT particion, soporte, por_producto, filas FROM {MATERIALIZATIONS} WHERE tabla = $1"
+)
+RECORD_MATERIALIZATION = f"INSERT INTO {MATERIALIZATIONS} VALUES ($1, $2, $3, $4, $5)"
 FORGET_MATERIALIZATION = f"DELETE FROM {MATERIALIZATIONS} WHERE tabla = $1"
 DROP_COPURCHASES = f"DROP TABLE IF EXISTS {COPURCHASES}"
 
@@ -96,7 +98,8 @@ def stock_nearby(count: int) -> str:
 
 def copurchase_pairs(count: int) -> str:
     """Los pares de `count` productos con los demás que compraron sus mismos clientes, con
-    cuántos clientes, desde `$2` clientes: `$1` partición, `$3…` los productos.
+    cuántos clientes, desde `$2` clientes: `$1` partición, `$3…` los productos. Van por
+    producto y, dentro de cada uno, de más a menos clientes.
 
     Es el autojoin del historial con el `GROUP BY` por hash externo del gestor. El historial
     de la izquierda entra por su B+ (`producto IN`); el de la derecha se recorre entero.
@@ -106,7 +109,8 @@ def copurchase_pairs(count: int) -> str:
         f"FROM {HISTORY} a JOIN {HISTORY} b ON a.usuario = b.usuario "
         f"WHERE a.producto IN ({placeholders(count, LIST_AFTER_TWO)}) "
         "AND a.particion = $1 AND b.particion = $1 AND b.producto <> a.producto "
-        "GROUP BY a.producto, b.producto HAVING COUNT(*) >= $2"
+        "GROUP BY a.producto, b.producto HAVING COUNT(*) >= $2 "
+        "ORDER BY producto, veces DESC, otro"
     )
 
 

@@ -52,7 +52,11 @@ DEFAULT_CACHE_RETRY_SECONDS = 5.0
 # Un par comprado por un solo cliente es casi siempre casualidad; con 2, la tabla baja de
 # 4,7 millones de pares a 406 668 (medido en el dataset).
 DEFAULT_COPURCHASE_MIN_SUPPORT = 2
-DEFAULT_COPURCHASE_CHUNK_PRODUCTS = 512
+# El recomendador pide como mucho unos cientos de candidatos por señal.
+DEFAULT_COPURCHASE_MAX_PARTNERS = 500
+# Compras de entrenamiento por lote del GROUP BY: 396 958 en unos 40 lotes, cada uno con un
+# resultado por debajo de las 10 000 filas de una respuesta del gestor en el dataset.
+DEFAULT_COPURCHASE_CHUNK_BUYERS = 10_000
 
 
 class ShopSettings(ServiceSettings):
@@ -125,8 +129,9 @@ class SeedSettings(ShopSettings):
             índices.
         copurchase_min_support: clientes que tienen que haber comprado un par para que
             entre a `shop_compras_conjuntas`.
-        copurchase_chunk_products: productos del primer lote del `GROUP BY` que calcula los
-            pares; se ajusta solo a lo que cabe en una respuesta del gestor.
+        copurchase_max_partners: pares que se guardan por producto, los de más clientes.
+        copurchase_chunk_buyers: compras que suma, como mucho, un lote del `GROUP BY` que
+            calcula los pares; un lote que no cabe en una respuesta se parte solo.
     """
 
     data_dir: Path
@@ -137,7 +142,8 @@ class SeedSettings(ShopSettings):
     progress_rows: int = Field(default=DEFAULT_PROGRESS_ROWS, ge=1)
     job_timeout_seconds: float = Field(default=DEFAULT_JOB_TIMEOUT_SECONDS, gt=0)
     copurchase_min_support: int = Field(default=DEFAULT_COPURCHASE_MIN_SUPPORT, ge=1)
-    copurchase_chunk_products: int = Field(default=DEFAULT_COPURCHASE_CHUNK_PRODUCTS, ge=1)
+    copurchase_max_partners: int = Field(default=DEFAULT_COPURCHASE_MAX_PARTNERS, ge=1)
+    copurchase_chunk_buyers: int = Field(default=DEFAULT_COPURCHASE_CHUNK_BUYERS, ge=1)
 
     @property
     def dataset(self) -> Path:

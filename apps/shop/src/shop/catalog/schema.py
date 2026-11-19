@@ -14,13 +14,18 @@ Cada tabla usa la organización y los índices que su consulta necesita:
 - `shop_inventario`: heap con hash extendible sobre `producto`: dónde hay un producto.
 - `shop_historial`: las mismas compras en un heap con B+ no agrupado sobre `usuario` y sobre
   `producto`, porque el archivo secuencial no admite índices secundarios: lo que compró un
-  usuario y quién compró un producto, sin recorrer 511 836 filas. B+ y no hash: un producto
-  tiene hasta ~1 900 compras y el hash extendible encadena las claves repetidas en
-  desbordamientos (la carga se hacía cada vez más lenta); la clave compuesta del B+ no.
-- `shop_compras_conjuntas`: heap con hash sobre `producto`; cuántos clientes compraron
-  cada par de productos, materializado por la carga con el `GROUP BY` del gestor
+  usuario y quién compró un producto, sin recorrer 511 836 filas.
+- `shop_compras_conjuntas`: heap con B+ no agrupado sobre `producto`; cuántos clientes
+  compraron cada par de productos, materializado por la carga con el `GROUP BY` del gestor
   (`shop.seed.copurchases`).
-- `shop_materializaciones`: con qué partición y soporte se calculó cada tabla materializada.
+- `shop_materializaciones`: con qué partición, soporte y pares por producto se calculó cada
+  tabla materializada.
+
+Las columnas con muchas filas por clave (`producto` del historial y de los pares) llevan B+ y
+no hash: el hash extendible parte una cubeta por el primer bit que separa dos claves, y con
+cientos de filas de una misma clave en la cubeta duplica el directorio una y otra vez (400
+claves repetidas 300 veces lo llevan a 2^18 entradas; con los pares del dataset entero llegó
+a 4 GB y la carga no terminaba). La clave compuesta del B+, `(valor, dirección)`, no repite.
 
 Los productos no son un B+ agrupado: el gestor solo pone índices secundarios sobre un heap,
 y esta tabla necesita tres.
@@ -74,7 +79,7 @@ COPURCHASES_TABLE = (
     f"particion VARCHAR({SPLIT_LENGTH}), veces INT)"
 )
 COPURCHASES_INDEX_STATEMENT = (
-    f"CREATE INDEX IF NOT EXISTS {COPURCHASES_INDEX} ON {COPURCHASES} USING HASH (producto)"
+    f"CREATE INDEX IF NOT EXISTS {COPURCHASES_INDEX} ON {COPURCHASES} USING BTREE (producto)"
 )
 
 SCHEMA: tuple[str, ...] = (
@@ -110,7 +115,7 @@ SCHEMA: tuple[str, ...] = (
     COPURCHASES_INDEX_STATEMENT,
     f"CREATE TABLE IF NOT EXISTS {MATERIALIZATIONS} ("
     f"tabla VARCHAR({TABLE_NAME_LENGTH}) PRIMARY KEY, particion VARCHAR({SPLIT_LENGTH}), "
-    "soporte INT, filas INT)",
+    "soporte INT, por_producto INT, filas INT)",
 )
 
 SIFT_INDEX = (

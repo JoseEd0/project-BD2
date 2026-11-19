@@ -24,6 +24,7 @@ from shop.catalog.errors import CatalogError
 from shop.clip import ClipError
 from shop.settings import SeedSettings
 
+from .copurchases import CopurchaseError
 from .job import SeedError, run_seed
 from .manifest import ManifestError
 from .report import SeedReport
@@ -33,6 +34,7 @@ FAILURE_EXIT_CODE = 1
 HTTP_LOGGER = "httpx"
 SEED_FAILURES = (
     SeedError,
+    CopurchaseError,
     ManifestError,
     CatalogError,
     ClipError,

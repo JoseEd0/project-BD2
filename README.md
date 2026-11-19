@@ -36,8 +36,8 @@ flowchart LR
     usuario(["navegador o celular"])
     subgraph apps["una red por aplicación"]
         direction TB
-        web["&lt;app&gt;-web · nginx<br/>:8101–8104 HTTP · :8401–8404 HTTPS"]
-        api["&lt;app&gt;-api × N<br/>FastAPI sin estado"]
+        web["app-web · nginx<br/>:8101–8104 HTTP · :8401–8404 HTTPS"]
+        api["app-api × N<br/>FastAPI sin estado"]
         web -- "/api" --> api
     end
     consola["console · nginx<br/>:8080"]

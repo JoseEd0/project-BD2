@@ -786,7 +786,7 @@ estimación de cardinalidad en el primer puesto en ninguno de los modos.
 
 `rag.evaluation` (#87) y tres guiones de `benchmarks/`; las cifras, las figuras, los comandos
 y las listas de revisión a mano están en
-[`benchmarks/README.md` §16](../../benchmarks/README.md#16-evaluación-del-rag--recuperación-de-preguntas-en-español-y-respuestas-con-claude).
+[`benchmarks/README.md` §19](../../benchmarks/README.md#19-evaluación-del-rag--recuperación-de-preguntas-en-español-y-respuestas-con-claude).
 
 | Pieza | Qué hace |
 |---|---|
@@ -799,30 +799,28 @@ y las listas de revisión a mano están en
 | `benchmarks/rag_judge_agreement.py` | la muestra para revisar a mano y el acuerdo del juez con esa revisión |
 
 **Medido** (63 preguntas escritas a mano, 45 con un fragmento correcto y 18 sin respuesta en
-el corpus; gestor sembrado con vectores int8):
+el corpus; gestor sembrado con vectores int8; la búsqueda de #136, con BM25 sin las palabras
+vacías del idioma de la pregunta):
 
 | Modo | Recall@5 | Recall@10 | MRR@10 | Recall@10, paper |
 |---|---:|---:|---:|---:|
-| BM25 | 0,111 | 0,111 | 0,080 | 0,111 |
-| vectorial | **0,422** | **0,533** | **0,325** | 0,800 |
-| híbrido (RRF) | 0,378 | 0,511 | 0,292 | **0,822** |
+| BM25 | 0,267 | 0,422 | 0,178 | 0,667 |
+| vectorial | 0,422 | 0,533 | **0,325** | 0,800 |
+| híbrido (RRF) | **0,467** | **0,578** | 0,286 | **0,844** |
 
-BM25 no encuentra ningún fragmento de los papers con preguntas en español (el índice es en
-inglés) y acierta las 5 del material del curso; el vectorial encuentra el paper correcto en 8
-de cada 10; el híbrido, que es el de `POST /answers`, queda por debajo del vectorial en los
-papers porque RRF suma la lista de BM25, que en español es ruido, y por encima en el curso.
+Sin las palabras vacías del español, BM25 encuentra por los nombres y siglas en inglés el
+fragmento de un 38 % de las preguntas de cs.DB (antes, ninguno); el híbrido, que es el de
+`POST /answers`, es el mejor en Recall y el único que acierta en los dos idiomas (0,80 en el
+material del curso, donde el vectorial acierta 1 de 5), y el vectorial conserva el mejor MRR.
+Con los 12 fragmentos del prompt, 28 de las 45 preguntas reciben su fragmento correcto.
 int8 contra fp32 no se midió: exige recalcular los 98 585 embeddings y sembrar otro gestor.
-
-La selección de fragmentos para el prompt se detiene en el primero que no cabe en
-`RAG_ANSWER_CONTEXT_TOKENS`: una pregunta cuyo primer fragmento es una tabla sin espacios de
-24 424 caracteres (hay 3 así en el corpus) se queda sin ningún documento.
 
 **Pendiente de la clave**: las preguntas de la Batch API, las respuestas de Claude (citas
 válidas, si citan el fragmento correcto, «no está en los documentos» en las 18 sin
 respuesta, costo y latencia hasta el primer texto), el juez y su acuerdo con la revisión a
 mano. Con `--answers simulated` el camino entero corrió sin clave (63 preguntas; el evento
-`sources` sale a los 33 ms de mediana), pero esas respuestas no dicen nada de la calidad.
-Costo estimado de la evaluación completa, unas 133 preguntas: **≈ 2,5 USD** (cota 6,4).
+`sources` sale a los 21 ms de mediana), pero esas respuestas no dicen nada de la calidad.
+Costo estimado de la evaluación completa, unas 133 preguntas: **≈ 3,2 USD** (cota 8,0).
 
 # Tests
 

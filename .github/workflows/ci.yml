@@ -168,10 +168,12 @@ jobs:
     env:
       WEB_URL: http://localhost:8080
       # El servicio de ejemplo del kit, montado como una aplicación (deploy/example), por HTTP y
-      # por HTTPS, que prueba la topología sin depender de ninguna app; y la tienda, con su carga.
+      # por HTTPS, que prueba la topología sin depender de ninguna app; la tienda, con su carga; y
+      # los rostros, con los modelos en su imagen.
       EXAMPLE_URL: http://localhost:8100
       EXAMPLE_TLS_URL: https://localhost:8400
       SHOP_URL: http://localhost:8102
+      FACES_URL: http://localhost:8104
       COMPOSE_PROFILES: example
     steps:
       - uses: actions/checkout@v4
@@ -247,6 +249,29 @@ jobs:
           head -c 2000000 /dev/zero > /tmp/grande
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' --data-binary @/tmp/grande "$EXAMPLE_URL/api/notas")" = 413
           seq 120 | xargs -P 30 -I{} curl --silent --output /dev/null --write-out '%{http_code}\n' "$EXAMPLE_URL/api/health" | grep -q 429
+      - name: Rostros por su web, con los modelos de la imagen
+        # Una selfie hecha en el contenedor con un retrato de prueba (el anfitrión no tiene
+        # Pillow): se acepta de frente, se cancela, y la foto de grupo no se reconoce.
+        run: |
+          curl --fail --silent --show-error "$FACES_URL/api/health"
+          curl --fail --silent --show-error "$FACES_URL/api/ready" | grep -q ready
+          curl --silent --head "$FACES_URL/" | grep -qi "permissions-policy: camera=(self)"
+          version=$(curl --fail --silent --show-error "$FACES_URL/api/consent" \
+            | python3 -c "import json, sys; print(json.load(sys.stdin)['version'])")
+          docker compose exec -T faces-api python -c "import io, sys; from PIL import Image
+          image = Image.open(io.BytesIO(sys.stdin.buffer.read())).convert('RGB')
+          image.crop((60, 30, 250, 250)).resize((570, 660)).save(sys.stdout.buffer, 'JPEG', quality=95)" \
+            < apps/faces/tests/fixtures/collins-1998.jpg > /tmp/selfie.jpg
+          enrollment=$(curl --fail --silent --show-error "$FACES_URL/api/enrollments" \
+            --header "content-type: application/json" \
+            --data "{\"display_name\": \"Eileen Collins\", \"consent\": {\"version\": \"$version\", \"accepted\": true}}" \
+            | python3 -c "import json, sys; print(json.load(sys.stdin)['enrollment_id'])")
+          curl --fail --silent --show-error --form "image=@/tmp/selfie.jpg" \
+            "$FACES_URL/api/enrollments/$enrollment/shots" \
+            | python3 -c "import json, sys; shot = json.load(sys.stdin); assert shot['accepted'] and shot['pose'] == 'front', shot"
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' --request DELETE "$FACES_URL/api/enrollments/$enrollment")" = 204
+          curl --fail --silent --show-error --form "image=@apps/faces/tests/fixtures/sts-114-crew.jpg" "$FACES_URL/api/identify" \
+            | python3 -c "import json, sys; faces = json.load(sys.stdin)['faces']; assert len(faces) == 7 and all(face['status'] != 'known' for face in faces), faces"
       - name: La carga inicial es idempotente
         run: |
           docker compose run --rm example-seed

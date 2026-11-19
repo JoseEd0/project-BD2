@@ -348,7 +348,9 @@ del modo) y `bm25` / `vector` con el puesto y el puntaje de cada método, o `nul
 método no lo trajo.
 
 - **`bm25`**: `WHERE MATCH(content, $1) USING BM25`. La pregunta va en minúsculas y sin
-  paréntesis: dentro de `MATCH`, `AND`, `OR`, `NOT` y los paréntesis son operadores.
+  paréntesis: dentro de `MATCH`, `AND`, `OR`, `NOT` y los paréntesis son operadores. Si está
+  en español, va además **sin sus palabras vacías** (ver [El idioma de la
+  pregunta](#el-idioma-de-la-pregunta)).
 - **`vector`**: el embedding de `query: <pregunta>` con `WHERE SIMILAR_TO(embedding, $1,
   k = $2) USING HNSW WITH ef_search = 128`; el puntaje es el coseno.
 - **`hybrid`**: las dos listas, 50 fragmentos cada una, en paralelo, fusionadas con
@@ -360,6 +362,52 @@ método no lo trajo.
 `Server-Timing` separa `embedding`, `bm25`, `vector` y `papers` (la metadata de los papers
 de los resultados, en una sola consulta con `IN`).
 
+## El idioma de la pregunta
+
+El índice invertido está en inglés: su analizador quita «the» o «of», pero no «de», «la» ni
+«qué». La evaluación de #87 (45 preguntas en español con su fragmento de origen, 40 sobre
+papers y 5 sobre los documentos del curso) mostró que, por esas palabras, BM25 contestaba a
+**toda** pregunta en español con fragmentos del curso —los únicos documentos en español—
+aunque tratara de un paper; RRF mezclaba ese ruido con la lista vectorial y la híbrida
+quedaba por debajo de la vectorial.
+
+`rag/language.py` adivina el idioma por las palabras vacías de cada lengua (más las tildes,
+la eñe y `¿` `¡`; sin indicios, como en `B+ tree range query`, es «desconocido» y la pregunta
+va tal cual) y, a una pregunta en español, le quita sus palabras vacías antes de BM25. Le
+quedan los nombres y términos que comparte con los papers (`PG-HIVE`, `InfluxDB`,
+`date_trunc`) y, en las preguntas del curso, los que comparte con el curso.
+
+**Medido** con `benchmarks/rag_language_benchmark.py` sobre una copia del gestor sembrado
+con el corpus entero: las 45 preguntas de #87 (`benchmarks/rag/preguntas.jsonl`, en #87) y
+las 20 primeras traducidas al inglés (`benchmarks/rag/preguntas_en.jsonl`). Correcto es el
+fragmento exacto del que salió la pregunta; «vecino», también el anterior o el siguiente,
+que se solapan con él. Resultados crudos en
+[`benchmarks/results/rag_idioma.json`](../../benchmarks/results/rag_idioma.json).
+
+| Modo | Todas (65): R@5 | R@8 | R@10 | R@12 | MRR@10 | R@12 vecino | Papers en español (40): R@10 | Curso (5): R@10 | Papers en inglés (20): R@10 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| BM25 | 0,354 | 0,354 | 0,354 | 0,354 | 0,245 | 0,369 | 0,000 | 1,000 | 0,900 |
+| BM25 sin palabras vacías | 0,462 | 0,538 | 0,569 | 0,585 | 0,314 | 0,662 | 0,350 | 1,000 | 0,900 |
+| vectorial | 0,523 | 0,615 | 0,631 | 0,646 | 0,393 | 0,738 | 0,575 | 0,200 | 0,850 |
+| híbrida de antes | 0,523 | 0,585 | 0,631 | 0,661 | **0,411** | 0,708 | 0,450 | **1,000** | **0,900** |
+| **híbrida nueva** (BM25 sin palabras vacías) | **0,585** | **0,662** | **0,677** | **0,708** | 0,406 | **0,800** | 0,550 | 0,800 | **0,900** |
+
+La híbrida nueva es la mejor en el conjunto en todas las profundidades: encuentra el
+fragmento de 46 de las 65 preguntas entre los 12 primeros (52 contando sus vecinos), contra
+43 (46) la de antes y 42 (48) la vectorial. Sobre papers en español casi alcanza a la
+vectorial (0,550 contra 0,575 en R@10, una pregunta) y la iguala entre los 5 primeros
+(0,450, contra 0,350 la de antes); en el curso conserva lo que la vectorial pierde (4 de 5
+contra 1 de 5); en inglés, nada cambia. También se probó RRF ponderado, con un peso menor
+para BM25 en las preguntas en español (`--weights`): con 0,5 o 0,25 sube la de papers en
+español (0,625 y 0,600) pero el curso cae a 1 de 5, y en el conjunto queda igual o peor
+(R@12 0,677 y 0,692); con 0 es la vectorial. Por eso la fusión sigue con pesos iguales.
+
+**Por qué 12 fragmentos por respuesta.** De 8 a 12, la híbrida nueva pasa de 0,662 a 0,708
+(de 0,754 a 0,800 con vecinos) y el prompt de unos 4 000 a unos 6 000 tokens estimados de
+pasajes (mediana): unos 2 000 tokens de entrada más, 0,004 USD por respuesta al precio de
+Sonnet 5.5. De las 45 preguntas en español, el fragmento correcto está entre los 12
+recuperados en 28 (33 con vecinos); antes, con la híbrida vieja y 8, en 20.
+
 # Las respuestas: `POST /answers`
 
 ```bash
@@ -370,13 +418,18 @@ curl -N localhost:8003/answers -H 'content-type: application/json' \
 `question` es texto de 1 a 1 000 caracteres. La ruta hace, en orden:
 
 1. **Recupera** con la búsqueda híbrida de `POST /search` (BM25 y vecinos del HNSW en
-   paralelo, 50 candidatos por lista, fusionados con RRF): `RAG_ANSWER_CHUNKS` fragmentos (8)
+   paralelo, 50 candidatos por lista, fusionados con RRF): `RAG_ANSWER_CHUNKS` fragmentos (12)
    con la constante `RAG_RRF_K` (60).
-2. **Elige** los primeros, en su orden, mientras quepan en `RAG_ANSWER_CONTEXT_TOKENS` (6 000
-   tokens estimados a 3 caracteres por token, una cuenta conservadora para texto con fórmulas
-   y siglas; se detiene en el primero que no cabe, para que uno peor clasificado no pase delante
-   por ser más corto). Con el corpus entero, las diez preguntas de `benchmarks/rag/questions.py`
-   entran con sus 8 fragmentos y un prompt estimado de unos 5 400 tokens.
+2. **Elige** los que caben en `RAG_ANSWER_CONTEXT_TOKENS` (9 000 tokens estimados a 3
+   caracteres por token, una cuenta conservadora para texto con fórmulas y siglas), en su
+   orden. Cada pasaje se recorta antes a dos veces su parte del contexto (`9 000 / 12 × 2` =
+   1 500 tokens, unos 4 500 caracteres) con ` […]` al final: un fragmento normal (hasta 500
+   palabras) nunca llega, pero una tabla que el corte por oraciones no pudo partir sí (la más
+   larga del corpus tiene 24 424 caracteres). Se recorta el final, porque la cita abre el PDF
+   donde empieza el pasaje. Un pasaje que aun así no cabe en lo que queda **se salta** y se
+   sigue con los siguientes, con los números `n` seguidos: antes la selección se detenía en
+   el primero que no cabía, y esa tabla en el primer puesto dejaba el prompt sin documentos
+   (la pregunta u07 de #87).
 3. **Reserva** la cota del costo en el tope diario (abajo). Si no cabe, `429` en JSON sin
    llamar al modelo.
 4. **Responde en SSE**: los fragmentos enviados, el texto a medida que llega y un cierre con
@@ -422,7 +475,7 @@ la lectura de caché), por el mismo camino que la ruta, y guarda en
 `benchmarks/results/rag_respuestas.json` el tiempo de la recuperación, hasta el primer texto y
 total, los tokens de cada clase, el costo, el motivo de parada, las citas válidas e inválidas
 y la respuesta entera para juzgarla. Con `--simulated` corre sin clave ni costo (así se
-probó: 10 preguntas, 8 fragmentos cada una, 30 ms de recuperación de mediana). Además,
+probó, con los 8 fragmentos de entonces: 10 preguntas, 30 ms de recuperación de mediana). Además,
 `RAG_ANTHROPIC_API_KEY=… uv run pytest -m anthropic apps/rag` corre la prueba real (ver
 [Tests](#tests)).
 
@@ -525,7 +578,7 @@ entrada=… salida=… cache_escrita=… cache_leida=… costo_usd=… duracion_
 
 **Tope diario** (`RAG_DAILY_BUDGET_USD`, 5 USD). Antes de llamar al modelo se reserva la
 cota de la respuesta —toda la entrada estimada al precio más caro y los `max_tokens` de
-salida: unos 0,05 USD con los valores por omisión— y al terminar se cambia por el costo real.
+salida: unos 0,06 USD con los valores por omisión— y al terminar se cambia por el costo real.
 Si la reserva no cabe en lo que queda del día (UTC), la pregunta recibe `429`
 `BudgetExhaustedError` sin llamar al modelo. Una respuesta cortada se queda con su reserva.
 Vive en la memoria de cada réplica: con N réplicas el gasto puede llegar a N veces el tope.

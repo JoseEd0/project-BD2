@@ -3,7 +3,8 @@
 Hay dos clases principales de figura: `Figure`, con una línea por técnica frente al tamaño
 de los datos en ejes logarítmicos, y `BarFigure`, con barras agrupadas en un eje lineal de 0
 a 1 para medidas que son fracciones, como la precisión. `BreakdownFigure` desglosa en barras
-apiladas las cifras de una sola ejecución.
+apiladas las cifras de una sola ejecución, y `XYFigure` dibuja curvas de dos magnitudes
+cualesquiera guardadas como listas, como una ROC.
 """
 
 from __future__ import annotations
@@ -257,3 +258,48 @@ class BreakdownFigure:
     title: str
     subtitle: str
     panels: tuple[BreakdownPanel, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class Axis:
+    """Un eje de un panel XY: su rótulo, con la magnitud y su unidad, la clave de `extra`
+    de donde salen sus valores y si es logarítmico."""
+
+    label: str
+    field: str
+    logarithmic: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class Series:
+    """Una serie de un panel XY: las medidas de `technique` y `operation`, cuyos `extra`
+    traen en los campos de los ejes una lista de valores o uno solo. `points_only` la
+    dibuja como puntos sueltos, para marcar puntos de operación sobre una curva."""
+
+    label: str
+    style: Style
+    technique: str
+    operation: str
+    points_only: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class XYPanel:
+    title: str
+    x: Axis
+    y: Axis
+    series: tuple[Series, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class XYFigure:
+    """Una imagen de curvas con cualquier par de magnitudes, como una ROC (TAR contra FAR)
+    o una tasa a lo largo del tiempo; `legend_columns`, como en `Figure`."""
+
+    filename: str
+    report: str
+    title: str
+    subtitle: str
+    columns: int
+    panels: tuple[XYPanel, ...]
+    legend_columns: int = 0

@@ -20,6 +20,9 @@ from benchmarks.plots.model import (
     GalleryFigure,
     Line,
     Panel,
+    Series,
+    XYFigure,
+    XYPanel,
 )
 from benchmarks.plots.style import (
     AXIS,
@@ -210,7 +213,7 @@ def _top(group: tuple[float, int], gap: float) -> float:
     return total / count + (count - 1) * gap / 2
 
 
-AnyFigure = Figure | BarFigure | CurveFigure | GalleryFigure | BreakdownFigure
+AnyFigure = Figure | BarFigure | CurveFigure | GalleryFigure | BreakdownFigure | XYFigure
 
 
 def compose(figure: AnyFigure, report: dict[str, Any]) -> Any:
@@ -223,6 +226,8 @@ def compose(figure: AnyFigure, report: dict[str, Any]) -> Any:
         return _compose_gallery(figure, report)
     if isinstance(figure, BreakdownFigure):
         return _compose_breakdown(figure, report)
+    if isinstance(figure, XYFigure):
+        return _compose_xy(figure, report)
     return _compose_lines(figure, report)
 
 
@@ -860,3 +865,90 @@ def _draw_gallery_cell(
     axis.set_xlabel(caption, color=SECONDARY_INK, fontsize=GALLERY_LABEL_SIZE)
     if title:
         axis.set_title(title, color=INK, fontsize=GALLERY_LABEL_SIZE, loc="left", pad=TITLE_PAD)
+
+
+def xy_points(
+    report: dict[str, Any], panel: XYPanel, series: Series
+) -> list[tuple[float, float]]:
+    """Los puntos `(x, y)` de la serie, en el orden en que se guardaron; en un eje
+    logarítmico se dejan fuera los que no son positivos."""
+    found: list[tuple[float, float]] = []
+    for item in report["measurements"]:
+        if item["technique"] != series.technique or item["operation"] != series.operation:
+            continue
+        xs, ys = (_as_list(item["extra"].get(axis.field)) for axis in (panel.x, panel.y))
+        found += [(float(x), float(y)) for x, y in zip(xs, ys, strict=True)]
+    return [
+        (x, y)
+        for x, y in found
+        if (x > 0 or not panel.x.logarithmic) and (y > 0 or not panel.y.logarithmic)
+    ]
+
+
+def _as_list(value: Any) -> list[Any]:
+    if value is None:
+        return []
+    return list(value) if isinstance(value, list) else [value]
+
+
+def _compose_xy(figure: XYFigure, report: dict[str, Any]) -> Any:
+    plt = _start_drawing()
+    rows = -(-len(figure.panels) // figure.columns)
+    legend_columns = figure.legend_columns or LEGEND_ENTRIES_PER_COLUMN * figure.columns
+    labels = dict.fromkeys(series.label for panel in figure.panels for series in panel.series)
+    header = _header_height(figure.subtitle, -(-len(labels) // legend_columns))
+    height = CURVE_PANEL_HEIGHT * rows + header
+    canvas, grid = plt.subplots(
+        rows,
+        figure.columns,
+        figsize=(CURVE_PANEL_WIDTH * figure.columns, height),
+        dpi=DPI,
+        squeeze=False,
+    )
+    canvas.set_facecolor(SURFACE)
+    axes = [axis for row in grid for axis in row]
+    for axis in axes[len(figure.panels) :]:
+        axis.remove()
+    for axis, panel in zip(axes, figure.panels, strict=False):
+        _draw_xy_panel(axis, panel, report)
+    _draw_header(canvas, figure, height, legend_columns)
+    canvas.tight_layout(rect=(0.0, 0.0, 1.0, 1.0 - header / height), w_pad=PANEL_GAP, h_pad=ROW_GAP)
+    return canvas
+
+
+def _draw_xy_panel(axis: Any, panel: XYPanel, report: dict[str, Any]) -> None:
+    from matplotlib.ticker import FuncFormatter
+
+    axis.set_facecolor(SURFACE)
+    for series in panel.series:
+        points = xy_points(report, panel, series)
+        if not points:
+            continue
+        style = series.style
+        axis.plot(
+            [x for x, _ in points],
+            [y for _, y in points],
+            label=series.label,
+            color=style.color,
+            linewidth=0.0 if series.points_only else LINE_WIDTH,
+            linestyle=(0, DASHES) if style.dashed else "solid",
+            marker=style.marker if series.points_only or len(points) == 1 else None,
+            markersize=MARKER_SIZE,
+            markeredgecolor=SURFACE,
+            markeredgewidth=MARKER_RING,
+            zorder=4 if series.points_only else 3,
+        )
+    axis.set_xscale("log" if panel.x.logarithmic else "linear")
+    axis.set_yscale("log" if panel.y.logarithmic else "linear")
+    for ticks in (axis.xaxis, axis.yaxis):
+        ticks.set_major_formatter(FuncFormatter(lambda value, _: format_tick(value)))
+    axis.grid(visible=True, which="major", color=GRID, linewidth=0.8, linestyle="solid", zorder=0)
+    axis.set_axisbelow(True)
+    for side in ("top", "right"):
+        axis.spines[side].set_visible(False)
+    for side in ("bottom", "left"):
+        axis.spines[side].set_color(AXIS)
+    axis.tick_params(axis="both", which="both", colors=MUTED_INK, length=0, labelsize=LABEL_SIZE)
+    axis.set_xlabel(panel.x.label, color=SECONDARY_INK, fontsize=LABEL_SIZE, labelpad=4)
+    axis.set_ylabel(panel.y.label, color=SECONDARY_INK, fontsize=LABEL_SIZE)
+    axis.set_title(panel.title, color=INK, fontsize=PANEL_TITLE_SIZE, loc="left", pad=TITLE_PAD)

@@ -169,6 +169,9 @@ benchmarks/output/
 !/docs/informe.pdf
 !/docs/latex/figuras/*.png
 
+# --- Preguntas de los experimentos del RAG (texto, versionadas) ---
+!/benchmarks/rag/preguntas_en.jsonl
+
 
 # --- Editores e IDEs ---
 .vscode/

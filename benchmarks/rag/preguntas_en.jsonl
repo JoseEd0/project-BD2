@@ -1,0 +1,20 @@
+{"question_id": "a01-en", "question": "How does SHARP choose which partial matches to keep when patterns violate their latency bounds?", "chunk_id": "2507.04872#50", "paper_id": "2507.04872"}
+{"question_id": "a02-en", "question": "Which datasets and which operator library is ShapleyPipe evaluated with?", "chunk_id": "2510.27168#30", "paper_id": "2510.27168"}
+{"question_id": "a03-en", "question": "What advantage does the Object Centric Event Data standard have over flat XES logs in process mining?", "chunk_id": "2511.00693#2", "paper_id": "2511.00693"}
+{"question_id": "a04-en", "question": "How is it decided whether a glass composition extracted from a patent is in molar or mass basis when the unit is uncertain?", "chunk_id": "2511.16366#31", "paper_id": "2511.16366"}
+{"question_id": "a05-en", "question": "How is entity matching formulated as a binary classification after blocking?", "chunk_id": "2511.22832#10", "paper_id": "2511.22832"}
+{"question_id": "a06-en", "question": "How does PG-HIVE infer the data type of properties when discovering the schema of a property graph?", "chunk_id": "2512.01092#40", "paper_id": "2512.01092"}
+{"question_id": "a07-en", "question": "Why does HIPAA compliance depend on context rather than on static data annotation?", "chunk_id": "2512.05453#8", "paper_id": "2512.05453"}
+{"question_id": "a08-en", "question": "Why does MS-Index use Euclidean distance instead of DTW for multivariate time series subsequence search?", "chunk_id": "2512.14723#10", "paper_id": "2512.14723"}
+{"question_id": "a09-en", "question": "Which characteristics of real cloud data warehouse workloads are not captured by TPC-H or TPC-DS?", "chunk_id": "2511.13059#0", "paper_id": "2511.13059"}
+{"question_id": "a10-en", "question": "Can InfluxDB store and analyze graph data?", "chunk_id": "2601.00304#25", "paper_id": "2601.00304"}
+{"question_id": "a11-en", "question": "How much faster are SPaC-tree batch updates than those of Pkd-trees?", "chunk_id": "2601.05347#10", "paper_id": "2601.05347"}
+{"question_id": "a12-en", "question": "What is the benefit of merging transactions from different clients in a middleware when they contend for the same rows?", "chunk_id": "2601.10596#12", "paper_id": "2601.10596"}
+{"question_id": "a13-en", "question": "What is the Simplicial Normal Form and how does it relate to the functional dependencies of a relational schema?", "chunk_id": "2602.21213#0", "paper_id": "2602.21213"}
+{"question_id": "a14-en", "question": "Why are the global orthogonal rotations of OPQ and RaBitQ expensive for very high-dimensional embeddings?", "chunk_id": "2603.05180#4", "paper_id": "2603.05180"}
+{"question_id": "a15-en", "question": "How can clustering be solved over a join result without materializing it?", "chunk_id": "2603.11402#7", "paper_id": "2603.11402"}
+{"question_id": "a16-en", "question": "Why was a Cypher query with a join on a node property slow in Neo4j and how was it sped up?", "chunk_id": "2603.13835#52", "paper_id": "2603.13835"}
+{"question_id": "a17-en", "question": "How does semantic top-K with LLMs differ from traditional SQL top-K?", "chunk_id": "2603.17223#12", "paper_id": "2603.17223"}
+{"question_id": "a18-en", "question": "What is a function unit when synthesizing native database functions such as date_trunc?", "chunk_id": "2604.06231#12", "paper_id": "2604.06231"}
+{"question_id": "a19-en", "question": "Which counters are proposed for table formats like Iceberg to monitor data quality without scanning the data?", "chunk_id": "2605.30308#11", "paper_id": "2605.30308"}
+{"question_id": "a20-en", "question": "When do researchers respond best when asked to contribute to the community curation of their publications?", "chunk_id": "2608.28835#17", "paper_id": "2608.28835"}

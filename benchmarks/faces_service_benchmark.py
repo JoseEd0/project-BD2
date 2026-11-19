@@ -63,7 +63,7 @@ ACCEPTED = "toma aceptada"
 REJECTED = "toma rechazada"
 ENROLLED = "persona registrada"
 STRANGER = "desconocida"
-STAGES = ("analisis", "galeria", "guardar", "total")
+STAGES = ("analisis", "sesion", "galeria", "guardar", "total")
 PERCENTILES = (50, 95)
 DEFAULT_PEOPLE = 1000
 DEFAULT_CHECKPOINTS = (100, 250, 500, 1000)
@@ -95,8 +95,9 @@ class Timings:
         totals = self.stages["total"]
         median, high = (round(float(v), DIGITS) for v in np.percentile(totals, PERCENTILES))
         stages = {
-            f"{stage}_p50_ms": round(float(np.percentile(values, 50)), DIGITS)
+            f"{stage}_p{percentile}_ms": round(float(np.percentile(values, percentile)), DIGITS)
             for stage, values in self.stages.items()
+            for percentile in PERCENTILES
         }
         return {"p50": median, "p95_ms": high, "consultas": len(totals), **stages}
 

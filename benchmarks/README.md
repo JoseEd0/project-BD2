@@ -37,6 +37,8 @@ gráficas de [`figures/`](figures/) y todas las tablas de este documento.
 .venv/bin/python -m benchmarks.faces_cache_benchmark --api-url http://127.0.0.1:<web>/api \
     --url ws://127.0.0.1:<web>/api/ws/recognize --speeds 0 16 32 40 48 56 64 96 \
     --frames 200 --warmup 20 --fps 10
+.venv/bin/python -m benchmarks.copyright_evaluation_benchmark \
+    --engine-dir data/copyright-engine --data-dir data/datasets
 .venv/bin/python -m benchmarks.plot              # redibuja todas las gráficas
 ```
 
@@ -141,6 +143,7 @@ docker compose --profile bench down       # apaga PostgreSQL
 | [14. Detección de copyright](#14-detección-de-copyright--latencia-de-post-detections-y-casos-de-control) | latencia de `POST /detections` por duración de la subida y sus etapas; puntajes de copias enteras, tramos de 15 y 7,5 s y pistas no catalogadas frente al umbral | [latencia](figures/copyright-deteccion.png), [etapas](figures/copyright-deteccion-etapas.png), [puntajes](figures/copyright-deteccion-puntajes.png) |
 | [15. Rostros en vivo](#15-rostros-en-vivo--latencia-por-cuadro-por-websocket) | un cuadro de punta a punta por WebSocket, por el nginx o directo a la API, con y sin la caché de rastros en Redis, con cada etapa | [en vivo](figures/rostros-tiempo-real.png) |
 | [16. Recomendaciones de la tienda](#16-recomendaciones-de-la-tienda--cuatro-señales-y-caché) | compras conjuntas al vuelo vs materializadas; latencia p50/p95 de cada señal y de la recomendación con caché fría y caliente | [recomendaciones](figures/tienda-recomendaciones.png) |
+| [16. Evaluación de la detección de copyright](#16-evaluación-de-la-detección-de-copyright--remixes-con-la-verdad-conocida) | precisión, recall, F1, curva ROC e IoU de la detección sobre 400 remixes generados con la verdad conocida, sin distorsión y con ruido, MP3, pasa bajos, volumen, tempo y tono; umbral elegido, recall por largo del fragmento y otras definiciones del puntaje | [ROC](figures/copyright-evaluacion-roc.png), [detección](figures/copyright-evaluacion-deteccion.png), [IoU](figures/copyright-evaluacion-iou.png), [largo](figures/copyright-evaluacion-largo.png) |
 | [18. Rostros en LFW](#18-rostros-en-lfw--verificación-identificación-latencia-y-caché) | verificación con el protocolo de LFW (exactitud por pliegues, TAR a FAR fijo, ROC) y umbrales calibrados; identificación en el gestor, HNSW vs búsqueda exacta; p99 de cada etapa; aciertos de la caché de rastros según la velocidad del rostro | [verificación](figures/rostros-evaluacion-verificacion.png), [identificación](figures/rostros-evaluacion-identificacion.png), [latencia](figures/rostros-evaluacion-latencia.png), [caché](figures/rostros-cache.png) |
 | [19. Evaluación del RAG](#19-evaluación-del-rag--recuperación-de-preguntas-en-español-y-respuestas-con-claude) | Recall@5, Recall@10 y MRR de BM25, vectorial e híbrido con 45 preguntas en español de fragmentos conocidos, por categoría y criterio de acierto; respuestas simuladas para probar el camino (la calidad con Claude, pendiente de la clave) | [recuperación](figures/rag-evaluacion-recuperacion.png), [criterio](figures/rag-evaluacion-relevancia.png) |
 
@@ -2107,6 +2110,163 @@ uv run --no-sync python -m benchmarks.shop_recommend_benchmark --data-dir data/d
 ```
 
 `--engine-data-dir` se modifica (la carga añade tablas): conviene una copia.
+
+## 16. Evaluación de la detección de copyright — remixes con la verdad conocida
+
+`copyright_evaluation_benchmark.py` evalúa la detección del §14 (#77) con un conjunto de
+prueba generado por programa, del que se sabe qué canción suena, dónde suena en la subida y
+de qué parte del original sale. Como en el §14, el gestor es **una copia** del que dejó el
+trabajo de carga, servida en otro proceso y en un puerto libre; de la copia se borran los
+tramos de 200 canciones al azar, que pasan a ser **no catalogadas**. Quedan 7 794 canciones.
+El servicio corre con su configuración por omisión.
+
+**El conjunto de prueba** ([`remixes/`](remixes/)), con la semilla 20261120:
+
+- **200 remixes con copias**: de 1 a 3 fragmentos de 5 a 20 s (largo al azar, uniforme)
+  de canciones del catálogo, cada uno de un punto al azar de su pista y pegados con fundidos
+  lineales de 1 s. Ninguna canción se repite entre remixes. Son 394 fragmentos (74 remixes de
+  uno, 58 de dos y 68 de tres).
+- **200 remixes sin copias**, iguales pero con canciones no catalogadas.
+- Duran de 5,1 a 50,7 s (23,9 s de media) y se suben en FLAC a 44,1 kHz, mono.
+
+**Las distorsiones**, cada una por separado sobre el mismo remix (13 versiones, 5 200
+subidas): ruido blanco a 30, 20 y 10 dB de SNR sobre el remix entero; tempo ±5 % sin cambiar
+el tono (vocoder de fase de librosa); tono ±1 semitono sin cambiar la duración; MP3 a
+64 kbit/s constantes (LAME por libsndfile) y decodificado otra vez; un pasa bajos ideal a
+4 kHz; y el volumen a −1, −3 y −12 dB. El enunciado pide ruido a 20 y 10 dB y «volumen»; el
+ruido a 30 dB y los −1 y −3 dB se agregaron para ver **dónde** se rompe. Con el tempo, los
+tramos de la verdad se escalan a la duración nueva.
+
+**Qué se cuenta.** La unidad es la canción copiada dentro de una subida. Un **acierto** es
+una canción de la verdad con alguna coincidencia que llega al umbral; un **fallo**, una que
+no; una **falsa alarma**, cualquier otra canción que llega al umbral, en un remix con o sin
+copias. La **curva ROC** barre el umbral de 0 a 1 en pasos de 0,01: su recall es la fracción
+de fragmentos acertados y su tasa de falsos positivos, la de remixes sin copias con alguna
+coincidencia que llega al umbral. El **umbral se elige** con la J de Youden (TPR − FPR
+máxima) sobre los remixes **sin distorsión**, y todas las versiones se miden a ese umbral.
+La **IoU** compara, en cada acierto, el tramo informado con el verdadero, en la subida y en
+el original. La latencia es la de la petición entera, por minuto de audio subido.
+
+**Dónde corrió.** Apple M4 Pro (12 núcleos), macOS, Python 3.12; 11 min 12 s. La carga
+media fue de 6,9 a 24,4 durante la medida (está en el JSON): otros procesos ocupaban la
+máquina, a ratos más que sus 12 núcleos, así que la latencia es pesimista.
+
+### Resultados medidos
+
+![Curvas ROC por distorsión](figures/copyright-evaluacion-roc.png)
+
+![Precisión, recall y F1 por distorsión](figures/copyright-evaluacion-deteccion.png)
+
+Al umbral elegido, **0,43** (sin distorsión: recall 0,546 con 29 % de remixes sin copias
+marcados):
+
+| Versión | AUC | Precisión | Recall | F1 | Aciertos / falsas alarmas / fallos | F1 a 0,45 | IoU subida | IoU original | ms por min de audio (p50 / p95) |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| sin distorsión | **0,62** | 0,43 | **0,55** | **0,48** | 215 / 290 / 179 | 0,46 | 0,91 | 0,87 | 184 / 370 |
+| MP3 64 kbit/s | 0,59 | 0,42 | 0,54 | 0,47 | 211 / 293 / 183 | 0,46 | 0,91 | 0,86 | 179 / 344 |
+| ruido 30 dB | 0,40 | 0,31 | 0,34 | 0,32 | 133 / 300 / 261 | 0,32 | 0,90 | 0,86 | 181 / 366 |
+| ruido 20 dB | 0,21 | 0,16 | 0,18 | 0,17 | 73 / 371 / 321 | 0,18 | 0,90 | 0,82 | 185 / 364 |
+| ruido 10 dB | 0,04 | 0,02 | 0,03 | 0,03 | 12 / 520 / 382 | 0,03 | 0,83 | 0,56 | 187 / 376 |
+| volumen −1 dB | 0,55 | 0,37 | 0,47 | 0,41 | 184 / 308 / 210 | 0,40 | 0,90 | 0,83 | 180 / 357 |
+| volumen −3 dB | 0,17 | 0,11 | 0,11 | 0,11 | 44 / 355 / 350 | 0,11 | 0,89 | 0,66 | 180 / 348 |
+| volumen −12 dB | 0,01 | 0,00 | **0,00** | 0,00 | 0 / 469 / 394 | 0,00 | — | — | 177 / 329 |
+| pasa bajos 4 kHz | 0,02 | 0,01 | 0,01 | 0,01 | 6 / 621 / 388 | 0,01 | 0,84 | 0,74 | 170 / 352 |
+| tempo +5 % | 0,13 | 0,09 | 0,08 | 0,09 | 33 / 348 / 361 | 0,07 | 0,86 | 0,54 | 181 / 373 |
+| tempo −5 % | 0,13 | 0,08 | 0,08 | 0,08 | 30 / 327 / 364 | 0,08 | 0,82 | 0,66 | 180 / 375 |
+| tono +1 semitono | 0,11 | 0,07 | 0,07 | 0,07 | 27 / 359 / 367 | 0,07 | 0,82 | 0,45 | 181 / 383 |
+| tono −1 semitono | 0,11 | 0,06 | 0,05 | 0,06 | 21 / 354 / 373 | 0,05 | 0,85 | 0,64 | 180 / 318 |
+| todas juntas | 0,23 | 0,17 | 0,19 | 0,18 | 989 / 4 915 / 4 133 | 0,17 | 0,90 | 0,83 | 181 / 364 |
+
+![Dónde se localiza la copia](figures/copyright-evaluacion-iou.png)
+
+![Recall según el largo del fragmento](figures/copyright-evaluacion-largo.png)
+
+| Largo del fragmento (sin distorsión) | Fragmentos | Su canción está entre las coincidencias | Recall a 0,43 |
+|---|---:|---:|---:|
+| 5 a 7,5 s | 67 | 0,51 | 0,21 |
+| 7,5 a 10 s | 77 | 0,92 | 0,27 |
+| 10 a 15 s | 144 | **1,00** | 0,53 |
+| 15 a 20 s | 106 | **1,00** | **0,98** |
+
+| Fragmentos en el remix (sin distorsión) | Fragmentos | Recall a 0,43 |
+|---|---:|---:|
+| 1 | 74 | **1,00** |
+| 2 | 116 | 0,58 |
+| 3 | 204 | 0,36 |
+
+Otras definiciones del puntaje, calculadas sobre **las mismas coincidencias** (ninguna está
+en el servicio):
+
+| Puntaje | AUC sin distorsión | Punto de Youden (TPR / FPR) | AUC con MP3 | AUC con −1 dB |
+|---|---:|---:|---:|---:|
+| similitud media × cobertura (el del servicio) | 0,62 | 0,55 / 0,29 | 0,59 | 0,55 |
+| similitud media sola | 0,74 | 0,83 / 0,40 | 0,72 | 0,59 |
+| ventanas de la racha / 7, si su similitud media es ≥ 0,9 | **0,78** | **0,67 / 0,22** | **0,76** | **0,65** |
+
+### Conclusiones
+
+- **El umbral pasa de 0,45 a 0,43**, el de máxima J de Youden sin distorsión. Es casi el
+  mismo: el F1 sube de 0,46 a 0,48. Lo que dice la curva es otra cosa: **ningún umbral
+  separa bien** (área bajo la curva 0,62). Con 0,43 se encuentra el 55 % de los fragmentos
+  copiados, el 29 % de los remixes sin copias da alguna coincidencia y la precisión es 0,43:
+  hay 290 falsas alarmas, 148 en remixes sin copias y 142 en remixes con copias.
+- **Dónde falla el MFCC: el nivel, antes que el tono.** Bajar el volumen 1 dB cuesta el 15 %
+  del recall (0,55 → 0,47), 3 dB lo deja en 0,11 y 12 dB en 0. El descriptor son 39 MFCC
+  (con Δ y Δ²) cuantizados en una bolsa de palabras: una ganancia suma una constante a
+  todas las bandas log-mel y, tras la DCT, esa constante solo mueve c0, la energía; pero el
+  vocabulario cuantiza valores absolutos, así que las ventanas caen en otras palabras y la
+  copia ya no se parece a su original. Lo mismo pasa con el ruido (recall 0,34 a 30 dB,
+  0,18 a 20 dB y 0,03 a 10 dB) y con el pasa bajos a 4 kHz (0,01). **El cambio de tono lo
+  rompe** (recall 0,05 y 0,07 con ±1 semitono) **y el de tempo también** (0,08 con ±5 %),
+  pero no es una debilidad propia de ellos: un cambio de 3 dB, que no se oye como otra
+  canción, rompe casi igual. Lo único que no le hace daño es el MP3 a 64 kbit/s (0,54).
+- **Bajo la diagonal.** Con esas distorsiones las curvas quedan por debajo del azar: la
+  copia ya no se encuentra (su canción puntúa 0), pero los remixes, con o sin copia, siguen
+  dando coincidencias con otras canciones del FMA. El sistema sigue «encontrando algo»; lo
+  que pierde es la copia.
+- **Lo que pierde recall sin distorsión es el puntaje, no la búsqueda.** La canción copiada
+  está entre las coincidencias en el 100 % de los fragmentos de 10 s o más y en el 92 % de
+  los de 7,5 a 10 s, pero a 0,43 solo pasan el 53 % y el 27 %. La cobertura divide las
+  ventanas de la racha por las que podían compartir subida y original (`min(subida,
+  original)`): en un remix de tres fragmentos de ~35 s, cada uno cubre como mucho un tercio
+  y su puntaje no pasa de ~0,3 aunque la similitud sea 0,98. Por eso el recall cae de 1,00
+  con un fragmento a 0,58 con dos y 0,36 con tres. Un fragmento de 5 a 7,5 s solo se
+  detecta cuando va solo (una subida de una ventana, cobertura 1), y una subida así de corta
+  sin copias también puntúa alto.
+- **Un puntaje mejor, propuesto y no aplicado.** Contar las ventanas de la racha (sobre las 7
+  de un fragmento de 20 s) cuando su similitud media es alta no depende de cuánto duran la
+  subida ni el original: sube el área bajo la curva de 0,62 a 0,78 sin distorsión y de 0,59
+  a 0,76 con MP3, y su mejor punto da más recall (0,67) con menos falsas alarmas (22 %). Se
+  calculó sobre las coincidencias que devolvió el servicio, que son las 10 mejores por el
+  puntaje actual; con el puntaje nuevo podrían entrar otras, así que la cifra es una
+  estimación por lo bajo. No se cambia aquí: cambia lo que significa el puntaje en la
+  respuesta y en la interfaz (#78). Lo que más ganaría, sin embargo, es el descriptor: sin c0
+  (o restando la media cepstral de cada ventana) el MFCC no cambia con el volumen, a costa de
+  rehacer el vocabulario y el HNSW del catálogo (unos 3 min, §12). No está medido.
+- **Cuando encuentra la copia, la ubica bien**: la mediana de la IoU es 0,91 en la subida y
+  0,87 en el original sin distorsión. Lo que falta para 1 es la rejilla de 2,5 s de las
+  ventanas. Con tempo o tono, en los pocos aciertos que quedan, la IoU en el original baja a
+  0,45-0,66.
+- **Unos 180 ms por minuto de audio** (p50; p95 de 320 a 380 ms, porque las subidas cortas
+  pagan los costos fijos de la petición), igual con cualquier distorsión: el trabajo es
+  decodificar y sacar MFCC (§14), no buscar. Se midió con la máquina cargada.
+
+### Reproducirlo
+
+```bash
+uv run --no-sync python -m benchmarks.copyright_evaluation_benchmark \
+    --engine-dir data/copyright-engine --data-dir data/datasets
+uv run --no-sync python -m benchmarks.plot
+```
+
+`--positives`, `--negatives`, `--held-out` y `--seed` fijan el conjunto (200, 200, 200 y
+20261120); `--min-fragments`, `--max-fragments`, `--min-fragment-seconds`,
+`--max-fragment-seconds` y `--crossfade-seconds`, la forma de los remixes;
+`--threshold-step`, el paso de la curva; `--provisional-threshold`, el umbral con que se
+compara (0,45); y `--length-bins`, los largos de la tabla. Las detecciones crudas quedan en
+[`results/copyright_evaluacion_casos.json`](results/copyright_evaluacion_casos.json), una
+subida por línea con su verdad y sus coincidencias; con `--reuse-cases` todas las cifras se
+recalculan desde ese archivo, sin gestor.
 
 ## 18. Rostros en LFW — verificación, identificación, latencia y caché
 

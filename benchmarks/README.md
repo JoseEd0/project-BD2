@@ -1327,6 +1327,19 @@ Docker la cifra será otra. Las fotos ampliadas no tienen más detalle que la or
 250 px: miden el costo de su tamaño, no la precisión con fotos grandes. La exactitud de la
 verificación con los pares de LFW y el umbral del conjunto abierto se miden en la sección 18.
 
+### Reproducirlo
+
+```bash
+.venv/bin/python -m faces lfw --salida data/datasets/lfw       # 172 MiB, con su SHA-256
+.venv/bin/python -m faces models --salida data/models/faces    # YuNet y SFace, 37 MiB
+.venv/bin/python -m benchmarks.faces_benchmark --lfw data/datasets/lfw/lfw \
+    --models data/models/faces --sides 500 1000 2000 4000 --sample 500 --threads 1
+.venv/bin/python -m benchmarks.plot
+```
+
+La medida publicada tardó 6 min 30 s, casi 4 de ellos en las 13 233 fotos de LFW. `--warmup`
+cambia cuántas fotos de cada tamaño se procesan antes de medir (20) y `--seed`, la muestra.
+
 ## 8. Tramos de audio y consulta por segmentos
 
 `segments_benchmark.py` mide lo que añade el issue #74 para la detección de copyright
@@ -1409,15 +1422,6 @@ Dónde se va el tiempo de `/media/segments` (lo que mide el servidor):
 ### Reproducirlo
 
 ```bash
-.venv/bin/python -m faces lfw --salida data/datasets/lfw       # 172 MiB, con su SHA-256
-.venv/bin/python -m faces models --salida data/models/faces    # YuNet y SFace, 37 MiB
-.venv/bin/python -m benchmarks.faces_benchmark --lfw data/datasets/lfw/lfw \
-    --models data/models/faces --sides 500 1000 2000 4000 --sample 500 --threads 1
-.venv/bin/python -m benchmarks.plot
-```
-
-La medida publicada tardó 6 min 30 s, casi 4 de ellos en las 13 233 fotos de LFW. `--warmup`
-cambia cuántas fotos de cada tamaño se procesan antes de medir (20) y `--seed`, la muestra.
 .venv/bin/python -m benchmarks.segments_benchmark --tracks-directory data/datasets/fma_small/pistas
 .venv/bin/python -m benchmarks.plot
 ```
@@ -1618,6 +1622,19 @@ fuera de la fila), `shop_compras` 41,7, inventario 10,9, usuarios 7,9 y tiendas 
 
 Detalle, decisiones y tablas completas en [`apps/shop/README.md`](../apps/shop/README.md#medido-cargar-todo-el-dataset).
 
+### Reproducirlo
+
+```bash
+uv run python -m shop.dataset prepare --data-dir data/datasets
+uv run python -m shop.clip models --salida data/models/shop
+.venv/bin/python -m benchmarks.shop_seed_benchmark --data-dir data/datasets \
+    --models data/models/shop --engine-data-dir data/tienda-gestor
+.venv/bin/python -m benchmarks.plot
+```
+
+`--engine-data-dir` tiene que estar vacío (sin él, uno temporal); `--embeddings-dir` reusa una
+caché (sin él, una vacía, y se miden todas las fotos).
+
 ## 11. Servicio de rostros — registro, reconocimiento y conjunto abierto
 
 `faces_service_benchmark.py` mide el API de rostros ([`apps/faces`](../apps/faces/README.md),
@@ -1703,15 +1720,6 @@ de 200 consultas por tamaño: un punto de diferencia es una consulta.
 ### Reproducirlo
 
 ```bash
-uv run python -m shop.dataset prepare --data-dir data/datasets
-uv run python -m shop.clip models --salida data/models/shop
-.venv/bin/python -m benchmarks.shop_seed_benchmark --data-dir data/datasets \
-    --models data/models/shop --engine-data-dir data/tienda-gestor
-.venv/bin/python -m benchmarks.plot
-```
-
-`--engine-data-dir` tiene que estar vacío (sin él, uno temporal); `--embeddings-dir` reusa una
-caché (sin él, una vacía, y se miden todas las fotos).
 .venv/bin/python -m faces lfw --salida data/datasets/lfw
 .venv/bin/python -m faces models --salida data/models/faces
 .venv/bin/python -m benchmarks.faces_service_benchmark --lfw data/datasets/lfw/lfw \

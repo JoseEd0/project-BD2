@@ -39,6 +39,7 @@ from pathlib import Path
 from typing import Any
 
 import cv2
+import faiss
 import httpx
 import numpy as np
 from fastapi.testclient import TestClient
@@ -320,6 +321,7 @@ def _open_set(
 
 def run(arguments: argparse.Namespace) -> Report:
     cv2.setNumThreads(arguments.threads)
+    faiss.omp_set_num_threads(arguments.threads)
     photos = people_with_photos(lfw_images(arguments.lfw))
     rng = random.Random(arguments.seed)
     candidates = sorted(person for person, paths in photos.items() if len(paths) >= MIN_PHOTOS)
@@ -353,7 +355,7 @@ def _parameters(arguments: argparse.Namespace, candidates: int, strangers: int) 
         "consultas": arguments.queries,
         "umbrales": list(arguments.thresholds),
         "semilla": arguments.seed,
-        "hilos_opencv": arguments.threads,
+        "hilos_opencv_y_faiss": arguments.threads,
         "ancho_minimo_rostro": quality.min_face_width,
         "nitidez_minima": quality.min_sharpness,
         "equipo": machine_description(),
@@ -369,7 +371,9 @@ def main() -> None:
     parser.add_argument("--queries", type=int, default=DEFAULT_QUERIES)
     parser.add_argument("--thresholds", type=float, nargs="+", default=list(DEFAULT_THRESHOLDS))
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
-    parser.add_argument("--threads", type=int, default=DEFAULT_THREADS)
+    parser.add_argument(
+        "--threads", type=int, default=DEFAULT_THREADS, help="hilos de OpenCV y de FAISS"
+    )
     parser.add_argument("--output", type=Path, default=results_directory(Path(__file__).parent))
     arguments = parser.parse_args()
     report = run(arguments)

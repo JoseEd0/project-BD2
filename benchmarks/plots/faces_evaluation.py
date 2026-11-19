@@ -180,8 +180,8 @@ CACHE_FIGURE = XYFigure(
     report=CACHE_REPORT,
     title="Rostros en vivo: la caché de rastros según cuánto se mueve el rostro",
     subtitle=(
-        "Un retrato que se desliza de lado a lado en cuadros de 640 x 480, a 10 por segundo,\n"
-        "por el nginx del compose; 200 cuadros por velocidad, con la caché y sin ella."
+        "Un rostro de 87 px de ancho que cruza cuadros de 1 280 x 720 a 10 por segundo, por el\n"
+        "nginx del compose; 200 cuadros por velocidad, con la caché y sin ella."
     ),
     columns=3,
     legend_columns=4,
@@ -207,8 +207,8 @@ CACHE_FIGURE = XYFigure(
             Axis("tasa de aciertos", "tasa_de_aciertos"),
             (
                 Series("0 px por cuadro", Style(LIGHT_BLUE, "o"), "0 px por cuadro", TIMELINE),
-                Series("64 px por cuadro", Style(DARK_BLUE, "^"), "64 px por cuadro", TIMELINE),
-                Series("128 px por cuadro", Style(AQUA, "D"), "128 px por cuadro", TIMELINE),
+                Series("40 px por cuadro", Style(DARK_BLUE, "^"), "40 px por cuadro", TIMELINE),
+                Series("48 px por cuadro", Style(AQUA, "D"), "48 px por cuadro", TIMELINE),
             ),
         ),
     ),

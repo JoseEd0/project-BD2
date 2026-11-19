@@ -25,11 +25,13 @@ from benchmarks.plots.drawing import (
     ticks_between,
     title_detail,
     vertical_scale,
+    xy_points,
 )
 from benchmarks.plots.model import (
     DISK_SPACE,
     NODES,
     TOTAL_TIME,
+    Axis,
     BarFigure,
     BarGroup,
     BarPanel,
@@ -38,9 +40,12 @@ from benchmarks.plots.model import (
     Figure,
     Line,
     Segment,
+    Series,
     StackedBar,
     Style,
     Technique,
+    XYFigure,
+    XYPanel,
     compare,
 )
 from benchmarks.plots.style import BASELINE_CLEARANCE, BLUE, ORANGE, format_number
@@ -373,3 +378,29 @@ def test_a_breakdown_labels_each_bar_with_its_total(tmp_path: Path):
     assert [label.get_text() for label in axis.get_yticklabels()] == ["uno", "dos"]
     pyplot.close(canvas)
     assert draw(BREAKDOWN, BREAKDOWN_REPORT, tmp_path).stat().st_size > 10_000
+
+
+XY_REPORT = {
+    "name": "xy",
+    "measurements": [
+        {"technique": "a", "operation": "roc", "dataset_size": 1, "milliseconds": 0.0, "extra": {"far": [0.0, 0.01, 0.1], "tar": [0.5, 0.9, 1.0]}},
+        {"technique": "a: umbral", "operation": "punto", "dataset_size": 1, "milliseconds": 0.0, "extra": {"far": 0.01, "tar": 0.9}},
+    ],
+}
+XY_PANEL = XYPanel(
+    "ROC",
+    Axis("FAR", "far", logarithmic=True),
+    Axis("TAR", "tar"),
+    (Series("a", STYLE, "a", "roc"), Series("umbral", STYLE, "a: umbral", "punto", points_only=True)),
+)
+
+
+def test_xy_points_come_from_lists_or_single_values_and_skip_zeros_on_a_log_axis():
+    assert xy_points(XY_REPORT, XY_PANEL, XY_PANEL.series[0]) == [(0.01, 0.9), (0.1, 1.0)]
+    assert xy_points(XY_REPORT, XY_PANEL, XY_PANEL.series[1]) == [(0.01, 0.9)]
+
+
+def test_an_xy_figure_is_written_to_disk(tmp_path: Path):
+    pytest.importorskip("matplotlib")
+    figure = XYFigure("xy", "xy", "Título", "Subtítulo", columns=1, panels=(XY_PANEL,))
+    assert draw(figure, XY_REPORT, tmp_path).stat().st_size > 10_000

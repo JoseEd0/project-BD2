@@ -12,6 +12,13 @@ Cada tabla usa la organización y los índices que su consulta necesita:
   cronológico, para recorrer y cortar las compras por fecha.
 - `shop_tiendas`: heap con B+ sobre `id` y R-Tree sobre `ubicacion`: tiendas cercanas.
 - `shop_inventario`: heap con hash extendible sobre `producto`: dónde hay un producto.
+- `shop_historial`: las mismas compras en un heap con hash sobre `usuario` y sobre
+  `producto`, porque el archivo secuencial no admite índices secundarios: lo que compró un
+  usuario y quién compró un producto, sin recorrer 511 836 filas.
+- `shop_compras_conjuntas`: heap con hash sobre `producto`; cuántos clientes compraron
+  cada par de productos, materializado por la carga con el `GROUP BY` del gestor
+  (`shop.seed.copurchases`).
+- `shop_materializaciones`: con qué partición y soporte se calculó cada tabla materializada.
 
 Los productos no son un B+ agrupado: el gestor solo pone índices secundarios sobre un heap,
 y esta tabla necesita tres.
@@ -30,6 +37,9 @@ USERS = "shop_usuarios"
 PURCHASES = "shop_compras"
 STORES = "shop_tiendas"
 INVENTORY = "shop_inventario"
+HISTORY = "shop_historial"
+COPURCHASES = "shop_compras_conjuntas"
+MATERIALIZATIONS = "shop_materializaciones"
 
 PRODUCT_ID_LENGTH = 10
 USER_ID_LENGTH = 40
@@ -40,6 +50,7 @@ CATEGORY_PATH_LENGTH = 192
 SPLIT_LENGTH = 5
 STORE_NAME_LENGTH = 64
 STORE_KIND_LENGTH = 32
+TABLE_NAME_LENGTH = 32
 CLIP_DIMENSION = 512
 # El texto de Amazon está en inglés: con el stemmer y las stopwords en inglés, «strings» y
 # «string» son el mismo término y «the» no cuenta.
@@ -51,6 +62,18 @@ CLIP_INDEX = f"{CLIP}_embedding"
 STORES_INDEX = f"{STORES}_ubicacion"
 INVENTORY_INDEX = f"{INVENTORY}_producto"
 SIFT_INDEX_NAME = f"{PRODUCTS}_imagen"
+HISTORY_USER_INDEX = f"{HISTORY}_usuario"
+HISTORY_PRODUCT_INDEX = f"{HISTORY}_producto"
+COPURCHASES_INDEX = f"{COPURCHASES}_producto"
+
+COPURCHASES_TABLE = (
+    f"CREATE TABLE IF NOT EXISTS {COPURCHASES} ("
+    f"producto VARCHAR({PRODUCT_ID_LENGTH}), otro VARCHAR({PRODUCT_ID_LENGTH}), "
+    f"particion VARCHAR({SPLIT_LENGTH}), veces INT)"
+)
+COPURCHASES_INDEX_STATEMENT = (
+    f"CREATE INDEX IF NOT EXISTS {COPURCHASES_INDEX} ON {COPURCHASES} USING HASH (producto)"
+)
 
 SCHEMA: tuple[str, ...] = (
     f"CREATE TABLE IF NOT EXISTS {PRODUCTS} ("
@@ -76,6 +99,16 @@ SCHEMA: tuple[str, ...] = (
     f"CREATE TABLE IF NOT EXISTS {INVENTORY} ("
     f"tienda BIGINT, producto VARCHAR({PRODUCT_ID_LENGTH}), unidades INT)",
     f"CREATE INDEX IF NOT EXISTS {INVENTORY_INDEX} ON {INVENTORY} USING HASH (producto)",
+    f"CREATE TABLE IF NOT EXISTS {HISTORY} ("
+    f"usuario VARCHAR({USER_ID_LENGTH}), producto VARCHAR({PRODUCT_ID_LENGTH}), "
+    f"instante BIGINT, particion VARCHAR({SPLIT_LENGTH}))",
+    f"CREATE INDEX IF NOT EXISTS {HISTORY_USER_INDEX} ON {HISTORY} USING HASH (usuario)",
+    f"CREATE INDEX IF NOT EXISTS {HISTORY_PRODUCT_INDEX} ON {HISTORY} USING HASH (producto)",
+    COPURCHASES_TABLE,
+    COPURCHASES_INDEX_STATEMENT,
+    f"CREATE TABLE IF NOT EXISTS {MATERIALIZATIONS} ("
+    f"tabla VARCHAR({TABLE_NAME_LENGTH}) PRIMARY KEY, particion VARCHAR({SPLIT_LENGTH}), "
+    "soporte INT, filas INT)",
 )
 
 SIFT_INDEX = (

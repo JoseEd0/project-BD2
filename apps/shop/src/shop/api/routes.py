@@ -13,6 +13,7 @@ from starlette.concurrency import run_in_threadpool
 
 from appkit import BadRequestError, Engine, ResourceNotFoundError, ServiceError, timed
 from minigestor_client import Point, Record
+from shop.catalog.queries import CLIP_SEARCH, fetch_products
 from shop.clip.encoder import Embeddings
 from shop.settings import ShopSettings
 
@@ -86,9 +87,9 @@ async def image_search(
         (vector,) = await run_in_threadpool(encoder.embed, [q])
     with timed(ENGINE_STAGE):
         neighbours = await engine.fetch_all(
-            queries.CLIP_SEARCH, [vector, _limit(limite, settings)]
+            CLIP_SEARCH, [vector, _limit(limite, settings)]
         )
-        products = await _products(engine, [str(row["id"]) for row in neighbours])
+        products = await fetch_products(engine, [str(row["id"]) for row in neighbours])
     return [
         _scored(products[str(row["id"])], row["puntaje"])
         for row in neighbours
@@ -110,13 +111,6 @@ async def nearby_stores(
             queries.NEAREST_STORES, [Point(lat, lon), _limit(limite, settings)]
         )
     return [NearbyStore.model_validate(row) for row in found]
-
-
-async def _products(engine: Engine, ids: list[str]) -> dict[str, Record]:
-    if not ids:
-        return {}
-    found = await engine.fetch_all(queries.products_by_ids(len(ids)), ids)
-    return {str(row["id"]): row for row in found}
 
 
 def _scored(row: Record, score: object) -> ScoredProduct:

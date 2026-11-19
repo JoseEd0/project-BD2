@@ -12,7 +12,7 @@ apps/
   kit/             appkit: configuración, logs, trazas, salud, errores, migraciones y descargas
   copyright/       copyright en audio (opción C): catálogo de FMA indexado por tramos (`songcheck`)
   shop/            tienda con recomendaciones (opción B): dataset, catálogo en el gestor y CLIP
-  rag/             RAG sobre papers (opción A): corpus de arXiv, ingesta con e5 y búsqueda híbrida
+  rag/             RAG sobre papers (opción A): corpus de arXiv, ingesta con e5, búsqueda y respuestas
   faces/           rostros (opción D): YuNet y SFace; API de registro, reconocimiento y borrado
   web-kit/         @minigestor/web-kit: lógica sin estilos que comparten las interfaces
     template/      plantilla de la interfaz de una app: Vite y React
@@ -27,7 +27,7 @@ apps/
 |---|---|---|---|---|
 | Copyright en audio | `apps/copyright/` | `copyright-api`, `copyright-web` | 8101 / 8401 | sí, con su interfaz |
 | Tienda con recomendaciones | `apps/shop/` | `shop-api`, `shop-web` | 8102 / 8402 | sí; la interfaz es la plantilla hasta #83 |
-| Preguntas a papers (RAG) | `apps/rag/` | `papers-api`, `papers-web` | 8103 / 8403 | sí: búsqueda; la web es la plantilla hasta #88 |
+| Preguntas a papers (RAG) | `apps/rag/` | `papers-api`, `papers-web` | 8103 / 8403 | sí: búsqueda y respuestas por SSE; la web es la plantilla hasta #88 |
 | Reconocimiento de rostros | `apps/faces/` | `faces-api`, `faces-web` | 8104 / 8404 | sí, con su PWA de cámara ([`faces/web`](faces/web/README.md)) |
 | Ejemplo del kit (perfil `example`) | `deploy/example/` | `example-api`, `example-web` | 8100 / 8400 | sí, para probar la topología |
 

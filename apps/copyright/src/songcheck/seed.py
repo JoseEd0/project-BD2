@@ -33,8 +33,11 @@ from songcheck.errors import SeedError
 from songcheck.fma.prepare import CatalogReport, prepare_catalog
 from songcheck.schema import (
     SCHEMA,
+    SEGMENT_END_COLUMN,
     SEGMENT_INDEX,
     SEGMENT_INDEX_NAME,
+    SEGMENT_SONG_COLUMN,
+    SEGMENT_START_COLUMN,
     SEGMENTS_TABLE,
     SONGS_TABLE,
 )
@@ -122,9 +125,9 @@ def segment_rows(
         for number, window in enumerate(segment_windows(song.duration_seconds, windowing)):
             yield {
                 "id": segment_id(song.track_id, number),
-                "cancion": song.track_id,
-                "inicio": window.start,
-                "fin": window.end,
+                SEGMENT_SONG_COLUMN: song.track_id,
+                SEGMENT_START_COLUMN: window.start,
+                SEGMENT_END_COLUMN: window.end,
                 "ruta": window.of(path),
             }
 

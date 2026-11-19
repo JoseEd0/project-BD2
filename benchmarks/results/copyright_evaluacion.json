@@ -454,9 +454,9 @@
       "technique": "latencia",
       "operation": "original",
       "dataset_size": 400,
-      "milliseconds": 184.045,
+      "milliseconds": 184.046,
       "extra": {
-        "p95": 369.654,
+        "p95": 369.656,
         "segundos_medios": 23.85,
         "ms_medios": 81.006
       }
@@ -468,6 +468,7 @@
       "milliseconds": 0.0,
       "extra": {
         "recall": 0.209,
+        "entre_las_coincidencias": 0.507,
         "fragmentos": 67,
         "desde": 5.0,
         "hasta": 7.5
@@ -480,6 +481,7 @@
       "milliseconds": 0.0,
       "extra": {
         "recall": 0.273,
+        "entre_las_coincidencias": 0.922,
         "fragmentos": 77,
         "desde": 7.5,
         "hasta": 10.0
@@ -492,6 +494,7 @@
       "milliseconds": 0.0,
       "extra": {
         "recall": 0.528,
+        "entre_las_coincidencias": 1.0,
         "fragmentos": 144,
         "desde": 10.0,
         "hasta": 15.0
@@ -504,9 +507,43 @@
       "milliseconds": 0.0,
       "extra": {
         "recall": 0.981,
+        "entre_las_coincidencias": 1.0,
         "fragmentos": 106,
         "desde": 15.0,
         "hasta": 20.0
+      }
+    },
+    {
+      "technique": "original",
+      "operation": "por_fragmentos",
+      "dataset_size": 400,
+      "milliseconds": 0.0,
+      "extra": {
+        "fragmentos_por_remix": 1,
+        "recall": 1.0,
+        "fragmentos": 74
+      }
+    },
+    {
+      "technique": "original",
+      "operation": "por_fragmentos",
+      "dataset_size": 400,
+      "milliseconds": 0.0,
+      "extra": {
+        "fragmentos_por_remix": 2,
+        "recall": 0.578,
+        "fragmentos": 116
+      }
+    },
+    {
+      "technique": "original",
+      "operation": "por_fragmentos",
+      "dataset_size": 400,
+      "milliseconds": 0.0,
+      "extra": {
+        "fragmentos_por_remix": 3,
+        "recall": 0.363,
+        "fragmentos": 204
       }
     },
     {
@@ -894,7 +931,7 @@
       "technique": "latencia",
       "operation": "ruido 30 dB",
       "dataset_size": 400,
-      "milliseconds": 181.316,
+      "milliseconds": 181.315,
       "extra": {
         "p95": 365.778,
         "segundos_medios": 23.85,
@@ -908,6 +945,7 @@
       "milliseconds": 0.0,
       "extra": {
         "recall": 0.164,
+        "entre_las_coincidencias": 0.418,
         "fragmentos": 67,
         "desde": 5.0,
         "hasta": 7.5
@@ -920,6 +958,7 @@
       "milliseconds": 0.0,
       "extra": {
         "recall": 0.169,
+        "entre_las_coincidencias": 0.61,
         "fragmentos": 77,
         "desde": 7.5,
         "hasta": 10.0
@@ -932,6 +971,7 @@
       "milliseconds": 0.0,
       "extra": {
         "recall": 0.319,
+        "entre_las_coincidencias": 0.708,
         "fragmentos": 144,
         "desde": 10.0,
         "hasta": 15.0
@@ -944,9 +984,43 @@
       "milliseconds": 0.0,
       "extra": {
         "recall": 0.594,
+        "entre_las_coincidencias": 0.764,
         "fragmentos": 106,
         "desde": 15.0,
         "hasta": 20.0
+      }
+    },
+    {
+      "technique": "ruido 30 dB",
+      "operation": "por_fragmentos",
+      "dataset_size": 400,
+      "milliseconds": 0.0,
+      "extra": {
+        "fragmentos_por_remix": 1,
+        "recall": 0.77,
+        "fragmentos": 74
+      }
+    },
+    {
+      "technique": "ruido 30 dB",
+      "operation": "por_fragmentos",
+      "dataset_size": 400,
+      "milliseconds": 0.0,
+      "extra": {
+        "fragmentos_por_remix": 2,
+        "recall": 0.293,
+        "fragmentos": 116
+      }
+    },
+    {
+      "technique": "ruido 30 dB",
+      "operation": "por_fragmentos",
+      "dataset_size": 400,
+      "milliseconds": 0.0,
+      "extra": {
+        "fragmentos_por_remix": 3,
+        "recall": 0.206,
+        "fragmentos": 204
       }
     },
     {
@@ -1314,7 +1388,7 @@
       "dataset_size": 400,
       "milliseconds": 0.0,
       "extra": {
-        "iou": 0.903,
+        "iou": 0.902,
         "media": 0.87,
         "aciertos": 73
       }
@@ -1334,9 +1408,9 @@
       "technique": "latencia",
       "operation": "ruido 20 dB",
       "dataset_size": 400,
-      "milliseconds": 185.378,
+      "milliseconds": 185.377,
       "extra": {
-        "p95": 364.41,
+        "p95": 364.411,
         "segundos_medios": 23.85,
         "ms_medios": 81.587
       }
@@ -1348,6 +1422,7 @@
       "milliseconds": 0.0,
       "extra": {
         "recall": 0.119,
+        "entre_las_coincidencias": 0.254,
         "fragmentos": 67,
         "desde": 5.0,
         "hasta": 7.5
@@ -1360,6 +1435,7 @@
       "milliseconds": 0.0,
       "extra": {
         "recall": 0.065,
+        "entre_las_coincidencias": 0.351,
         "fragmentos": 77,
         "desde": 7.5,
         "hasta": 10.0
@@ -1372,6 +1448,7 @@
       "milliseconds": 0.0,
       "extra": {
         "recall": 0.194,
+        "entre_las_coincidencias": 0.396,
         "fragmentos": 144,
         "desde": 10.0,
         "hasta": 15.0
@@ -1384,9 +1461,43 @@
       "milliseconds": 0.0,
       "extra": {
         "recall": 0.302,
+        "entre_las_coincidencias": 0.406,
         "fragmentos": 106,
         "desde": 15.0,
         "hasta": 20.0
+      }
+    },
+    {
+      "technique": "ruido 20 dB",
+      "operation": "por_fragmentos",
+      "dataset_size": 400,
+      "milliseconds": 0.0,
+      "extra": {
+        "fragmentos_por_remix": 1,
+        "recall": 0.514,
+        "fragmentos": 74
+      }
+    },
+    {
+      "technique": "ruido 20 dB",
+      "operation": "por_fragmentos",
+      "dataset_size": 400,
+      "milliseconds": 0.0,
+      "extra": {
+        "fragmentos_por_remix": 2,
+        "recall": 0.147,
+        "fragmentos": 116
+      }
+    },
+    {
+      "technique": "ruido 20 dB",
+      "operation": "por_fragmentos",
+      "dataset_size": 400,
+      "milliseconds": 0.0,
+      "extra": {
+        "fragmentos_por_remix": 3,
+        "recall": 0.088,
+        "fragmentos": 204
       }
     },
     {
@@ -1776,7 +1887,7 @@
       "dataset_size": 400,
       "milliseconds": 186.785,
       "extra": {
-        "p95": 376.262,
+        "p95": 376.269,
         "segundos_medios": 23.85,
         "ms_medios": 83.988
       }
@@ -1788,6 +1899,7 @@
       "milliseconds": 0.0,
       "extra": {
         "recall": 0.015,
+        "entre_las_coincidencias": 0.03,
         "fragmentos": 67,
         "desde": 5.0,
         "hasta": 7.5
@@ -1800,6 +1912,7 @@
       "milliseconds": 0.0,
       "extra": {
         "recall": 0.0,
+        "entre_las_coincidencias": 0.013,
         "fragmentos": 77,
         "desde": 7.5,
         "hasta": 10.0
@@ -1812,6 +1925,7 @@
       "milliseconds": 0.0,
       "extra": {
         "recall": 0.049,
+        "entre_las_coincidencias": 0.104,
         "fragmentos": 144,
         "desde": 10.0,
         "hasta": 15.0
@@ -1824,9 +1938,43 @@
       "milliseconds": 0.0,
       "extra": {
         "recall": 0.038,
+        "entre_las_coincidencias": 0.104,
         "fragmentos": 106,
         "desde": 15.0,
         "hasta": 20.0
+      }
+    },
+    {
+      "technique": "ruido 10 dB",
+      "operation": "por_fragmentos",
+      "dataset_size": 400,
+      "milliseconds": 0.0,
+      "extra": {
+        "fragmentos_por_remix": 1,
+        "recall": 0.095,
+        "fragmentos": 74
+      }
+    },
+    {
+      "technique": "ruido 10 dB",
+      "operation": "por_fragmentos",
+      "dataset_size": 400,
+      "milliseconds": 0.0,
+      "extra": {
+        "fragmentos_por_remix": 2,
+        "recall": 0.017,
+        "fragmentos": 116
+      }
+    },
+    {
+      "technique": "ruido 10 dB",
+      "operation": "por_fragmentos",
+      "dataset_size": 400,
+      "milliseconds": 0.0,
+      "extra": {
+        "fragmentos_por_remix": 3,
+        "recall": 0.015,
+        "fragmentos": 204
       }
     },
     {
@@ -2214,9 +2362,9 @@
       "technique": "latencia",
       "operation": "tempo +5 %",
       "dataset_size": 400,
-      "milliseconds": 180.701,
+      "milliseconds": 180.7,
       "extra": {
-        "p95": 373.022,
+        "p95": 373.027,
         "segundos_medios": 22.714,
         "ms_medios": 77.361
       }
@@ -2228,6 +2376,7 @@
       "milliseconds": 0.0,
       "extra": {
         "recall": 0.104,
+        "entre_las_coincidencias": 0.164,
         "fragmentos": 67,
         "desde": 5.0,
         "hasta": 7.5
@@ -2240,6 +2389,7 @@
       "milliseconds": 0.0,
       "extra": {
         "recall": 0.104,
+        "entre_las_coincidencias": 0.312,
         "fragmentos": 77,
         "desde": 7.5,
         "hasta": 10.0
@@ -2252,6 +2402,7 @@
       "milliseconds": 0.0,
       "extra": {
         "recall": 0.062,
+        "entre_las_coincidencias": 0.271,
         "fragmentos": 144,
         "desde": 10.0,
         "hasta": 15.0
@@ -2264,9 +2415,43 @@
       "milliseconds": 0.0,
       "extra": {
         "recall": 0.085,
+        "entre_las_coincidencias": 0.349,
         "fragmentos": 106,
         "desde": 15.0,
         "hasta": 20.0
+      }
+    },
+    {
+      "technique": "tempo +5 %",
+      "operation": "por_fragmentos",
+      "dataset_size": 400,
+      "milliseconds": 0.0,
+      "extra": {
+        "fragmentos_por_remix": 1,
+        "recall": 0.324,
+        "fragmentos": 74
+      }
+    },
+    {
+      "technique": "tempo +5 %",
+      "operation": "por_fragmentos",
+      "dataset_size": 400,
+      "milliseconds": 0.0,
+      "extra": {
+        "fragmentos_por_remix": 2,
+        "recall": 0.052,
+        "fragmentos": 116
+      }
+    },
+    {
+      "technique": "tempo +5 %",
+      "operation": "por_fragmentos",
+      "dataset_size": 400,
+      "milliseconds": 0.0,
+      "extra": {
+        "fragmentos_por_remix": 3,
+        "recall": 0.015,
+        "fragmentos": 204
       }
     },
     {
@@ -2634,7 +2819,7 @@
       "dataset_size": 400,
       "milliseconds": 0.0,
       "extra": {
-        "iou": 0.821,
+        "iou": 0.82,
         "media": 0.822,
         "aciertos": 30
       }
@@ -2654,9 +2839,9 @@
       "technique": "latencia",
       "operation": "tempo -5 %",
       "dataset_size": 400,
-      "milliseconds": 180.458,
+      "milliseconds": 180.457,
       "extra": {
-        "p95": 375.019,
+        "p95": 375.02,
         "segundos_medios": 25.105,
         "ms_medios": 86.714
       }
@@ -2668,6 +2853,7 @@
       "milliseconds": 0.0,
       "extra": {
         "recall": 0.09,
+        "entre_las_coincidencias": 0.194,
         "fragmentos": 67,
         "desde": 5.0,
         "hasta": 7.5
@@ -2680,6 +2866,7 @@
       "milliseconds": 0.0,
       "extra": {
         "recall": 0.104,
+        "entre_las_coincidencias": 0.286,
         "fragmentos": 77,
         "desde": 7.5,
         "hasta": 10.0
@@ -2692,6 +2879,7 @@
       "milliseconds": 0.0,
       "extra": {
         "recall": 0.049,
+        "entre_las_coincidencias": 0.257,
         "fragmentos": 144,
         "desde": 10.0,
         "hasta": 15.0
@@ -2704,9 +2892,43 @@
       "milliseconds": 0.0,
       "extra": {
         "recall": 0.085,
+        "entre_las_coincidencias": 0.368,
         "fragmentos": 106,
         "desde": 15.0,
         "hasta": 20.0
+      }
+    },
+    {
+      "technique": "tempo -5 %",
+      "operation": "por_fragmentos",
+      "dataset_size": 400,
+      "milliseconds": 0.0,
+      "extra": {
+        "fragmentos_por_remix": 1,
+        "recall": 0.284,
+        "fragmentos": 74
+      }
+    },
+    {
+      "technique": "tempo -5 %",
+      "operation": "por_fragmentos",
+      "dataset_size": 400,
+      "milliseconds": 0.0,
+      "extra": {
+        "fragmentos_por_remix": 2,
+        "recall": 0.052,
+        "fragmentos": 116
+      }
+    },
+    {
+      "technique": "tempo -5 %",
+      "operation": "por_fragmentos",
+      "dataset_size": 400,
+      "milliseconds": 0.0,
+      "extra": {
+        "fragmentos_por_remix": 3,
+        "recall": 0.015,
+        "fragmentos": 204
       }
     },
     {
@@ -3094,9 +3316,9 @@
       "technique": "latencia",
       "operation": "tono +1",
       "dataset_size": 400,
-      "milliseconds": 180.506,
+      "milliseconds": 180.505,
       "extra": {
-        "p95": 383.35,
+        "p95": 383.352,
         "segundos_medios": 23.85,
         "ms_medios": 85.036
       }
@@ -3108,6 +3330,7 @@
       "milliseconds": 0.0,
       "extra": {
         "recall": 0.09,
+        "entre_las_coincidencias": 0.194,
         "fragmentos": 67,
         "desde": 5.0,
         "hasta": 7.5
@@ -3120,6 +3343,7 @@
       "milliseconds": 0.0,
       "extra": {
         "recall": 0.078,
+        "entre_las_coincidencias": 0.273,
         "fragmentos": 77,
         "desde": 7.5,
         "hasta": 10.0
@@ -3132,6 +3356,7 @@
       "milliseconds": 0.0,
       "extra": {
         "recall": 0.042,
+        "entre_las_coincidencias": 0.167,
         "fragmentos": 144,
         "desde": 10.0,
         "hasta": 15.0
@@ -3144,9 +3369,43 @@
       "milliseconds": 0.0,
       "extra": {
         "recall": 0.085,
+        "entre_las_coincidencias": 0.34,
         "fragmentos": 106,
         "desde": 15.0,
         "hasta": 20.0
+      }
+    },
+    {
+      "technique": "tono +1",
+      "operation": "por_fragmentos",
+      "dataset_size": 400,
+      "milliseconds": 0.0,
+      "extra": {
+        "fragmentos_por_remix": 1,
+        "recall": 0.243,
+        "fragmentos": 74
+      }
+    },
+    {
+      "technique": "tono +1",
+      "operation": "por_fragmentos",
+      "dataset_size": 400,
+      "milliseconds": 0.0,
+      "extra": {
+        "fragmentos_por_remix": 2,
+        "recall": 0.06,
+        "fragmentos": 116
+      }
+    },
+    {
+      "technique": "tono +1",
+      "operation": "por_fragmentos",
+      "dataset_size": 400,
+      "milliseconds": 0.0,
+      "extra": {
+        "fragmentos_por_remix": 3,
+        "recall": 0.01,
+        "fragmentos": 204
       }
     },
     {
@@ -3534,9 +3793,9 @@
       "technique": "latencia",
       "operation": "tono -1",
       "dataset_size": 400,
-      "milliseconds": 179.664,
+      "milliseconds": 179.662,
       "extra": {
-        "p95": 318.394,
+        "p95": 318.391,
         "segundos_medios": 23.85,
         "ms_medios": 80.807
       }
@@ -3548,6 +3807,7 @@
       "milliseconds": 0.0,
       "extra": {
         "recall": 0.09,
+        "entre_las_coincidencias": 0.164,
         "fragmentos": 67,
         "desde": 5.0,
         "hasta": 7.5
@@ -3560,6 +3820,7 @@
       "milliseconds": 0.0,
       "extra": {
         "recall": 0.039,
+        "entre_las_coincidencias": 0.208,
         "fragmentos": 77,
         "desde": 7.5,
         "hasta": 10.0
@@ -3572,6 +3833,7 @@
       "milliseconds": 0.0,
       "extra": {
         "recall": 0.049,
+        "entre_las_coincidencias": 0.194,
         "fragmentos": 144,
         "desde": 10.0,
         "hasta": 15.0
@@ -3584,9 +3846,43 @@
       "milliseconds": 0.0,
       "extra": {
         "recall": 0.047,
+        "entre_las_coincidencias": 0.321,
         "fragmentos": 106,
         "desde": 15.0,
         "hasta": 20.0
+      }
+    },
+    {
+      "technique": "tono -1",
+      "operation": "por_fragmentos",
+      "dataset_size": 400,
+      "milliseconds": 0.0,
+      "extra": {
+        "fragmentos_por_remix": 1,
+        "recall": 0.216,
+        "fragmentos": 74
+      }
+    },
+    {
+      "technique": "tono -1",
+      "operation": "por_fragmentos",
+      "dataset_size": 400,
+      "milliseconds": 0.0,
+      "extra": {
+        "fragmentos_por_remix": 2,
+        "recall": 0.026,
+        "fragmentos": 116
+      }
+    },
+    {
+      "technique": "tono -1",
+      "operation": "por_fragmentos",
+      "dataset_size": 400,
+      "milliseconds": 0.0,
+      "extra": {
+        "fragmentos_por_remix": 3,
+        "recall": 0.01,
+        "fragmentos": 204
       }
     },
     {
@@ -3974,9 +4270,9 @@
       "technique": "latencia",
       "operation": "MP3 64 kbps",
       "dataset_size": 400,
-      "milliseconds": 179.206,
+      "milliseconds": 179.204,
       "extra": {
-        "p95": 344.301,
+        "p95": 344.298,
         "segundos_medios": 23.85,
         "ms_medios": 79.868
       }
@@ -3988,6 +4284,7 @@
       "milliseconds": 0.0,
       "extra": {
         "recall": 0.209,
+        "entre_las_coincidencias": 0.522,
         "fragmentos": 67,
         "desde": 5.0,
         "hasta": 7.5
@@ -4000,6 +4297,7 @@
       "milliseconds": 0.0,
       "extra": {
         "recall": 0.286,
+        "entre_las_coincidencias": 0.909,
         "fragmentos": 77,
         "desde": 7.5,
         "hasta": 10.0
@@ -4012,6 +4310,7 @@
       "milliseconds": 0.0,
       "extra": {
         "recall": 0.507,
+        "entre_las_coincidencias": 1.0,
         "fragmentos": 144,
         "desde": 10.0,
         "hasta": 15.0
@@ -4024,9 +4323,43 @@
       "milliseconds": 0.0,
       "extra": {
         "recall": 0.962,
+        "entre_las_coincidencias": 1.0,
         "fragmentos": 106,
         "desde": 15.0,
         "hasta": 20.0
+      }
+    },
+    {
+      "technique": "MP3 64 kbps",
+      "operation": "por_fragmentos",
+      "dataset_size": 400,
+      "milliseconds": 0.0,
+      "extra": {
+        "fragmentos_por_remix": 1,
+        "recall": 0.986,
+        "fragmentos": 74
+      }
+    },
+    {
+      "technique": "MP3 64 kbps",
+      "operation": "por_fragmentos",
+      "dataset_size": 400,
+      "milliseconds": 0.0,
+      "extra": {
+        "fragmentos_por_remix": 2,
+        "recall": 0.569,
+        "fragmentos": 116
+      }
+    },
+    {
+      "technique": "MP3 64 kbps",
+      "operation": "por_fragmentos",
+      "dataset_size": 400,
+      "milliseconds": 0.0,
+      "extra": {
+        "fragmentos_por_remix": 3,
+        "recall": 0.353,
+        "fragmentos": 204
       }
     },
     {
@@ -4414,9 +4747,9 @@
       "technique": "latencia",
       "operation": "pasa bajos 4 kHz",
       "dataset_size": 400,
-      "milliseconds": 169.598,
+      "milliseconds": 169.597,
       "extra": {
-        "p95": 352.065,
+        "p95": 352.063,
         "segundos_medios": 23.85,
         "ms_medios": 76.567
       }
@@ -4428,6 +4761,7 @@
       "milliseconds": 0.0,
       "extra": {
         "recall": 0.03,
+        "entre_las_coincidencias": 0.03,
         "fragmentos": 67,
         "desde": 5.0,
         "hasta": 7.5
@@ -4440,6 +4774,7 @@
       "milliseconds": 0.0,
       "extra": {
         "recall": 0.0,
+        "entre_las_coincidencias": 0.0,
         "fragmentos": 77,
         "desde": 7.5,
         "hasta": 10.0
@@ -4452,6 +4787,7 @@
       "milliseconds": 0.0,
       "extra": {
         "recall": 0.007,
+        "entre_las_coincidencias": 0.062,
         "fragmentos": 144,
         "desde": 10.0,
         "hasta": 15.0
@@ -4464,9 +4800,43 @@
       "milliseconds": 0.0,
       "extra": {
         "recall": 0.028,
+        "entre_las_coincidencias": 0.085,
         "fragmentos": 106,
         "desde": 15.0,
         "hasta": 20.0
+      }
+    },
+    {
+      "technique": "pasa bajos 4 kHz",
+      "operation": "por_fragmentos",
+      "dataset_size": 400,
+      "milliseconds": 0.0,
+      "extra": {
+        "fragmentos_por_remix": 1,
+        "recall": 0.027,
+        "fragmentos": 74
+      }
+    },
+    {
+      "technique": "pasa bajos 4 kHz",
+      "operation": "por_fragmentos",
+      "dataset_size": 400,
+      "milliseconds": 0.0,
+      "extra": {
+        "fragmentos_por_remix": 2,
+        "recall": 0.026,
+        "fragmentos": 116
+      }
+    },
+    {
+      "technique": "pasa bajos 4 kHz",
+      "operation": "por_fragmentos",
+      "dataset_size": 400,
+      "milliseconds": 0.0,
+      "extra": {
+        "fragmentos_por_remix": 3,
+        "recall": 0.005,
+        "fragmentos": 204
       }
     },
     {
@@ -4854,9 +5224,9 @@
       "technique": "latencia",
       "operation": "volumen -1 dB",
       "dataset_size": 400,
-      "milliseconds": 180.276,
+      "milliseconds": 180.279,
       "extra": {
-        "p95": 356.979,
+        "p95": 356.969,
         "segundos_medios": 23.85,
         "ms_medios": 80.369
       }
@@ -4868,6 +5238,7 @@
       "milliseconds": 0.0,
       "extra": {
         "recall": 0.224,
+        "entre_las_coincidencias": 0.582,
         "fragmentos": 67,
         "desde": 5.0,
         "hasta": 7.5
@@ -4880,6 +5251,7 @@
       "milliseconds": 0.0,
       "extra": {
         "recall": 0.247,
+        "entre_las_coincidencias": 0.805,
         "fragmentos": 77,
         "desde": 7.5,
         "hasta": 10.0
@@ -4892,6 +5264,7 @@
       "milliseconds": 0.0,
       "extra": {
         "recall": 0.417,
+        "entre_las_coincidencias": 0.993,
         "fragmentos": 144,
         "desde": 10.0,
         "hasta": 15.0
@@ -4904,9 +5277,43 @@
       "milliseconds": 0.0,
       "extra": {
         "recall": 0.849,
+        "entre_las_coincidencias": 0.981,
         "fragmentos": 106,
         "desde": 15.0,
         "hasta": 20.0
+      }
+    },
+    {
+      "technique": "volumen -1 dB",
+      "operation": "por_fragmentos",
+      "dataset_size": 400,
+      "milliseconds": 0.0,
+      "extra": {
+        "fragmentos_por_remix": 1,
+        "recall": 0.932,
+        "fragmentos": 74
+      }
+    },
+    {
+      "technique": "volumen -1 dB",
+      "operation": "por_fragmentos",
+      "dataset_size": 400,
+      "milliseconds": 0.0,
+      "extra": {
+        "fragmentos_por_remix": 2,
+        "recall": 0.491,
+        "fragmentos": 116
+      }
+    },
+    {
+      "technique": "volumen -1 dB",
+      "operation": "por_fragmentos",
+      "dataset_size": 400,
+      "milliseconds": 0.0,
+      "extra": {
+        "fragmentos_por_remix": 3,
+        "recall": 0.284,
+        "fragmentos": 204
       }
     },
     {
@@ -5294,9 +5701,9 @@
       "technique": "latencia",
       "operation": "volumen -3 dB",
       "dataset_size": 400,
-      "milliseconds": 179.592,
+      "milliseconds": 179.595,
       "extra": {
-        "p95": 348.214,
+        "p95": 348.216,
         "segundos_medios": 23.85,
         "ms_medios": 79.719
       }
@@ -5308,6 +5715,7 @@
       "milliseconds": 0.0,
       "extra": {
         "recall": 0.119,
+        "entre_las_coincidencias": 0.254,
         "fragmentos": 67,
         "desde": 5.0,
         "hasta": 7.5
@@ -5320,6 +5728,7 @@
       "milliseconds": 0.0,
       "extra": {
         "recall": 0.156,
+        "entre_las_coincidencias": 0.377,
         "fragmentos": 77,
         "desde": 7.5,
         "hasta": 10.0
@@ -5332,6 +5741,7 @@
       "milliseconds": 0.0,
       "extra": {
         "recall": 0.069,
+        "entre_las_coincidencias": 0.34,
         "fragmentos": 144,
         "desde": 10.0,
         "hasta": 15.0
@@ -5344,9 +5754,43 @@
       "milliseconds": 0.0,
       "extra": {
         "recall": 0.132,
+        "entre_las_coincidencias": 0.5,
         "fragmentos": 106,
         "desde": 15.0,
         "hasta": 20.0
+      }
+    },
+    {
+      "technique": "volumen -3 dB",
+      "operation": "por_fragmentos",
+      "dataset_size": 400,
+      "milliseconds": 0.0,
+      "extra": {
+        "fragmentos_por_remix": 1,
+        "recall": 0.405,
+        "fragmentos": 74
+      }
+    },
+    {
+      "technique": "volumen -3 dB",
+      "operation": "por_fragmentos",
+      "dataset_size": 400,
+      "milliseconds": 0.0,
+      "extra": {
+        "fragmentos_por_remix": 2,
+        "recall": 0.086,
+        "fragmentos": 116
+      }
+    },
+    {
+      "technique": "volumen -3 dB",
+      "operation": "por_fragmentos",
+      "dataset_size": 400,
+      "milliseconds": 0.0,
+      "extra": {
+        "fragmentos_por_remix": 3,
+        "recall": 0.02,
+        "fragmentos": 204
       }
     },
     {
@@ -5734,9 +6178,9 @@
       "technique": "latencia",
       "operation": "volumen -12 dB",
       "dataset_size": 400,
-      "milliseconds": 177.478,
+      "milliseconds": 177.482,
       "extra": {
-        "p95": 329.414,
+        "p95": 329.415,
         "segundos_medios": 23.85,
         "ms_medios": 77.231
       }
@@ -5748,6 +6192,7 @@
       "milliseconds": 0.0,
       "extra": {
         "recall": 0.0,
+        "entre_las_coincidencias": 0.0,
         "fragmentos": 67,
         "desde": 5.0,
         "hasta": 7.5
@@ -5760,6 +6205,7 @@
       "milliseconds": 0.0,
       "extra": {
         "recall": 0.0,
+        "entre_las_coincidencias": 0.0,
         "fragmentos": 77,
         "desde": 7.5,
         "hasta": 10.0
@@ -5772,6 +6218,7 @@
       "milliseconds": 0.0,
       "extra": {
         "recall": 0.0,
+        "entre_las_coincidencias": 0.0,
         "fragmentos": 144,
         "desde": 10.0,
         "hasta": 15.0
@@ -5784,9 +6231,43 @@
       "milliseconds": 0.0,
       "extra": {
         "recall": 0.0,
+        "entre_las_coincidencias": 0.0,
         "fragmentos": 106,
         "desde": 15.0,
         "hasta": 20.0
+      }
+    },
+    {
+      "technique": "volumen -12 dB",
+      "operation": "por_fragmentos",
+      "dataset_size": 400,
+      "milliseconds": 0.0,
+      "extra": {
+        "fragmentos_por_remix": 1,
+        "recall": 0.0,
+        "fragmentos": 74
+      }
+    },
+    {
+      "technique": "volumen -12 dB",
+      "operation": "por_fragmentos",
+      "dataset_size": 400,
+      "milliseconds": 0.0,
+      "extra": {
+        "fragmentos_por_remix": 2,
+        "recall": 0.0,
+        "fragmentos": 116
+      }
+    },
+    {
+      "technique": "volumen -12 dB",
+      "operation": "por_fragmentos",
+      "dataset_size": 400,
+      "milliseconds": 0.0,
+      "extra": {
+        "fragmentos_por_remix": 3,
+        "recall": 0.0,
+        "fragmentos": 204
       }
     },
     {
@@ -6174,9 +6655,9 @@
       "technique": "latencia",
       "operation": "todas",
       "dataset_size": 400,
-      "milliseconds": 180.712,
+      "milliseconds": 180.714,
       "extra": {
-        "p95": 364.406,
+        "p95": 364.4,
         "segundos_medios": 23.859,
         "ms_medios": 80.754
       }
@@ -6188,6 +6669,7 @@
       "milliseconds": 0.0,
       "extra": {
         "recall": 0.113,
+        "entre_las_coincidencias": 0.255,
         "fragmentos": 871,
         "desde": 5.0,
         "hasta": 7.5
@@ -6200,6 +6682,7 @@
       "milliseconds": 0.0,
       "extra": {
         "recall": 0.117,
+        "entre_las_coincidencias": 0.39,
         "fragmentos": 1001,
         "desde": 7.5,
         "hasta": 10.0
@@ -6212,6 +6695,7 @@
       "milliseconds": 0.0,
       "extra": {
         "recall": 0.176,
+        "entre_las_coincidencias": 0.423,
         "fragmentos": 1872,
         "desde": 10.0,
         "hasta": 15.0
@@ -6224,9 +6708,43 @@
       "milliseconds": 0.0,
       "extra": {
         "recall": 0.322,
+        "entre_las_coincidencias": 0.478,
         "fragmentos": 1378,
         "desde": 15.0,
         "hasta": 20.0
+      }
+    },
+    {
+      "technique": "todas",
+      "operation": "por_fragmentos",
+      "dataset_size": 400,
+      "milliseconds": 0.0,
+      "extra": {
+        "fragmentos_por_remix": 1,
+        "recall": 0.446,
+        "fragmentos": 962
+      }
+    },
+    {
+      "technique": "todas",
+      "operation": "por_fragmentos",
+      "dataset_size": 400,
+      "milliseconds": 0.0,
+      "extra": {
+        "fragmentos_por_remix": 2,
+        "recall": 0.184,
+        "fragmentos": 1508
+      }
+    },
+    {
+      "technique": "todas",
+      "operation": "por_fragmentos",
+      "dataset_size": 400,
+      "milliseconds": 0.0,
+      "extra": {
+        "fragmentos_por_remix": 3,
+        "recall": 0.106,
+        "fragmentos": 2652
       }
     },
     {

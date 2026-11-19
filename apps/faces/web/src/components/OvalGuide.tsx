@@ -2,9 +2,9 @@ import { poseArrowSide, type Pose, type Size } from "../camera/geometry";
 
 /** El óvalo: proporción de una cara, centrado un poco arriba para dejar sitio a la hoja. */
 const OVAL_ASPECT = 1.3;
-const OVAL_MAX_HEIGHT_FRACTION = 0.48;
+const OVAL_MAX_HEIGHT_FRACTION = 0.42;
 const OVAL_MAX_WIDTH_FRACTION = 0.7;
-export const OVAL_CENTER_Y_FRACTION = 0.42;
+export const OVAL_CENTER_Y_FRACTION = 0.37;
 const ARROW_REACH = 34;
 const ARROW_HEAD = 14;
 

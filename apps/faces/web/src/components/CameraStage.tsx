@@ -11,6 +11,7 @@ export interface CameraStageProps {
   /** Lo que se dibuja sobre el video, con el tamaño de la vista. */
   readonly overlay?: (view: Size) => ReactNode;
   readonly middle?: ReactNode;
+  /** `null` sin hoja: cuando un problema ocupa la pantalla. */
   readonly sheet: ReactNode;
   /** Cambia con cada toma aceptada: el visor destella una vez. */
   readonly flashKey?: number;
@@ -34,9 +35,11 @@ export function CameraStage({ video, mirrored, label, top, overlay, middle, shee
       {flashKey > 0 && <div key={flashKey} className="camera-flash is-firing" aria-hidden="true" />}
       <div className="camera-top">{top}</div>
       <div className="camera-middle">{middle}</div>
-      <div className="camera-sheet">
-        <div className="camera-sheet-inner">{sheet}</div>
-      </div>
+      {sheet !== null && (
+        <div className="camera-sheet">
+          <div className="camera-sheet-inner">{sheet}</div>
+        </div>
+      )}
     </div>
   );
 }

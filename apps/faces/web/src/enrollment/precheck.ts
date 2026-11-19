@@ -23,7 +23,7 @@ export const PRECHECK: PrecheckOptions = {
   minWidthFraction: 0.2,
   maxWidthFraction: 0.8,
   centerTolerance: 0.2,
-  guideCenterY: 0.42,
+  guideCenterY: 0.4,
   backgroundFaceRatio: 0.5,
 };
 

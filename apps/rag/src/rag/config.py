@@ -17,8 +17,8 @@ Además de lo común a todo servicio (`RAG_ENGINE_URL`, `RAG_ENGINE_KEY`,
 | `RAG_ANSWER_EFFORT` | `low`, `medium`, `high`, `xhigh` o `max` | `low` |
 | `RAG_ANSWER_SERVER_FALLBACK` | respaldo del servidor ante un rechazo | `true` |
 | `RAG_ANSWER_MAX_TOKENS` | tope de salida (razonamiento incluido) por respuesta | `2048` |
-| `RAG_ANSWER_CHUNKS` | fragmentos que recupera la búsqueda híbrida | `8` |
-| `RAG_ANSWER_CONTEXT_TOKENS` | tokens estimados de documentos que caben en el prompt | `6000` |
+| `RAG_ANSWER_CHUNKS` | fragmentos que recupera la búsqueda híbrida | `12` |
+| `RAG_ANSWER_CONTEXT_TOKENS` | tokens estimados de documentos que caben en el prompt | `9000` |
 | `RAG_RRF_K` | constante de Reciprocal Rank Fusion | `60` |
 | `RAG_DAILY_BUDGET_USD` | gasto máximo del día en el modelo, por réplica | `5` |
 | `RAG_ANTHROPIC_TIMEOUT_SECONDS` | plazo de la API de Anthropic | `60` |
@@ -56,12 +56,14 @@ ENV_PREFIX = "RAG_"
 DEFAULT_ANSWER_MAX_TOKENS = 2048
 # El tope de salida de Sonnet 5.5 en la API de mensajes.
 MAX_OUTPUT_TOKENS = 128_000
-# Ocho fragmentos de unas 220 palabras son unos 4 000 tokens estimados con su marcado; 6 000
-# deja entrar los ocho aunque alguno llegue a las 500 palabras.
-DEFAULT_ANSWER_CHUNKS = 8
-DEFAULT_ANSWER_CONTEXT_TOKENS = 6000
+# Medido con las preguntas de #87 (`benchmarks/rag_language_benchmark.py`): de 8 a 12
+# fragmentos el correcto aparece en el 71 % de las preguntas en vez del 66 % (80 % contra
+# 75 % contando sus vecinos), por unos 2 000 tokens más de entrada (~0,004 USD). Los 12 son
+# unos 6 000 tokens estimados (mediana) más su marcado; 9 000 deja margen para los largos.
+DEFAULT_ANSWER_CHUNKS = 12
+DEFAULT_ANSWER_CONTEXT_TOKENS = 9000
 DEFAULT_ANSWER_EFFORT: Effort = "low"
-# La cota de una respuesta con los valores por omisión es de unos 0,05 USD: al menos cien
+# La cota de una respuesta con los valores por omisión es de unos 0,06 USD: al menos ochenta
 # preguntas al día; con el costo típico, varias veces más.
 DEFAULT_DAILY_BUDGET_USD = 5.0
 DEFAULT_ANTHROPIC_TIMEOUT_SECONDS = 60.0

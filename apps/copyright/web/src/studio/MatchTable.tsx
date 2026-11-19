@@ -13,7 +13,7 @@ export function MatchTable({ spans, selected, threshold, onSelect }: MatchTableP
   return (
     <table className="matches">
       <caption className="matches__caption">
-        Coincidencias, de mayor a menor parecido. Copia probable desde {formatPercent(threshold)}.
+        Coincidencias, de mayor a menor evidencia: cuánto dura el tramo (hasta 20 s) y cuánto se parece. Copia probable desde {formatPercent(threshold)}.
       </caption>
       <thead>
         <tr>
@@ -21,7 +21,7 @@ export function MatchTable({ spans, selected, threshold, onSelect }: MatchTableP
           <th scope="col">En tu audio</th>
           <th scope="col">En el original</th>
           <th scope="col">Desfase</th>
-          <th scope="col">Parecido</th>
+          <th scope="col">Evidencia</th>
         </tr>
       </thead>
       <tbody>
@@ -49,7 +49,7 @@ export function MatchTable({ spans, selected, threshold, onSelect }: MatchTableP
               <td className="measure" data-label="Desfase">
                 {formatOffset(match.offset_seconds)}
               </td>
-              <td data-label="Parecido">
+              <td data-label="Evidencia">
                 <span className="measure">{formatPercent(match.score)}</span>{" "}
                 <span className="strength">{span.weak ? "débil" : "copia probable"}</span>
               </td>

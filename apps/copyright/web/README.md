@@ -3,7 +3,7 @@
 La interfaz propia de la opción C de la Parte 5: un estudio de escucha. Se sube un audio y
 se ve **dónde** coincide con el catálogo: la forma de onda grabada sobre un pentagrama, cada
 tramo coincidente como un trazo de resaltador del color de su canción original (con su
-letra, su parecido y su desfase) y, al elegirlo, el pentagrama del original unido al mismo
+letra, su evidencia y su desfase) y, al elegirlo, el pentagrama del original unido al mismo
 pasaje. Debajo, la escucha A/B y una conclusión en lenguaje claro. Qué es y para quién está
 en [`PRODUCT.md`](PRODUCT.md); cómo se ve y por qué, en [`DESIGN.md`](DESIGN.md).
 

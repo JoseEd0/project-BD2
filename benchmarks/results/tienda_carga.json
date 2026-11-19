@@ -1,0 +1,275 @@
+{
+  "name": "tienda_carga",
+  "parameters": {
+    "datos": "/Users/jose/Documents/University/8to-ciclo/BD2/project-BD2/data/datasets",
+    "gestor": "uvicorn en otro proceso, directorio de datos vacío",
+    "cache_de_embeddings": "vacía",
+    "fotos_por_lote": 32,
+    "hilos_de_preprocesado": 12,
+    "modelo": "Xenova/clip-vit-base-patch32@6b7c523 (float32)",
+    "indice_sift": "shop_productos_imagen",
+    "versiones": {
+      "onnxruntime": "1.32.0",
+      "numpy": "2.5.5"
+    },
+    "maquina": {
+      "procesador": "Apple M4 Pro",
+      "nucleos": 12,
+      "sistema": "macOS-27.0.1-arm64-arm-64bit",
+      "python": "3.12.11",
+      "carga_media_1_min": 8.73
+    }
+  },
+  "measurements": [
+    {
+      "technique": "migraciones",
+      "operation": "primera ejecución",
+      "dataset_size": 0,
+      "milliseconds": 44.642,
+      "extra": {}
+    },
+    {
+      "technique": "shop_tiendas",
+      "operation": "carga",
+      "dataset_size": 209,
+      "milliseconds": 31.08,
+      "extra": {
+        "segundos": 0.031,
+        "filas_por_segundo": 6724.7,
+        "indices_al_final": [
+          "shop_tiendas_ubicacion"
+        ]
+      }
+    },
+    {
+      "technique": "shop_productos",
+      "operation": "carga",
+      "dataset_size": 24587,
+      "milliseconds": 15431.59,
+      "extra": {
+        "segundos": 15.432,
+        "filas_por_segundo": 1593.3,
+        "indices_al_final": [
+          "shop_productos_texto"
+        ]
+      }
+    },
+    {
+      "technique": "shop_usuarios",
+      "operation": "carga",
+      "dataset_size": 57439,
+      "milliseconds": 11560.095,
+      "extra": {
+        "segundos": 11.56,
+        "filas_por_segundo": 4968.7,
+        "indices_al_final": []
+      }
+    },
+    {
+      "technique": "shop_compras",
+      "operation": "carga",
+      "dataset_size": 511836,
+      "milliseconds": 40028.26,
+      "extra": {
+        "segundos": 40.028,
+        "filas_por_segundo": 12786.9,
+        "indices_al_final": []
+      }
+    },
+    {
+      "technique": "shop_inventario",
+      "operation": "carga",
+      "dataset_size": 209000,
+      "milliseconds": 5414.055,
+      "extra": {
+        "segundos": 5.414,
+        "filas_por_segundo": 38603.2,
+        "indices_al_final": []
+      }
+    },
+    {
+      "technique": "shop_clip",
+      "operation": "carga",
+      "dataset_size": 24580,
+      "milliseconds": 16890.96,
+      "extra": {
+        "segundos": 16.891,
+        "filas_por_segundo": 1455.2,
+        "indices_al_final": [
+          "shop_clip_embedding"
+        ]
+      }
+    },
+    {
+      "technique": "SIFT + HNSW",
+      "operation": "shop_productos_imagen",
+      "dataset_size": 0,
+      "milliseconds": 71489.13,
+      "extra": {
+        "calculo_segundos": 71.489
+      }
+    },
+    {
+      "technique": "CLIP (embeddings)",
+      "operation": "carga",
+      "dataset_size": 24308,
+      "milliseconds": 137830.84,
+      "extra": {
+        "calculo_segundos": 137.831,
+        "calculadas": 24308,
+        "de_la_cache": 0,
+        "fotos_por_segundo": 176.4
+      }
+    },
+    {
+      "technique": "total",
+      "operation": "primera ejecución",
+      "dataset_size": 0,
+      "milliseconds": 298989.283,
+      "extra": {}
+    },
+    {
+      "technique": "shop_productos_texto",
+      "operation": "CREATE INDEX",
+      "dataset_size": 24587,
+      "milliseconds": 2999.203,
+      "extra": {
+        "calculo_segundos": 2.999
+      }
+    },
+    {
+      "technique": "shop_tiendas_ubicacion",
+      "operation": "CREATE INDEX",
+      "dataset_size": 209,
+      "milliseconds": 4.162,
+      "extra": {
+        "calculo_segundos": 0.004
+      }
+    },
+    {
+      "technique": "shop_clip_embedding",
+      "operation": "CREATE INDEX",
+      "dataset_size": 24580,
+      "milliseconds": 808.007,
+      "extra": {
+        "calculo_segundos": 0.808
+      }
+    },
+    {
+      "technique": "shop_inventario_producto",
+      "operation": "CREATE INDEX",
+      "dataset_size": 209000,
+      "milliseconds": 2436.278,
+      "extra": {
+        "calculo_segundos": 2.436
+      }
+    },
+    {
+      "technique": "total",
+      "operation": "segunda ejecución",
+      "dataset_size": 0,
+      "milliseconds": 272.930416977033,
+      "extra": {}
+    },
+    {
+      "technique": "catalog",
+      "operation": "espacio",
+      "dataset_size": 0,
+      "milliseconds": 0.0,
+      "extra": {
+        "datos_mib": 0.006,
+        "indices_total_mib": 0.0,
+        "indices_mib": {}
+      }
+    },
+    {
+      "technique": "shop_clip",
+      "operation": "espacio",
+      "dataset_size": 0,
+      "milliseconds": 0.0,
+      "extra": {
+        "datos_mib": 96.02,
+        "indices_total_mib": 52.357,
+        "indices_mib": {
+          "pk_shop_clip": 0.758,
+          "shop_clip_embedding": 51.599
+        }
+      }
+    },
+    {
+      "technique": "shop_compras",
+      "operation": "espacio",
+      "dataset_size": 0,
+      "milliseconds": 0.0,
+      "extra": {
+        "datos_mib": 41.66,
+        "indices_total_mib": 0.0,
+        "indices_mib": {}
+      }
+    },
+    {
+      "technique": "shop_inventario",
+      "operation": "espacio",
+      "dataset_size": 0,
+      "milliseconds": 0.0,
+      "extra": {
+        "datos_mib": 5.598,
+        "indices_total_mib": 5.293,
+        "indices_mib": {
+          "shop_inventario_producto": 5.293
+        }
+      }
+    },
+    {
+      "technique": "shop_productos",
+      "operation": "espacio",
+      "dataset_size": 0,
+      "milliseconds": 0.0,
+      "extra": {
+        "datos_mib": 68.562,
+        "indices_total_mib": 77.369,
+        "indices_mib": {
+          "pk_shop_productos": 0.758,
+          "shop_productos_imagen": 60.225,
+          "shop_productos_texto": 16.387
+        }
+      }
+    },
+    {
+      "technique": "shop_tiendas",
+      "operation": "espacio",
+      "dataset_size": 0,
+      "milliseconds": 0.0,
+      "extra": {
+        "datos_mib": 0.031,
+        "indices_total_mib": 0.023,
+        "indices_mib": {
+          "pk_shop_tiendas": 0.008,
+          "shop_tiendas_ubicacion": 0.016
+        }
+      }
+    },
+    {
+      "technique": "shop_usuarios",
+      "operation": "espacio",
+      "dataset_size": 0,
+      "milliseconds": 0.0,
+      "extra": {
+        "datos_mib": 2.777,
+        "indices_total_mib": 5.109,
+        "indices_mib": {
+          "pk_shop_usuarios": 5.109
+        }
+      }
+    },
+    {
+      "technique": "total",
+      "operation": "espacio",
+      "dataset_size": 0,
+      "milliseconds": 0.0,
+      "extra": {
+        "mib": 354.807
+      }
+    }
+  ]
+}

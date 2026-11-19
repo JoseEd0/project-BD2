@@ -83,6 +83,7 @@ def test_bm25_reads_operators_and_parentheses_as_words(service: TestClient):
 
 def test_a_question_without_known_words_finds_nothing_in_bm25(service: TestClient):
     assert search(service, "zzzz qqqq", "bm25") == []
+    assert search(service, "((", "bm25") == []
 
 
 def test_vector_mode_returns_k_chunks_by_cosine(service: TestClient):

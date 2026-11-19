@@ -35,7 +35,7 @@ DEFAULT_NEIGHBOURS_PER_WINDOW = 10
 # del catálogo (ver el README).
 DEFAULT_MIN_RUN_WINDOWS = 2
 # El de máxima J de Youden en la curva ROC de 400 remixes sin distorsión, con la verdad conocida
-# (benchmarks/README.md, §16): encuentra el 55 % de los fragmentos copiados y da alguna
+# (benchmarks/README.md, §17): encuentra el 55 % de los fragmentos copiados y da alguna
 # coincidencia en el 29 % de los remixes sin copias. Ningún umbral separa mucho mejor (área
 # bajo la curva 0,62), y bajo una distorsión de nivel, ruido, tempo o tono no hay umbral que
 # sirva: el descriptor deja de encontrar la copia.

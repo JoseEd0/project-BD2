@@ -143,7 +143,7 @@ docker compose --profile bench down       # apaga PostgreSQL
 | [14. Detección de copyright](#14-detección-de-copyright--latencia-de-post-detections-y-casos-de-control) | latencia de `POST /detections` por duración de la subida y sus etapas; puntajes de copias enteras, tramos de 15 y 7,5 s y pistas no catalogadas frente al umbral | [latencia](figures/copyright-deteccion.png), [etapas](figures/copyright-deteccion-etapas.png), [puntajes](figures/copyright-deteccion-puntajes.png) |
 | [15. Rostros en vivo](#15-rostros-en-vivo--latencia-por-cuadro-por-websocket) | un cuadro de punta a punta por WebSocket, por el nginx o directo a la API, con y sin la caché de rastros en Redis, con cada etapa | [en vivo](figures/rostros-tiempo-real.png) |
 | [16. Recomendaciones de la tienda](#16-recomendaciones-de-la-tienda--cuatro-señales-y-caché) | compras conjuntas al vuelo vs materializadas; latencia p50/p95 de cada señal y de la recomendación con caché fría y caliente | [recomendaciones](figures/tienda-recomendaciones.png) |
-| [16. Evaluación de la detección de copyright](#16-evaluación-de-la-detección-de-copyright--remixes-con-la-verdad-conocida) | precisión, recall, F1, curva ROC e IoU de la detección sobre 400 remixes generados con la verdad conocida, sin distorsión y con ruido, MP3, pasa bajos, volumen, tempo y tono; umbral elegido, recall por largo del fragmento y otras definiciones del puntaje | [ROC](figures/copyright-evaluacion-roc.png), [detección](figures/copyright-evaluacion-deteccion.png), [IoU](figures/copyright-evaluacion-iou.png), [largo](figures/copyright-evaluacion-largo.png) |
+| [17. Evaluación de la detección de copyright](#17-evaluación-de-la-detección-de-copyright--remixes-con-la-verdad-conocida) | precisión, recall, F1, curva ROC e IoU de la detección sobre 400 remixes generados con la verdad conocida, sin distorsión y con ruido, MP3, pasa bajos, volumen, tempo y tono; umbral elegido, recall por largo del fragmento y otras definiciones del puntaje | [ROC](figures/copyright-evaluacion-roc.png), [detección](figures/copyright-evaluacion-deteccion.png), [IoU](figures/copyright-evaluacion-iou.png), [largo](figures/copyright-evaluacion-largo.png) |
 | [18. Rostros en LFW](#18-rostros-en-lfw--verificación-identificación-latencia-y-caché) | verificación con el protocolo de LFW (exactitud por pliegues, TAR a FAR fijo, ROC) y umbrales calibrados; identificación en el gestor, HNSW vs búsqueda exacta; p99 de cada etapa; aciertos de la caché de rastros según la velocidad del rostro | [verificación](figures/rostros-evaluacion-verificacion.png), [identificación](figures/rostros-evaluacion-identificacion.png), [latencia](figures/rostros-evaluacion-latencia.png), [caché](figures/rostros-cache.png) |
 | [19. Evaluación del RAG](#19-evaluación-del-rag--recuperación-de-preguntas-en-español-y-respuestas-con-claude) | Recall@5, Recall@10 y MRR de BM25, vectorial e híbrido con 45 preguntas en español de fragmentos conocidos, por categoría y criterio de acierto; respuestas simuladas para probar el camino (la calidad con Claude, pendiente de la clave) | [recuperación](figures/rag-evaluacion-recuperacion.png), [criterio](figures/rag-evaluacion-relevancia.png) |
 
@@ -1952,7 +1952,7 @@ núcleos.
   sabe. Con 0,50
   pasarían solo 9 de los 20 tramos de 15 s y las mismas tres no catalogadas. **La curva
   ROC de la evaluación (#77) lo calibra** con muchos más casos y transformaciones del audio:
-  queda en 0,43 ([§16](#16-evaluación-de-la-detección-de-copyright--remixes-con-la-verdad-conocida)).
+  queda en 0,43 ([§17](#17-evaluación-de-la-detección-de-copyright--remixes-con-la-verdad-conocida)).
 - **La subida de 60 s no tiene la segunda copia**: tres pistas de 29,9 s dejan para la
   tercera 0,2 s, que no llena una ventana; por eso son 10 copias y no 20.
 
@@ -2112,7 +2112,7 @@ uv run --no-sync python -m benchmarks.shop_recommend_benchmark --data-dir data/d
 
 `--engine-data-dir` se modifica (la carga añade tablas): conviene una copia.
 
-## 16. Evaluación de la detección de copyright — remixes con la verdad conocida
+## 17. Evaluación de la detección de copyright — remixes con la verdad conocida
 
 `copyright_evaluation_benchmark.py` evalúa la detección del §14 (#77) con un conjunto de
 prueba generado por programa, del que se sabe qué canción suena, dónde suena en la subida y

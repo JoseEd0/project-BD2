@@ -16,7 +16,7 @@ import httpx
 from . import calls
 from .context import current_request_id, new_request_id
 from .errors import EngineError, MinigestorError, ServiceUnavailableError, TransportError
-from .media import MediaFile, as_media_file
+from .media import FileStream, MediaFile, as_media_file, representation_headers
 from .models import LoadReport, MediaUpload, QueryResult, SegmentSearch, TableInfo
 from .options import PoolLimits, RetryPolicy, Timeouts
 from .queries import BEGIN_SQL, COMMIT_SQL, ROLLBACK_SQL, Params, SyncQueries
@@ -196,12 +196,21 @@ class Client(SyncQueries):
 
     @contextmanager
     def stream_file(
-        self, path: str, chunk_bytes: int = DOWNLOAD_CHUNK_BYTES
-    ) -> Iterator[Iterator[bytes]]:
-        """El archivo `path` por trozos de hasta `chunk_bytes`, sin tenerlo entero en memoria."""
-        response = self._send(calls.file_stream_call(path))
+        self,
+        path: str,
+        chunk_bytes: int = DOWNLOAD_CHUNK_BYTES,
+        *,
+        byte_range: str | None = None,
+    ) -> Iterator[FileStream[Iterator[bytes]]]:
+        """El archivo `path` por trozos de hasta `chunk_bytes`, sin tenerlo entero en memoria;
+        con `byte_range` (el valor de una cabecera `Range`), solo ese trozo (`206`)."""
+        response = self._send(calls.file_stream_call(path, byte_range))
         try:
-            yield response.iter_bytes(chunk_bytes)
+            yield FileStream(
+                response.status_code,
+                representation_headers(response.headers),
+                response.iter_bytes(chunk_bytes),
+            )
         finally:
             response.close()
 

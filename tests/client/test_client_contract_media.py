@@ -110,10 +110,23 @@ def test_a_file_in_memory_is_uploaded_with_its_name(media_client: Client, photos
 def test_a_file_is_downloaded_whole_or_streamed(media_client: Client, photos: list[Path]):
     original = photos[1].read_bytes()
     assert media_client.download(str(photos[1])) == original
-    with media_client.stream_file(str(photos[1]), STREAM_CHUNK) as chunks:
-        received = list(chunks)
+    with media_client.stream_file(str(photos[1]), STREAM_CHUNK) as stream:
+        received = list(stream.chunks)
     assert b"".join(received) == original
     assert len(received) > 1
+    assert stream.status_code == 200
+    assert stream.headers["Accept-Ranges"] == "bytes"
+
+
+def test_a_range_of_a_file_is_streamed_with_its_headers(media_client: Client, photos: list[Path]):
+    original = photos[1].read_bytes()
+    with media_client.stream_file(str(photos[1]), byte_range="bytes=10-29") as stream:
+        received = b"".join(stream.chunks)
+    assert received == original[10:30]
+    assert stream.status_code == 206
+    assert stream.headers["Content-Range"] == f"bytes 10-29/{len(original)}"
+    assert stream.headers["Content-Length"] == "20"
+    assert "Content-Type" in stream.headers
 
 
 def test_a_thumbnail_is_a_jpeg(media_client: Client, photos: list[Path]):

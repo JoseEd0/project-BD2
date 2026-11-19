@@ -50,6 +50,7 @@ JSON_CONTENT_TYPE = "application/json"
 NDJSON_CONTENT_TYPE = "application/x-ndjson"
 CONTENT_TYPE_HEADER = "Content-Type"
 AUTHORIZATION_HEADER = "Authorization"
+RANGE_HEADER = "Range"
 BEARER_PREFIX = "Bearer "
 
 logger = logging.getLogger(__name__)
@@ -182,8 +183,10 @@ def file_call(path: str) -> Call:
     return Call(GET, MEDIA_FILE_PATH, retryable=True, query={MEDIA_PATH_PARAMETER: path})
 
 
-def file_stream_call(path: str) -> Call:
-    return replace(file_call(path), stream=True)
+def file_stream_call(path: str, byte_range: str | None) -> Call:
+    """Con `byte_range` (el valor de una cabecera `Range`), solo ese trozo."""
+    headers = {} if byte_range is None else {RANGE_HEADER: byte_range}
+    return replace(file_call(path), stream=True, headers=headers)
 
 
 def thumbnail_call(path: str) -> Call:

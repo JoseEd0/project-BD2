@@ -3,10 +3,25 @@
 from __future__ import annotations
 
 import mimetypes
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Generic, TypeVar
 
 FALLBACK_CONTENT_TYPE = "application/octet-stream"
+# Lo que describe el archivo o el trozo que llega, y lo que un reproductor necesita para
+# saltar: se reenvía tal cual, sin las cabeceras de la conexión con el gestor.
+REPRESENTATION_HEADERS = (
+    "Content-Type",
+    "Content-Length",
+    "Content-Range",
+    "Accept-Ranges",
+    "ETag",
+    "Last-Modified",
+    "Cache-Control",
+)
+
+Chunks = TypeVar("Chunks")
 
 
 @dataclass(frozen=True, slots=True)
@@ -31,3 +46,20 @@ class MediaFile:
 
 def as_media_file(file: MediaFile | Path) -> MediaFile:
     return file if isinstance(file, MediaFile) else MediaFile.from_path(file)
+
+
+@dataclass(frozen=True, slots=True)
+class FileStream(Generic[Chunks]):
+    """Un archivo del gestor que llega por trozos (`GET /media/file`).
+
+    `status_code` es `206` si se pidió un rango y `200` si llega entero; `headers`, las de
+    `REPRESENTATION_HEADERS` que trajo la respuesta, para reenviarlas.
+    """
+
+    status_code: int
+    headers: Mapping[str, str]
+    chunks: Chunks
+
+
+def representation_headers(headers: Mapping[str, str]) -> dict[str, str]:
+    return {name: headers[name] for name in REPRESENTATION_HEADERS if name in headers}

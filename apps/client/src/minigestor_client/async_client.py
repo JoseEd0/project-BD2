@@ -15,7 +15,7 @@ import httpx
 from . import calls
 from .context import current_request_id, new_request_id
 from .errors import EngineError, MinigestorError, ServiceUnavailableError, TransportError
-from .media import MediaFile, as_media_file
+from .media import FileStream, MediaFile, as_media_file, representation_headers
 from .models import LoadReport, MediaUpload, QueryResult, SegmentSearch, TableInfo
 from .options import PoolLimits, RetryPolicy, Timeouts
 from .queries import BEGIN_SQL, COMMIT_SQL, ROLLBACK_SQL, AsyncQueries, Params
@@ -143,12 +143,21 @@ class AsyncClient(AsyncQueries):
 
     @asynccontextmanager
     async def stream_file(
-        self, path: str, chunk_bytes: int = DOWNLOAD_CHUNK_BYTES
-    ) -> AsyncIterator[AsyncIterator[bytes]]:
-        """El archivo `path` por trozos, para reenviarlo sin tenerlo entero en memoria."""
-        response = await self._send(calls.file_stream_call(path))
+        self,
+        path: str,
+        chunk_bytes: int = DOWNLOAD_CHUNK_BYTES,
+        *,
+        byte_range: str | None = None,
+    ) -> AsyncIterator[FileStream[AsyncIterator[bytes]]]:
+        """Como `Client.stream_file`: el archivo por trozos, para reenviarlo sin tenerlo
+        entero en memoria, o solo el trozo de `byte_range`."""
+        response = await self._send(calls.file_stream_call(path, byte_range))
         try:
-            yield response.aiter_bytes(chunk_bytes)
+            yield FileStream(
+                response.status_code,
+                representation_headers(response.headers),
+                response.aiter_bytes(chunk_bytes),
+            )
         finally:
             await response.aclose()
 

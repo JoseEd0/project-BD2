@@ -40,7 +40,7 @@ from .llm import (
 )
 from .pricing import Attempt, TokenUsage, attempt_cost, total_cost, total_usage, worst_case_cost
 from .prompt import PASSAGE_SHARE, Prompt, Source, build_prompt, select_sources
-from .search import Paper, Retriever, SearchMode
+from .search import Paper, Retriever, SearchFilters, SearchMode
 from .sse import sse_frame
 
 SOURCES_EVENT = "sources"
@@ -163,9 +163,14 @@ class Answerer:
         self._settings = settings
 
     async def prepare(
-        self, question: str, engine: AsyncClient, embedder: Embedder
+        self,
+        question: str,
+        engine: AsyncClient,
+        embedder: Embedder,
+        filters: SearchFilters | None = None,
     ) -> PreparedAnswer:
-        """Recupera los fragmentos de `question`, arma el prompt y reserva su gasto.
+        """Recupera los fragmentos de `question` (solo de los papers que cumplen `filters`),
+        arma el prompt y reserva su gasto.
 
         Raises:
             BudgetExhaustedError: si el gasto del día no admite una respuesta más.
@@ -173,7 +178,7 @@ class Answerer:
         """
         settings = self._settings
         retriever = Retriever(engine, embedder, rrf_k=settings.rrf_k)
-        hits = await retriever.search(question, SearchMode.HYBRID, settings.chunks)
+        hits = await retriever.search(question, SearchMode.HYBRID, settings.chunks, filters)
         sources = tuple(select_sources(hits, settings.context_tokens, settings.passage_tokens))
         prompt = build_prompt(question, sources)
         reservation = self._reserve(prompt) if sources else None

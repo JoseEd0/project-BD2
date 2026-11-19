@@ -301,6 +301,12 @@ def test_photos_that_cannot_be_analyzed(
     assert (query.status_code, query.json()["kind"]) == (status, kind)
 
 
+def test_faces_too_small_to_recognize_are_reported(service: TestClient):
+    result = identify(service, jpeg(portrait_image(GROUP_PHOTO)))
+    assert [face["status"] for face in result["faces"]] == ["too_small"] * 7
+    assert result["message"].startswith("Los rostros se ven muy pequeños")
+
+
 def test_an_identify_without_faces_says_so(service: TestClient):
     blank = Image.new("RGB", (640, 480), (128, 128, 128))
     result = identify(service, jpeg(blank))

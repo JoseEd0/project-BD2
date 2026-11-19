@@ -141,7 +141,7 @@ async def _load_table(
     present = (await _row_counts(engine)).get(source.table, 0)
     if present == source.expected:
         logger.info("%s ya tiene sus %d filas", source.table, present)
-        return TableLoad(source.table, source.expected, 0, 0.0, 0.0)
+        return TableLoad(source.table, source.expected, 0, 0.0)
     if present > source.expected:
         raise SeedError(
             f"{source.table} tiene {present} filas y el dataset {source.expected}: vacíala"
@@ -150,9 +150,8 @@ async def _load_table(
         "%s: cargando %d filas desde la %d", source.table, source.expected - present, present + 1
     )
     pending = _logged(islice(source.rows(), present, None), source.table, present, progress_rows)
-    stream = _TimedStream(pending, clock)
     started = clock()
-    load = await engine.bulk_insert(source.table, stream)
+    load = await engine.bulk_insert(source.table, pending)
     finished = clock()
     _require_complete(load, source, present)
     logger.info(
@@ -167,7 +166,6 @@ async def _load_table(
         source.expected,
         load.rows_loaded,
         finished - started,
-        finished - stream.exhausted_at(finished),
         tuple(load.deferred_indexes),
     )
 
@@ -214,7 +212,7 @@ async def _load_clip(
     present = (await _row_counts(engine)).get(CLIP, 0)
     if present == len(images):
         logger.info("%s ya tiene sus %d filas", CLIP, present)
-        return TableLoad(CLIP, present, 0, 0.0, 0.0), EmbeddingStep(0, 0, 0, 0.0)
+        return TableLoad(CLIP, present, 0, 0.0), EmbeddingStep(0, 0, 0, 0.0)
     encoder = _LazyEncoder(load_encoder, settings)
     batches = BatchSettings(
         settings.clip_batch_size, settings.preprocess_workers, settings.progress_rows
@@ -242,23 +240,6 @@ def _logged(items: Iterable[Row], table: str, start: int, every: int) -> Iterato
         if position % every == 0:
             logger.info("%s: %d filas enviadas", table, position)
         yield item
-
-
-class _TimedStream:
-    """Las filas de una carga, anotando cuándo se pidió la última: lo que tarda el gestor
-    desde ahí es el último lote y los índices que construye al final."""
-
-    def __init__(self, items: Iterator[Row], clock: Clock) -> None:
-        self._items = items
-        self._clock = clock
-        self._exhausted: float | None = None
-
-    def __iter__(self) -> Iterator[Row]:
-        yield from self._items
-        self._exhausted = self._clock()
-
-    def exhausted_at(self, default: float) -> float:
-        return default if self._exhausted is None else self._exhausted
 
 
 class _LazyEncoder:

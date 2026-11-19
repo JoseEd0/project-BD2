@@ -11,10 +11,14 @@ from appkit import ServiceSettings
 from faces.config import PipelineConfig
 from faces.enrollment import IdentityThresholds, PosePlan
 from faces.pose import Pose
+from faces.tracking import TrackingConfig
 
 ENV_PREFIX = "FACES_"
 SECONDS_PER_DAY = 86_400
 MEBIBYTE = 1 << 20
+# Un cuadro Full HD: más de lo que manda la cámara de un celular reducida para el socket.
+FULL_HD_PIXELS = 1920 * 1080
+DEFAULT_TRACKING = TrackingConfig()
 DEFAULT_THRESHOLDS = IdentityThresholds()
 DEFAULT_PIPELINE = PipelineConfig()
 
@@ -39,6 +43,21 @@ class FacesSettings(ServiceSettings):
         analysis_workers: fotos que la réplica analiza a la vez, cada una en su hilo con su
             pipeline; las demás esperan turno.
         purge_interval_seconds: cada cuánto se borran los registros y sesiones vencidos.
+        redis_url: el Redis de los rastros del reconocimiento en vivo; sin él, no hay caché
+            de rastros y cada rostro de cada cuadro se busca.
+        redis_timeout_seconds: plazo de Redis para conectar y para cada operación; corto,
+            porque si Redis no responde cada cuadro lo espera hasta que se deja de probar.
+        redis_retry_seconds: cuánto se deja de probar Redis después de un fallo.
+        stream_max_frame_bytes, stream_max_frame_pixels: el tamaño máximo de un cuadro, en
+            bytes y en píxeles declarados.
+        stream_max_fps: cuadros por segundo que procesa una conexión; los que llegan antes
+            esperan y, si llega otro, se descartan.
+        stream_idle_timeout_seconds: una conexión sin mensajes por este tiempo se cierra.
+        stream_max_connections: conexiones de reconocimiento a la vez en una réplica.
+        track_min_iou, track_verify_seconds, track_lost_seconds: el seguimiento (ver
+            `TrackingConfig`).
+        track_session_ttl_seconds: cuánto viven en Redis los rastros de una sesión sin
+            cuadros: lo que tiene el celular para reconectarse y retomarlos.
     """
 
     model_config = SettingsConfigDict(env_prefix=ENV_PREFIX, frozen=True, extra="ignore")
@@ -60,6 +79,18 @@ class FacesSettings(ServiceSettings):
     lookalike_threshold: float = Field(default=DEFAULT_THRESHOLDS.lookalike, ge=-1, le=1)
     analysis_workers: int = Field(default=2, ge=1)
     purge_interval_seconds: float = Field(default=300.0, gt=0)
+    redis_url: str | None = None
+    redis_timeout_seconds: float = Field(default=0.1, gt=0)
+    redis_retry_seconds: float = Field(default=5.0, ge=0)
+    stream_max_frame_bytes: int = Field(default=MEBIBYTE, ge=1)
+    stream_max_frame_pixels: int = Field(default=FULL_HD_PIXELS, ge=1)
+    stream_max_fps: float = Field(default=15.0, gt=0)
+    stream_idle_timeout_seconds: float = Field(default=30.0, gt=0)
+    stream_max_connections: int = Field(default=16, ge=1)
+    track_min_iou: float = Field(default=DEFAULT_TRACKING.min_iou, gt=0, le=1)
+    track_verify_seconds: float = Field(default=DEFAULT_TRACKING.verify_seconds, ge=0)
+    track_lost_seconds: float = Field(default=DEFAULT_TRACKING.lost_seconds, ge=0)
+    track_session_ttl_seconds: int = Field(default=60, ge=1)
 
     @model_validator(mode="after")
     def lookalike_below_duplicate(self) -> FacesSettings:
@@ -80,6 +111,13 @@ class FacesSettings(ServiceSettings):
             match=self.match_threshold,
             duplicate=self.duplicate_threshold,
             lookalike=self.lookalike_threshold,
+        )
+
+    def tracking(self) -> TrackingConfig:
+        return TrackingConfig(
+            min_iou=self.track_min_iou,
+            verify_seconds=self.track_verify_seconds,
+            lost_seconds=self.track_lost_seconds,
         )
 
     def pipeline(self) -> PipelineConfig:

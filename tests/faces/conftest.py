@@ -16,6 +16,7 @@ from fastapi.testclient import TestClient
 
 from api.auth import Role, ServiceKey, digest_of
 from api.main import create_app as create_engine_app
+from appkit import RedisFactory
 from config import EngineConfig
 from faces.api import create_app
 from faces.api.settings import FacesSettings
@@ -74,10 +75,11 @@ ServiceFactory = Callable[..., AbstractContextManager[TestClient]]
 
 @pytest.fixture
 def start_service(engine_app: FastAPI, models_dir: Path, clock: FakeClock) -> ServiceFactory:
-    """Arranca el servicio con la configuración de los tests y `overrides` encima."""
+    """Arranca el servicio con la configuración de los tests y `overrides` encima; con
+    `redis`, con esa caché de rastros."""
 
     @contextmanager
-    def started(**overrides: Any) -> Iterator[TestClient]:
+    def started(redis: RedisFactory | None = None, **overrides: Any) -> Iterator[TestClient]:
         values: dict[str, Any] = {
             "engine_url": ENGINE_URL,
             "engine_key": WRITE_KEY,
@@ -90,7 +92,8 @@ def start_service(engine_app: FastAPI, models_dir: Path, clock: FakeClock) -> Se
         }
         settings = FacesSettings(**{**values, **overrides})
         transport = httpx.ASGITransport(app=engine_app)
-        with TestClient(create_app(settings, engine_transport=transport, clock=clock)) as client:
+        app = create_app(settings, engine_transport=transport, clock=clock, redis=redis)
+        with TestClient(app) as client:
             yield client
 
     return started

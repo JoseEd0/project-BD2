@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from http import HTTPStatus
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Request, Response, UploadFile
+from fastapi import APIRouter, Depends, File, Header, Request, Response, UploadFile
 
 from faces.api.enrollments import EnrollmentService
 from faces.api.errors import UNREADABLE_IMAGE, UnreadableImageError, UploadTooLargeError
@@ -24,6 +24,9 @@ from faces.api.people import PeopleService
 from faces.consent import ConsentText
 
 MEBIBYTE = 1 << 20
+# El código de una persona es la llave para ver y borrar su registro: viaja en una cabecera y
+# no en la ruta, que queda en los logs de acceso del servicio y del nginx.
+PERSON_ID_HEADER = "X-Person-Id"
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,6 +48,9 @@ def services_of(request: Request) -> FacesServices:
 
 Services = Annotated[FacesServices, Depends(services_of)]
 Photo = Annotated[UploadFile, File(description="La foto: JPEG, PNG, WebP, BMP, GIF o TIFF.")]
+PersonId = Annotated[
+    str, Header(alias=PERSON_ID_HEADER, description="El código que se recibió al registrarse.")
+]
 
 router = APIRouter()
 
@@ -89,13 +95,13 @@ async def identify(image: Photo, services: Services) -> Identification:
     return await services.identification.identify(photo)
 
 
-@router.get("/people/{person_id}")
-async def person(person_id: str, services: Services) -> Person:
+@router.get("/person")
+async def person(person_id: PersonId, services: Services) -> Person:
     return await services.people.person(person_id)
 
 
-@router.delete("/people/{person_id}", status_code=HTTPStatus.NO_CONTENT)
-async def forget_person(person_id: str, services: Services) -> Response:
+@router.delete("/person", status_code=HTTPStatus.NO_CONTENT)
+async def forget_person(person_id: PersonId, services: Services) -> Response:
     """Borra a la persona y todos sus embeddings. Responde igual si ya no estaba."""
     await services.people.forget(person_id)
     return Response(status_code=HTTPStatus.NO_CONTENT)

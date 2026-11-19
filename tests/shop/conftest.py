@@ -14,7 +14,7 @@ from pathlib import Path
 import httpx
 import numpy as np
 import pytest
-from apps.shop.tests.shop_support import write_tiny_dataset
+from apps.shop.tests.tiny_dataset import write_tiny_dataset
 from fastapi import FastAPI
 
 from api.main import create_app
@@ -31,9 +31,9 @@ PAGE_SIZE = 4096
 # Dos filas por lote: el dataset diminuto ya cruza lotes, y una carga a medias se puede
 # dejar con una cantidad exacta de filas confirmadas.
 BATCH_ROWS = 2
-# Cinco fotos de ruido de 96 px dan unos cientos de descriptores SIFT: alcanzan para un
-# vocabulario de ocho palabras, no para las 256 por omisión.
-VOCABULARY_SIZE = 8
+# Las cuatro fotos distintas del dataset diminuto dan unos 700 descriptores SIFT. Con 32
+# palabras cada foto usa solo algunas, así que el idf no las anula y k-means entrena rápido.
+VOCABULARY_SIZE = 32
 
 
 class FakeImageEncoder:

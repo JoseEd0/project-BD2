@@ -8,7 +8,7 @@ from itertools import islice
 
 import httpx
 import pytest
-from apps.shop.tests.shop_support import TINY_PRODUCTS, TINY_PURCHASES
+from apps.shop.tests.tiny_dataset import TINY_PRODUCTS, TINY_PURCHASES
 from tests.shop.conftest import ENGINE_KEY, ENGINE_URL, FakeImageEncoder
 
 from api.main import create_app

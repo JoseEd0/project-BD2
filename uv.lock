@@ -1755,6 +1755,7 @@ dependencies = [
     { name = "numpy", version = "2.5.5", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
     { name = "onnxruntime" },
     { name = "pillow" },
+    { name = "python-multipart" },
     { name = "redis" },
     { name = "tokenizers" },
 ]
@@ -1765,6 +1766,7 @@ requires-dist = [
     { name = "numpy", specifier = ">=1.26" },
     { name = "onnxruntime", specifier = ">=1.20" },
     { name = "pillow", specifier = ">=11" },
+    { name = "python-multipart", specifier = ">=0.0.9" },
     { name = "redis", specifier = ">=5.2" },
     { name = "tokenizers", specifier = ">=0.20" },
 ]

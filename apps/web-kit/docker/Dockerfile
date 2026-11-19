@@ -40,7 +40,8 @@ COPY --from=build /csp.conf /etc/nginx/app/csp.conf
 COPY --from=build /dist /usr/share/nginx/html
 
 # Lo que cambia de una app a otra lo pone su compose: a qué API reenvía, cuánto puede subir,
-# cuántas peticiones por segundo admite de cada IP y qué permisos del navegador pide.
+# cuántas peticiones por segundo admite de cada IP, qué permisos del navegador pide y de qué
+# otros orígenes carga imágenes (las teselas de un mapa).
 ENV WEB_PORT=8080 \
     WEB_TLS_PORT=8443 \
     API_UPSTREAM=http://api:8000 \
@@ -49,6 +50,7 @@ ENV WEB_PORT=8080 \
     API_RATE_LIMIT=20r/s \
     API_RATE_BURST=40 \
     WEB_PERMISSIONS_POLICY="camera=(), microphone=(), geolocation=()" \
+    WEB_IMG_SOURCES="" \
     HSTS_MAX_AGE=31536000 \
     TLS_CERTIFICATE=/etc/nginx/certs/cert.pem \
     TLS_CERTIFICATE_KEY=/etc/nginx/certs/key.pem \

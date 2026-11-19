@@ -1,6 +1,6 @@
 # Cabeceras de seguridad. Van en cada `location` porque un `add_header` dentro de una
 # `location` descarta los que vienen del `server`.
-add_header Content-Security-Policy "default-src 'self'; script-src 'self' $csp_script_hashes; style-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; font-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'" always;
+add_header Content-Security-Policy "default-src 'self'; script-src 'self' $csp_script_hashes; style-src 'self'; img-src 'self' data: blob: ${WEB_IMG_SOURCES}; media-src 'self' blob:; connect-src 'self'; font-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'" always;
 add_header Strict-Transport-Security $strict_transport_security always;
 add_header Permissions-Policy "${WEB_PERMISSIONS_POLICY}" always;
 add_header X-Content-Type-Options nosniff always;

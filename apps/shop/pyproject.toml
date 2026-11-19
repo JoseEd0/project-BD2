@@ -12,6 +12,8 @@ dependencies = [
     "numpy>=1.26",
     "onnxruntime>=1.20",
     "pillow>=11",
+    # La foto de `POST /busqueda/foto` llega como multipart/form-data.
+    "python-multipart>=0.0.9",
     "redis>=5.2",
     "tokenizers>=0.20",
 ]

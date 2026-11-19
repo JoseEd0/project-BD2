@@ -102,7 +102,8 @@ de una a otra son variables que pone su `compose.yaml`:
 | `API_TIMEOUT` | plazo de una respuesta de la API | `60s` |
 | `API_MAX_BODY_SIZE` | lo más que se puede subir en una petición (`413` si pasa) | `1m` |
 | `API_RATE_LIMIT`, `API_RATE_BURST` | peticiones a `/api/` por IP y su ráfaga (`429` si pasa) | `20r/s`, `40` |
-| `WEB_PERMISSIONS_POLICY` | `Permissions-Policy`: la cámara o el micrófono, solo en la app que los usa | todo apagado |
+| `WEB_PERMISSIONS_POLICY` | `Permissions-Policy`: la cámara, el micrófono o la ubicación, solo en la app que los usa | todo apagado |
+| `WEB_IMG_SOURCES` | orígenes extra del `img-src` de la CSP, separados por espacios: las teselas de un mapa | ninguno |
 | `WEB_PORT`, `WEB_TLS_PORT` | puertos HTTP y HTTPS dentro del contenedor | `8080`, `8443` |
 | `TLS_CERTIFICATE`, `TLS_CERTIFICATE_KEY` | certificado y clave montados; sin ellos, solo HTTP | `/etc/nginx/certs/{cert,key}.pem` |
 | `HSTS_MAX_AGE` | `Strict-Transport-Security`, solo en las respuestas por HTTPS | un año |

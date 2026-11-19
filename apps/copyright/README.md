@@ -318,7 +318,7 @@ de 5 a 20 s de canciones del catálogo, pegados con fundidos de 1 s, y 200 igual
 canciones que se borraron del catálogo; cada uno sin distorsión y con 12 distorsiones por
 separado. Medido el 19-11-2026 contra una copia del gestor con 7 794 canciones, con la
 máquina cargada (carga media de 6,9 a 24,4). El detalle está en el
-[§16 de `benchmarks/README.md`](../../benchmarks/README.md#16-evaluación-de-la-detección-de-copyright--remixes-con-la-verdad-conocida)
+[§17 de `benchmarks/README.md`](../../benchmarks/README.md#17-evaluación-de-la-detección-de-copyright--remixes-con-la-verdad-conocida)
 y los datos crudos en
 [`benchmarks/results/copyright_evaluacion_casos.json`](../../benchmarks/results/copyright_evaluacion_casos.json).
 

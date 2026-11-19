@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel
+from typing import Any
+
+from pydantic import BaseModel, Field
+
+from shop.catalog.schema import PRODUCT_ID_LENGTH
 
 
 class ProductSummary(BaseModel):
@@ -44,3 +48,55 @@ class NearbyStore(BaseModel):
     tipo: str
     ubicacion: Location
     metros: float
+
+
+class SignalQuery(BaseModel):
+    """Una señal tal como corrió: el SQL exacto, sus parámetros (un vector, por su dimensión),
+    cuántos candidatos dio y los milisegundos que tardó."""
+
+    senal: str
+    sql: str
+    parametros: list[Any]
+    candidatos: int
+    milisegundos: float
+
+
+class Reason(BaseModel):
+    """Lo que aportó una señal: su puntaje normalizado, por su peso, y su frase."""
+
+    senal: str
+    aporte: float
+    texto: str
+
+
+class Recommendation(BaseModel):
+    producto: ProductSummary
+    puntaje: float
+    motivos: list[Reason]
+    explicacion: str
+
+
+class Recommendations(BaseModel):
+    """Las recomendaciones, con los pesos efectivos, si fue arranque en frío y las consultas
+    de cada señal."""
+
+    origen: str
+    arranque_en_frio: bool
+    pesos: dict[str, float]
+    version_pesos: str
+    senales: list[SignalQuery]
+    recomendaciones: list[Recommendation]
+
+
+class PurchaseRequest(BaseModel):
+    producto: str = Field(min_length=1, max_length=PRODUCT_ID_LENGTH)
+
+
+class PurchaseRecorded(BaseModel):
+    id: int
+    usuario: str
+    producto: str
+    instante: int
+    particion: str
+    pares_sumados: int
+    pares_nuevos: int

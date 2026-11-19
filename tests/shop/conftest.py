@@ -7,6 +7,7 @@ prueban la de verdad), para que estos tests no necesiten los 577 MiB del modelo.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator, Iterator
 from dataclasses import replace
 from pathlib import Path
@@ -22,6 +23,7 @@ from config import EngineConfig
 from minigestor_client import AsyncClient
 from shop.clip import EMBEDDING_DIMENSION, PixelEncoder
 from shop.clip.preprocessing import PixelValues
+from shop.seed import run_seed
 from shop.seed.job import EncoderLoader
 from shop.settings import DATASET_DIRECTORY, SeedSettings
 
@@ -109,3 +111,15 @@ async def engine(engine_app: FastAPI) -> AsyncIterator[AsyncClient]:
     transport = httpx.ASGITransport(app=engine_app)
     async with AsyncClient(ENGINE_URL, ENGINE_KEY, transport=transport) as client:
         yield client
+
+
+@pytest.fixture
+def seeded(engine_app: FastAPI, seed_settings: SeedSettings, load_encoder: EncoderLoader) -> None:
+    """El gestor con el catálogo diminuto ya cargado."""
+
+    async def seed() -> None:
+        transport = httpx.ASGITransport(app=engine_app)
+        async with AsyncClient(ENGINE_URL, ENGINE_KEY, transport=transport) as engine:
+            await run_seed(engine, seed_settings, load_encoder)
+
+    asyncio.run(seed())

@@ -7,12 +7,9 @@ tamaños, el número de consultas, las repeticiones y la semilla, y guarda sus m
 \texttt{benchmarks/results/} en formato JSON; las gráficas y las tablas de esta sección se
 generan a partir de esos archivos y \texttt{benchmarks/README.md} tiene los comandos para
 repetir cada uno. Todas las técnicas reciben los mismos datos y las mismas consultas, con
-1\,000, 10\,000 y 100\,000 elementos. Se midió en un Apple M4 Pro (12 núcleos) con macOS y
-Python~3.12; como referencia se usaron PostgreSQL~17 con PostGIS (GiST), GIN y pgvector,
-FAISS y USearch. En las gráficas el eje horizontal es el tamaño de la colección, los dos
-ejes suelen estar en escala logarítmica y el número al final de cada línea es el valor con
-el tamaño mayor. En las tablas, ms son milisegundos, s segundos, KiB y MiB kibibytes y
-mebibytes, y el mejor valor de cada columna está en negrita.
+1\,000, 10\,000 y 100\,000 elementos, en un Apple M4 Pro (12 núcleos) con macOS y
+Python~3.12. En las gráficas los ejes suelen ser logarítmicos y el número al final de cada
+línea es el valor con el tamaño mayor; en las tablas, el mejor valor está en negrita.
 
 \FloatBarrier
 \subsection{Experimento 1: Heap file vs archivo secuencial}
@@ -222,8 +219,7 @@ porque siempre calcula todas las distancias, mientras que el R-Tree depende de c
 puntos devuelve: es 351 veces más rápido para 1~km, 77 para 5~km y 31 para 10~km, cuando
 cada consulta ya devuelve el 1.6\,\% de la tabla. En k-NN la diferencia es mayor: sin
 índice hay que calcular y ordenar las 100\,000 distancias (1\,171~ms para $k = 10$) y el
-R-Tree tarda 0.57~ms, 2\,042 veces menos, porque visita en promedio 3.9 de sus 606 nodos. De
-1\,000 a 100\,000 puntos el tiempo secuencial se multiplica por 201 y el del R-Tree por 1.7.
+R-Tree tarda 0.57~ms, 2\,042 veces menos, porque visita en promedio 3.9 de sus 606 nodos.
 GiST es entre 4.0 y 14 veces más rápido, con curvas de la misma forma: está escrito en C
 dentro de PostgreSQL y el R-Tree del proyecto deserializa en Python cada nodo que lee. La
 carga masiva STR es 41 veces más rápida que insertar uno por uno y deja 606 nodos en lugar
@@ -410,8 +406,7 @@ IVF (gestor, por SQL) & 4.90 (0.987) & 4.78 (0.975) & 1.46 (0.983) & 1.39 (0.994
 
 \paragraph{IVF contra HNSW.} La búsqueda exacta crece en proporción (de 0.034 a 1.40~ms con
 el coseno, 41 veces para 100 veces más fotos) y HNSW casi no se mueve (de 0.038 a
-0.063~ms): con 100\,000 objetos es 22 veces más rápido. Con 1\,000 objetos la exacta compite
-sin perder nada. A esfuerzo fijo, el recall de HNSW cae con el tamaño (0.995, 0.972 y 0.927
+0.063~ms): con 100\,000 objetos es 22 veces más rápido. A esfuerzo fijo, el recall de HNSW cae con el tamaño (0.995, 0.972 y 0.927
 en imágenes con el coseno), mientras que el de IVF, que crece sus listas con $\sqrt{N}$,
 sube (0.926, 0.940 y 0.974). Para llegar a un Recall@10 de 0.95 con 100\,000 objetos, en
 imágenes HNSW necesita $ef$ 80 (0.098~ms) e IVF 16 listas (0.125~ms), y en audio IVF basta
@@ -549,12 +544,20 @@ tramo de 7.5~s no se distingue de una canción que no se copió (mediana 0.27). 
 catalogadas pasan el umbral con rachas de 6 a 8 ventanas seguidas con otra canción del FMA,
 una de ellas del mismo artista.
 
-\paragraph{Tienda.} La carga completa toma 299.0~s y una segunda ejecución 0.27~s
-(tabla~\ref{tab:tienda}). Calcular CLIP para 24\,308 fotos es casi la mitad (176 fotos por
-segundo); SIFT tarda la mitad que CLIP, pero su índice ocupa 60.2~MiB contra 51.6~MiB del
-HNSW de CLIP y crearlo toma 71.5~s contra 0.81~s. Las compras entran a 12\,787 filas por
-segundo en el archivo secuencial porque llegan en el orden de la clave y cada una va al
-final de la última página. Con todo cargado, el gestor ocupa 354.8~MiB.
+\paragraph{Tienda.} La carga completa toma 299.0~s y una segunda ejecución 0.27~s.
+Calcular CLIP para 24\,308 fotos es casi la mitad (137.8~s, 176 fotos por segundo); el
+\texttt{CREATE INDEX} de SIFT tarda 71.5~s y su índice ocupa 60.2~MiB, contra 0.81~s y
+51.6~MiB del HNSW de CLIP. Las 511\,836 compras entran en 40.0~s (12\,787 filas por segundo)
+en el archivo secuencial, porque llegan en el orden de la clave y cada una va al final de
+la última página. Con todo cargado, el gestor ocupa 354.8~MiB. Las compras
+conjuntas no se pueden calcular por petición: el autojoin tarda 67.3~s sobre el archivo
+secuencial y 2.9~s sobre un historial con B+. Materializadas en la carga (793.6~s una vez,
+369\,087 pares) son una búsqueda por el B+ de 4.5~ms, y una recomendación completa tarda
+68.9~ms de mediana con la caché fría y 1.9~ms con Redis (tabla~\ref{tab:tienda-recomendar}).
+Al medir aparecieron dos problemas del gestor: con cientos de filas por clave, el hash
+extendible duplicaba el directorio sin fin (por eso los pares usan un B+), y un \texttt{IN}
+con cientos de textos se comparaba opción por opción; buscarlo en un conjunto bajó la
+materialización de 2\,231 a 793.6~s.
 
 \paragraph{RAG.} La ingesta del corpus entero tardó 43.9~minutos, y el 97\,\% fue calcular
 los embeddings en CPU (38.4 fragmentos por segundo con int8 y 8 hilos); la carga en el
@@ -562,33 +565,17 @@ gestor con los dos índices construidos al final tomó 65.0~s (tabla~\ref{tab:ra
 variante int8 es un 14 a 22\,\% más rápida que fp32 con 4 y 8 hilos y sus vectores tienen un
 coseno medio de 0.994 con los de fp32. Con preguntas en español, BM25 sobre el índice en
 inglés solo encuentra los documentos del curso, mientras que la búsqueda vectorial cruza el
-idioma y trae el paper que corresponde. La calidad de las respuestas generadas todavía no
+idioma y trae el paper que corresponde. Para medir la recuperación se escribieron 65
+preguntas (45 en español y 20 en inglés), cada una con el fragmento del que salió
+(tabla~\ref{tab:rag-recuperacion}): quitar las palabras vacías del español sube el
+Recall@10 de BM25 de 0.354 a 0.569, y con eso la búsqueda híbrida queda por encima de la
+vectorial (0.677 contra 0.631). La calidad de las respuestas generadas (citas válidas,
+respuestas \guillemotleft{}no está en los documentos\guillemotright{}, costo y latencia hasta el primer texto) todavía no
 se midió porque requiere la clave del API del modelo.
 
 \begin{table}[!htb]
 \centering
-\begin{minipage}[t]{0.42\textwidth}
-\centering
-\caption{Carga de la tienda en el gestor.}\label{tab:tienda}
-\small
-\begin{tabular}{@{}lrr@{}}
-\toprule
-\textbf{Paso} & \textbf{Filas} & \textbf{Tiempo (s)} \\
-\midrule
-productos (invertido) & 24\,587 & 15.4 \\
-usuarios & 57\,439 & 11.6 \\
-compras (secuencial) & 511\,836 & 40.0 \\
-inventario (hash) & 209\,000 & 5.4 \\
-tiendas (R-Tree) & 209 & 0.03 \\
-SIFT: \texttt{CREATE INDEX} & 24\,580 & 71.5 \\
-CLIP: embeddings & 24\,308 & 137.8 \\
-CLIP: carga y HNSW & 24\,580 & 16.9 \\
-\midrule
-total & & 299.0 \\
-\bottomrule
-\end{tabular}
-\end{minipage}\hfill
-\begin{minipage}[t]{0.55\textwidth}
+\begin{minipage}[t]{0.6\textwidth}
 \centering
 \caption{Ingesta del RAG (98\,585 fragmentos).}\label{tab:rag}
 \small
@@ -605,6 +592,44 @@ disco: tabla / invertido / HNSW & 354 / 96 / 159 MiB \\
 búsqueda BM25 (cliente) & 5--18 ms \\
 búsqueda vectorial (cliente) & 11--13 ms \\
 búsqueda híbrida (cliente) & 13--30 ms \\
+\bottomrule
+\end{tabular}
+\end{minipage}
+\end{table}
+
+\begin{table}[!htb]
+\centering
+\begin{minipage}[t]{0.48\textwidth}
+\centering
+\caption{Recomendaciones de la tienda: mediana y p95 por petición (100 productos).}\label{tab:tienda-recomendar}
+\small
+\begin{tabular}{@{}lrr@{}}
+\toprule
+\textbf{Parte de la petición} & \textbf{p50} & \textbf{p95} \\
+\midrule
+compras conjuntas (B+) & 4.5 ms & 7.7 ms \\
+fotos (CLIP y HNSW) & 19.5 ms & 28.2 ms \\
+texto (BM25) & 23.6 ms & 41.5 ms \\
+cercanía (hash y R-Tree) & 31.2 ms & 84.3 ms \\
+completa, caché fría & 68.9 ms & 142.8 ms \\
+completa, con Redis & \textbf{1.9 ms} & \textbf{3.4 ms} \\
+\bottomrule
+\end{tabular}
+\end{minipage}\hfill
+\begin{minipage}[t]{0.49\textwidth}
+\centering
+\caption{Recuperación del RAG con 65 preguntas: fracción con su fragmento entre los $k$
+primeros (R@$k$) y MRR@10.}\label{tab:rag-recuperacion}
+\small\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}lrrrr@{}}
+\toprule
+\textbf{Modo} & \textbf{R@5} & \textbf{R@10} & \textbf{R@12} & \textbf{MRR} \\
+\midrule
+BM25 & 0.354 & 0.354 & 0.354 & 0.245 \\
+BM25 sin palabras vacías & 0.462 & 0.569 & 0.585 & 0.314 \\
+vectorial & 0.523 & 0.631 & 0.646 & 0.393 \\
+híbrida, BM25 completo & 0.523 & 0.631 & 0.661 & \textbf{0.411} \\
+híbrida, sin vacías & \textbf{0.585} & \textbf{0.677} & \textbf{0.708} & 0.406 \\
 \bottomrule
 \end{tabular}
 \end{minipage}
@@ -657,7 +682,8 @@ con y sin la caché de rastros.}
 Tramos con votación por desfase & Copias enteras con puntaje de 0.99 y su desfase exacto; 7~ms por ventana. & Un tramo de 7.5~s no se separa de la música no copiada. & Copias de 15~s o más dentro de una canción. \\
 Consulta de ventanas en lote & 2.2 veces más rápida que una consulta por ventana, con los mismos vecinos. & El audio se decodifica una vez en el servicio y otra en el gestor. & Cualquier consulta con muchos fragmentos del mismo archivo. \\
 CLIP frente a SIFT & Índice en 0.81~s y 51.6~MiB; busca fotos a partir de un texto. & Calcular los embeddings es la mitad de la carga (137.8~s). & Búsqueda visual por contenido o por texto. \\
-Búsqueda vectorial frente a BM25 & Encuentra papers en inglés con preguntas en español. & Calcular los embeddings es el 97\,\% de la ingesta. & Corpus en otro idioma que las preguntas. \\
+Compras conjuntas materializadas & 4.5~ms por consulta contra 2.9~s al vuelo. & 793.6~s en la carga; la tabla envejece hasta recalcularla. & Señales que salen de un \texttt{GROUP BY} sobre toda la historia. \\
+Búsqueda híbrida (RRF) & Recall@10 de 0.677, sobre la vectorial (0.631) y BM25 (0.354). & Calcular los embeddings es el 97\,\% de la ingesta; BM25 necesita la consulta en el idioma del índice. & Preguntas en otro idioma que el corpus, con nombres propios. \\
 Caché de rastros en Redis & Un tercio menos de mediana (23.8 a 16.4~ms); cualquier réplica sigue la sesión. & Se pierde si el rostro salta más de 47~px entre cuadros. & Video en vivo con rostros que se mueven poco. \\
 \bottomrule
 \end{tabular}
@@ -666,12 +692,9 @@ Caché de rastros en Redis & Un tercio menos de mediana (23.8 a 16.4~ms); cualqu
 \FloatBarrier
 \subsection{Conclusiones}
 
-Ninguna estructura es la mejor en todo: el heap es mejor para insertar y el secuencial para
-buscar, el B+ agrupado para consultar y el hash para construir, y el R-Tree, el índice
-invertido y HNSW ayudan más mientras más selectiva es la consulta. Varios resultados no
-eran los esperados antes de medir: el hash no fue más rápido que el B+ agrupado por
-igualdad, GIN fue más lento que el motor con consultas largas porque no ordena con el
-índice, y en la búsqueda multimedia el costo está en extraer y cuantizar, no en el índice.
-En las aplicaciones el gestor nunca fue el cuello de botella: lo que domina es decodificar
-audio, calcular embeddings o correr las redes de rostros, y las búsquedas en el gestor
-tardan de 0.2 a 2~ms dentro de respuestas de decenas o cientos de milisegundos.
+Ninguna estructura es la mejor en todo, y varios resultados no eran los esperados antes de
+medir: el hash no fue más rápido que el B+ agrupado por igualdad, GIN fue más lento que el
+motor con consultas largas porque no ordena con el índice, y en la búsqueda multimedia el
+costo está en extraer y cuantizar, no en el índice. En las aplicaciones lo que domina es
+decodificar audio, calcular embeddings o correr las redes de rostros; las búsquedas en el
+gestor tardan desde 0.2~ms hasta unas decenas de milisegundos.

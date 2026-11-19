@@ -440,13 +440,14 @@ largas, no contraseñas que se puedan adivinar con un diccionario. Sin
 `MINIGESTOR_API_KEYS` el API queda **abierto**, para desarrollar, y lo avisa en el log al
 arrancar. `/health`, `/ready` y `/docs` no piden clave.
 
-**La consola** no lleva la clave en el bundle: nginx, en el contenedor `web`, añade
+**La consola** no lleva la clave en el bundle: nginx, en el contenedor `console`, añade
 `Authorization: Bearer $CONSOLE_API_KEY` a cada petición que reenvía a `/api/`, y reemplaza
 la que traiga el navegador. Así también la llevan las peticiones que el navegador hace solo
 —el `<img>` de una miniatura, el `sendBeacon` que cierra la sesión—, que no pueden añadir
 cabeceras. Con Docker se da en `MINIGESTOR_CONSOLE_KEY` (ver [`.env.example`](../../.env.example))
-y su hash va en `MINIGESTOR_API_KEYS`, normalmente con rol `admin`. Quien llega a la interfaz
-actúa con la clave de la consola: el puerto de `web` es la puerta de administración y se
+y su hash va en `MINIGESTOR_API_KEYS`, normalmente con rol `admin`; `python -m
+tools.compose_keys` crea esa y las de cada aplicación. Quien llega a la interfaz
+actúa con la clave de la consola: el puerto de `console` es la puerta de administración y se
 publica solo donde deba. Con `npm run dev` la interfaz habla directo con el API, sin nginx,
 así que en desarrollo se deja el API sin claves.
 

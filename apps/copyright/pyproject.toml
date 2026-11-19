@@ -1,0 +1,21 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "minigestor-copyright"
+version = "0.1.0"
+description = "Detección de copyright en audio (Parte 5, opción C): catálogo de FMA por segmentos"
+requires-python = ">=3.11"
+dependencies = [
+    "minigestor-kit",
+    # Lee la duración de cada pista de su cabecera con libsndfile, la misma librería con que el
+    # gestor la decodifica: las ventanas del catálogo son las que el gestor puede recortar.
+    "soundfile>=0.12",
+]
+
+[tool.uv.sources]
+minigestor-kit = { workspace = true }
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/songcheck"]

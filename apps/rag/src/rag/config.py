@@ -99,6 +99,12 @@ class RagSettings(ServiceSettings):
     anthropic_timeout_seconds: float = Field(default=DEFAULT_ANTHROPIC_TIMEOUT_SECONDS, gt=0)
     anthropic_max_retries: int = Field(default=DEFAULT_ANTHROPIC_MAX_RETRIES, ge=0)
 
+    @field_validator("anthropic_api_key", mode="before")
+    @classmethod
+    def blank_key_is_missing(cls, value: object) -> object:
+        """El compose pasa la variable vacía cuando `.env` no la define: es no tenerla."""
+        return None if isinstance(value, str) and not value.strip() else value
+
     @field_validator("answer_model")
     @classmethod
     def priced_model(cls, model: str) -> str:

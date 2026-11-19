@@ -36,8 +36,9 @@ def test_the_simulated_provider_needs_no_key():
     assert isinstance(opened(settings(llm_provider=LlmProvider.SIMULATED)), SimulatedModel)
 
 
-def test_anthropic_without_a_key_opens_no_model():
-    assert opened(settings()) is None
+@pytest.mark.parametrize("key", [None, "", "   "])
+def test_anthropic_without_a_key_opens_no_model(key: str | None):
+    assert opened(settings(anthropic_api_key=key)) is None
 
 
 def test_anthropic_with_a_key_opens_claude_with_the_configured_model():

@@ -18,7 +18,8 @@ const PERSON_ID_HEADER = "X-Person-Id";
 const PHOTO_FIELD = "image";
 const PHOTO_NAME = "toma.jpg";
 
-const client = createServiceClient<paths>({ baseUrl: API_BASE_URL });
+// `fetch` se busca en cada petición y no al crear el cliente: así lo sustituyen los tests.
+const client = createServiceClient<paths>({ baseUrl: API_BASE_URL, fetch: (request) => globalThis.fetch(request) });
 
 interface FetchResult<T> {
   readonly data?: T;

@@ -46,7 +46,8 @@ export function CaptureStep(props: CaptureStepProps) {
   const camera = useCamera(video, "user");
   const live = camera.status.kind === "live";
   const guide = useRecognitionStream({ video, active: live, scheduler: GUIDE_SCHEDULER });
-  const gate = useRef(new ShotGate(SHOT_GATE));
+  const gate = useRef<ShotGate | null>(null);
+  gate.current ??= new ShotGate(performance.now(), SHOT_GATE);
   const canvas = useRef<HTMLCanvasElement | null>(null);
   const latest = useRef(props);
   latest.current = props;
@@ -56,7 +57,7 @@ export function CaptureStep(props: CaptureStepProps) {
 
   useEffect(() => {
     if (guide.answer !== null) {
-      gate.current.observe(precheck(guide.answer.result.faces, guide.answer.size), performance.now());
+      gate.current?.observe(precheck(guide.answer.result.faces, guide.answer.size), performance.now());
     }
   }, [guide.answer]);
 
@@ -70,10 +71,10 @@ export function CaptureStep(props: CaptureStepProps) {
     if (photo === null) {
       return;
     }
-    gate.current.shot(performance.now());
+    gate.current?.shot(performance.now());
     latest.current.onShotSent();
     const outcome = await submitShot(latest.current.enrollment.enrollment_id, photo.blob);
-    gate.current.answered(outcome.ok && outcome.data.accepted, performance.now());
+    gate.current?.answered(outcome.ok && outcome.data.accepted, performance.now());
     if (outcome.ok) {
       latest.current.onShotAnswered(outcome.data);
     } else {
@@ -88,7 +89,7 @@ export function CaptureStep(props: CaptureStepProps) {
       return;
     }
     const timer = window.setInterval(() => {
-      if (!latest.current.shooting && gate.current.shouldShoot(performance.now())) {
+      if (!latest.current.shooting && gate.current?.shouldShoot(performance.now())) {
         void shootRef.current();
       }
     }, GATE_TICK_MS);

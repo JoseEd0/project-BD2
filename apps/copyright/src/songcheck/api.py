@@ -1,9 +1,10 @@
-"""El API del servicio de copyright: por ahora, la lectura del catálogo de canciones originales.
+"""El API del servicio de copyright: la lectura del catálogo de canciones originales y la
+detección de fragmentos copiados (`detection_api`).
 
     uvicorn --factory songcheck.api:create_app --host 0.0.0.0 --port 8000
 
 Sin estado: todo lo lee del gestor con `appkit`, que pone `/health`, `/ready`, las trazas y
-las migraciones al arrancar. La detección (#76) se suma aquí.
+las migraciones al arrancar.
 """
 
 from __future__ import annotations
@@ -22,6 +23,8 @@ from appkit import (
 )
 from minigestor_client import Record
 from minigestor_client.queries import Params
+from songcheck.detection_api import DetectionSettings
+from songcheck.detection_api import router as detection_router
 from songcheck.schema import SCHEMA, SEGMENT_INDEX_NAME, SEGMENTS_TABLE, SONGS_TABLE
 from songcheck.seed import SEGMENT_ID_STRIDE
 from songcheck.settings import CopyrightSettings
@@ -184,7 +187,9 @@ def build_app(
         migrations=SCHEMA,
         engine_transport=engine_transport,
     )
+    app.state.detection = DetectionSettings.of(settings)
     app.include_router(router)
+    app.include_router(detection_router)
     return app
 
 

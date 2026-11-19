@@ -15,6 +15,9 @@ from __future__ import annotations
 SONGS_TABLE = "cr_canciones"
 SEGMENTS_TABLE = "cr_segmentos"
 SEGMENT_INDEX_NAME = "cr_segmentos_ruta"
+SEGMENT_SONG_COLUMN = "cancion"
+SEGMENT_START_COLUMN = "inicio"
+SEGMENT_END_COLUMN = "fin"
 GENRE_LENGTH = 40
 # Una ruta absoluta del gestor más `#t=inicio,fin`: la de Docker mide unos 70 caracteres y
 # la de un checkout local unos 110.
@@ -31,7 +34,8 @@ SCHEMA = (
     f"CREATE INDEX IF NOT EXISTS cr_canciones_busqueda ON {SONGS_TABLE} USING INVERTED (busqueda)"
     f" WITH (idioma = '{SEARCH_LANGUAGE}')",
     f"CREATE TABLE IF NOT EXISTS {SEGMENTS_TABLE} ("
-    f" id INT PRIMARY KEY, cancion INT, inicio FLOAT, fin FLOAT, ruta VARCHAR({PATH_LENGTH}))",
+    f" id INT PRIMARY KEY, {SEGMENT_SONG_COLUMN} INT, {SEGMENT_START_COLUMN} FLOAT,"
+    f" {SEGMENT_END_COLUMN} FLOAT, ruta VARCHAR({PATH_LENGTH}))",
 )
 SEGMENT_INDEX = (
     f"CREATE INDEX IF NOT EXISTS {SEGMENT_INDEX_NAME} ON {SEGMENTS_TABLE} USING HNSW (ruta)"

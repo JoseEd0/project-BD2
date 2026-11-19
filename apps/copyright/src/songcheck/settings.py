@@ -21,12 +21,51 @@ DEFAULT_DOWNLOAD_THREADS = 4
 # El `CREATE INDEX` del catálogo completo extrae los MFCC de unos 80 000 tramos: minutos, no
 # los segundos de una consulta. Su respuesta llega al terminar, así que se espera hasta esto.
 DEFAULT_INDEX_TIMEOUT_SECONDS = 3600.0
+# Un WAV estéreo de 16 bits a 44,1 kHz de 4 min cabe; un MP3 de 10 min a 320 kbit/s, también.
+# El gestor admite hasta 64 MiB por subida (`max_upload_bytes`).
+DEFAULT_MAX_UPLOAD_BYTES = 48 * 1024 * 1024
+# El máximo del gestor (`max_segment_audio_seconds`): 10 min dan 239 ventanas de 5 s cada
+# 2,5 s, dentro de las 256 que busca por consulta.
+DEFAULT_MAX_UPLOAD_SECONDS = 600.0
+# Una copia alineada trae a sus vecinas solapadas (el tramo de antes y el de después) entre
+# los primeros vecinos; diez dejan sitio a otras canciones parecidas sin pasar de las
+# `max_result_rows` filas del gestor con la subida más larga (239 · 10).
+DEFAULT_NEIGHBOURS_PER_WINDOW = 10
+# Dos ventanas seguidas son 7,5 s de audio, la copia más corta que llena entera una ventana
+# del catálogo (ver el README).
+DEFAULT_MIN_RUN_WINDOWS = 2
+# Umbral provisional, de una medida rápida con pocos casos (README, «Detección»); la curva
+# ROC de la evaluación (#77) lo calibra.
+DEFAULT_MATCH_THRESHOLD = 0.5
+DEFAULT_MAX_MATCHES = 10
+# Por debajo, silencio digital o el ruido de fondo de una grabación: -60 dBFS es mil veces
+# menos potencia que una pista a -30 dBFS, que ya suena bajo.
+DEFAULT_SILENCE_THRESHOLD_DBFS = -60.0
 
 
 class CopyrightSettings(ServiceSettings):
-    """Lo que necesita el API del servicio: solo lo común (ver `appkit.ServiceSettings`)."""
+    """Lo que necesita el API del servicio: lo común (ver `appkit.ServiceSettings`) y la
+    detección.
+
+    Attributes:
+        max_upload_bytes, max_upload_seconds: el audio más pesado y el más largo que se
+            admite en `POST /detections`.
+        neighbours_per_window: tramos del catálogo que se piden por ventana de la subida.
+        min_run_windows: ventanas seguidas con el mismo desfase que hacen una coincidencia.
+        match_threshold: puntaje desde el que una coincidencia cuenta como copia.
+        max_matches: coincidencias que se devuelven, las de mayor puntaje.
+        silence_threshold_dbfs: nivel por debajo del cual una ventana no vota.
+    """
 
     model_config = SettingsConfigDict(env_prefix=ENV_PREFIX, frozen=True, extra="ignore")
+
+    max_upload_bytes: int = Field(default=DEFAULT_MAX_UPLOAD_BYTES, ge=1)
+    max_upload_seconds: float = Field(default=DEFAULT_MAX_UPLOAD_SECONDS, gt=0)
+    neighbours_per_window: int = Field(default=DEFAULT_NEIGHBOURS_PER_WINDOW, ge=1)
+    min_run_windows: int = Field(default=DEFAULT_MIN_RUN_WINDOWS, ge=1)
+    match_threshold: float = Field(default=DEFAULT_MATCH_THRESHOLD, ge=0, le=1)
+    max_matches: int = Field(default=DEFAULT_MAX_MATCHES, ge=1)
+    silence_threshold_dbfs: float = DEFAULT_SILENCE_THRESHOLD_DBFS
 
 
 class SeedSettings(CopyrightSettings):

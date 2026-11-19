@@ -5,10 +5,7 @@ from __future__ import annotations
 
 import csv
 import io
-import math
-import struct
 import threading
-import wave
 import zipfile
 from collections import Counter
 from collections.abc import Iterator, Sequence
@@ -19,15 +16,13 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from songcheck.fma.archive import track_path
 from songcheck.fma.prepare import FmaSources
+from songcheck.sample import sweep_wav
 
 LOCALHOST = "127.0.0.1"
 POLL_SECONDS = 0.01
 KEEP_ALIVE_PROTOCOL = "HTTP/1.1"
 AUDIO_PATH = "/fma_small.zip"
 METADATA_PATH = "/fma_metadata.zip"
-SAMPLE_RATE = 16_000
-SAMPLE_WIDTH = 2
-AMPLITUDE = 8_000
 # Cuatro segundos en PCM de 16 bits a 16 kHz pesan 128 KB, más que el mínimo de una pista.
 TRACK_SECONDS = 4.0
 BASE_HZ = 220.0
@@ -61,19 +56,8 @@ SILENT_BYTES = 1_500
 
 
 def wav_bytes(seconds: float, frequency: float) -> bytes:
-    """Un tono en WAV, que libsndfile reconoce por su cabecera aunque se llame `.mp3`."""
-    frames = round(seconds * SAMPLE_RATE)
-    samples = (
-        round(AMPLITUDE * math.sin(2 * math.pi * frequency * index / SAMPLE_RATE))
-        for index in range(frames)
-    )
-    buffer = io.BytesIO()
-    with wave.open(buffer, "wb") as audio:
-        audio.setnchannels(1)
-        audio.setsampwidth(SAMPLE_WIDTH)
-        audio.setframerate(SAMPLE_RATE)
-        audio.writeframes(struct.pack(f"<{frames}h", *samples))
-    return buffer.getvalue()
+    """Un WAV, que libsndfile reconoce por su cabecera aunque se llame `.mp3`."""
+    return sweep_wav(seconds, frequency)
 
 
 def tracks_csv(tracks: Sequence[ToyTrack]) -> bytes:

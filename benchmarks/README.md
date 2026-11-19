@@ -127,6 +127,7 @@ docker compose --profile bench down       # apaga PostgreSQL
 | [11. Servicio de rostros](#11-servicio-de-rostros--registro-reconocimiento-y-conjunto-abierto) | registrar una toma y reconocer por el API según el tamaño de la galería; umbrales de coseno 1:N y duplicados falsos con LFW | [reconocer](figures/rostros-servicio-reconocer.png), [conjunto abierto](figures/rostros-servicio-conjunto-abierto.png) |
 | [12. Catálogo de copyright](#12-catálogo-de-copyright--descargar-cargar-e-indexar-fma-por-tramos) | descargar fma_small por rangos, cargar 83 290 tramos por NDJSON y construir su HNSW, según el tamaño del catálogo; disco del gestor | [catálogo](figures/copyright-catalogo.png) |
 | [13. Ingesta del RAG](#13-ingesta-del-rag--embeddings-e5-en-onnx-y-carga-con-bm25-y-hnsw) | multilingual-e5-small fp32 vs int8 en ONNX por hilos; siembra de 98 585 fragmentos y cada etapa de la carga (NDJSON, índice invertido, HNSW) | [embeddings](figures/rag-embeddings.png), [carga](figures/rag-ingesta.png) |
+| [14. Detección de copyright](#14-detección-de-copyright--latencia-de-post-detections-y-casos-de-control) | latencia de `POST /detections` por duración de la subida y sus etapas; puntajes de copias enteras, tramos de 15 y 7,5 s y pistas no catalogadas frente al umbral | [latencia](figures/copyright-deteccion.png), [etapas](figures/copyright-deteccion-etapas.png), [puntajes](figures/copyright-deteccion-puntajes.png) |
 
 **Cómo leer las gráficas.** Cada una es una fila de paneles, uno por operación, con el
 número de filas en horizontal y una línea por técnica. Los dos ejes son logarítmicos: los
@@ -1848,6 +1849,106 @@ embeddings (`--cache-dir`, por omisión la del corpus) tiene que empezar vacía 
 cálculo, y `--engine-dir`, sin las tablas del RAG para medir la carga; el gestor queda
 sembrado al terminar. `--sizes` cambia los tamaños de las etapas y `--search-repetitions`, las
 búsquedas por pregunta.
+
+## 14. Detección de copyright — latencia de `POST /detections` y casos de control
+
+`copyright_detection_benchmark.py` mide la detección del servicio de copyright (#76; ver
+[`apps/copyright/`](../apps/copyright/README.md#detección)): una subida se corta en ventanas
+de 5 s cada 2,5 s, el gestor busca los vecinos de todas en un lote del HNSW de tramos y la
+votación por desfase arma las coincidencias. El gestor es **una copia** del que dejó el
+trabajo de carga con el catálogo entero, servida por uvicorn en otro proceso y en un puerto
+libre; de la copia se borran los tramos de 40 canciones al azar, que pasan a ser **pistas no
+catalogadas**: música real del mismo FMA que el catálogo ya no tiene. Quedan 7 954
+canciones. El servicio corre en el proceso del experimento con su configuración por omisión
+(10 vecinos por ventana, racha mínima de 2, umbral 0,45) y habla con el gestor por HTTP.
+
+**Qué se mide.** (1) La **latencia** de la petición entera, medida en el cliente, para
+subidas de 30, 60 y 180 s: 10 subidas distintas por duración, cada una pistas de 30 s
+pegadas (una del catálogo, una no catalogada, …) en MP3 a 44,1 kHz estéreo, con sus etapas
+de `Server-Timing`. (2) **Casos de control**, 20 de cada uno: una pista del catálogo entera;
+un tramo de 15 s (de 6 a 21 s) pegado a los 10 s de una pista no catalogada, con un desfase
+de 4 s que **no cae en la rejilla** de 2,5 s; un tramo de 7,5 s (de 10 a 17,5 s) pegado a
+los 5 s, la copia más corta que llena dos ventanas; y una pista no catalogada sola. De cada
+caso se guarda el puntaje de la canción copiada y el mejor de cualquier otra.
+
+**Dónde corrió.** Apple M4 Pro (12 núcleos), macOS, Python 3.12. La carga media antes de
+cada duración fue de 4,9 a 5,1 (está en el JSON): otros procesos ocupaban unos cinco
+núcleos.
+
+### Resultados medidos
+
+![Latencia de la detección](figures/copyright-deteccion.png)
+
+| Subida | Ventanas | p50 | p95 | p50 por ventana | Copias del catálogo encontradas con su desfase |
+|---:|---:|---:|---:|---:|---:|
+| 30 s | 11 | 79,8 ms | 87,2 ms | 7,26 ms | 10 de 10 |
+| 60 s | 23 | 157,4 ms | 165,4 ms | 6,85 ms | 10 de 10 |
+| 180 s | 71 | **489,8 ms** | **531,9 ms** | 6,90 ms | 30 de 30 |
+
+![Etapas de la detección](figures/copyright-deteccion-etapas.png)
+
+| Etapa (mediana) | 30 s | 60 s | 180 s |
+|---|---:|---:|---:|
+| reconocer el formato (`probe`) | 0,09 ms | 0,09 ms | 0,11 ms |
+| nivel por ventana: decodificar en el servicio (`loudness`) | 24,6 ms | 50,9 ms | 159,4 ms |
+| `POST /media/segments`, ida y vuelta (`segments`) | 50,0 ms | 99,1 ms | 308,3 ms |
+| — decodificar en el gestor (`decode`) | 20,7 ms | 42,0 ms | 128,0 ms |
+| — MFCC y TF-IDF de las ventanas (`extraction`) | 23,7 ms | 48,3 ms | 160,4 ms |
+| — HNSW en lote (`search`) | 0,46 ms | 0,63 ms | 1,46 ms |
+| votación por desfase (`voting`) | 0,26 ms | 0,56 ms | 1,64 ms |
+| canciones candidatas por SQL (`songs`) | 3,4 ms | 4,7 ms | 13,3 ms |
+
+![Puntajes de los casos de control](figures/copyright-deteccion-puntajes.png)
+
+| Caso (20 de cada uno) | Puntaje de la copiada: mín. / mediana / máx. | Detectada (≥ 0,45) | Desfase informado | Otra canción ≥ 0,45 |
+|---|---:|---:|---|---:|
+| pista del catálogo entera | 0,986 / 0,997 / 1,000 | **20** | 0 s en las 20 | 1 |
+| tramo de 15 s fuera de la rejilla (desfase real 4 s) | 0,381 / 0,494 / 0,661 | **18** | 5 s en 17, 2,5 s en 3 | 1 |
+| tramo de 7,5 s | 0,196 / 0,266 / 0,390 | 0 | — | 2 |
+| pista no catalogada (mejor de cualquier canción) | 0,164 / 0,272 / 0,728 | — | — | **3** |
+
+### Conclusiones
+
+- **Una canción de 3 min se revisa en medio segundo** (p50 de 490 ms, p95 de 532 ms) contra
+  83 290 tramos, y el costo es lineal en las ventanas: unos 7 ms por ventana con cualquier
+  duración. El HNSW no pesa (1,5 ms para 71 búsquedas en lote) ni la votación (1,6 ms): todo
+  es **decodificar y sacar MFCC**.
+- **El audio se decodifica dos veces**: el servicio lo decodifica para medir el nivel de
+  cada ventana (159 ms con 3 min) y el gestor otra vez para sus MFCC (128 ms). Lo del
+  servicio rechaza un cuerpo dañado antes de llegar al gestor y deja una subida en silencio
+  sin consulta; correrlo a la vez que la búsqueda del gestor ahorraría cerca de un tercio de
+  la latencia, a cambio de mandar al gestor también las subidas en silencio.
+- **Las copias largas se separan bien; las cortas no.** Una pista copiada entera puntúa
+  0,99 o más, con su desfase exacto. Un tramo de 15 s fuera de la rejilla llega a 0,38-0,66
+  y se informa con el desfase del tramo del catálogo más cercano (5 o 2,5 s para un desfase
+  real de 4 s: a un salto o menos). Un tramo de 7,5 s cubre dos o tres de las 11 ventanas
+  que podía compartir, así que su puntaje no pasa de 0,27 por la similitud: queda donde
+  quedan las canciones que no se copiaron (mediana 0,27). Es lo que da la cobertura del
+  puntaje, que premia copias largas.
+- **El umbral provisional es 0,45**: pasan las 20 copias enteras y 18 de los 20 tramos de
+  15 s, y quedan por debajo 17 de las 20 pistas no catalogadas. Las tres que pasan
+  (0,52, 0,67 y 0,73) tienen rachas de 6, 7 y 8 ventanas seguidas con otra canción del FMA
+  (una de ellas, del mismo artista) en las que el original avanza con la subida: o comparten
+  material (bucles, otra versión) o el descriptor no las distingue, y solo escuchándolas se
+  sabe. Con 0,50
+  pasarían solo 9 de los 20 tramos de 15 s y las mismas tres no catalogadas. **La curva
+  ROC de la evaluación (#77) lo calibra** con muchos más casos y transformaciones del audio.
+- **La subida de 60 s no tiene la segunda copia**: tres pistas de 29,9 s dejan para la
+  tercera 0,2 s, que no llena una ventana; por eso son 10 copias y no 20.
+
+### Reproducirlo
+
+```bash
+uv run --no-sync python -m benchmarks.copyright_detection_benchmark \
+    --engine-dir data/copyright-engine --data-dir data/datasets
+uv run --no-sync python -m benchmarks.plot
+```
+
+`--engine-dir` es el directorio de datos de un gestor con el catálogo cargado (lo deja
+`python -m songcheck.seed`; el experimento trabaja sobre una copia temporal en
+`--workspace`), `--data-dir` la carpeta de datasets cuyas rutas guarda ese gestor,
+`--durations`, `--repetitions`, `--cases`, `--held-out` y `--seed` lo de arriba. La medida
+publicada tardó menos de 2 min.
 
 ## Gráficas
 

@@ -17,6 +17,7 @@ from benchmarks.plots import (
     rag,
     segments,
     shop,
+    shop_recommend,
     spatial,
     storage,
     text_search,
@@ -50,4 +51,5 @@ FIGURES: tuple[
     *copyright_catalog.FIGURES,
     *copyright_detection.FIGURES,
     *rag.FIGURES,
+    *shop_recommend.FIGURES,
 )

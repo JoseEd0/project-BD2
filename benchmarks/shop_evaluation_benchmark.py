@@ -11,9 +11,10 @@ proceso, cuyas compras conjuntas se materializaron solo con el entrenamiento (lo
 en `shop_materializaciones`). Para una muestra de usuarios con semilla guarda en `--signals`
 los candidatos de cada señal, con CLIP y con SIFT; todo lo demás es Python sobre esas listas:
 
-- cada señal sola, la fusión con los pesos por omisión, lo más vendido y una lista al azar;
+- cada señal sola, la fusión con los pesos de partida (`--starting-weights`, por omisión los de
+  la configuración), lo más vendido y una lista al azar;
 - los pesos de la fusión, buscados en una rejilla sobre el símplex **solo con la validación**,
-  y medidos una vez en la prueba; la diferencia con los de omisión, con intervalo pareado;
+  y medidos una vez en la prueba; la diferencia con los de partida, con intervalo pareado;
 - el arranque en frío por grupos: usuarios con pocas compras de entrenamiento, productos
   con pocas compras y fusiones sin compras conjuntas;
 - CLIP contra SIFT como señal visual, sola y fundida con compras y texto (con los pesos de
@@ -73,19 +74,20 @@ CLIP_ALONE = "visual (CLIP)"
 SIFT_ALONE = "visual (SIFT)"
 TEXT_ALONE = "texto (BM25)"
 NEARBY_ALONE = "cercanía"
-DEFAULT_FUSION = "fusión, pesos por omisión"
+STARTING_FUSION = "fusión, pesos de partida"
 TUNED_FUSION = "fusión, pesos ajustados"
 POPULAR = "lo más vendido"
 RANDOM = "al azar"
 WEIGHT_SEARCH = "búsqueda de pesos"
 WEIGHTS_OPERATION = "pesos en validación"
 PLACE = "puesto {}"
-DEFAULT_PLACE = "pesos por omisión"
-TUNED_MINUS_DEFAULT = "ajustados menos por omisión"
+STARTING_PLACE = "pesos de partida"
+TUNED_MINUS_STARTING = "ajustados menos de partida"
 TUNED_MINUS_COPURCHASE = "fusión ajustada menos compras conjuntas"
 CLIP_FUSION = "compras + CLIP + texto"
 SIFT_FUSION = "compras + SIFT + texto"
 SIFT_MINUS_CLIP = "SIFT menos CLIP (fundidas)"
+SIFT_MINUS_CLIP_ALONE = "SIFT menos CLIP (solas)"
 VISUAL_OPERATION = "prueba: parecido visual"
 COLD_USERS = "prueba: usuarios con {} compras"
 COLD_PRODUCTS = "prueba: productos con {} compras"
@@ -123,7 +125,11 @@ class Arguments:
     grid_steps: int
     resamples: int
     confidence: float
+    starting_weights: list[float]
     output: Path
+
+    def starting(self) -> FusionWeights:
+        return FusionWeights(*self.starting_weights)
 
 
 def run(arguments: Arguments) -> Report:
@@ -178,36 +184,36 @@ def _collection(arguments: Arguments) -> Collection:
     return Collection(
         DEFAULT_RECOMMENDATION_SPLIT,
         arguments.k,
-        _default_weights(),
+        arguments.starting(),
         Nearby(Point(LIMA["lat"], LIMA["lon"]), DEFAULT_NEARBY_RADIUS_METERS),
     )
 
 
 def _evaluate(report: Report, evaluator: Evaluator, arguments: Arguments) -> None:
     k = arguments.k
-    defaults = _default_weights()
+    starting = arguments.starting()
     tuned_search = _search(evaluator, FOUR_SIGNALS, arguments.grid_steps, _clip)
     tuned = tuned_search[0].weights
-    lists = _main_lists(evaluator, defaults, tuned, arguments.seed)
+    lists = _main_lists(evaluator, starting, tuned, arguments.seed)
     for name, ranked in lists.items():
         for target in Target:
             report.add(name, target.value, len(evaluator.users), 0.0,
                        **evaluator.summary(ranked, target, evaluator.everyone()))
-    _add_weight_search(report, evaluator, tuned_search, defaults, lists[DEFAULT_FUSION])
-    report.add(TUNED_MINUS_DEFAULT, Target.TEST.value, len(evaluator.users), 0.0,
-               **evaluator.difference(lists[TUNED_FUSION], lists[DEFAULT_FUSION], Target.TEST))
+    _add_weight_search(report, evaluator, tuned_search, starting, lists[STARTING_FUSION])
+    report.add(TUNED_MINUS_STARTING, Target.TEST.value, len(evaluator.users), 0.0,
+               **evaluator.difference(lists[TUNED_FUSION], lists[STARTING_FUSION], Target.TEST))
     report.add(TUNED_MINUS_COPURCHASE, Target.TEST.value, len(evaluator.users), 0.0,
                **evaluator.difference(lists[TUNED_FUSION], lists[COPURCHASE_ALONE],
                                       Target.TEST))
     _add_cold_start(report, evaluator, lists)
     _add_visual(report, evaluator, arguments, lists)
-    report.parameters["pesos_por_omision"] = asdict(defaults)
+    report.parameters["pesos_de_partida"] = asdict(starting)
     report.parameters["pesos_ajustados"] = asdict(tuned)
     report.parameters["k"] = k
 
 
 def _main_lists(
-    evaluator: Evaluator, defaults: FusionWeights, tuned: FusionWeights, seed: int
+    evaluator: Evaluator, starting: FusionWeights, tuned: FusionWeights, seed: int
 ) -> dict[str, list[list[str]]]:
     k = evaluator.settings.k
     split = evaluator.split
@@ -218,7 +224,7 @@ def _main_lists(
         CLIP_ALONE: evaluator.lists(_signal_alone(Signal.VISUAL, k)),
         TEXT_ALONE: evaluator.lists(_signal_alone(Signal.TEXT, k)),
         NEARBY_ALONE: evaluator.lists(_signal_alone(Signal.NEARBY, k)),
-        DEFAULT_FUSION: evaluator.lists(_fusion(defaults, k, _clip)),
+        STARTING_FUSION: evaluator.lists(_fusion(starting, k, _clip)),
         TUNED_FUSION: evaluator.lists(_fusion(tuned, k, _clip)),
         POPULAR: evaluator.lists(lambda _, excluded: most_popular(popular, excluded, k)),
         RANDOM: evaluator.lists(
@@ -251,8 +257,8 @@ def _add_weight_search(
     report: Report,
     evaluator: Evaluator,
     found: Sequence[WeightScore],
-    defaults: FusionWeights,
-    default_lists: Sequence[Sequence[str]],
+    starting: FusionWeights,
+    starting_lists: Sequence[Sequence[str]],
 ) -> None:
     report.add(
         WEIGHT_SEARCH,
@@ -270,10 +276,10 @@ def _add_weight_search(
         report.add(PLACE.format(place), WEIGHTS_OPERATION, len(evaluator.users), 0.0,
                    puesto=place, pesos=asdict(score.weights), rotulo=label(score.weights),
                    **evaluator.summary(ranked, Target.VALIDATION, evaluator.everyone()))
-    report.add(DEFAULT_PLACE, WEIGHTS_OPERATION, len(evaluator.users), 0.0,
-               puesto=_place_of(found, defaults), pesos=asdict(defaults),
-               rotulo=f"{label(defaults)} (omisión)",
-               **evaluator.summary(default_lists, Target.VALIDATION, evaluator.everyone()))
+    report.add(STARTING_PLACE, WEIGHTS_OPERATION, len(evaluator.users), 0.0,
+               puesto=_place_of(found, starting), pesos=asdict(starting),
+               rotulo=f"{label(starting)} (de partida)",
+               **evaluator.summary(starting_lists, Target.VALIDATION, evaluator.everyone()))
 
 
 def _add_cold_start(
@@ -332,6 +338,8 @@ def _add_visual(
         extra = {"pesos": asdict(weights)} if weights is not None else {}
         report.add(name, VISUAL_OPERATION, len(everyone), 0.0,
                    **evaluator.summary(ranked, Target.TEST, everyone), **extra)
+    report.add(SIFT_MINUS_CLIP_ALONE, VISUAL_OPERATION, len(everyone), 0.0,
+               **evaluator.difference(sift_alone, lists[CLIP_ALONE], Target.TEST))
     report.add(SIFT_MINUS_CLIP, VISUAL_OPERATION, len(everyone), 0.0,
                **evaluator.difference(sift_fused, clip_fused, Target.TEST))
     report.add(SAME_RUNS, CONSISTENCY, len(everyone), 0.0, **_same_runs(evaluator.users))
@@ -391,12 +399,6 @@ def _rounded(weights: FusionWeights) -> FusionWeights:
     )
 
 
-def _default_weights() -> FusionWeights:
-    return FusionWeights(
-        DEFAULT_COPURCHASE_WEIGHT, DEFAULT_VISUAL_WEIGHT, DEFAULT_TEXT_WEIGHT, DEFAULT_NEARBY_WEIGHT
-    )
-
-
 def _parameters(
     arguments: Arguments, split: EvaluationSplit, users: Sequence[str]
 ) -> dict[str, Any]:
@@ -430,6 +432,18 @@ def main() -> None:
     parser.add_argument("--grid-steps", type=int, default=10)
     parser.add_argument("--resamples", type=int, default=1000)
     parser.add_argument("--confidence", type=float, default=0.95)
+    parser.add_argument(
+        "--starting-weights",
+        type=float,
+        nargs=4,
+        metavar=("COMPRAS", "VISUAL", "TEXTO", "CERCANIA"),
+        default=[
+            DEFAULT_COPURCHASE_WEIGHT,
+            DEFAULT_VISUAL_WEIGHT,
+            DEFAULT_TEXT_WEIGHT,
+            DEFAULT_NEARBY_WEIGHT,
+        ],
+    )
     parser.add_argument("--output", type=Path, default=results_directory(Path(__file__).parent))
     parsed = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")

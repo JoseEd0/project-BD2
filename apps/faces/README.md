@@ -68,9 +68,11 @@ python -m faces models --salida data/models/faces   # o con FACES_MODELS_DIR def
 python -m faces lfw --salida data/datasets/lfw      # deja lfw/<Persona>/<Persona>_0001.jpg
 ```
 
-`python -m faces models` es también lo que correrá la imagen del servicio al construirse
-(`RUN python -m faces models --salida /opt/faces/models` con `FACES_MODELS_DIR` apuntando
-ahí), de modo que el contenedor arranca con los modelos verificados y sin red.
+`python -m faces models` es también lo que corre la imagen del servicio al construirse:
+[`docker-build.sh`](docker-build.sh) es el paso propio de la app en
+[`deploy/service/Dockerfile`](../../deploy/service/Dockerfile), que deja los modelos en
+`/opt/app/models` (su compose fija `FACES_MODELS_DIR` ahí), de modo que el contenedor
+arranca con los modelos verificados y sin red.
 
 LFW se extrae en una carpeta aparte que se mueve al final, con el filtro `data` de
 `tarfile` (sin rutas absolutas, enlaces ni `..`), y se comprueba que hay 13 233 fotos de

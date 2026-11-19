@@ -34,9 +34,9 @@ from benchmarks.engine_process import engine_server
 from minigestor_client import AsyncClient
 from rag.config import RagSettings, load_embedder
 from rag.embeddings import Embedder
+from rag.evaluation.metrics import Relevance, first_relevant_rank, summarize
 from rag.fusion import RRF_K, reciprocal_rank_fusion
 from rag.language import Language, detect_language
-from rag.pipeline import CHUNK_ID_SEPARATOR
 from rag.prompt import estimated_tokens
 from rag.search import (
     BM25_SQL,
@@ -53,7 +53,6 @@ UNUSED_ENGINE_URL = "http://gestor.invalid"
 DEFAULT_WEIGHTS = (1.0, 0.5, 0.25, 0.1, 0.0)
 DEFAULT_DEPTHS = (5, 8, 10, 12)
 MRR_DEPTH = 10
-NEIGHBOUR_DISTANCE = 1
 COURSE_PREFIX = "curso:"
 PAPERS_SPANISH = "papers, pregunta en español"
 COURSE_SPANISH = "curso, pregunta en español"
@@ -66,6 +65,7 @@ OLD_HYBRID = "híbrida de antes"
 NEW_HYBRID = "híbrida"
 EXACT = "exacto"
 NEIGHBOUR = "vecino"
+RELEVANCES = {EXACT: Relevance.EXACT, NEIGHBOUR: Relevance.NEIGHBOUR}
 
 
 @dataclass(frozen=True, slots=True)
@@ -146,36 +146,19 @@ def ranked(item: Retrieved, mode: str, weight: float) -> list[str]:
     return [entry.key for entry in fused if entry.score > 0]
 
 
-def first_rank(keys: Sequence[str], gold: str, relevance: str) -> int | None:
-    paper, ordinal = gold.rsplit(CHUNK_ID_SEPARATOR, 1)
-    for rank, key in enumerate(keys, start=1):
-        if key == gold:
-            return rank
-        candidate_paper, candidate_ordinal = key.rsplit(CHUNK_ID_SEPARATOR, 1)
-        near = abs(int(candidate_ordinal) - int(ordinal)) <= NEIGHBOUR_DISTANCE
-        if relevance == NEIGHBOUR and candidate_paper == paper and near:
-            return rank
-    return None
-
-
 def scores(
     items: Sequence[Retrieved], mode: str, weight: float, depths: Sequence[int]
 ) -> dict[str, Any]:
     result: dict[str, Any] = {"preguntas": len(items)}
-    for relevance in (EXACT, NEIGHBOUR):
+    for name, relevance in RELEVANCES.items():
         ranks = [
-            first_rank(ranked(item, mode, weight), item.question.chunk_id, relevance)
+            first_relevant_rank(ranked(item, mode, weight), item.question.chunk_id, relevance)
             for item in items
         ]
-        for depth in depths:
-            found = sum(rank is not None and rank <= depth for rank in ranks)
-            result[f"recall_{depth}_{relevance}"] = round(found / len(items), 4)
-        result[f"mrr_{relevance}"] = round(
-            statistics.mean(
-                1 / rank if rank is not None and rank <= MRR_DEPTH else 0.0 for rank in ranks
-            ),
-            4,
-        )
+        summary = summarize(ranks, depths, MRR_DEPTH)
+        for depth, recall in summary.recall.items():
+            result[f"recall_{depth}_{name}"] = round(recall, 4)
+        result[f"mrr_{name}"] = round(summary.mrr, 4)
     for depth in depths:
         result[f"tokens_{depth}"] = round(
             statistics.median(

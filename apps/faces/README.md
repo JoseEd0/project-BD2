@@ -199,10 +199,10 @@ Un coseno de SFace se compara contra umbrales distintos según la pregunta:
 
 | Umbral | Valor | Pregunta | Por qué ese valor |
 |---|---:|---|---|
-| `FACES_SESSION_THRESHOLD` | 0,363 | ¿esta toma es de la misma persona que las anteriores? (1:1) | el de verificación que publica OpenCV para SFace; en los pares de LFW, un 0,17 % de falsos aceptados y un 1,2 % de falsos rechazos |
-| `FACES_MATCH_THRESHOLD` | 0,45 | ¿quién de la galería es? (1:N) | con 1 000 personas registradas, 0,363 reconoce como alguien al 46,5 % de los desconocidos; 0,45 al 1,5 %, a costa de no reconocer al 5 % de los registrados (medido abajo) |
-| `FACES_LOOKALIKE_THRESHOLD` | 0,45 | ¿se parece demasiado a alguien para registrarlo aparte? | el mismo que reconocer: por encima, el reconocimiento ya los confundiría. Bloqueó a 17 de 1 513 desconocidos (1,1 %) mientras la galería crecía hasta 1 000 personas |
-| `FACES_DUPLICATE_THRESHOLD` | 0,50 | ¿ya está registrado? (y se dice como quién) | 4 de esos 1 513 desconocidos (0,26 %) pasaron 0,50; ninguno mientras la galería tenía menos de 250 personas |
+| `FACES_SESSION_THRESHOLD` | 0,363 | ¿esta toma es de la misma persona que las anteriores? (1:1) | el de verificación que publica OpenCV para SFace, y lo que dan los datos: el umbral de máxima exactitud en los 10 pliegues de LFW es 0,336 y el de un FAR de 10⁻³ en los 16,5 millones de pares de personas distintas, 0,361; con 0,363, FAR de 9,1 · 10⁻⁴ y TAR de 99,6 % |
+| `FACES_MATCH_THRESHOLD` | 0,47 | ¿quién de la galería es? (1:N) | calibrado en #92 para que, con 1 000 personas, a lo sumo el 1 % de los desconocidos salga como alguien: cada comparación debe aceptar a lo sumo 10⁻⁵ impostores, y en los pares de LFW ese FAR está en 0,470. Con 1 679 personas de LFW en la galería, FPIR de 1,6 % y FNIR de 3,7 %; el 0,45 anterior daba 3,4 % y 3,0 % |
+| `FACES_LOOKALIKE_THRESHOLD` | 0,47 | ¿se parece demasiado a alguien para registrarlo aparte? | el mismo que reconocer: por encima, el reconocimiento ya los confundiría. Con 0,45 bloqueó a 17 de 1 513 desconocidos (1,1 %) mientras la galería crecía hasta 1 000 personas |
+| `FACES_DUPLICATE_THRESHOLD` | 0,50 | ¿ya está registrado? (y se dice como quién) | 4 de esos 1 513 desconocidos (0,26 %) pasaron 0,50; ninguno mientras la galería tenía menos de 250 personas. En los pares de LFW, un FAR de 4,6 · 10⁻⁶ |
 
 La diferencia entre 1:1 y 1:N es el tamaño de la galería: un desconocido se compara con
 todos, así que la probabilidad de que alguno pase el umbral crece con cada persona
@@ -215,13 +215,14 @@ cota superior). Promediar exige que todas las tomas se parezcan, no solo la mejo
 persona más parecida:
 
 - **≥ 0,50** → `409 AlreadyEnrolledError`: «Ya estás registrado como «X»», con su nombre;
-- **entre 0,45 y 0,50** → `409 LookalikeError`: «Te pareces mucho a alguien que ya está
+- **entre 0,47 y 0,50** → `409 LookalikeError`: «Te pareces mucho a alguien que ya está
   registrado…», **sin** decir a quién, porque puede ser otra persona;
 - debajo, se registra.
 
 En los dos primeros casos la sesión y sus tomas se borran: no hay nada más que hacer con
 ellas. Una persona vencida que aún no se borró no cuenta. Todos los umbrales son
-configuración; #92 los calibrará con los pares de LFW a un FAR fijo.
+configuración; la evaluación con LFW que los calibra está en
+[`benchmarks/README.md`](../../benchmarks/README.md#16-rostros-en-lfw--verificación-identificación-latencia-y-caché).
 
 **Dos registros que terminan a la vez.** La búsqueda de duplicados de `finish` corre dentro
 de la transacción que crea a la persona, después de borrar la sesión: ese `DELETE` bloquea
@@ -388,7 +389,7 @@ Además de lo común de `appkit` (`FACES_ENGINE_URL`, `FACES_ENGINE_KEY`,
 | `FACES_MAX_IMAGE_PIXELS` | píxeles que puede declarar una foto | `50000000` |
 | `FACES_MAX_QUERY_FACES` | rostros que busca `POST /identify` | `10` |
 | `FACES_SEARCH_NEIGHBOURS` | vecinos que se piden al HNSW | `10` |
-| `FACES_SESSION_THRESHOLD`, `FACES_MATCH_THRESHOLD`, `FACES_LOOKALIKE_THRESHOLD`, `FACES_DUPLICATE_THRESHOLD` | los umbrales de coseno | `0.363`, `0.45`, `0.45`, `0.5` |
+| `FACES_SESSION_THRESHOLD`, `FACES_MATCH_THRESHOLD`, `FACES_LOOKALIKE_THRESHOLD`, `FACES_DUPLICATE_THRESHOLD` | los umbrales de coseno | `0.363`, `0.47`, `0.47`, `0.5` |
 | `FACES_ANALYSIS_WORKERS` | fotos que la réplica analiza a la vez | `2` |
 | `FACES_PURGE_INTERVAL_SECONDS` | cada cuánto se borra lo vencido | `300` |
 | `FACES_REDIS_URL` | el Redis de los rastros; sin ella, no hay caché de rastros | sin valor (el compose: `redis://redis:6379/1`) |
@@ -606,7 +607,8 @@ tiempo es una petición completa. Resultados crudos en
 
 Con 100 personas, reconocer tarda 22,2 y 20,5 ms: la galería (el HNSW y el nombre de la
 persona) cuesta de 2 a 5 ms con cualquier tamaño medido, y el resto es analizar la foto.
-Con 1 000 personas, el umbral de 0,45 acepta como alguien al 1,5 % de los desconocidos y
-deja sin reconocer al 5 % de los registrados; el de OpenCV (0,363) aceptaría al 46,5 %.
+Con 1 000 personas, el umbral de 0,45 que tenía entonces el servicio aceptó como alguien
+al 1,5 % de los desconocidos y dejó sin reconocer al 5 % de los registrados; el de OpenCV
+(0,363) aceptaría al 46,5 %. #92 lo subió a 0,47 (ver *Duplicados y umbrales*).
 
 ![Reconocer una foto por el API](../../benchmarks/figures/rostros-servicio-reconocer.png)

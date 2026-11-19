@@ -159,9 +159,9 @@ class IdentityThresholds:
     """
 
     session: float = 0.363
-    match: float = 0.45
+    match: float = 0.47
     duplicate: float = 0.5
-    lookalike: float = 0.45
+    lookalike: float = 0.47
 
 
 def resemblance_of(score: float, thresholds: IdentityThresholds) -> Resemblance | None:

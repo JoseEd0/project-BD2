@@ -83,8 +83,9 @@ follow_imports_for_stubs = true
 ignore_missing_imports = true
 
 # Ni el stemmer de Snowball, ni libsndfile (`soundfile`), ni onnxruntime publican tipos. El
-# analizador de texto, el lector de audio y los codificadores de CLIP de la tienda los
-# envuelven en funciones tipadas, así que el resto del código no ve el `Any`.
+# analizador de texto, el lector de audio, los codificadores de CLIP de la tienda y el modelo
+# de embeddings del RAG los envuelven en funciones tipadas, así que el resto del código no ve
+# el `Any`.
 [[tool.mypy.overrides]]
 module = ["snowballstemmer", "soundfile", "onnxruntime"]
 ignore_missing_imports = true

@@ -10,6 +10,7 @@ from benchmarks.remixes.evaluation import (
     BY_FRAGMENTS,
     CHANCE,
     CHOSEN_POINT,
+    COVERAGE_KEY,
     F1,
     LATENCY,
     PRECISION,
@@ -149,7 +150,7 @@ def measured(report: Report, technique: str, operation: str) -> dict:
 
 def test_the_analysis_chooses_the_youden_threshold_and_measures_at_it():
     report = Report("prueba", {})
-    chosen = analyse(report, uploads(), THRESHOLDS, 0.5, (5.0, 7.5, 20.0), "original")
+    chosen = analyse(report, uploads(), THRESHOLDS, (5.0, 7.5, 20.0), "original")
     assert chosen == 0.75
     assert report.parameters["umbral_elegido"] == 0.75
     assert measured(report, CHOSEN_POINT, "original") | {"ms": 0.0} == {
@@ -166,7 +167,6 @@ def test_the_analysis_chooses_the_youden_threshold_and_measures_at_it():
     assert measured(report, ALL_VERSIONS, ROC)["fpr_elegido"] == 0.0
     assert measured(report, PRECISION, "original")["elegido"] == 1.0
     assert measured(report, RECALL, "original")["elegido"] == 1.0
-    assert measured(report, PRECISION, "original")["provisional"] == 0.5
     assert measured(report, F1, "ruido")["elegido"] == 0.0
     assert measured(report, UPLOAD_SPAN, "original")["iou"] == 0.75
     assert measured(report, "original", "original")["iou"] == pytest.approx(0.75)
@@ -223,6 +223,7 @@ def test_a_match_of_the_service_is_kept_compact_and_read_back():
         SONG_KEY: 7,
         SCORE_KEY: 0.123,
         SIMILARITY_KEY: 0.988,
+        COVERAGE_KEY: 0.5,
         WINDOWS_KEY: 2,
         UPLOAD_SPAN: [2.5, 10.0],
         "original": [5.0, 12.5],

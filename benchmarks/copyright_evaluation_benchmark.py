@@ -58,9 +58,9 @@ from benchmarks.remixes.distortions import (
     volume,
 )
 from benchmarks.remixes.evaluation import (
+    COVERAGE_KEY,
     SCORE_KEY,
     SIMILARITY_KEY,
-    WINDOWS_KEY,
     Scoring,
     Upload,
     add_scoring_comparison,
@@ -85,15 +85,13 @@ UPLOAD_NAME = "remix.flac"
 DEFAULT_POSITIVES = 200
 DEFAULT_NEGATIVES = 200
 DEFAULT_HELD_OUT = 200
-DEFAULT_SEED = 20261120
+DEFAULT_SEED = 20261121
 DEFAULT_MIN_FRAGMENTS = 1
 DEFAULT_MAX_FRAGMENTS = 3
 DEFAULT_MIN_FRAGMENT_SECONDS = 5.0
 DEFAULT_MAX_FRAGMENT_SECONDS = 20.0
 DEFAULT_CROSSFADE_SECONDS = 1.0
 DEFAULT_THRESHOLD_STEP = 0.01
-# El umbral provisional de #76 (benchmarks/README.md, §14), con el que se compara el elegido.
-PROVISIONAL_THRESHOLD = 0.45
 # 7,5 s es la copia más corta que llena dos ventanas seguidas del catálogo (ventana + salto).
 DEFAULT_LENGTH_BINS = (5.0, 7.5, 10.0, 15.0, 20.0)
 DEFAULT_LOAD_SAMPLES = 10
@@ -126,23 +124,15 @@ DISTORTIONS = (
     volume("volumen -3 dB", QUIETER_DB),
     volume("volumen -12 dB", MUCH_QUIETER_DB),
 )
-# Otras definiciones del puntaje, sobre las mismas coincidencias, para comparar con la del
-# servicio (similitud media · cobertura): la similitud sola, y las ventanas de la racha (sobre
-# las de un fragmento de 20 s) cuando su similitud media es alta, que no dependen de cuánto
-# duran la subida ni el original.
-RUN_WINDOWS_FOR_FULL_SCORE = 7
-HIGH_SIMILARITY = 0.9
+# El puntaje del servicio frente a otras definiciones, sobre las mismas coincidencias: el de
+# #76 (similitud media · cobertura), que la evaluación de #77 reemplazó, y la similitud sola.
 SCORINGS = (
-    Scoring("similitud · cobertura (servicio)", lambda match: float(match[SCORE_KEY])),
-    Scoring("similitud media", lambda match: float(match[SIMILARITY_KEY])),
+    Scoring("evidencia de la racha (servicio)", lambda match: float(match[SCORE_KEY])),
     Scoring(
-        f"ventanas / {RUN_WINDOWS_FOR_FULL_SCORE} si similitud ≥ {HIGH_SIMILARITY}",
-        lambda match: (
-            min(1.0, int(match[WINDOWS_KEY]) / RUN_WINDOWS_FOR_FULL_SCORE)
-            if float(match[SIMILARITY_KEY]) >= HIGH_SIMILARITY
-            else 0.0
-        ),
+        "similitud · cobertura (#76)",
+        lambda match: float(match[SIMILARITY_KEY]) * float(match[COVERAGE_KEY]),
     ),
+    Scoring("similitud media", lambda match: float(match[SIMILARITY_KEY])),
 )
 
 
@@ -284,7 +274,6 @@ def run(arguments: argparse.Namespace) -> Report:
             "hop_seconds": WINDOWING.hop_seconds,
             "neighbours_per_window": settings.neighbours_per_window,
             "min_run_windows": settings.min_run_windows,
-            "provisional_threshold": arguments.provisional_threshold,
             "threshold_step": arguments.threshold_step,
             "length_bins": list(arguments.length_bins),
             "machine": machine_description(),
@@ -302,7 +291,6 @@ def run(arguments: argparse.Namespace) -> Report:
         report,
         uploads,
         thresholds,
-        arguments.provisional_threshold,
         arguments.length_bins,
         DISTORTIONS[0].name,
     )
@@ -354,12 +342,6 @@ def main() -> None:
     parser.add_argument("--max-fragment-seconds", type=float, default=DEFAULT_MAX_FRAGMENT_SECONDS)
     parser.add_argument("--crossfade-seconds", type=float, default=DEFAULT_CROSSFADE_SECONDS)
     parser.add_argument("--threshold-step", type=float, default=DEFAULT_THRESHOLD_STEP)
-    parser.add_argument(
-        "--provisional-threshold",
-        type=float,
-        default=PROVISIONAL_THRESHOLD,
-        help="umbral con que se compara el elegido",
-    )
     parser.add_argument("--length-bins", type=float, nargs="+", default=DEFAULT_LENGTH_BINS)
     parser.add_argument("--load-samples", type=int, default=DEFAULT_LOAD_SAMPLES)
     parser.add_argument(

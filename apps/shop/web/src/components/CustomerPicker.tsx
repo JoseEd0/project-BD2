@@ -23,7 +23,7 @@ export function CustomerPicker() {
     <div className="customer">
       <label htmlFor={id} className="customer-label">
         <Icon name="user" size={18} />
-        <span>Cliente</span>
+        <span className="customer-word">Cliente</span>
       </label>
       <select
         id={id}

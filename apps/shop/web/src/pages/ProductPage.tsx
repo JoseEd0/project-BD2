@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router";
 
 import { useCustomerRecommendations, useProduct, useProductRecommendations } from "../api/shop";
 import type { Product, Recommendations } from "../api/types";
+import { Icon } from "../components/Icon";
 import { ProblemNotice } from "../components/ProblemNotice";
 import { ProductPhoto } from "../components/ProductPhoto";
 import { RecommendationRails } from "../components/RecommendationRails";
@@ -28,10 +29,10 @@ function ProductSheet({ product }: { readonly product: Product }) {
           {trail.join(" › ")}
         </p>
       )}
+      <p className={price === null ? "tag-price tag-price-missing" : "tag-price"}>{price ?? "Sin precio"}</p>
       <h1 className="sheet-title" lang="en">
         {product.titulo ?? "Producto sin título"}
       </h1>
-      <p className={price === null ? "tag-price tag-price-missing" : "tag-price"}>{price ?? "Sin precio"}</p>
       <dl className="sheet-facts">
         {product.marca && (
           <div>
@@ -61,7 +62,10 @@ function Description({ text }: { readonly text: string | null }) {
   }
   return (
     <details className="description">
-      <summary>Descripción de la ficha (en inglés)</summary>
+      <summary>
+        <Icon name="right" size={18} />
+        Descripción de la ficha (en inglés)
+      </summary>
       <div lang="en">
         {bullets.length > 0 && (
           <ul>
@@ -123,16 +127,19 @@ export default function ProductPage() {
     <article className="product">
       <title>{`${item.titulo ?? item.id} · ${APP.name}`}</title>
       <div className="product-top">
-        <div className="product-photo">
-          <ProductPhoto productId={item.id} hasPhoto={item.imagen !== null} eager />
-        </div>
-        <div className="product-side">
+        <div className="product-main">
+          <div className="product-photo">
+            <ProductPhoto productId={item.id} hasPhoto={item.imagen !== null} eager />
+          </div>
+          <span className="tile-string product-string" aria-hidden="true" />
           <ProductSheet product={item} />
-          <PurchaseBox product={item} onBeforePurchase={snapshot} onPurchased={() => setPurchased(true)} />
           <Description text={item.descripcion} />
         </div>
+        <div className="product-side">
+          <PurchaseBox product={item} onBeforePurchase={snapshot} onPurchased={() => setPurchased(true)} />
+          <StockPanel productId={item.id} />
+        </div>
       </div>
-      <StockPanel productId={item.id} />
       {purchased && forCustomer.data !== undefined && (
         <ChangedNotice
           fetching={forCustomer.isFetching}

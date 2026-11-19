@@ -33,15 +33,15 @@
   /* Tintas de sello, sobre manila en los dos temas. */
   --stamp-compras: #5b2a86;
   --stamp-visual: #1d4e89;
-  --stamp-texto: #23633a;
-  --stamp-cercania: #9e2a1f;
+  --stamp-texto: #1f5a34;
+  --stamp-cercania: #922619;
   --stamp-new: #16171a;
 
   /* Las mismas señales fuera de la etiqueta (cabeceras de fila, mapa). */
   --signal-compras: #5b2a86;
   --signal-visual: #1d4e89;
-  --signal-texto: #23633a;
-  --signal-cercania: #9e2a1f;
+  --signal-texto: #1f5a34;
+  --signal-cercania: #922619;
 
   --font-ui: "Archivo Variable", "Archivo", system-ui, sans-serif;
   --font-code: ui-monospace, "SF Mono", Menlo, Consolas, monospace;

@@ -13,6 +13,9 @@ from faces.shots import QueryFace, analyze_query
 
 Clock = Callable[[], float]
 NO_FACE_MESSAGE = REJECTION_MESSAGES[RejectionReason.NO_FACE]
+TOO_SMALL_MESSAGE = (
+    "Los rostros se ven muy pequeños para reconocerlos. Acércate o acerca la cámara."
+)
 
 
 class IdentificationService:
@@ -57,6 +60,8 @@ class IdentificationService:
 def _summary(faces: list[IdentifiedFace]) -> str:
     if not faces:
         return NO_FACE_MESSAGE
+    if all(face.status is MatchStatus.TOO_SMALL for face in faces):
+        return TOO_SMALL_MESSAGE
     names = [face.display_name for face in faces if face.display_name is not None]
     if not names:
         return "No reconocemos a nadie en la foto."

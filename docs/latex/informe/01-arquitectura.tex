@@ -105,8 +105,8 @@ consola es \texttt{admin}, y cada API atiende con una clave \texttt{write} y usa
 EXISTS}). Cada interfaz es un nginx que está solo en la red de su aplicación y reenvía
 \texttt{/api} a su API, con límites de tamaño del cuerpo y de peticiones por segundo; así,
 una interfaz no puede hablar con el gestor ni con otra aplicación. Las API no guardan
-estado y escalan con réplicas detrás de su nginx; el RAG y rostros usan además un Redis
-sin disco como caché. Cada aplicación tiene un trabajo de carga inicial (perfil
+estado y escalan con réplicas detrás de su nginx; rostros usa además un Redis sin disco
+para guardar los rastros de cada sesión en vivo. Cada aplicación tiene un trabajo de carga inicial (perfil
 \texttt{seed}) que es repetible: una segunda ejecución no vuelve a cargar nada. Para
 cargar sus datos usan una ruta de carga masiva en NDJSON que confirma lotes de 1\,000 filas
 y construye los índices al final; con 10\,000 filas sin vector es 4.5 veces más rápida que

@@ -10,6 +10,7 @@ import { APP } from "./src/identity";
 /** Variables solo del servidor de desarrollo: sin el prefijo `VITE_`, nunca llegan al bundle. */
 const DEV_ENV_PREFIX = "WEB_DEV_";
 const TEST_API_BASE_URL = "http://app.test/api";
+const MODULE_EXTENSION = ".mjs";
 
 // Los mismos valores que `--ground` y `--strip` del tema claro en `src/styles.css`: el
 // manifiesto no puede leer CSS, y el sistema los pinta antes de que cargue la página.
@@ -52,6 +53,16 @@ export default defineConfig(({ mode }) => {
         }),
       ),
     ],
+    build: {
+      rollupOptions: {
+        output: {
+          // El worker de pdf.js viene como `.mjs`, que el `mime.types` de nginx no conoce: lo
+          // serviría como `application/octet-stream` y el navegador no carga un módulo así.
+          assetFileNames: (asset) =>
+            asset.names.some((name) => name.endsWith(MODULE_EXTENSION)) ? "assets/[name]-[hash].js" : "assets/[name]-[hash][extname]",
+        },
+      },
+    },
     server: { proxy },
     preview: { proxy },
     test: {

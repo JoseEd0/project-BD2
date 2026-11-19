@@ -99,7 +99,7 @@ def copurchase_pairs(count: int) -> str:
     cuántos clientes, desde `$2` clientes: `$1` partición, `$3…` los productos.
 
     Es el autojoin del historial con el `GROUP BY` por hash externo del gestor. El historial
-    de la izquierda entra por su hash (`producto IN`); el de la derecha se recorre entero.
+    de la izquierda entra por su B+ (`producto IN`); el de la derecha se recorre entero.
     """
     return (
         "SELECT a.producto AS producto, b.producto AS otro, COUNT(*) AS veces "

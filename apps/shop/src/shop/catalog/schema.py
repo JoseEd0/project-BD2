@@ -12,9 +12,11 @@ Cada tabla usa la organización y los índices que su consulta necesita:
   cronológico, para recorrer y cortar las compras por fecha.
 - `shop_tiendas`: heap con B+ sobre `id` y R-Tree sobre `ubicacion`: tiendas cercanas.
 - `shop_inventario`: heap con hash extendible sobre `producto`: dónde hay un producto.
-- `shop_historial`: las mismas compras en un heap con hash sobre `usuario` y sobre
+- `shop_historial`: las mismas compras en un heap con B+ no agrupado sobre `usuario` y sobre
   `producto`, porque el archivo secuencial no admite índices secundarios: lo que compró un
-  usuario y quién compró un producto, sin recorrer 511 836 filas.
+  usuario y quién compró un producto, sin recorrer 511 836 filas. B+ y no hash: un producto
+  tiene hasta ~1 900 compras y el hash extendible encadena las claves repetidas en
+  desbordamientos (la carga se hacía cada vez más lenta); la clave compuesta del B+ no.
 - `shop_compras_conjuntas`: heap con hash sobre `producto`; cuántos clientes compraron
   cada par de productos, materializado por la carga con el `GROUP BY` del gestor
   (`shop.seed.copurchases`).
@@ -102,8 +104,8 @@ SCHEMA: tuple[str, ...] = (
     f"CREATE TABLE IF NOT EXISTS {HISTORY} ("
     f"usuario VARCHAR({USER_ID_LENGTH}), producto VARCHAR({PRODUCT_ID_LENGTH}), "
     f"instante BIGINT, particion VARCHAR({SPLIT_LENGTH}))",
-    f"CREATE INDEX IF NOT EXISTS {HISTORY_USER_INDEX} ON {HISTORY} USING HASH (usuario)",
-    f"CREATE INDEX IF NOT EXISTS {HISTORY_PRODUCT_INDEX} ON {HISTORY} USING HASH (producto)",
+    f"CREATE INDEX IF NOT EXISTS {HISTORY_USER_INDEX} ON {HISTORY} USING BTREE (usuario)",
+    f"CREATE INDEX IF NOT EXISTS {HISTORY_PRODUCT_INDEX} ON {HISTORY} USING BTREE (producto)",
     COPURCHASES_TABLE,
     COPURCHASES_INDEX_STATEMENT,
     f"CREATE TABLE IF NOT EXISTS {MATERIALIZATIONS} ("

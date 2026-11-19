@@ -103,10 +103,10 @@ GET /consent ─▶ POST /enrollments ─▶ POST …/shots (de frente) ─▶ �
    anteriores (coseno de al menos `FACES_SESSION_THRESHOLD` con cada una: nadie completa el
    registro de otro) y que no esté ya registrada (ver *Duplicados*). Entonces se guarda su
    embedding en `face_tomas`, nunca la foto.
-4. `POST …/finish` exige todas las poses del plan, vuelve a buscar duplicados (alguien pudo
-   registrarse mientras tanto) y, **en una sola transacción** del gestor, borra la sesión y
-   sus tomas y crea la persona con un embedding por toma. Si la sesión ya no está —otra
-   petición la terminó o la canceló— la transacción se deshace y no se crea nadie: un
+4. `POST …/finish` exige todas las poses del plan y, **en una sola transacción** del gestor,
+   borra la sesión y sus tomas, vuelve a buscar duplicados (alguien pudo registrarse
+   mientras tanto) y crea la persona con un embedding por toma. Si la sesión ya no está
+   —otra petición la terminó o la canceló— la transacción se deshace y no se crea nadie: un
    registro se termina una sola vez.
 
 Más de una cara en el cuadro no siempre es un error: un rostro de menos de la mitad del
@@ -209,10 +209,15 @@ En los dos primeros casos la sesión y sus tomas se borran: no hay nada más que
 ellas. Una persona vencida que aún no se borró no cuenta. Todos los umbrales son
 configuración; #92 los calibrará con los pares de LFW a un FAR fijo.
 
-**Lo que no cubre.** Dos registros de la misma persona que terminan a la vez pueden pasar
-los dos: la búsqueda de duplicados y la escritura no están en la misma transacción (el HNSW
-no participa del bloqueo de una búsqueda). Es una carrera de milisegundos que solo puede
-provocar quien se registra dos veces a propósito.
+**Dos registros que terminan a la vez.** La búsqueda de duplicados de `finish` corre dentro
+de la transacción que crea a la persona, después de borrar la sesión: ese `DELETE` bloquea
+`face_sesiones` en exclusiva hasta el final, así que dos `finish` se turnan, y el segundo
+busca con el primero ya confirmado y recibe «Ya estás registrado». La búsqueda toma
+`face_embeddings` y `face_personas` en modo compartido y las escrituras la suben a
+exclusivo; dos transacciones nunca suben a la vez, porque las dos esperan primero por
+`face_sesiones`. Toda transacción que toca la sesión y sus tomas borra en el mismo orden
+(sesión, luego tomas), para que dos no se crucen los bloqueos. Un test termina dos sesiones
+de la misma cara en paralelo: una crea la persona y la otra responde `409`.
 
 ## Estado de las sesiones
 
@@ -389,9 +394,10 @@ FACES_MODELS_DIR=data/models/faces uv run --no-sync python -m pytest -q apps/fac
   que el test adelanta: consentimiento ausente, rechazado o de otra versión (y que no queda
   nada en el gestor), el nombre, el plan y su guía, tomas de otra persona, registrar →
   reconocer → borrar (y que las tablas quedan vacías y solo guardan números), «ya estás
-  registrado como», «te pareces mucho» sin el nombre, terminar dos veces, cancelar, sesiones
-  e intentos que se acaban, registros que vencen y la purga, fotos demasiado pesadas, con
-  demasiados píxeles, vacías o que no son imágenes, y las migraciones repetidas.
+  registrado como», «te pareces mucho» sin el nombre, terminar dos veces, dos sesiones de la
+  misma cara que terminan a la vez, cancelar, sesiones e intentos que se acaban, registros
+  que vencen y la purga, fotos demasiado pesadas, con demasiados píxeles, vacías o que no
+  son imágenes, y las migraciones repetidas.
 
 Los que corren los modelos usan tres fotos de dominio público de la NASA
 ([`tests/fixtures/`](tests/fixtures/README.md)): un retrato, otro retrato de la misma

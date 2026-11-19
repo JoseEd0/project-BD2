@@ -1,0 +1,70 @@
+# Copyright en audio (opción C): su API, su interfaz, su carga inicial y su túnel, montados
+# como cualquier aplicación (ver apps/README.md, «Desplegar una app»). Lo incluye el
+# compose raíz. Hasta que llegue su interfaz (#78), la web es la plantilla del kit.
+#
+# El catálogo de FMA no viaja en la imagen: el gestor lee el audio por su ruta, así que la
+# carpeta de datasets entra de solo lectura en el gestor (compose raíz) y en la carga
+# inicial en la misma ruta, /app/data/datasets, que está en MINIGESTOR_IMPORT_DIRS del
+# gestor. Se baja antes en el anfitrión: `uv run python -m songcheck.fma --data-dir data/datasets`.
+
+services:
+  copyright-api:
+    extends: { file: ../../deploy/app.compose.yaml, service: api }
+    build:
+      args:
+        APP_DIR: copyright
+        APP_PACKAGE: songcheck
+    image: minigestor-copyright-api
+    environment: &copyright-environment
+      COPYRIGHT_ENGINE_URL: http://engine:8000
+      COPYRIGHT_ENGINE_KEY: ${COPYRIGHT_ENGINE_KEY:-}
+      COPYRIGHT_MIGRATION_KEY: ${COPYRIGHT_MIGRATION_KEY:-}
+      COPYRIGHT_LOG_LEVEL: ${COPYRIGHT_LOG_LEVEL:-INFO}
+    networks: [data, copyright]
+    depends_on:
+      engine:
+        condition: service_healthy
+
+  copyright-web:
+    extends: { file: ../../deploy/app.compose.yaml, service: web }
+    build:
+      args:
+        APP_DIR: web-kit/template
+    image: minigestor-copyright-web
+    environment:
+      API_UPSTREAM: http://copyright-api:8000
+    ports:
+      - ${COPYRIGHT_WEB_PORT:-8101}:8080
+      - ${COPYRIGHT_WEB_TLS_PORT:-8401}:8443
+    networks: [copyright]
+    depends_on:
+      copyright-api:
+        condition: service_healthy
+
+  copyright-seed:
+    extends: { file: ../../deploy/app.compose.yaml, service: seed }
+    profiles: [seed]
+    image: minigestor-copyright-api
+    environment:
+      <<: *copyright-environment
+      COPYRIGHT_DATA_DIR: /app/data/datasets
+      # El CREATE INDEX del catálogo entero tarda minutos (ver apps/copyright/README.md).
+      COPYRIGHT_INDEX_TIMEOUT_SECONDS: ${COPYRIGHT_INDEX_TIMEOUT_SECONDS:-3600}
+    volumes:
+      - ${MINIGESTOR_DATASETS_DIR:-../../data/datasets}:/app/data/datasets:ro
+    networks: [data]
+    depends_on:
+      copyright-api:
+        condition: service_healthy
+
+  copyright-tunnel:
+    extends: { file: ../../deploy/app.compose.yaml, service: tunnel }
+    profiles: [tunnel]
+    command: ["tunnel", "--no-autoupdate", "--url", "http://copyright-web:8080"]
+    networks: [copyright]
+    depends_on:
+      copyright-web:
+        condition: service_healthy
+
+networks:
+  copyright: {}

@@ -39,7 +39,7 @@ from .llm import (
     TextDelta,
 )
 from .pricing import Attempt, TokenUsage, attempt_cost, total_cost, total_usage, worst_case_cost
-from .prompt import Prompt, Source, build_prompt, select_sources
+from .prompt import PASSAGE_SHARE, Prompt, Source, build_prompt, select_sources
 from .search import Paper, Retriever, SearchMode
 from .sse import sse_frame
 
@@ -67,6 +67,11 @@ class AnswerSettings:
     context_tokens: int
     max_tokens: int
     rrf_k: int
+
+    @property
+    def passage_tokens(self) -> int:
+        """El tope de un pasaje: `PASSAGE_SHARE` veces su parte del contexto."""
+        return PASSAGE_SHARE * self.context_tokens // self.chunks
 
 
 class SourceData(BaseModel):
@@ -169,7 +174,7 @@ class Answerer:
         settings = self._settings
         retriever = Retriever(engine, embedder, rrf_k=settings.rrf_k)
         hits = await retriever.search(question, SearchMode.HYBRID, settings.chunks)
-        sources = tuple(select_sources(hits, settings.context_tokens))
+        sources = tuple(select_sources(hits, settings.context_tokens, settings.passage_tokens))
         prompt = build_prompt(question, sources)
         reservation = self._reserve(prompt) if sources else None
         return PreparedAnswer(question, sources, prompt, reservation)

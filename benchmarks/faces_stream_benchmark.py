@@ -52,7 +52,7 @@ STAGES = ("decode", "detect", "track", "embed", "search")
 REST_STAGE = "resto"
 TAIL_FIELD = "p95_sobre_p50_ms"
 SERVER_TAIL_FIELD = "servidor_p95_sobre_p50_ms"
-PERCENTILES = (50, 95)
+PERCENTILES = (50, 95, 99)
 FRAME_SIZE = (640, 480)
 FACE_HEIGHT = 400
 BACKGROUND_GRAY = 96
@@ -79,6 +79,7 @@ class Run:
     rest_ms: list[float] = field(default_factory=list)
     server_total_ms: list[float] = field(default_factory=list)
     cached: int = 0
+    cached_per_frame: list[int] = field(default_factory=list)
     known: int = 0
     faces: int = 0
     dropped: int = 0
@@ -91,7 +92,8 @@ class Run:
         self.rest_ms.append(latency_ms - sum(float(timings[stage]) for stage in STAGES))
         self.server_total_ms.append(float(timings["total"]))
         self.faces += len(result["faces"])
-        self.cached += sum(face["cached"] for face in result["faces"])
+        self.cached_per_frame.append(sum(face["cached"] for face in result["faces"]))
+        self.cached += self.cached_per_frame[-1]
         self.known += sum(face["status"] == "known" for face in result["faces"])
         self.dropped = int(result["dropped"])
 
@@ -115,6 +117,7 @@ class Run:
         figures["reconocidos"] = self.known
         figures["descartados"] = self.dropped
         figures["latencias_ms"] = [round(value, DIGITS) for value in self.latencies_ms]
+        figures["de_la_cache_por_cuadro"] = self.cached_per_frame
         return figures
 
 

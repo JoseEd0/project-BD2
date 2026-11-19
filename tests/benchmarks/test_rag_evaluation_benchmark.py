@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 from apps.rag.tests.rag_llm_fakes import sources
 from benchmarks.rag_evaluation_benchmark import estimate_cost
+from benchmarks.rag_judge_agreement import judged_answers, review_sample, score
 from benchmarks.rag_questions import batch_questions
 
 from rag.answering import PreparedAnswer
@@ -64,3 +65,37 @@ def test_approved_candidates_are_numbered_after_the_batch_questions_already_ther
         ("b002", "2601.05347#3", Origin.BATCH)
     ]
     assert added[0].category == "cs.DB" and added[0].year == 2026
+
+
+def judged_report(*rows: tuple[str, bool | None]) -> dict[str, object]:
+    measurements = [
+        {
+            "extra": {
+                "pregunta_id": question_id,
+                "juez": None if faithful is None else {"fiel": faithful},
+            }
+        }
+        for question_id, faithful in rows
+    ]
+    return {"measurements": measurements}
+
+
+def test_only_answers_with_a_verdict_enter_the_review_sample():
+    verdicts = judged_answers(judged_report(("a01", True), ("a02", None), ("a03", False)))
+    assert verdicts == {"a01": True, "a03": False}
+    assert review_sample(verdicts, size=5, seed=1) == ["a01", "a03"]
+    assert review_sample(verdicts, size=1, seed=1) == review_sample(verdicts, size=1, seed=1)
+
+
+def test_the_score_pairs_labels_with_verdicts():
+    verdicts = {"a01": True, "a02": True, "a03": False}
+    labels = [
+        {"pregunta_id": "a01", "fiel": True},
+        {"pregunta_id": "a02", "fiel": False},
+        {"pregunta_id": "a03", "fiel": False},
+        {"pregunta_id": "z99", "fiel": True},
+    ]
+    result = score(verdicts, labels)
+    assert result["casos"] == 3
+    assert result["acuerdo"] == pytest.approx(2 / 3, abs=1e-4)
+    assert result["fieles_segun_el_juez"] == 2

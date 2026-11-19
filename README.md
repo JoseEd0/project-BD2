@@ -139,7 +139,7 @@ apps/                servicios de la Parte 5, que usan el gestor solo por su API
                      tramos de 5 s en el gestor, su trabajo de carga y su API
   shop/              tienda con recomendaciones (opción B): dataset de Amazon Reviews 2023
                      con tiendas de Lima
-  rag/               RAG sobre papers (opción A): corpus de arXiv con texto por página
+  rag/               RAG sobre papers (opción A): corpus, ingesta con e5 en ONNX y búsqueda
   faces/             reconocimiento facial: YuNet, SFace y LFW; registro, reconocimiento y borrado
   web-kit/           lógica sin estilos que comparten las interfaces de las aplicaciones
     template/        plantilla de la interfaz de cada app: React + TypeScript
@@ -194,7 +194,7 @@ proyecto:
 | [`apps/`](apps/) | aplicaciones de la Parte 5: su API y su interfaz | [README](apps/README.md) |
 | [`apps/copyright/`](apps/copyright/) | copyright en audio: descarga verificada de FMA, catálogo por tramos con HNSW, trabajo de carga y API de lectura | [README](apps/copyright/README.md) |
 | [`apps/shop/`](apps/shop/) | tienda con recomendaciones: dataset de compras reales, fotos, tiendas de Lima e inventario | [README](apps/shop/README.md) |
-| [`apps/rag/`](apps/rag/) | RAG sobre papers: cosecha de arXiv por licencia, texto por página, fragmentos | [README](apps/rag/README.md) |
+| [`apps/rag/`](apps/rag/) | RAG sobre papers: corpus de arXiv, embeddings e5 en ONNX, ingesta en el gestor, búsqueda BM25, vectorial e híbrida | [README](apps/rag/README.md) |
 | [`apps/faces/`](apps/faces/) | rostros: decodificación segura, detección con YuNet, embedding con SFace, descarga de modelos y de LFW; API de registro con consentimiento y controles de calidad, reconocimiento y borrado | [README](apps/faces/README.md) |
 | [`apps/web-kit/`](apps/web-kit/) | kit de las interfaces: cliente tipado, salud, tiempos por etapa, tema, PWA y la plantilla de cada app | [README](apps/web-kit/README.md) |
 | [`benchmarks/`](benchmarks/) | comparación experimental, con resultados y gráficas | [README](benchmarks/README.md) |
@@ -470,7 +470,8 @@ están en [`.env.example`](.env.example); las de la interfaz, en
 | `MINIGESTOR_API_PORT` | puerto del API con Docker y `deploy/compose.dev.yaml` | `8000` |
 | `SHOP_DATA_DIR` | carpeta de datasets de `python -m shop.dataset` si no se da `--data-dir` | — |
 | `MINIGESTOR_DATASETS_DIR` | carpeta de datos que el perfil `bench` monta como `data/datasets/` | `./data/datasets` |
-| `RAG_DATA_DIR` | carpeta donde el corpus del RAG deja `rag_papers/` sin `--data-dir` | — |
+| `RAG_DATA_DIR` | carpeta donde el corpus del RAG deja `rag_papers/` (y de donde la lee `rag.seed`) sin `--data-dir` | — |
+| `RAG_MODELS_DIR` | carpeta del modelo de embeddings del RAG (multilingual-e5-small en ONNX) y de sus tests | — |
 
 Las dos obligatorias no tienen un valor por omisión a propósito: sin `MINIGESTOR_CORS_ORIGINS`
 el API no arranca y dice por qué; sin `VITE_API_URL` la interfaz lo avisa en el panel de
@@ -555,6 +556,13 @@ uv run python -m rag.corpus build --data-dir data/datasets \
     --material Proyecto_Integrador_BD2.md --material docs/informe.pdf
 uv run python -m rag.corpus figure --manifest benchmarks/results/rag_corpus.json \
     --output benchmarks/figures/rag-fragmentos.png
+
+# ingesta del RAG: embeddings fp32 contra int8, la siembra del corpus entero en un gestor
+# propio y cada etapa de la carga (ver benchmarks/README.md §10)
+uv run python -m rag.models --salida data/models/rag --variante int8 --variante fp32
+.venv/bin/python -m benchmarks.rag_ingest_benchmark --data-dir data/datasets \
+    --models data/models/rag --engine-dir data/engine-rag --threads 1 2 4 8 12 \
+    --sample 1000 --repetitions 2 --seed-threads 8
 
 # velocidad del analizador de texto, sobre texto real en español
 .venv/bin/python -m benchmarks.text_analyzer_benchmark --repetitions 5 \

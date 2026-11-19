@@ -14,9 +14,8 @@ class TableLoad:
         table: la tabla.
         rows: filas que tiene que tener al terminar.
         loaded: filas que envió esta carga (0 si ya estaba completa).
-        seconds: desde la primera fila enviada hasta la respuesta del gestor.
-        tail_seconds: desde que se envió la última fila hasta la respuesta: el último lote
-            y la construcción de los índices diferidos (`deferred_indexes`).
+        seconds: desde la primera fila enviada hasta la respuesta del gestor, que llega
+            después de construir los índices diferidos.
         deferred_indexes: índices que el gestor construyó de una vez al final.
     """
 
@@ -24,7 +23,6 @@ class TableLoad:
     rows: int
     loaded: int
     seconds: float
-    tail_seconds: float
     deferred_indexes: tuple[str, ...] = ()
 
     @property

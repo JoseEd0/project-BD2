@@ -135,6 +135,8 @@ demos/               generador del dataset, descarga de lugares reales y de mús
 apps/                servicios de la Parte 5, que usan el gestor solo por su API REST
   client/            cliente tipado del API del gestor, con su contrato OpenAPI
   kit/               configuración, logs, salud, errores y descargas verificadas
+  copyright/         copyright en audio (opción C): las 8 000 pistas de FMA indexadas por
+                     tramos de 5 s en el gestor, su trabajo de carga y su API
   shop/              tienda con recomendaciones (opción B): dataset de Amazon Reviews 2023
                      con tiendas de Lima
   rag/               RAG sobre papers (opción A): corpus de arXiv con texto por página
@@ -190,6 +192,7 @@ proyecto:
 | [`src/api/`](src/api/) | API REST | [README](src/api/README.md) |
 | [`frontend/`](frontend/) | consola SQL de 4 paneles con panel de mapa, y páginas de búsqueda de texto y multimedia | [README](frontend/README.md) |
 | [`apps/`](apps/) | aplicaciones de la Parte 5: su API y su interfaz | [README](apps/README.md) |
+| [`apps/copyright/`](apps/copyright/) | copyright en audio: descarga verificada de FMA, catálogo por tramos con HNSW, trabajo de carga y API de lectura | [README](apps/copyright/README.md) |
 | [`apps/shop/`](apps/shop/) | tienda con recomendaciones: dataset de compras reales, fotos, tiendas de Lima e inventario | [README](apps/shop/README.md) |
 | [`apps/rag/`](apps/rag/) | RAG sobre papers: cosecha de arXiv por licencia, texto por página, fragmentos | [README](apps/rag/README.md) |
 | [`apps/faces/`](apps/faces/) | rostros: decodificación segura, detección con YuNet, embedding con SFace, descarga de modelos y de LFW; API de registro con consentimiento y controles de calidad, reconocimiento y borrado | [README](apps/faces/README.md) |
@@ -374,6 +377,17 @@ si se cortan, siguen donde quedaron:
 .venv/bin/python -m faces lfw --salida data/datasets/lfw
 export FACES_MODELS_DIR=data/models/faces   # para los tests que corren los modelos
 ```
+
+**Copyright en audio (Parte 5, opción C).** El servicio baja el `fma_small` entero (8 000
+pistas, 7,7 GB) y lo carga en el gestor cortado en tramos de 5 s. Con el API del gestor en
+marcha y `./data/datasets` en sus `MINIGESTOR_IMPORT_DIRS`:
+
+```bash
+COPYRIGHT_ENGINE_URL=http://127.0.0.1:8000 COPYRIGHT_ENGINE_KEY=local \
+COPYRIGHT_DATA_DIR=data/datasets uv run python -m songcheck.seed
+```
+
+Detalles, cifras y la elección de las ventanas en [`apps/copyright/README.md`](apps/copyright/README.md).
 
 ### 3.5 Cargar datos desde la interfaz
 

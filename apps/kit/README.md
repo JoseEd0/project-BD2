@@ -14,6 +14,7 @@ sondear igual. Eso vive aquí y no copiado en cada app:
 | [`migrations.py`](src/appkit/migrations.py) | migraciones repetibles al arrancar |
 | [`service.py`](src/appkit/service.py) | `create_service_app`: la aplicación FastAPI con todo lo anterior puesto |
 | [`download.py`](src/appkit/download.py) | descargas verificadas de modelos y datasets (ver [`apps/README.md`](../README.md)) |
+| [`ranges.py`](src/appkit/ranges.py) | un archivo remoto leído por rangos HTTP: de un `.zip` de gigabytes, solo su índice y los miembros pedidos |
 
 ## Un servicio en veinte líneas
 

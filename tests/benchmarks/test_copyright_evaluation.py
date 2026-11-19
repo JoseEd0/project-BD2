@@ -8,6 +8,8 @@ from benchmarks.common import Report
 from benchmarks.remixes.evaluation import (
     ALL_VERSIONS,
     BY_FRAGMENTS,
+    CHANCE,
+    CHOSEN_POINT,
     F1,
     LATENCY,
     PRECISION,
@@ -150,6 +152,15 @@ def test_the_analysis_chooses_the_youden_threshold_and_measures_at_it():
     chosen = analyse(report, uploads(), THRESHOLDS, 0.5, (5.0, 7.5, 20.0), "original")
     assert chosen == 0.75
     assert report.parameters["umbral_elegido"] == 0.75
+    assert measured(report, CHOSEN_POINT, "original") | {"ms": 0.0} == {
+        "tpr": 1.0,
+        "fpr": 0.0,
+        "ms": 0.0,
+    }
+    assert (measured(report, CHANCE, ROC)["fpr"], measured(report, CHANCE, ROC)["tpr"]) == (
+        [0.0, 1.0],
+        [0.0, 1.0],
+    )
     assert measured(report, "original", ROC)["tpr_elegido"] == 1.0
     assert measured(report, ALL_VERSIONS, ROC)["tpr_elegido"] == 0.5
     assert measured(report, ALL_VERSIONS, ROC)["fpr_elegido"] == 0.0

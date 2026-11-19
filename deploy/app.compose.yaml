@@ -1,0 +1,64 @@
+# Lo común de los servicios de cada aplicación. No se levanta solo: cada
+# `apps/<app>/compose.yaml` extiende estos servicios (`extends`) y pone lo suyo: nombre,
+# imagen, variables con su prefijo, redes y puertos. Las rutas son relativas a este archivo.
+
+services:
+  # El API de la app (FastAPI, sin estado): la única que llega al gestor, con su clave. No
+  # publica puertos, así que escala con `--scale <app>-api=N` detrás del nginx de su web.
+  api:
+    build:
+      context: ..
+      dockerfile: deploy/service/Dockerfile
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: ${APP_API_MEMORY:-512m}
+    # uvicorn espera SERVICE_DRAIN_SECONDS a las peticiones abiertas; esto le deja margen.
+    stop_grace_period: 20s
+    restart: unless-stopped
+
+  # La interfaz de la app: su build servido por nginx, que reenvía /api solo a su API. Por
+  # HTTP en el puerto de la app y, con un certificado en MINIGESTOR_CERTS_DIR, por HTTPS en
+  # el paralelo (ver deploy/certs.sh).
+  web:
+    build:
+      context: ../apps
+      dockerfile: web-kit/docker/Dockerfile
+    read_only: true
+    tmpfs:
+      - /tmp
+      # nginx renderiza aquí su configuración al arrancar (uid 101: el usuario de la imagen).
+      - /etc/nginx/conf.d:uid=101,gid=101
+    volumes:
+      - ${MINIGESTOR_CERTS_DIR:-../data/certs}:/etc/nginx/certs:ro
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: ${APP_WEB_MEMORY:-128m}
+    restart: unless-stopped
+
+  # La carga inicial de la app (`python -m <paquete>.seed`), con la imagen de su API: corre
+  # una vez y termina. Tiene que ser idempotente: repetirla no duplica nada. El perfil
+  # (`seed`) lo pone cada app: `extends` suma las listas, y uno aquí no se podría quitar.
+  seed:
+    command: ["sh", "-c", "exec python -m \"$$SERVICE_SEED_MODULE\""]
+    pull_policy: never
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      disable: true
+    restart: "no"
+
+  # Una URL HTTPS pública y temporal para la web de la app (Cloudflare Quick Tunnel), para
+  # probar la cámara desde cualquier celular. La URL sale en su log.
+  # Su perfil, `tunnel`, lo pone cada app.
+  tunnel:
+    image: cloudflare/cloudflared:${CLOUDFLARED_VERSION:-2026.10.7}
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped

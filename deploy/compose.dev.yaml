@@ -1,0 +1,16 @@
+# Para desarrollar: publica el API del gestor en el anfitrión, como antes de la Parte 5, para
+# `npm run dev` de la consola, /docs o un servicio corriendo en local. Nunca en un despliegue.
+#   docker compose -f compose.yaml -f deploy/compose.dev.yaml up
+# o, para no escribirlo cada vez, COMPOSE_FILE=compose.yaml:deploy/compose.dev.yaml en `.env`.
+
+services:
+  engine:
+    ports:
+      - ${MINIGESTOR_API_PORT:-8000}:8000
+    # La red `data` es interna: publicar un puerto necesita además una que no lo sea.
+    networks: [data, engine-dev]
+    environment:
+      MINIGESTOR_CORS_ORIGINS: ${MINIGESTOR_DEV_CORS_ORIGINS:-http://localhost:5173,http://localhost:8080}
+
+networks:
+  engine-dev: {}

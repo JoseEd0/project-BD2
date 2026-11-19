@@ -1,5 +1,11 @@
 name: minigestor
 
+# El gestor es un servicio con estado en una red interna; cada aplicación de la Parte 5 es
+# un producto aparte, con su API y su interfaz, en su propio compose y su propio puerto.
+# Las redes y el volumen compartidos se declaran solo aquí.
+include:
+  - deploy/example/compose.yaml
+
 x-engine: &engine
   image: minigestor-api
   volumes:
@@ -7,26 +13,33 @@ x-engine: &engine
     # Las fotos y pistas de la Parte 4 (ver `benchmarks/multimedia/README.md`). Si no están
     # descargadas, la demo no carga sus tablas y lo demás funciona igual.
     - ${MINIGESTOR_DATASETS_DIR:-./data/datasets}:/app/data/datasets:ro
+  networks: [data]
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
 
 services:
   demo:
     <<: *engine
-    # Usa la imagen que construye `api`: si la construyeran los dos a la vez, chocarían
+    # Usa la imagen que construye `engine`: si la construyeran los dos a la vez, chocarían
     # al etiquetarla.
     pull_policy: never
     command: ["python", "/app/demos/poblar_ecommerce.py", "--data-dir", "/data", "--solo-si-vacia"]
     restart: "no"
 
-  api:
+  # El gestor: la única réplica con estado. No publica ningún puerto y su red es interna:
+  # solo la consola y las API de las aplicaciones llegan a él, cada una con su clave.
+  engine:
     <<: *engine
     build:
       context: .
       target: engine
     environment:
       MINIGESTOR_CORS_ORIGINS: http://localhost:${MINIGESTOR_WEB_PORT:-8080}
+      # Vacía, el gestor queda abierto (lo avisa en su log). `python -m tools.compose_keys`
+      # la arma en `.env` con la clave de la consola y las de cada aplicación.
       MINIGESTOR_API_KEYS: ${MINIGESTOR_API_KEYS:-}
-    ports:
-      - ${MINIGESTOR_API_PORT:-8000}:8000
+      MINIGESTOR_LOG_LEVEL: ${MINIGESTOR_LOG_LEVEL:-INFO}
+    mem_limit: ${MINIGESTOR_ENGINE_MEMORY:-4g}
     # El apagado espera a las peticiones en curso (API_DRAIN_SECONDS) y después, con sus
     # sentencias canceladas, a que salgan (shutdown_grace_seconds) antes de cerrar el motor.
     stop_grace_period: 20s
@@ -35,16 +48,55 @@ services:
         condition: service_completed_successfully
     restart: unless-stopped
 
-  web:
+  # La consola del gestor de las Partes 1 a 4: la puerta de administración, con la clave
+  # `admin` de la consola que pone su nginx.
+  console:
     build: ./frontend
-    image: minigestor-web
+    image: minigestor-console
     environment:
+      API_UPSTREAM: http://engine:8000
       CONSOLE_API_KEY: ${MINIGESTOR_CONSOLE_KEY:-}
     ports:
       - ${MINIGESTOR_WEB_PORT:-8080}:8080
+    networks: [data, console]
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /etc/nginx/conf.d:uid=101,gid=101
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: ${MINIGESTOR_CONSOLE_MEMORY:-128m}
     depends_on:
-      api:
+      engine:
         condition: service_healthy
+    restart: unless-stopped
+
+  # La caché de las aplicaciones: sin disco (ni RDB ni AOF), con tope de memoria y LRU.
+  redis:
+    image: redis:${REDIS_VERSION:-8.8.4-alpine}
+    command:
+      - redis-server
+      - --save
+      - ""
+      - --appendonly
+      - "no"
+      - --maxmemory
+      - ${REDIS_MAXMEMORY:-256mb}
+      - --maxmemory-policy
+      - allkeys-lru
+    user: redis
+    networks: [cache]
+    read_only: true
+    tmpfs:
+      - /data
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: ${REDIS_MEMORY:-320m}
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
     restart: unless-stopped
 
   postgres:
@@ -76,6 +128,16 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+
+networks:
+  # Internas: sin salida a Internet ni puertos publicables. El gestor no se alcanza desde el
+  # anfitrión aunque alguien le añada un `ports:`.
+  data:
+    internal: true
+  cache:
+    internal: true
+  # La de la consola, para publicar su puerto.
+  console: {}
 
 volumes:
   minigestor-data:

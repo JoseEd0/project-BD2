@@ -563,15 +563,14 @@ materialización de 2\,231 a 793.6~s.
 los embeddings en CPU (38.4 fragmentos por segundo con int8 y 8 hilos); la carga en el
 gestor con los dos índices construidos al final tomó 65.0~s (tabla~\ref{tab:rag}). La
 variante int8 es un 14 a 22\,\% más rápida que fp32 con 4 y 8 hilos y sus vectores tienen un
-coseno medio de 0.994 con los de fp32. Con preguntas en español, BM25 sobre el índice en
-inglés solo encuentra los documentos del curso, mientras que la búsqueda vectorial cruza el
-idioma y trae el paper que corresponde. Para medir la recuperación se escribieron 65
-preguntas (45 en español y 20 en inglés), cada una con el fragmento del que salió
-(tabla~\ref{tab:rag-recuperacion}): quitar las palabras vacías del español sube el
-Recall@10 de BM25 de 0.354 a 0.569, y con eso la búsqueda híbrida queda por encima de la
-vectorial (0.677 contra 0.631). La calidad de las respuestas generadas (citas válidas,
-respuestas \guillemotleft{}no está en los documentos\guillemotright{}, costo y latencia hasta el primer texto) todavía no
-se midió porque requiere la clave del API del modelo.
+coseno medio de 0.994 con los de fp32. Para evaluar la recuperación se escribieron a mano
+63 preguntas en español: 45 cuya respuesta es un fragmento conocido y 18 sin respuesta en el
+corpus (tabla~\ref{tab:rag-recuperacion}). La búsqueda híbrida trae el fragmento correcto
+entre los 10 primeros en el 57.8\,\% de las preguntas y un fragmento del paper correcto en el
+84.4\,\%, contra 53.3\,\% y 80.0\,\% de la vectorial; BM25 llega a 42.2\,\% porque a la
+pregunta se le quitan sus palabras vacías (con la pregunta entera era 11.1\,\%). La calidad de
+las respuestas generadas (fidelidad, citas y respuestas \guillemotleft{}no está en los
+documentos\guillemotright{}) todavía no se midió porque requiere la clave del API del modelo.
 
 \begin{table}[!htb]
 \centering
@@ -618,18 +617,16 @@ completa, con Redis & \textbf{1.9 ms} & \textbf{3.4 ms} \\
 \end{minipage}\hfill
 \begin{minipage}[t]{0.49\textwidth}
 \centering
-\caption{Recuperación del RAG con 65 preguntas: fracción con su fragmento entre los $k$
-primeros (R@$k$) y MRR@10.}\label{tab:rag-recuperacion}
+\caption{Recuperación del RAG con las 45 preguntas con respuesta: fracción con el fragmento
+correcto (o su paper) entre los $k$ primeros, MRR@10 y mediana por búsqueda.}\label{tab:rag-recuperacion}
 \small\setlength{\tabcolsep}{4pt}
-\begin{tabular}{@{}lrrrr@{}}
+\begin{tabular}{@{}lrrrrr@{}}
 \toprule
-\textbf{Modo} & \textbf{R@5} & \textbf{R@10} & \textbf{R@12} & \textbf{MRR} \\
+\textbf{Modo} & \textbf{R@5} & \textbf{R@10} & \textbf{MRR} & \textbf{Paper} & \textbf{ms} \\
 \midrule
-BM25 & 0.354 & 0.354 & 0.354 & 0.245 \\
-BM25 sin palabras vacías & 0.462 & 0.569 & 0.585 & 0.314 \\
-vectorial & 0.523 & 0.631 & 0.646 & 0.393 \\
-híbrida, BM25 completo & 0.523 & 0.631 & 0.661 & \textbf{0.411} \\
-híbrida, sin vacías & \textbf{0.585} & \textbf{0.677} & \textbf{0.708} & 0.406 \\
+BM25 & 0.267 & 0.422 & 0.178 & 0.667 & \textbf{9.5} \\
+vectorial & 0.422 & 0.533 & \textbf{0.325} & 0.800 & 18.2 \\
+híbrida (RRF) & \textbf{0.467} & \textbf{0.578} & 0.286 & \textbf{0.844} & 23.9 \\
 \bottomrule
 \end{tabular}
 \end{minipage}
@@ -683,7 +680,7 @@ Tramos con votación por desfase & Copias enteras con puntaje de 0.99 y su desfa
 Consulta de ventanas en lote & 2.2 veces más rápida que una consulta por ventana, con los mismos vecinos. & El audio se decodifica una vez en el servicio y otra en el gestor. & Cualquier consulta con muchos fragmentos del mismo archivo. \\
 CLIP frente a SIFT & Índice en 0.81~s y 51.6~MiB; busca fotos a partir de un texto. & Calcular los embeddings es la mitad de la carga (137.8~s). & Búsqueda visual por contenido o por texto. \\
 Compras conjuntas materializadas & 4.5~ms por consulta contra 2.9~s al vuelo. & 793.6~s en la carga; la tabla envejece hasta recalcularla. & Señales que salen de un \texttt{GROUP BY} sobre toda la historia. \\
-Búsqueda híbrida (RRF) & Recall@10 de 0.677, sobre la vectorial (0.631) y BM25 (0.354). & Calcular los embeddings es el 97\,\% de la ingesta; BM25 necesita la consulta en el idioma del índice. & Preguntas en otro idioma que el corpus, con nombres propios. \\
+Búsqueda híbrida (RRF) & Recall@10 de 0.578, sobre la vectorial (0.533) y BM25 (0.422). & Calcular los embeddings es el 97\,\% de la ingesta; BM25 necesita la consulta en el idioma del índice. & Preguntas en otro idioma que el corpus, con nombres propios. \\
 Caché de rastros en Redis & Un tercio menos de mediana (23.8 a 16.4~ms); cualquier réplica sigue la sesión. & Se pierde si el rostro salta más de 47~px entre cuadros. & Video en vivo con rostros que se mueven poco. \\
 \bottomrule
 \end{tabular}

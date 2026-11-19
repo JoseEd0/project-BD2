@@ -46,7 +46,7 @@ from benchmarks.faces_stream_benchmark import (
 )
 
 REPORT_NAME = "rostros_cache"
-SPEED = "velocidad"
+SPEED = "por velocidad"
 TIMELINE = "aciertos por segundo"
 TECHNIQUE = "{speed} px por cuadro"
 DEFAULT_SPEEDS = (0, 8, 16, 32, 48, 64, 96)
@@ -115,13 +115,7 @@ def add_speed(
         if operation == WITH_CACHE:
             extra["ahorro_p50_ms"] = round(saved_p50, DIGITS)
             extra["ahorro_medio_ms"] = round(saved_mean, DIGITS)
-        report.add(
-            TECHNIQUE.format(speed=speed),
-            operation,
-            len(runs[operation].latencies_ms),
-            summary["p50_ms"],
-            **extra,
-        )
+        report.add(operation, SPEED, speed, summary["p50_ms"], **extra)
     cached = runs[WITH_CACHE].cached_per_frame
     rates = hit_rate_per_second(cached, fps)
     report.add(

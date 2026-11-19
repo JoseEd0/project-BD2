@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, TypeVar
 
 from benchmarks.plots.model import (
+    Axis,
     BarFigure,
     BarPanel,
     BreakdownFigure,
@@ -920,10 +921,12 @@ def _draw_xy_panel(axis: Any, panel: XYPanel, report: dict[str, Any]) -> None:
     from matplotlib.ticker import FuncFormatter
 
     axis.set_facecolor(SURFACE)
+    drawn: list[tuple[float, float]] = []
     for series in panel.series:
         points = xy_points(report, panel, series)
         if not points:
             continue
+        drawn += points
         style = series.style
         axis.plot(
             [x for x, _ in points],
@@ -938,8 +941,10 @@ def _draw_xy_panel(axis: Any, panel: XYPanel, report: dict[str, Any]) -> None:
             markeredgewidth=MARKER_RING,
             zorder=4 if series.points_only else 3,
         )
-    axis.set_xscale("log" if panel.x.logarithmic else "linear")
-    axis.set_yscale("log" if panel.y.logarithmic else "linear")
+    if drawn:
+        xs, ys = [x for x, _ in drawn], [y for _, y in drawn]
+        _logarithmic_scale(axis.xaxis, axis.set_xscale, axis.set_xlim, panel.x, xs)
+        _logarithmic_scale(axis.yaxis, axis.set_yscale, axis.set_ylim, panel.y, ys)
     for ticks in (axis.xaxis, axis.yaxis):
         ticks.set_major_formatter(FuncFormatter(lambda value, _: format_tick(value)))
     axis.grid(visible=True, which="major", color=GRID, linewidth=0.8, linestyle="solid", zorder=0)
@@ -952,3 +957,19 @@ def _draw_xy_panel(axis: Any, panel: XYPanel, report: dict[str, Any]) -> None:
     axis.set_xlabel(panel.x.label, color=SECONDARY_INK, fontsize=LABEL_SIZE, labelpad=4)
     axis.set_ylabel(panel.y.label, color=SECONDARY_INK, fontsize=LABEL_SIZE)
     axis.set_title(panel.title, color=INK, fontsize=PANEL_TITLE_SIZE, loc="left", pad=TITLE_PAD)
+
+
+def _logarithmic_scale(
+    ticks: Any, set_scale: Any, set_limits: Any, chosen: Axis, values: Sequence[float]
+) -> None:
+    """Un eje logarítmico con las marcas redondas de `vertical_scale` y sin marcas
+    menores, que matplotlib rotularía en notación científica."""
+    from matplotlib.ticker import FixedLocator, NullLocator
+
+    if not chosen.logarithmic:
+        return
+    set_scale("log")
+    scale = vertical_scale(values, 0.0)
+    set_limits(scale.low, scale.high)
+    ticks.set_major_locator(FixedLocator(scale.ticks))
+    ticks.set_minor_locator(NullLocator())

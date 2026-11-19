@@ -8,6 +8,7 @@ from benchmarks.plots import (
     copyright_catalog,
     copyright_detection,
     faces,
+    faces_evaluation,
     faces_service,
     faces_stream,
     indexes,
@@ -21,9 +22,18 @@ from benchmarks.plots import (
     text_search,
     vectors,
 )
-from benchmarks.plots.model import BarFigure, BreakdownFigure, CurveFigure, Figure, GalleryFigure
+from benchmarks.plots.model import (
+    BarFigure,
+    BreakdownFigure,
+    CurveFigure,
+    Figure,
+    GalleryFigure,
+    XYFigure,
+)
 
-FIGURES: tuple[Figure | BarFigure | CurveFigure | GalleryFigure | BreakdownFigure, ...] = (
+FIGURES: tuple[
+    Figure | BarFigure | CurveFigure | GalleryFigure | BreakdownFigure | XYFigure, ...
+] = (
     *storage.FIGURES,
     *indexes.FIGURES,
     *spatial.FIGURES,
@@ -33,6 +43,7 @@ FIGURES: tuple[Figure | BarFigure | CurveFigure | GalleryFigure | BreakdownFigur
     *faces.FIGURES,
     *faces_service.FIGURES,
     *faces_stream.FIGURES,
+    *faces_evaluation.FIGURES,
     *segments.FIGURES,
     *ingest.FIGURES,
     *shop.FIGURES,

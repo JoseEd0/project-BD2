@@ -15,6 +15,7 @@ from benchmarks.plots import (
     ingest,
     multimedia,
     rag,
+    rag_evaluation,
     segments,
     shop,
     shop_recommend,
@@ -52,4 +53,5 @@ FIGURES: tuple[
     *copyright_detection.FIGURES,
     *rag.FIGURES,
     *shop_recommend.FIGURES,
+    *rag_evaluation.FIGURES,
 )

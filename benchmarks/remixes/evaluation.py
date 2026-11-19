@@ -33,6 +33,8 @@ from benchmarks.remixes.metrics import (
 
 ALL_VERSIONS = "todas"
 ROC = "roc"
+CHOSEN_POINT = "umbral elegido"
+CHANCE = "azar"
 DETECTION = "deteccion"
 LOCALIZATION = "localizacion"
 BY_FRAGMENTS = "por_fragmentos"
@@ -125,6 +127,7 @@ def analyse(
     chosen = youden_point(roc_curve(calibrating, thresholds)).threshold
     report.parameters["umbral_elegido"] = chosen
     report.parameters["version_de_calibracion"] = calibration
+    _add_chance(report, remixes)
     for version, group in (*by_version.items(), (ALL_VERSIONS, list(uploads))):
         cases = [upload.case for upload in group]
         _add_roc(report, version, roc_curve(cases, thresholds), chosen, remixes)
@@ -212,6 +215,19 @@ def _add_roc(
         tpr=[round(point.true_positive_rate, DIGITS) for point in curve],
         fpr=[round(point.false_positive_rate, DIGITS) for point in curve],
     )
+    report.add(
+        CHOSEN_POINT,
+        version,
+        uploads,
+        0.0,
+        tpr=round(point.true_positive_rate, DIGITS),
+        fpr=round(point.false_positive_rate, DIGITS),
+    )
+
+
+def _add_chance(report: Report, uploads: int) -> None:
+    """La diagonal de una curva ROC que no separa nada, para dibujarla junto a las medidas."""
+    report.add(CHANCE, ROC, uploads, 0.0, tpr=[0.0, 1.0], fpr=[0.0, 1.0])
 
 
 def _add_detection(

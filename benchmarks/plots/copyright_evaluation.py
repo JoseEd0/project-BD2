@@ -12,24 +12,27 @@ from benchmarks.copyright_evaluation_benchmark import (
     REPORT_NAME,
 )
 from benchmarks.plots.model import (
+    Axis,
     BarFigure,
     BarGroup,
     BarPanel,
-    RocFigure,
-    RocPanel,
+    Series,
     Style,
     Technique,
+    XYFigure,
+    XYPanel,
 )
-from benchmarks.plots.style import AQUA, BLUE, DARK_BLUE, LIGHT_BLUE, MUTED_INK, ORANGE
+from benchmarks.plots.style import AQUA, AXIS, BLUE, DARK_BLUE, INK, LIGHT_BLUE, MUTED_INK, ORANGE
 from benchmarks.remixes.evaluation import (
     ALL_VERSIONS,
+    CHANCE,
+    CHOSEN_POINT,
     F1,
     FALSE_POSITIVE_RATE,
     ORIGINAL_SPAN,
     PRECISION,
     RECALL,
     ROC,
-    THRESHOLDS,
     TRUE_POSITIVE_RATE,
     UPLOAD_SPAN,
     length_bin_label,
@@ -118,6 +121,23 @@ LEVEL_TITLE = "Volumen y pasa bajos"
 TIME_TITLE = "Tempo y tono (%, semitonos)"
 
 
+FALSE_POSITIVES = Axis("tasa de falsos positivos", FALSE_POSITIVE_RATE)
+TRUE_POSITIVES = Axis("tasa de verdaderos positivos (recall)", TRUE_POSITIVE_RATE)
+CHANCE_LINE = Series("azar", Style(AXIS, "", dashed=True), CHANCE, ROC)
+CHOSEN_STYLE = Style(INK, "o")
+
+
+def _roc_panel(title: str, lines: tuple[Technique, ...]) -> XYPanel:
+    """Una curva por versión, la diagonal del azar y, sobre cada curva, el punto del umbral
+    elegido."""
+    curves = tuple(Series(line.label or line.name, line.style, line.name, ROC) for line in lines)
+    chosen = tuple(
+        Series(CHOSEN_POINT, CHOSEN_STYLE, CHOSEN_POINT, line.name, points_only=True)
+        for line in lines
+    )
+    return XYPanel(title, FALSE_POSITIVES, TRUE_POSITIVES, (CHANCE_LINE, *curves, *chosen))
+
+
 def _bar_panels(axis: str, field: str, techniques: tuple[Technique, ...]) -> tuple[BarPanel, ...]:
     return (
         BarPanel(NOISE_TITLE, axis, field, NOISE_GROUPS, techniques),
@@ -126,27 +146,23 @@ def _bar_panels(axis: str, field: str, techniques: tuple[Technique, ...]) -> tup
     )
 
 
-FIGURES: tuple[RocFigure | BarFigure, ...] = (
-    RocFigure(
+FIGURES: tuple[XYFigure | BarFigure, ...] = (
+    XYFigure(
         filename="copyright-evaluacion-roc",
         report=REPORT_NAME,
         title="Copyright: curvas ROC de la detección por distorsión",
         subtitle=(
             "Recall de los fragmentos copiados contra la fracción de remixes sin copias con\n"
-            "alguna coincidencia, al barrer el umbral. El anillo marca el umbral elegido con los\n"
-            "remixes sin distorsión. Bajo la diagonal: el remix sin copias se parece más a algo\n"
-            "del catálogo que la copia a su original."
+            "alguna coincidencia, al barrer el umbral. El punto negro es el umbral elegido con\n"
+            "los remixes sin distorsión. Bajo la diagonal: el remix sin copias se parece más a\n"
+            "algo del catálogo que la copia a su original."
         ),
         columns=3,
-        thresholds_field=THRESHOLDS,
-        true_field=TRUE_POSITIVE_RATE,
-        false_field=FALSE_POSITIVE_RATE,
-        chosen_parameter="umbral_elegido",
         legend_columns=5,
         panels=(
-            RocPanel(NOISE_TITLE, ROC, NOISE_LINES),
-            RocPanel(LEVEL_TITLE, ROC, LEVEL_LINES),
-            RocPanel(TIME_TITLE, ROC, TIME_LINES),
+            _roc_panel(NOISE_TITLE, NOISE_LINES),
+            _roc_panel(LEVEL_TITLE, LEVEL_LINES),
+            _roc_panel(TIME_TITLE, TIME_LINES),
         ),
     ),
     BarFigure(

@@ -11,9 +11,10 @@ dos partes:
   embeddings en una columna `VECTOR(128)` con un HNSW coseno— y habla con él solo por
   [`minigestor_client`](../client/README.md), armado con [`appkit`](../kit/README.md);
 - el **reconocimiento en vivo** por WebSocket (#91): cuadros de la cámara, rostros seguidos
-  entre cuadros con sus rastros en Redis, contrapresión y límites.
-
-La PWA del celular llega en #93.
+  entre cuadros con sus rastros en Redis, contrapresión y límites;
+- la **PWA del celular** (#93), [`web/`](web/README.md): consentimiento, registro guiado con
+  el óvalo y las tres tomas automáticas, reconocimiento en vivo con cajas y latencia, y
+  borrar mis datos.
 Como todo servicio, no importa el código del gestor (ver [`apps/README.md`](../README.md)).
 
 ```
@@ -409,8 +410,9 @@ hilos, sin detener el bucle de eventos; con todos ocupados, la siguiente espera 
 `:8104` y `:8404` con HTTPS. La imagen del API trae los modelos verificados
 ([`docker-build.sh`](docker-build.sh)) y el compose fija `FACES_MODELS_DIR=/opt/app/models`.
 Con dos pipelines y recién arrancada, una réplica usa unos 290 MiB; su tope es
-`FACES_API_MEMORY` (1 GiB), por las fotos de celular de hasta 50 MP. La web es por ahora la
-plantilla del kit (la PWA es #93); su nginx permite la cámara (`camera=(self)`), acepta
+`FACES_API_MEMORY` (1 GiB), por las fotos de celular de hasta 50 MP. La web es la PWA de
+[`web/`](web/README.md), servida por la imagen común del kit; su nginx permite la cámara
+(`camera=(self)`, y nada de micrófono ni ubicación), acepta
 subidas de 11 MB (`FACES_WEB_MAX_BODY_SIZE`: una foto de 10 MiB y el multipart) y baja el
 límite a 5 peticiones por segundo por IP con ráfaga de 20, porque cada foto cuesta CPU. No
 hay carga inicial (`faces.seed`): el servicio arranca vacío y sus tablas las crean las

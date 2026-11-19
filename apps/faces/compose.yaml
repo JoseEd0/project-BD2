@@ -1,6 +1,6 @@
-# Rostros (opción D): su API, que es la única que habla con el gestor, y su interfaz, que
-# por ahora es la plantilla del kit web (la PWA llega en #93). Se incluye desde el
-# compose.yaml raíz; las redes data y cache están declaradas allí.
+# Rostros (opción D): su API, que es la única que habla con el gestor, y su interfaz, la PWA
+# de la cámara (apps/faces/web). Se incluye desde el compose.yaml raíz; las redes data y
+# cache están declaradas allí.
 
 services:
   faces-api:
@@ -39,10 +39,11 @@ services:
     extends: { file: ../../deploy/app.compose.yaml, service: web }
     build:
       args:
-        APP_DIR: web-kit/template
+        APP_DIR: faces/web
     image: minigestor-faces-web
     environment:
       API_UPSTREAM: http://faces-api:8000
+      # La PWA pide la cámara; el micrófono y la ubicación, nunca.
       WEB_PERMISSIONS_POLICY: camera=(self), microphone=(), geolocation=()
       # Una foto de 10 MiB (FACES_MAX_UPLOAD_BYTES) más el sobre del multipart.
       API_MAX_BODY_SIZE: ${FACES_WEB_MAX_BODY_SIZE:-11m}

@@ -31,7 +31,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import BinaryIO
 
-from benchmarks.remote import HttpRangeSource, RemoteFile
+from appkit.ranges import HttpRangeSource, RangeReader
 
 DEFAULT_URL = "https://download.geofabrik.de/south-america/peru-latest-free.shp.zip"
 # Capas de puntos que se leen y, de cada una, los rubros que interesan (`None`: todos). De
@@ -316,7 +316,7 @@ def main() -> None:
     )
     arguments = parser.parse_args()
     source = HttpRangeSource(arguments.url)
-    remote = io.BufferedReader(RemoteFile(source), buffer_size=READ_AHEAD_BYTES)
+    remote = io.BufferedReader(RangeReader(source), buffer_size=READ_AHEAD_BYTES)
     with source, zipfile.ZipFile(remote) as archive:
         places = read_places(archive)
         if arguments.recuadro is not None:

@@ -42,6 +42,9 @@ pythonpath = ["src", "."]
 # Cada servicio trae su carpeta tests/ con archivos `test_<servicio>_*.py`: pytest importa por
 # nombre de archivo, y así dos servicios no chocan.
 testpaths = ["tests", "apps"]
+markers = [
+    "anthropic: llama a la API real de Anthropic (cuesta); se salta sin RAG_ANTHROPIC_API_KEY",
+]
 
 [tool.ruff]
 line-length = 100

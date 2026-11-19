@@ -113,9 +113,12 @@ async def test_ready_and_tables(table: AsyncClient):
 
 async def test_upload_and_stream_a_file(async_client: AsyncClient):
     uploaded = await async_client.upload_media(MediaFile("tono.wav", b"RIFF-y-algo-mas"))
-    async with async_client.stream_file(uploaded.path, chunk_bytes=4) as chunks:
-        received = [chunk async for chunk in chunks]
+    async with async_client.stream_file(uploaded.path, chunk_bytes=4) as stream:
+        received = [chunk async for chunk in stream.chunks]
     assert b"".join(received) == b"RIFF-y-algo-mas"
+    async with async_client.stream_file(uploaded.path, byte_range="bytes=5-") as stream:
+        tail = b"".join([chunk async for chunk in stream.chunks])
+    assert (stream.status_code, tail) == (206, b"y-algo-mas")
     assert await async_client.download(uploaded.path) == b"RIFF-y-algo-mas"
 
 

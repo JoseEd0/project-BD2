@@ -18,7 +18,7 @@ from .errors import (
     StatementTimeoutError,
     TransportError,
 )
-from .media import MediaFile
+from .media import FileStream, MediaFile
 from .models import (
     ColumnInfo,
     LoadReport,
@@ -55,6 +55,7 @@ __all__ = [
     "DefinitionMismatchError",
     "DomainError",
     "EngineError",
+    "FileStream",
     "LoadReport",
     "MediaFile",
     "MediaUpload",

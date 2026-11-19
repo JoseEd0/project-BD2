@@ -80,7 +80,7 @@ tras construir los índices diferidos.
 | `similar_media(archivo, sql, params)` | la anterior y `POST /query` | sube y ejecuta `sql` con la ruta como `$1` y `params` desde `$2` |
 | `segments(archivo, tabla, k=, window=, hop=)` | `POST /media/segments` | vecinos de cada ventana de un audio |
 | `download(path)`, `thumbnail(path)` | `GET /media/file`, `/media/thumbnail` | el archivo o su miniatura JPEG |
-| `stream_file(path)` | `GET /media/file` | el archivo por trozos, para reenviarlo |
+| `stream_file(path, byte_range=)` | `GET /media/file` | el archivo por trozos, para reenviarlo; con `byte_range` (una cabecera `Range`), solo ese trozo, con su estado y sus cabeceras |
 
 ```python
 fotos = gestor.similar_media(

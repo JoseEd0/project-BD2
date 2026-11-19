@@ -33,6 +33,8 @@ services:
     image: minigestor-copyright-web
     environment:
       API_UPSTREAM: http://copyright-api:8000
+      # El audio de POST /detections: COPYRIGHT_MAX_UPLOAD_BYTES (48 MiB) y el multipart.
+      API_MAX_BODY_SIZE: ${COPYRIGHT_WEB_MAX_BODY_SIZE:-49m}
     ports:
       - ${COPYRIGHT_WEB_PORT:-8101}:8080
       - ${COPYRIGHT_WEB_TLS_PORT:-8401}:8443

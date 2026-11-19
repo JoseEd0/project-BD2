@@ -8,7 +8,7 @@ from itertools import islice
 
 import httpx
 import pytest
-from apps.shop.tests.tiny_dataset import TINY_PRODUCTS, TINY_PURCHASES
+from apps.shop.tests.tiny_dataset import TINY_PRODUCTS, TINY_PURCHASES, TINY_USERS
 from tests.shop.conftest import ENGINE_KEY, ENGINE_URL, FakeImageEncoder
 
 from api.main import create_app
@@ -18,8 +18,11 @@ from shop.catalog import rows
 from shop.catalog.schema import (
     CLIP,
     CLIP_INDEX,
+    COPURCHASES,
+    HISTORY,
     INVENTORY,
     INVENTORY_INDEX,
+    MATERIALIZATIONS,
     PRODUCTS,
     PURCHASES,
     SCHEMA,
@@ -40,9 +43,13 @@ DISTINCT_PHOTOS = len({product["image_seed"] for product in TINY_PRODUCTS} - {No
 EXPECTED_ROWS = {
     STORES: 3,
     PRODUCTS: len(TINY_PRODUCTS),
-    USERS: 2,
+    USERS: len(TINY_USERS),
     PURCHASES: len(TINY_PURCHASES),
     INVENTORY: 3,
+    HISTORY: len(TINY_PURCHASES),
+    # Con soporte 2, solo la guitarra y el cable, en los dos sentidos.
+    COPURCHASES: 2,
+    MATERIALIZATIONS: 1,
     CLIP: PRODUCTS_WITH_PHOTO,
 }
 
@@ -170,7 +177,7 @@ async def test_an_interrupted_load_resumes_after_its_last_row(
 
     loads = {load.table: load.loaded for load in report.tables}
     assert loads[PURCHASES] == len(TINY_PURCHASES) - len(first)
-    assert loads[USERS] == 2
+    assert loads[USERS] == len(TINY_USERS)
     ids = await engine.fetch_all(f"SELECT id FROM {PURCHASES}")
     assert [row["id"] for row in ids] == list(range(1, len(TINY_PURCHASES) + 1))
 

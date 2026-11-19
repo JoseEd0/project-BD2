@@ -3,12 +3,14 @@
 Pasos, en orden:
 
 1. **migraciones**: las de `catalog.schema.SCHEMA`, las mismas que aplica el API al arrancar;
-2. **tablas** por carga masiva NDJSON (`bulk_insert`): tiendas, productos, usuarios, compras
-   e inventario. Los índices que se construyen de una vez ya existen con la tabla vacía, y
-   el gestor los construye al final de la carga;
-3. **SIFT**: el `CREATE INDEX ... USING HNSW (imagen)`, que necesita las fotos de la tabla
+2. **tablas** por carga masiva NDJSON (`bulk_insert`): tiendas, productos, usuarios, compras,
+   inventario e historial. Los índices que se construyen de una vez ya existen con la tabla
+   vacía, y el gestor los construye al final de la carga;
+3. **compras conjuntas**: los pares del historial con el `GROUP BY` del gestor, materializados
+   en `shop_compras_conjuntas` (`copurchases.py`);
+4. **SIFT**: el `CREATE INDEX ... USING HNSW (imagen)`, que necesita las fotos de la tabla
    para entrenar su vocabulario;
-4. **CLIP**: los embeddings de cada foto (con su caché en disco) y la carga de `shop_clip`,
+5. **CLIP**: los embeddings de cada foto (con su caché en disco) y la carga de `shop_clip`,
    que construye su HNSW al final.
 
 **Repetible:** una tabla con todas sus filas no se vuelve a cargar y un índice que existe no
@@ -31,6 +33,7 @@ from shop.catalog import rows
 from shop.catalog.rows import DatasetPaths, Row
 from shop.catalog.schema import (
     CLIP,
+    HISTORY,
     INVENTORY,
     PRODUCTS,
     PURCHASES,
@@ -53,6 +56,7 @@ from shop.clip.models import VISION_MODEL
 from shop.clip.preprocessing import PixelValues
 from shop.settings import SeedSettings
 
+from .copurchases import CopurchaseSettings, materialize_copurchases
 from .manifest import expected_rows
 from .report import EmbeddingStep, IndexBuild, SeedReport, TableLoad
 
@@ -104,6 +108,16 @@ async def run_seed(
     paths = DatasetPaths(settings.dataset, settings.engine_dataset)
     for source in _table_sources(settings, paths):
         report.tables.append(await _load_table(engine, source, settings.progress_rows, clock))
+    report.copurchases = await materialize_copurchases(
+        engine,
+        [str(row["id"]) for row in rows.product_rows(paths)],
+        CopurchaseSettings(
+            settings.recommendation_split,
+            settings.copurchase_min_support,
+            settings.copurchase_chunk_products,
+        ),
+        clock,
+    )
     report.indexes.append(await _create_sift_index(engine, clock))
     clip_load, embeddings = await _load_clip(engine, settings, paths, load_encoder, clock)
     report.tables.append(clip_load)
@@ -122,6 +136,7 @@ def _table_sources(settings: SeedSettings, paths: DatasetPaths) -> list[TableSou
         TableSource(USERS, lambda: rows.user_rows(dataset), counts.users),
         TableSource(PURCHASES, lambda: rows.purchase_rows(dataset), counts.purchases),
         TableSource(INVENTORY, lambda: rows.inventory_rows(dataset), counts.inventory),
+        TableSource(HISTORY, lambda: rows.history_rows(dataset), counts.purchases),
     ]
 
 

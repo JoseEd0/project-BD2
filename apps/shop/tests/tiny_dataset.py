@@ -1,6 +1,8 @@
 """Un dataset de la tienda diminuto, con la forma del de #79 (`python -m shop.dataset`):
-cinco productos, dos usuarios, cinco compras, tres tiendas y su inventario, con fotos
-sintéticas. Lo usan los tests y el humo del compose de la CI, que lo genera con
+cinco productos, tres usuarios, trece compras, tres tiendas y su inventario, con fotos
+sintéticas. En entrenamiento, la guitarra y el cable se compran juntos dos veces; el pack
+de iniciación solo se compra en validación y prueba, así que no tiene compras conjuntas de
+entrenamiento. Lo usan los tests y el humo del compose de la CI, que lo genera con
 
     uv run --no-sync python -m apps.shop.tests.tiny_dataset data/datasets/amazon_musical_instruments
 """
@@ -91,13 +93,21 @@ TINY_PRODUCTS = (
         "image_seed": 1,
     },
 )
-TINY_USERS = (("USER-A", 3), ("USER-B", 2))
+TINY_USERS = (("USER-A", 4), ("USER-B", 5), ("USER-C", 4))
 TINY_PURCHASES = (
     ("USER-A", "B000GUITAR", 5.0, 1_600_000_000_000, "train"),
     ("USER-B", "B0000DRUMS", 4.0, 1_600_000_000_000, "train"),
-    ("USER-A", "B000CABLES", 3.0, 1_600_000_500_000, "valid"),
-    ("USER-B", "B000STRING", 5.0, 1_700_000_000_000, "test"),
+    ("USER-B", "B000GUITAR", 5.0, 1_600_000_100_000, "train"),
+    ("USER-A", "B000CABLES", 3.0, 1_600_000_200_000, "train"),
+    ("USER-B", "B000CABLES", 4.0, 1_600_000_300_000, "train"),
+    ("USER-C", "B000GUITAR", 4.0, 1_600_000_400_000, "train"),
+    ("USER-C", "B000STRING", 5.0, 1_600_000_500_000, "train"),
+    ("USER-A", "B000COPYGT", 4.0, 1_650_000_000_000, "valid"),
+    ("USER-B", "B000STRING", 5.0, 1_650_000_100_000, "valid"),
+    ("USER-C", "B0000DRUMS", 3.0, 1_650_000_200_000, "valid"),
+    ("USER-B", "B000COPYGT", 5.0, 1_700_000_000_000, "test"),
     ("USER-A", "B000STRING", 4.0, 1_700_000_100_000, "test"),
+    ("USER-C", "B000CABLES", 4.0, 1_700_000_200_000, "test"),
 )
 TINY_STORES = (
     (101, "Centro", "tienda", "POINT(-12.0464, -77.0428)"),

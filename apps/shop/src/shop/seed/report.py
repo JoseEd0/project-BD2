@@ -50,6 +50,17 @@ class EmbeddingStep:
     seconds: float
 
 
+@dataclass(frozen=True, slots=True)
+class CopurchaseStep:
+    """La materialización de las compras conjuntas: pares cargados, consultas `GROUP BY`
+    (contando las que no cupieron en una respuesta) y segundos; `skipped` si ya estaba."""
+
+    pairs: int
+    queries: int
+    seconds: float
+    skipped: bool
+
+
 @dataclass(slots=True)
 class SeedReport:
     """Todos los pasos de una carga, en orden, y su duración total."""
@@ -58,6 +69,7 @@ class SeedReport:
     tables: list[TableLoad] = field(default_factory=list)
     indexes: list[IndexBuild] = field(default_factory=list)
     embeddings: EmbeddingStep | None = None
+    copurchases: CopurchaseStep | None = None
     total_seconds: float = 0.0
 
     def as_dict(self) -> dict[str, Any]:

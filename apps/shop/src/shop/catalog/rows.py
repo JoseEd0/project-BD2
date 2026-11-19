@@ -31,6 +31,7 @@ CSV_ENCODING = "utf-8"
 PARAGRAPH_BREAK = "\n\n"
 DATE_CHARACTERS = len("2003-05-26")
 FIRST_PURCHASE_ID = 1
+HISTORY_COLUMNS = ("usuario", "producto", "instante", "particion")
 POINT_PATTERN = re.compile(r"POINT\(\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*\)")
 
 
@@ -113,6 +114,17 @@ def purchase_rows(dataset: Path) -> Iterator[Row]:
             "fecha": record["purchased_at"][:DATE_CHARACTERS],
             "particion": record["split"],
         }
+
+
+def history_rows(dataset: Path) -> Iterator[Row]:
+    """`shop_historial`: las compras de `shop_compras` con lo que el recomendador busca por
+    usuario o por producto, en el mismo orden.
+
+    Raises:
+        CatalogError: si una compra es anterior a la que la precede en el CSV.
+    """
+    for purchase in purchase_rows(dataset):
+        yield {column: purchase[column] for column in HISTORY_COLUMNS}
 
 
 def store_rows(dataset: Path) -> Iterator[Row]:

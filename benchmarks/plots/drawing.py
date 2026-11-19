@@ -73,6 +73,7 @@ from benchmarks.plots.style import (
     LEGEND_ENTRIES_PER_COLUMN,
     LEGEND_ROW_HEIGHT,
     LINE_WIDTH,
+    MARKED_POINTS,
     MARKER_RING,
     MARKER_SIZE,
     MATCH,
@@ -96,6 +97,9 @@ from benchmarks.plots.style import (
     TITLE_PAD,
     TITLE_SIZE,
     VERTICAL_MARGIN,
+    XY_MARGIN,
+    XY_TICK_STEPS,
+    XY_TICKS,
     format_fraction,
     format_tick,
 )
@@ -868,6 +872,7 @@ def _draw_gallery_cell(
         axis.set_title(title, color=INK, fontsize=GALLERY_LABEL_SIZE, loc="left", pad=TITLE_PAD)
 
 
+
 def xy_points(
     report: dict[str, Any], panel: XYPanel, series: Series
 ) -> list[tuple[float, float]]:
@@ -935,7 +940,7 @@ def _draw_xy_panel(axis: Any, panel: XYPanel, report: dict[str, Any]) -> None:
             color=style.color,
             linewidth=0.0 if series.points_only else LINE_WIDTH,
             linestyle=(0, DASHES) if style.dashed else "solid",
-            marker=style.marker if series.points_only or len(points) == 1 else None,
+            marker=style.marker if len(points) <= MARKED_POINTS else None,
             markersize=MARKER_SIZE,
             markeredgecolor=SURFACE,
             markeredgewidth=MARKER_RING,
@@ -943,8 +948,8 @@ def _draw_xy_panel(axis: Any, panel: XYPanel, report: dict[str, Any]) -> None:
         )
     if drawn:
         xs, ys = [x for x, _ in drawn], [y for _, y in drawn]
-        _logarithmic_scale(axis.xaxis, axis.set_xscale, axis.set_xlim, panel.x, xs)
-        _logarithmic_scale(axis.yaxis, axis.set_yscale, axis.set_ylim, panel.y, ys)
+        _axis_scale(axis.xaxis, axis.set_xscale, axis.set_xlim, panel.x, xs)
+        _axis_scale(axis.yaxis, axis.set_yscale, axis.set_ylim, panel.y, ys)
     for ticks in (axis.xaxis, axis.yaxis):
         ticks.set_major_formatter(FuncFormatter(lambda value, _: format_tick(value)))
     axis.grid(visible=True, which="major", color=GRID, linewidth=0.8, linestyle="solid", zorder=0)
@@ -959,17 +964,25 @@ def _draw_xy_panel(axis: Any, panel: XYPanel, report: dict[str, Any]) -> None:
     axis.set_title(panel.title, color=INK, fontsize=PANEL_TITLE_SIZE, loc="left", pad=TITLE_PAD)
 
 
-def _logarithmic_scale(
+def _axis_scale(
     ticks: Any, set_scale: Any, set_limits: Any, chosen: Axis, values: Sequence[float]
 ) -> None:
-    """Un eje logarítmico con las marcas redondas de `vertical_scale` y sin marcas
-    menores, que matplotlib rotularía en notación científica."""
-    from matplotlib.ticker import FixedLocator, NullLocator
+    """Fija los límites y las marcas de un eje XY: en uno logarítmico, las marcas redondas
+    de `vertical_scale` sin marcas menores, que matplotlib rotularía en notación
+    científica; en uno lineal, las de matplotlib que caen dentro de los límites, para que
+    ningún rótulo quede fuera del panel."""
+    from matplotlib.ticker import FixedLocator, MaxNLocator, NullLocator
 
-    if not chosen.logarithmic:
+    if chosen.logarithmic:
+        set_scale("log")
+        scale = vertical_scale(values, 0.0)
+        set_limits(scale.low, scale.high)
+        ticks.set_major_locator(FixedLocator(scale.ticks))
+        ticks.set_minor_locator(NullLocator())
         return
-    set_scale("log")
-    scale = vertical_scale(values, 0.0)
-    set_limits(scale.low, scale.high)
-    ticks.set_major_locator(FixedLocator(scale.ticks))
-    ticks.set_minor_locator(NullLocator())
+    low, high = min(values), max(values)
+    margin = (high - low) * XY_MARGIN or abs(high) * XY_MARGIN or XY_MARGIN
+    low, high = low - margin, high + margin
+    set_limits(low, high)
+    found = MaxNLocator(nbins=XY_TICKS, steps=XY_TICK_STEPS).tick_values(low, high)
+    ticks.set_major_locator(FixedLocator([tick for tick in found if low <= tick <= high]))

@@ -43,6 +43,12 @@ PANEL_GAP = 1.0
 ROW_GAP = 2.0
 LINE_WIDTH = 2.0
 MARKER_SIZE = 7.5
+# Una curva con más puntos que estos, como una ROC, se lee mejor sin marcadores.
+MARKED_POINTS = 25
+# Ejes lineales de las curvas XY: aire a cada lado, como parte del rango, y cuántas marcas.
+XY_MARGIN = 0.05
+XY_TICKS = 6
+XY_TICK_STEPS = (1, 2, 5, 10)
 MARKER_RING = 1.6
 TITLE_PAD = 9.0
 # Del eje a su rótulo vertical: el ancho de la marca más larga de la figura más este aire.

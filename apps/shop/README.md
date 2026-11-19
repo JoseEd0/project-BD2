@@ -262,7 +262,7 @@ gestor tiene su tabla e índice:
 | `shop_tiendas` | heap con B+ sobre `id`; **R-Tree** sobre `ubicacion POINT` | 209 |
 | `shop_inventario` | heap; **hash extendible** sobre `producto` | 209 000 |
 | `shop_historial` (#81) | heap; **B+ no agrupado** sobre `usuario` y sobre `producto` | 511 836 |
-| `shop_compras_conjuntas` (#81) | heap; **hash extendible** sobre `producto`; materializada por la carga | 406 668 |
+| `shop_compras_conjuntas` (#81) | heap; **B+ no agrupado** sobre `producto`; materializada por la carga | 369 087 |
 
 Decisiones:
 
@@ -502,7 +502,7 @@ cada consulta.
 
 | Señal | Consulta | Índices |
 |---|---|---|
-| compras conjuntas | `SELECT otro, veces FROM shop_compras_conjuntas WHERE producto = $1 AND particion = $2 ORDER BY veces DESC, otro LIMIT $3` | hash de `producto` |
+| compras conjuntas | `SELECT otro, veces FROM shop_compras_conjuntas WHERE producto = $1 AND particion = $2 ORDER BY veces DESC, otro LIMIT $3` | B+ de `producto` |
 | visual (CLIP) | `SELECT id, SIMILARITY_SCORE() AS puntaje FROM shop_clip WHERE SIMILAR_TO(embedding, $1, k = $2) USING HNSW` | HNSW (coseno) |
 | visual (SIFT, `visual=sift`) | `SELECT id, SIMILARITY_SCORE() AS puntaje FROM shop_productos WHERE SIMILAR_TO(imagen, $1, k = $2) USING HNSW` | HNSW de la bolsa de palabras |
 | texto | `SELECT id, SCORE() AS puntaje FROM shop_productos WHERE MATCH(texto, $1) USING BM25 ORDER BY puntaje DESC LIMIT $2`, con el título | invertido en inglés |
@@ -532,30 +532,56 @@ WHERE a.producto = $1 AND a.particion = $2 AND b.particion = $2 AND b.producto <
 GROUP BY b.producto ORDER BY veces DESC, otro LIMIT $3
 ```
 
-Sobre el dataset entero tarda 165 s por producto sobre `shop_compras` (`EXPLAIN ANALYZE`,
-con el equipo cargado): el archivo secuencial no admite índices secundarios y el
-planificador aplica el `WHERE` después del `JOIN`, así que reúne 7,6 millones de filas.
-Sobre `shop_historial`, las mismas compras en un heap con B+ sobre `usuario` y `producto`, donde el lado izquierdo
-entra por el B+ pero el derecho se recorre entero (511 836 filas, unos 4 s solo el
-recorrido). Ninguna cabe en una petición en línea.
+Sobre el dataset entero tarda 67,3 s por producto sobre `shop_compras`: el archivo
+secuencial no admite índices secundarios y el planificador aplica el `WHERE` después del
+`JOIN`, así que reúne 7,6 millones de filas.
+Sobre `shop_historial`, las mismas compras en un heap con B+ sobre `usuario` y `producto`,
+el lado izquierdo entra por el B+ pero el derecho se recorre entero: 2,9 s de mediana.
+Ninguna cabe en una petición en línea.
 
 El gestor no tiene `INSERT ... SELECT` ni `CREATE TABLE ... AS`, y una respuesta trae como
 mucho 10 000 filas, así que la carga **materializa** los pares en `shop_compras_conjuntas`
-con esa misma consulta por lotes de productos (`a.producto IN (...)` y
-`HAVING COUNT(*) >= $2`): cada lote es un `GROUP BY` del gestor cuyo resultado va directo a la
-carga masiva; si no cabe en una respuesta se parte en dos, y si cupo con holgura el siguiente
-es el doble ([`seed/copurchases.py`](src/shop/seed/copurchases.py)). Con soporte mínimo 2
-(`SHOP_COPURCHASE_MIN_SUPPORT`) son 406 668 pares (contados sobre `interactions.csv`); un
-par comprado por un solo cliente es casi siempre casualidad y con soporte 1 serían 4,7
-millones. La consulta de cada petición queda en una búsqueda por hash.
+con esa misma consulta por lotes de productos (`a.producto IN (...)`,
+`HAVING COUNT(*) >= $2` y ordenada por producto y clientes): cada lote es un `GROUP BY` del
+gestor cuyo resultado va directo a la carga masiva
+([`seed/copurchases.py`](src/shop/seed/copurchases.py)).
+
+- **Los lotes se arman por compras, no por productos** (`SHOP_COPURCHASE_CHUNK_BUYERS`,
+  10 000): lo que crece es el `JOIN`, y un producto con 1 900 compradores pesa como cien de
+  los comunes, así que va solo. Las compras por producto salen del dataset, que la carga ya
+  lee: es solo una estimación para planear.
+- **Un lote que no cabe en una respuesta, o que pasa del plazo de sentencia del gestor, se
+  parte en dos** y se repite; un producto solo que pasa del plazo detiene la carga con un
+  error que lo nombra y dice qué variable subir. Cada lote deja en el log sus productos, sus
+  compras, sus pares y lo que tardó.
+- **Se guardan los `SHOP_COPURCHASE_MAX_PARTNERS` (500) pares más fuertes de cada producto**,
+  todo lo que el recomendador llega a pedir; como la consulta los ordena, un producto solo
+  que no cabe en una respuesta conserva los mejores.
+- **El índice es un B+, no un hash.** La primera versión usaba el hash extendible y la carga
+  no terminó: con cientos de filas de una misma clave en una cubeta, el hash la parte por el
+  primer bit que la separa de otra clave y duplica el directorio cada vez (400 claves
+  repetidas 300 veces lo llevan a 2^18 entradas; con los pares del dataset llegó a 4 GB y el
+  gestor quedó horas al 97 % de CPU). La clave compuesta del B+, `(valor, dirección)`, no se
+  repite. Lo mismo vale para el historial.
+
+Con soporte mínimo 2 (`SHOP_COPURCHASE_MIN_SUPPORT`) hay 406 668 pares (contados sobre
+`interactions.csv`) y se guardan 369 087, en 793,6 s y 70 consultas; un par
+comprado por un solo cliente es casi siempre casualidad y con soporte 1 serían 4,7 millones.
+La consulta de cada petición queda en una búsqueda por el B+: 4,5 ms de mediana.
+
+Cada lote tarda unos 12 s. Al principio tardaba 47 s, y `EXPLAIN ANALYZE` mostró por qué: el
+`JOIN` llevaba 6 s y el filtro de encima 35 s, porque el `WHERE` se vuelve a evaluar sobre las
+180 000 filas reunidas y el gestor comparaba cada una con las 747 opciones del `IN`. Ahora un
+`IN` de textos literales se busca en un conjunto (`src/query/expressions.py`) y la
+materialización entera bajó de 2 231 s a 793,6 s.
 
 El costo es que la tabla es una foto: un producto que nadie compró con otro al menos dos
 veces no tiene compras conjuntas (arranque en frío) aunque tenga compras. Una compra nueva
 (`POST /usuarios/{id}/compras`) la mantiene en la misma transacción: suma un cliente a cada
 par que ya estaba y crea con 1 los que no; si la carga había dejado fuera un par por el
 soporte, ese 1 es una cota inferior hasta que se vuelva a calcular. `shop_materializaciones`
-anota con qué partición y soporte se calculó: una carga repetida no la recalcula y una con
-otros parámetros la rehace.
+anota con qué partición, soporte y pares por producto se calculó: una carga repetida no la
+recalcula y una con otros parámetros la rehace.
 
 ### Fusión y explicación
 
@@ -588,10 +614,45 @@ depende. Una compra suma 1 a la generación del usuario, del producto comprado y
 usuario ya tenía (sus pares cambiaron): las claves viejas dejan de pedirse y caducan solas. A
 diferencia de borrar claves, no hay carrera: una respuesta que se calculaba mientras llegó la
 compra se guarda con la generación anterior y nadie la vuelve a leer. La cabecera `X-Cache`
-dice `hit`, `miss` o `bypass`. Redis es opcional: sin URL no hay caché, y si no responde
-(plazo `SHOP_REDIS_TIMEOUT_SECONDS`, 0,25 s, sin reintentos) se contesta sin ella, se avisa
-una vez en el log y no se vuelve a probar hasta `SHOP_CACHE_RETRY_SECONDS` (5 s). En el
-compose, `shop-api` está en la red interna `cache` con el `redis` común.
+dice `hit`, `miss` o `bypass`. Redis es opcional y lo maneja
+[`appkit.OptionalRedis`](../kit/README.md#caché-en-redis): sin URL no hay caché, y si no
+responde (plazo `SHOP_REDIS_TIMEOUT_SECONDS`, 0,25 s, sin reintentos) se contesta sin ella, se
+avisa una vez en el log, `/health` y `/ready` lo muestran en `degraded` y no se vuelve a probar
+hasta `SHOP_CACHE_RETRY_SECONDS` (5 s). La tienda solo pone las claves y las generaciones
+([`recommend/cache.py`](src/shop/recommend/cache.py)). En el compose, `shop-api` está en la
+red interna `cache` con el `redis` común.
+
+### Medido: latencia
+
+`python -m benchmarks.shop_recommend_benchmark` (ver
+[`benchmarks/README.md`](../../benchmarks/README.md#16-recomendaciones-de-la-tienda--cuatro-señales-y-caché))
+contra un gestor de verdad en otro proceso con el catálogo entero, la tienda en el mismo
+proceso y un Redis de verdad en Docker. 100 productos al azar, con una ubicación en Lima;
+cada uno se pide con la caché fría y otra vez caliente. Con otros procesos en el equipo (carga
+media 10,2 al empezar y 7,6 al terminar): las cifras son una cota superior. Crudas
+en
+[`benchmarks/results/tienda_recomendaciones.json`](../../benchmarks/results/tienda_recomendaciones.json).
+
+![Tienda: recomendar con cuatro señales](../../benchmarks/figures/tienda-recomendaciones.png)
+
+| Compras conjuntas de un producto | Consultas | p50 | p95 |
+|---|---:|---:|---:|
+| al vuelo sobre `shop_compras` (secuencial) | 1 | 67,3 s | 67,3 s |
+| al vuelo sobre `shop_historial` (B+) | 5 | 2,9 s | 3,4 s |
+| materializada (búsqueda por el B+) | 100 | 4,5 ms | 7,7 ms |
+| materializar todos los pares en la carga | 70 | 793,6 s (una vez) | |
+
+| Petición `GET /productos/{id}/recomendaciones` | Productos | p50 | p95 |
+|---|---:|---:|---:|
+| compras conjuntas (materializada) | 100 | 4,5 ms | 7,7 ms |
+| visual, CLIP (embedding + HNSW) | 100 | 19,5 ms | 28,2 ms |
+| texto, BM25 con el título | 100 | 23,6 ms | 41,5 ms |
+| cercanía (hash + R-Tree, tras las otras) | 100 | 31,2 ms | 84,3 ms |
+| **recomendación completa, caché fría** | 100 | 68,9 ms | 142,8 ms |
+| **recomendación completa, caché caliente (Redis)** | 100 | 1,9 ms | 3,4 ms |
+
+Lo que esta medida no dice: la calidad de las recomendaciones, que es #82, y el
+comportamiento con varias réplicas a la vez.
 
 ## Licencias
 

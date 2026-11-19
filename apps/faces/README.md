@@ -9,9 +9,11 @@ dos partes:
 - el **API** (`faces.api:create_app`): consentimiento, registro con controles de calidad,
   reconocimiento, consulta y borrado de un registro (#90). Guarda todo en el gestor —los
   embeddings en una columna `VECTOR(128)` con un HNSW coseno— y habla con él solo por
-  [`minigestor_client`](../client/README.md), armado con [`appkit`](../kit/README.md).
+  [`minigestor_client`](../client/README.md), armado con [`appkit`](../kit/README.md);
+- el **reconocimiento en vivo** por WebSocket (#91): cuadros de la cámara, rostros seguidos
+  entre cuadros con sus rastros en Redis, contrapresión y límites.
 
-El reconocimiento en tiempo real por WebSocket llega en #91 y la PWA del celular en #93.
+La PWA del celular llega en #93.
 Como todo servicio, no importa el código del gestor (ver [`apps/README.md`](../README.md)).
 
 ```
@@ -22,6 +24,8 @@ src/faces/
   recognition.py   SFace: alineación con los cinco puntos y embedding de norma 1
   pipeline.py      FacePipeline: decodificar → detectar → alinear → describir
   pose.py          giro, cabeceo e inclinación de la cabeza con los cinco puntos; la pose de una toma
+  tracking.py      seguir rostros entre cuadros por IoU; identidades que caducan
+  frames.py        un cuadro en un hilo: decodificar y detectar, y después embeber lo que falta
   quality.py       medidas de una toma y sus controles, cada uno con su mensaje
   shots.py         de una foto a una toma aceptada o rechazada, y a los rostros de una consulta
   enrollment.py    plan de poses, nombre, parecido con la galería y umbrales de coseno
@@ -42,6 +46,13 @@ src/faces/
     routes.py      las rutas HTTP
     models.py      los cuerpos JSON
     errors.py      los errores del API, con su estado y su mensaje
+    realtime/      el reconocimiento en vivo
+      protocol.py  la cabecera de un cuadro y los mensajes JSON
+      mailbox.py   la contrapresión: un solo cuadro en espera, el más nuevo
+      tracks.py    los rastros de cada sesión en Redis, con TTL
+      recognizer.py  un cuadro: detectar, rastros, embeber y buscar lo que falta, tiempos
+      connection.py  una conexión: recibir, procesar el más nuevo, límites y cierre
+      routes.py    WS /ws/recognize
 ```
 
 ## API
@@ -61,7 +72,8 @@ uvicorn --factory faces.api:create_app --host 0.0.0.0 --port 8000
 | `POST /identify` | una foto → cada rostro, del más grande al más chico, con `known` (nombre y coseno), `unknown` (y el mejor coseno visto) o `too_small` |
 | `GET /person` | con el código en la cabecera `X-Person-Id`: lo que se guarda de la persona, salvo sus embeddings (derecho de acceso) |
 | `DELETE /person` | con el código en `X-Person-Id`: borra la persona y todos sus embeddings (`204`, también si ya no estaba) |
-| `GET /health`, `GET /ready` | las sondas de `appkit` |
+| `WS /ws/recognize` | el reconocimiento en vivo: ver *Reconocimiento en vivo* |
+| `GET /health`, `GET /ready` | las sondas de `appkit`; sin Redis, con `degraded` (ver abajo) |
 
 Cada respuesta lleva `X-Request-ID` y `Server-Timing` con las etapas `analisis` (decodificar,
 detectar, medir y embeber), `sesion` (leer la sesión y sus tomas), `galeria` (el HNSW y los
@@ -230,8 +242,9 @@ proceso: cualquier réplica atiende cualquier toma. Se descartaron:
   aceptadas —datos biométricos— al navegador y de vuelta, cifrados y con una clave que
   rotar; y no se podría revocar: un token de una sesión terminada serviría para registrarse
   otra vez hasta que venciera;
-- **Redis** (llega en #91 para la caché de rastros): sería un segundo lugar con datos
-  biométricos que borrar y vigilar, solo para unas pocas filas por registro.
+- **Redis** (que sí guarda los rastros del reconocimiento en vivo, sin datos biométricos):
+  sería un segundo lugar con embeddings que borrar y vigilar, solo para unas pocas filas
+  por registro.
 
 En el gestor, la sesión se borra con todo lo demás —al cancelar, al terminar, al vencer—, y
 terminarla es una transacción: consumir la sesión y crear la persona pasan juntos o no
@@ -246,6 +259,83 @@ pasan. El costo es una lectura y una escritura más por toma (`sesion` en `Serve
 
 Los tiempos son segundos desde la época (`BIGINT`, UTC). Las tablas se crean con
 migraciones `IF NOT EXISTS` al arrancar ([`store.py`](src/faces/api/store.py)).
+
+## Reconocimiento en vivo
+
+`WS /ws/recognize` (por la web, `/api/ws/recognize`: el nginx reenvía el cambio de
+protocolo). El celular manda cuadros de su cámara y recibe, por cada uno, las cajas de los
+rostros con su nombre o «desconocido», su rastro y lo que tardó cada etapa. No pide
+credenciales, como el resto del servicio: la cámara es anónima y solo recibe nombres, nunca
+el código de una persona; lo que limita su uso son los topes de abajo y el límite de
+peticiones por IP del nginx, que cuenta la que abre la conexión.
+
+### Protocolo
+
+| Sentido | Mensaje | Contenido |
+|---|---|---|
+| celular → | binario | cabecera de 5 bytes —versión del protocolo (`1`, 1 byte) y número del cuadro (entero sin signo de 4 bytes, big-endian)— y la imagen, un JPEG reducido (u otro formato de los aceptados) |
+| celular → | texto, opcional | `{"type": "hello", "session": "<32 hex>", "track_cache": true}`: retoma los rastros de una sesión anterior y elige si usarlos |
+| ← servidor | `ready` | al conectarse y tras cada `hello`: `session` (guárdala para reconectarse), `track_cache` y los `limits` |
+| ← servidor | `result` | `frame` (el número que mandó el celular), `faces` del más grande al más chico —`track`, `box`, `status` (`known`, `unknown`, `too_small`), `label` (el nombre, «desconocido» o «acércate»), `display_name`, `score`, `cached`—, `dropped` y `timings` |
+| ← servidor | `error` | `frame` (o `null`), `kind` y `error`; la conexión sigue |
+
+`timings` son milisegundos en el servidor: `wait` (de llegar a empezar), `decode`, `detect`,
+`track` (leer y guardar los rastros en Redis), `embed`, `search` (el HNSW y el nombre en el
+gestor) y `total`. Como el número del cuadro vuelve en la respuesta, el celular mide su
+latencia sin relojes compartidos. Los errores de un cuadro son `InvalidFrameError` (sin
+cabecera, otra versión o sin imagen), `FrameTooLargeError`, `TooManyPixelsError` y
+`UnreadableImageError`; los de un texto, `InvalidMessageError`. Una cámara tapada o un
+cuadro sin rostros da `faces: []`, no un error.
+
+| Cierre | Código | Cuándo |
+|---|---|---|
+| réplica llena | `1013` (inténtalo más tarde) | ya atiende `FACES_STREAM_MAX_CONNECTIONS` conexiones: se acepta y se cierra, para que el celular sepa por qué |
+| sin mensajes | `4408` | pasaron `FACES_STREAM_IDLE_TIMEOUT_SECONDS` sin ningún mensaje |
+| fallo interno | `1011` | un error no previsto; queda en el log |
+
+**Reconexión.** Si la conexión se corta, el celular abre otra —el nginx puede llevarla a
+cualquier réplica— y manda `hello` con su `session`: sigue con los mismos rastros mientras
+no pasen `FACES_TRACK_SESSION_TTL_SECONDS` sin cuadros. La sesión no va en la URL para no
+quedar en ningún log.
+
+### Contrapresión
+
+Dos tareas por conexión: una lee el socket sin parar y deja cada cuadro en un único lugar
+de espera; la otra toma el que haya, no antes de `1 / FACES_STREAM_MAX_FPS` desde el
+anterior, y lo procesa. Si llega un cuadro mientras otro espera, **el viejo se descarta**
+(`dropped` los cuenta) y nunca se encola: con una cola, si el celular manda más rápido de lo
+que se procesa, cada respuesta llegaría más tarde que la anterior y las cajas dibujadas
+quedarían cada vez más atrás de la cámara. Así, un cuadro tarda a lo sumo el que está en
+curso más el suyo. Un test con un productor que manda 60 cuadros cada 5 ms contra un
+procesamiento de 50 ms comprueba que se responde el último, que los demás se cuentan como
+descartados y que ninguna respuesta tarda más de 200 ms.
+
+### Rastros y caché en Redis
+
+Cada rostro del cuadro se asigna al rastro cuya caja más se le solapa (IoU de al menos
+`FACES_TRACK_MIN_IOU`, voraz y uno a uno) o abre uno nuevo. Un rastro con identidad vigente
+—menos de `FACES_TRACK_VERIFY_SECONDS` desde que se buscó— **no se vuelve a embeber ni a
+buscar**: se responde con esa identidad y `cached: true`. Pasado ese tiempo se verifica de
+nuevo, así que alguien que se registra o se borra se nota en a lo sumo ese plazo. Un rastro
+que deja de verse se guarda `FACES_TRACK_LOST_SECONDS`, por si el detector lo pierde un
+cuadro. Rostros muy chicos para el embedding (`too_small`) tienen rastro pero no identidad.
+
+Los rastros de una sesión viven en Redis, en la clave `faces:rastros:<sesión>`, como JSON
+con un TTL de `FACES_TRACK_SESSION_TTL_SECONDS` que se renueva en cada cuadro: al cortarse
+la conexión caducan solos. Se leen y se guardan **en cada cuadro** (0,5 ms medidos), no solo
+al conectarse: Redis es la única copia, así que cualquier réplica retoma una sesión sin
+conexiones pegajosas en el nginx, y sin Redis no hay ninguna caché escondida en memoria. Lo
+guardado son cajas, el nombre que se muestra, un coseno y tiempos: **ni embeddings ni el
+código** de la persona. El Redis del compose no tiene disco.
+
+**Sin Redis.** Si Redis no responde, cada cuadro se reconoce entero —todos los rostros se
+embeben y se buscan— y `track` sale `null`: el servicio sigue. El primer fallo va una vez
+al log, Redis no se vuelve a probar hasta `FACES_REDIS_RETRY_SECONDS` después (para no
+pagar su plazo, `FACES_REDIS_TIMEOUT_SECONDS`, en cada cuadro), y mientras tanto `/health`
+y `/ready` responden con `"degraded": {"redis": "…"}` sin dejar de estar `ok` y `ready`. Es
+[`appkit.OptionalRedis`](../kit/README.md#caché-en-redis). Sin `FACES_REDIS_URL` no hay
+caché y tampoco es una degradación. Un cliente puede pedir cuadros sin rastros con
+`"track_cache": false` en su `hello`: es lo que usa el benchmark para medir su efecto.
 
 ## Privacidad (Ley 29733)
 
@@ -300,6 +390,14 @@ Además de lo común de `appkit` (`FACES_ENGINE_URL`, `FACES_ENGINE_KEY`,
 | `FACES_SESSION_THRESHOLD`, `FACES_MATCH_THRESHOLD`, `FACES_LOOKALIKE_THRESHOLD`, `FACES_DUPLICATE_THRESHOLD` | los umbrales de coseno | `0.363`, `0.45`, `0.45`, `0.5` |
 | `FACES_ANALYSIS_WORKERS` | fotos que la réplica analiza a la vez | `2` |
 | `FACES_PURGE_INTERVAL_SECONDS` | cada cuánto se borra lo vencido | `300` |
+| `FACES_REDIS_URL` | el Redis de los rastros; sin ella, no hay caché de rastros | sin valor (el compose: `redis://redis:6379/1`) |
+| `FACES_REDIS_TIMEOUT_SECONDS`, `FACES_REDIS_RETRY_SECONDS` | plazo de cada operación de Redis y cuánto se deja de probar tras un fallo | `0.1`, `5` |
+| `FACES_STREAM_MAX_FRAME_BYTES`, `FACES_STREAM_MAX_FRAME_PIXELS` | tamaño máximo de un cuadro | `1048576` (1 MiB), `2073600` (Full HD) |
+| `FACES_STREAM_MAX_FPS` | cuadros por segundo que procesa una conexión | `15` |
+| `FACES_STREAM_IDLE_TIMEOUT_SECONDS` | sin mensajes por este tiempo, se cierra | `30` |
+| `FACES_STREAM_MAX_CONNECTIONS` | conexiones de reconocimiento por réplica | `16` |
+| `FACES_TRACK_MIN_IOU`, `FACES_TRACK_VERIFY_SECONDS`, `FACES_TRACK_LOST_SECONDS` | el seguimiento: solapamiento mínimo, cuánto vale una identidad, cuánto se guarda un rastro perdido | `0.3`, `2`, `1` |
+| `FACES_TRACK_SESSION_TTL_SECONDS` | cuánto viven en Redis los rastros de una sesión sin cuadros | `60` |
 
 Cada réplica carga `FACES_ANALYSIS_WORKERS` pipelines al arrancar y analiza las fotos en
 hilos, sin detener el bucle de eventos; con todos ocupados, la siguiente espera turno.
@@ -317,8 +415,10 @@ subidas de 11 MB (`FACES_WEB_MAX_BODY_SIZE`: una foto de 10 MiB y el multipart) 
 límite a 5 peticiones por segundo por IP con ráfaga de 20, porque cada foto cuesta CPU. No
 hay carga inicial (`faces.seed`): el servicio arranca vacío y sus tablas las crean las
 migraciones. La CI levanta el compose y, por `:8104`, comprueba las sondas, el
-consentimiento, una toma aceptada de frente con un retrato de prueba y el reconocimiento de
-la foto de grupo.
+consentimiento, una toma aceptada de frente con un retrato de prueba, el reconocimiento de
+la foto de grupo y el WebSocket: dos cuadros de un retrato por el nginx, con su respuesta y
+su rastro guardado en Redis. La API usa el `redis` del compose (red `cache`, base 1) para
+los rastros; si se cae, el reconocimiento en vivo sigue sin ellos.
 
 ```bash
 python -m tools.compose_keys && deploy/certs.sh
@@ -395,7 +495,12 @@ FACES_MODELS_DIR=data/models/faces uv run --no-sync python -m pytest -q apps/fac
 - [`tests/`](tests/) prueba el pipeline y las reglas sin el gestor: la pose contra los cinco
   puntos de una cara promedio girada en 3D (exacta con giro, cabeceo e inclinación, solos o
   juntos), cada control de calidad con sus umbrales y su mensaje, el plan de poses, el
-  nombre, el parecido con la galería, el consentimiento y la configuración.
+  nombre, el parecido con la galería, el consentimiento y la configuración. Del
+  reconocimiento en vivo, sin modelos: el IoU y el emparejamiento de rastros, identidades que
+  caducan y rastros perdidos; los rastros en Redis (`fakeredis`: ida y vuelta, TTL, sin
+  embeddings, Redis caído); y la conexión con un reconocedor de mentira: el protocolo, cada
+  mensaje inválido sin cortar la conexión, la contrapresión con un productor rápido, el tope
+  de cuadros por segundo, la espera agotada y la réplica llena.
 - [`tests/faces/`](../../tests/faces/), en el árbol del gestor porque construye su API, prueba
   el servicio de punta a punta contra el **gestor real en el mismo proceso**, con un reloj
   que el test adelanta: consentimiento ausente, rechazado o de otra versión (y que no queda
@@ -404,7 +509,12 @@ FACES_MODELS_DIR=data/models/faces uv run --no-sync python -m pytest -q apps/fac
   registrado como», «te pareces mucho» sin el nombre, terminar dos veces, dos sesiones de la
   misma cara que terminan a la vez, el código fuera de los logs, cancelar, sesiones e
   intentos que se acaban, registros que vencen y la purga, fotos demasiado pesadas, con
-  demasiados píxeles, vacías o que no son imágenes, y las migraciones repetidas.
+  demasiados píxeles, vacías o que no son imágenes, y las migraciones repetidas. En vivo,
+  por el WebSocket: una persona registrada se reconoce, su rastro responde sin buscar y se
+  verifica de nuevo al caducar; un desconocido; una cámara tapada; un cuadro con demasiados
+  píxeles o que no es imagen; Redis caído (sin rastros y `/health` degradado), sin Redis
+  configurado y sin rastros pedidos; y **dos réplicas con el mismo Redis**: una sesión que
+  se reconecta a la otra sigue con su rastro sin volver a buscar.
 
 Los que corren los modelos usan tres fotos de dominio público de la NASA
 ([`tests/fixtures/`](tests/fixtures/README.md)): un retrato, otro retrato de la misma
@@ -422,6 +532,26 @@ pytest (y se guardan en la caché de Actions): un test que no los encuentre fall
 saltarse.
 
 ## Rendimiento medido
+
+### En vivo
+
+Con [`benchmarks/faces_stream_benchmark.py`](../../benchmarks/faces_stream_benchmark.py)
+contra el compose en el mismo equipo: cuadros JPEG de 640 x 480 con una persona registrada,
+a 10 por segundo, 300 por pasada. Resultados crudos en
+[`rostros_tiempo_real.json`](../../benchmarks/results/rostros_tiempo_real.json); análisis en
+[`benchmarks/README.md`](../../benchmarks/README.md#14-rostros-en-vivo--latencia-por-cuadro-por-websocket).
+
+![Rostros en vivo: latencia de un cuadro](../../benchmarks/figures/rostros-tiempo-real.png)
+
+| Camino | Rastros | p50 | p95 | Detectar p50 | Redis p50 | Embeber + buscar p50 |
+|---|---|---:|---:|---:|---:|---:|
+| nginx | con caché | 16,4 ms | 25,6 ms | 7,5 ms | 0,5 ms | 0 ms (285 de 300 del rastro) |
+| nginx | sin caché | 23,8 ms | 29,2 ms | 6,2 ms | — | 10,5 ms |
+| directo | con caché | 16,2 ms | 27,7 ms | 7,3 ms | 0,5 ms | 0 ms |
+| directo | sin caché | 23,4 ms | 28,9 ms | 6,2 ms | — | 9,9 ms |
+
+Muy por debajo de la meta de 100 ms. La caché de rastros quita un tercio de la mediana; el
+nginx no se nota. Carga media del equipo de 5,2 a 7,8 durante la medida.
 
 ### El pipeline
 

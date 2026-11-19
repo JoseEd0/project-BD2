@@ -2,7 +2,7 @@
 
 | Archivo | Qué es |
 |---|---|
-| [`informe.pdf`](informe.pdf) | Informe incremental de las Partes 1 y 2: diseño arquitectónico, dominio de datos, explicación de los algoritmos y parte experimental |
+| [`informe.pdf`](informe.pdf) | Informe de las Partes 1 a 5 (14 páginas): diseño arquitectónico, dominio de datos, explicación de los algoritmos y parte experimental |
 | [`latex/`](latex/) | Fuente LaTeX del informe |
 
 La documentación técnica de cada módulo está junto a su código: empieza por el
@@ -12,7 +12,7 @@ La documentación técnica de cada módulo está junto a su código: empieza por
 
 ```bash
 brew install tectonic                # una sola vez
-.venv/bin/python -m benchmarks.plot  # si cambiaron los resultados de los experimentos
+uv run --no-sync --with matplotlib python -m benchmarks.plot  # si cambiaron los resultados
 make -C docs/latex informe           # genera docs/informe.pdf
 ```
 

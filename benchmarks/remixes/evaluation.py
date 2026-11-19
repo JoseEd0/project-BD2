@@ -50,6 +50,10 @@ TRUE_POSITIVE_RATE = "tpr"
 FALSE_POSITIVE_RATE = "fpr"
 AUC = "auc"
 IOU = "iou"
+SONG_KEY = "cancion"
+SCORE_KEY = "puntaje"
+SIMILARITY_KEY = "similitud"
+WINDOWS_KEY = "ventanas"
 DIGITS = 3
 SECONDS_PER_MINUTE = 60.0
 LATENCY_PERCENTILES = (50, 95)
@@ -77,13 +81,26 @@ class Scoring:
     score: Callable[[dict[str, Any]], float]
 
 
+def compact_match(match: dict[str, Any]) -> dict[str, Any]:
+    """Lo que se guarda de una coincidencia de `POST /detections`: canción, puntaje, similitud
+    media, ventanas y los dos tramos, redondeados."""
+    return {
+        SONG_KEY: int(match["song"]["id"]),
+        SCORE_KEY: round(float(match["score"]), DIGITS),
+        SIMILARITY_KEY: round(float(match["mean_similarity"]), DIGITS),
+        WINDOWS_KEY: int(match["windows"]),
+        UPLOAD_SPAN: _span_pair(match["upload"]),
+        ORIGINAL_SPAN: _span_pair(match["original"]),
+    }
+
+
 def match_of(match: dict[str, Any], score: float | None = None) -> Detected:
-    """Una coincidencia de `POST /detections`, con su puntaje o con otro."""
+    """Una coincidencia guardada con `compact_match`, con su puntaje o con otro."""
     return Detected(
-        int(match["song"]["id"]),
-        float(match["score"]) if score is None else score,
-        Span(float(match["upload"]["start_seconds"]), float(match["upload"]["end_seconds"])),
-        Span(float(match["original"]["start_seconds"]), float(match["original"]["end_seconds"])),
+        int(match[SONG_KEY]),
+        float(match[SCORE_KEY]) if score is None else score,
+        Span(*match[UPLOAD_SPAN]),
+        Span(*match[ORIGINAL_SPAN]),
     )
 
 
@@ -98,20 +115,23 @@ def analyse(
     thresholds: Sequence[float],
     provisional: float,
     length_bins: Sequence[float],
+    calibration: str,
 ) -> float:
     """Suma al informe todas las cifras y devuelve el umbral elegido: el de la máxima J de
-    Youden en la curva ROC de todas las versiones juntas."""
+    Youden en la curva ROC de la versión `calibration`; las demás se miden a ese umbral."""
     by_version = _by_version(uploads)
-    pooled = roc_curve([upload.case for upload in uploads], thresholds)
-    chosen = youden_point(pooled).threshold
+    remixes = remix_count(uploads)
+    calibrating = [upload.case for upload in by_version[calibration]]
+    chosen = youden_point(roc_curve(calibrating, thresholds)).threshold
     report.parameters["umbral_elegido"] = chosen
+    report.parameters["version_de_calibracion"] = calibration
     for version, group in (*by_version.items(), (ALL_VERSIONS, list(uploads))):
         cases = [upload.case for upload in group]
-        _add_roc(report, version, roc_curve(cases, thresholds), chosen, len(group))
-        _add_detection(report, version, cases, chosen, provisional)
-        _add_localization(report, version, cases, chosen)
-        _add_latency(report, version, group)
-        _add_recall_by_length(report, version, group, chosen, length_bins)
+        _add_roc(report, version, roc_curve(cases, thresholds), chosen, remixes)
+        _add_detection(report, version, cases, chosen, provisional, remixes)
+        _add_localization(report, version, cases, chosen, remixes)
+        _add_latency(report, version, group, remixes)
+        _add_recall_by_length(report, version, group, chosen, length_bins, remixes)
     return chosen
 
 
@@ -134,7 +154,7 @@ def add_scoring_comparison(
             report.add(
                 scoring.name,
                 SCORES,
-                len(pairs),
+                remix_count(uploads),
                 0.0,
                 version=version,
                 auc=round(area_under(curve), DIGITS),
@@ -142,6 +162,11 @@ def add_scoring_comparison(
                 tpr=round(best.true_positive_rate, DIGITS),
                 fpr=round(best.false_positive_rate, DIGITS),
             )
+
+
+def remix_count(uploads: Iterable[Upload]) -> int:
+    """Los remixes distintos: el tamaño del experimento en todas sus cifras."""
+    return len({upload.remix for upload in uploads})
 
 
 def save_uploads(path: Path, uploads: Iterable[Upload], matches: Iterable[Any]) -> Path:
@@ -189,14 +214,19 @@ def _add_roc(
 
 
 def _add_detection(
-    report: Report, version: str, cases: Sequence[Case], chosen: float, provisional: float
+    report: Report,
+    version: str,
+    cases: Sequence[Case],
+    chosen: float,
+    provisional: float,
+    remixes: int,
 ) -> None:
     at_chosen, at_provisional = counts(cases, chosen), counts(cases, provisional)
     for name, measure in ((PRECISION, "precision"), (RECALL, "recall"), (F1, "f1")):
         report.add(
             name,
             version,
-            len(cases),
+            remixes,
             0.0,
             elegido=round(getattr(at_chosen, measure), DIGITS),
             provisional=round(getattr(at_provisional, measure), DIGITS),
@@ -206,7 +236,9 @@ def _add_detection(
         )
 
 
-def _add_localization(report: Report, version: str, cases: Sequence[Case], chosen: float) -> None:
+def _add_localization(
+    report: Report, version: str, cases: Sequence[Case], chosen: float, remixes: int
+) -> None:
     upload_iou: list[float] = []
     original_iou: list[float] = []
     for case in cases:
@@ -220,7 +252,7 @@ def _add_localization(report: Report, version: str, cases: Sequence[Case], chose
         report.add(
             name,
             version,
-            len(cases),
+            remixes,
             0.0,
             iou=round(statistics.median(values), DIGITS) if values else None,
             media=round(statistics.fmean(values), DIGITS) if values else None,
@@ -228,13 +260,13 @@ def _add_localization(report: Report, version: str, cases: Sequence[Case], chose
         )
 
 
-def _add_latency(report: Report, version: str, uploads: Sequence[Upload]) -> None:
+def _add_latency(report: Report, version: str, uploads: Sequence[Upload], remixes: int) -> None:
     per_minute = [upload.milliseconds / (upload.seconds / SECONDS_PER_MINUTE) for upload in uploads]
     middle, high = np.percentile(per_minute, LATENCY_PERCENTILES)
     report.add(
         LATENCY,
         version,
-        len(uploads),
+        remixes,
         round(float(middle), DIGITS),
         p95=round(float(high), DIGITS),
         segundos_medios=round(statistics.fmean(upload.seconds for upload in uploads), DIGITS),
@@ -248,6 +280,7 @@ def _add_recall_by_length(
     uploads: Sequence[Upload],
     chosen: float,
     bins: Sequence[float],
+    remixes: int,
 ) -> None:
     found: dict[int, list[bool]] = {index: [] for index in range(len(bins) - 1)}
     for upload in uploads:
@@ -260,7 +293,7 @@ def _add_recall_by_length(
         report.add(
             version,
             _bin_label(bins, index),
-            len(uploads),
+            remixes,
             0.0,
             recall=round(sum(outcomes) / len(outcomes), DIGITS) if outcomes else None,
             fragmentos=len(outcomes),
@@ -289,6 +322,10 @@ def _bin_of(seconds: float, bins: Sequence[float]) -> int | None:
     return None
 
 
+def _span_pair(span: dict[str, Any]) -> list[float]:
+    return [round(float(span["start_seconds"]), DIGITS), round(float(span["end_seconds"]), DIGITS)]
+
+
 def _upload_record(upload: Upload, matches: Any) -> dict[str, Any]:
     return {
         "remix": upload.remix,
@@ -297,9 +334,9 @@ def _upload_record(upload: Upload, matches: Any) -> dict[str, Any]:
         "ms": round(upload.milliseconds, DIGITS),
         "verdad": [
             {
-                "cancion": truth.song_id,
-                "subida": [round(truth.upload.start, DIGITS), round(truth.upload.end, DIGITS)],
-                "original": [
+                SONG_KEY: truth.song_id,
+                UPLOAD_SPAN: [round(truth.upload.start, DIGITS), round(truth.upload.end, DIGITS)],
+                ORIGINAL_SPAN: [
                     round(truth.original.start, DIGITS),
                     round(truth.original.end, DIGITS),
                 ],
@@ -313,7 +350,7 @@ def _upload_record(upload: Upload, matches: Any) -> dict[str, Any]:
 
 def _upload_of(record: dict[str, Any]) -> Upload:
     truth = tuple(
-        Truth(int(item["cancion"]), Span(*item["subida"]), Span(*item["original"]))
+        Truth(int(item[SONG_KEY]), Span(*item[UPLOAD_SPAN]), Span(*item[ORIGINAL_SPAN]))
         for item in record["verdad"]
     )
     detected = tuple(match_of(match) for match in record["coincidencias"])

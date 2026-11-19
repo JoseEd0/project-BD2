@@ -43,9 +43,11 @@ desde el mismo punto, alternando con una tecla.
 
 ## Capabilities and Constraints
 
-- El umbral de copia es 0,43, calibrado con la curva ROC de #77; la respuesta trae
-  `threshold`, `score`, `coverage`, `mean_similarity` y `above_threshold` por coincidencia. Una coincidencia bajo
-  el umbral se muestra como débil, no como copia.
+- El umbral de copia es 0,21, calibrado con la curva ROC de la evaluación (#77, #146); la
+  respuesta trae `threshold`, `score`, `coverage`, `mean_similarity` y `above_threshold` por
+  coincidencia. El `score` es la evidencia de la racha: cuánto dura (hasta una copia de 20 s)
+  por cuánto se parece; la interfaz lo muestra como «Evidencia», no como un parecido. Una
+  coincidencia bajo el umbral se muestra como débil, no como copia.
 - El audio subido no sale del navegador más que hacia el API de la app; la forma de onda se
   calcula en el navegador.
 - Errores con motivo: `415` formato no soportado, `400` vacío, dañado o de menos de 1 s,

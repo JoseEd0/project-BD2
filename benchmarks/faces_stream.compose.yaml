@@ -1,0 +1,19 @@
+# El despliegue del benchmark del reconocimiento en vivo (`faces_stream_benchmark`), encima
+# del compose.yaml raíz y con su propio proyecto (`-p`): la API publica su puerto solo en
+# localhost, y en uno libre, para medir sin el nginx, y registra con dos tomas de frente, que
+# es lo que dan las fotos de prueba. Las imágenes llevan otro nombre para no reemplazar las
+# del despliegue de siempre. La web va a un puerto libre con FACES_WEB_PORT=127.0.0.1: (ver
+# benchmarks/README.md).
+services:
+  demo:
+    image: rostros-bench-api
+  engine:
+    image: rostros-bench-api
+  faces-api:
+    image: rostros-bench-faces-api
+    environment:
+      FACES_ENROLLMENT_POSES: '["front", "front"]'
+    ports:
+      - "127.0.0.1::8000"
+  faces-web:
+    image: rostros-bench-faces-web

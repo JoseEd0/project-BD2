@@ -56,7 +56,7 @@ from shop.clip.models import VISION_MODEL
 from shop.clip.preprocessing import PixelValues
 from shop.settings import SeedSettings
 
-from .copurchases import CopurchaseSettings, materialize_copurchases
+from .copurchases import CopurchaseSettings, count_buyers, materialize_copurchases
 from .manifest import expected_rows
 from .report import EmbeddingStep, IndexBuild, SeedReport, TableLoad
 
@@ -110,11 +110,12 @@ async def run_seed(
         report.tables.append(await _load_table(engine, source, settings.progress_rows, clock))
     report.copurchases = await materialize_copurchases(
         engine,
-        [str(row["id"]) for row in rows.product_rows(paths)],
+        count_buyers(rows.history_rows(settings.dataset), settings.recommendation_split),
         CopurchaseSettings(
             settings.recommendation_split,
             settings.copurchase_min_support,
-            settings.copurchase_chunk_products,
+            settings.copurchase_max_partners,
+            settings.copurchase_chunk_buyers,
         ),
         clock,
     )

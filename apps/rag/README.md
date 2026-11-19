@@ -129,7 +129,9 @@ que 220 es el objetivo. El BM25 de la ingesta ve siempre el fragmento completo.
 mediana de 60 fragmentos (66 de media, por los apéndices largos): 1 500 papers son casi
 100 000 fragmentos. multilingual-e5-small los calcula en CPU a 51 fragmentos por segundo
 (medido sobre 3 000 fragmentos del corpus, Apple M4 Pro, 8 hilos de PyTorch), así que la
-ingesta (#85) tarda unos 32 minutos; con 3 000 papers serían más de una hora y 3 h de
+ingesta (#85) tarda unos 32 minutos (medida después con ONNX int8 y la máquina compartida:
+43,9 min, ver [Medidas de la ingesta](#medidas-de-la-ingesta)); con 3 000 papers serían más
+de una hora y 3 h de
 descarga al ritmo que pide arXiv. Cien mil filas es además la escala más grande que ya se
 midió en el gestor para HNSW, IVF y BM25 (Partes 3 y 4). `--papers` la cambia.
 
@@ -378,6 +380,116 @@ Si los embeddings ya se calcularon fuera de Docker, están en el corpus montado:
 `RAG_SEED_EMBEDDING_CACHE_DIR=/data/datasets/rag_papers/embeddings` hace que la siembra los
 lea de ahí y solo cargue. Sin ella, los calcula en el `/tmp` del contenedor. La CI siembra el
 corpus diminuto de los tests (`tests/fixtures/datasets/`) y busca por `:8103` en los tres modos.
+
+# Medidas de la ingesta
+
+`benchmarks/rag_ingest_benchmark.py` (ver [`benchmarks/README.md` §12](../../benchmarks/README.md#12-ingesta-del-rag--embeddings-e5-en-onnx-y-carga-con-bm25-y-hnsw)),
+el 18 de noviembre de 2026, en un Apple M4 Pro (12 núcleos: 8 de rendimiento y 4 de
+eficiencia), con el gestor en un **uvicorn aparte** (`app_from_environment`, como en Docker)
+sobre `data/engine-rag/` y claves `write` y `admin`. Los JSON crudos están en
+[`benchmarks/results/rag_ingesta.json`](../../benchmarks/results/rag_ingesta.json).
+
+**Medido con contención.** Otros procesos pesados (tests y gestores de otros trabajos)
+corrían en la misma máquina: la carga media fue 14,3 al empezar y 5,3 al terminar, con picos
+de 51 durante la siembra, sobre 12 núcleos. Las cifras de tiempo son una **cota inferior** de
+lo que da la máquina sola; las relaciones (int8 contra fp32, una etapa contra otra) se
+midieron en las mismas condiciones.
+
+**fp32 contra int8** (1 000 fragmentos repartidos por el corpus, mediana de 2 pasadas,
+lotes de 32):
+
+| Hilos | fp32 (fragmentos/s) | int8 (fragmentos/s) |
+|---:|---:|---:|
+| 1 | 16,5 | 12,8 |
+| 2 | 25,7 | 24,2 |
+| 4 | 31,2 | 38,0 |
+| 8 | 39,6 | **45,3** |
+| 12 | 26,8 | 27,4 |
+
+Con los mismos 1 000 fragmentos, el vector int8 de cada uno tiene coseno 0,994 de media con
+el fp32 (mínimo 0,977, percentil 5 0,988), y de los 10 vecinos de cada una de las 10
+preguntas a mano dentro de la muestra coinciden 7,3 de media (de 3 a 9).
+
+**Elegido: int8**, por omisión (`RAG_EMBEDDING_MODEL`). Con 4 y 8 hilos es un 22 % y un 14 %
+más rápido, ocupa la cuarta parte (113 MiB contra 449 MiB: la imagen del API y la memoria de cada
+réplica) y sus vectores están a coseno 0,99 de los de fp32. El costo es que el orden fino de
+los vecinos cambia (7 de 10 en común): si la evaluación de #87 muestra que eso baja el
+Recall@k, fp32 se usa cambiando la variable y volviendo a sembrar `rag_chunks`. Con 1 o 2
+hilos fp32 es más rápido (la cuantización dinámica cuesta su paso extra), y con 12 los dos
+caen: los 4 núcleos de eficiencia frenan a los demás y competían con la contención.
+
+**La siembra del corpus entero** (int8, 8 hilos):
+
+| Etapa | Tiempo | Cifras |
+|---|---:|---|
+| embeddings de 98 585 fragmentos | 2 565,6 s (42,8 min) | **38,4 fragmentos/s**; 12 330 truncados a 512 tokens (12,5 %) |
+| carga de `rag_papers` | 0,25 s | 1 495 documentos |
+| carga de `rag_chunks` con índices diferidos | 65,0 s | 98 585 filas; el gestor construye al final el invertido y el HNSW |
+| **total** | **2 633,5 s (43,9 min)** | el 97 % es calcular embeddings |
+| segunda corrida | 1,6 s | no calcula ni carga nada |
+
+**La carga, etapa por etapa** (en otro gestor desechable, con los vectores ya en la caché;
+figura `rag-ingesta.png`):
+
+| Fragmentos | Carga NDJSON sin índices | Índice invertido (`CREATE INDEX`) | HNSW (`CREATE INDEX`) | Carga con los índices diferidos |
+|---:|---:|---:|---:|---:|
+| 1 000 | 0,37 s | 0,32 s | 0,07 s | 0,72 s |
+| 10 000 | 4,19 s | 2,08 s | 0,32 s | 6,44 s |
+| 98 585 | 44,3 s | 17,4 s | 5,4 s | 67,1 s |
+
+Con el corpus entero, cargar las filas (sus 220 palabras de texto fuera de la fila y sus 384
+componentes) es dos tercios del tiempo, SPIMI una cuarta parte y FAISS el resto; la carga
+con los índices diferidos cuesta lo mismo que cargar y crear los dos índices después
+(67,1 s contra 44,3 + 17,4 + 5,4 = 67,1 s).
+
+**En el disco del gestor** (KiB):
+
+| Tabla | Datos (heap y textos) | Clave primaria | Índice invertido | HNSW |
+|---|---:|---:|---:|---:|
+| `rag_chunks` | 362 420 | 11 764 | 98 368 | 162 640 |
+| `rag_papers` | 3 836 | 168 | — | — |
+
+En total 624 MiB; un fragmento ocupa 3,7 KiB en la tabla (el texto, los 1 536 bytes del
+vector y la fila), 1,0 KiB en el índice invertido y 1,6 KiB en el HNSW.
+
+**Preguntas a mano** (el primer fragmento de cada modo; la evaluación de verdad es #87). Las
+búsquedas tardaron, vistas desde el cliente, 5–18 ms en BM25, 11–13 ms en vectorial (casi
+todo el embedding de la pregunta) y 13–30 ms en híbrido:
+
+| | Pregunta | BM25 | Vectorial | Híbrido |
+|---|---|---|---|---|
+| en | How do learned index structures replace B-trees? | Evaluating Learned Spatial Indexes, p. 4 | In-memory Multidimensional Indexing Using the skd-tree, p. 3 | BS-tree: A gapped data-parallel B-tree, p. 2 |
+| en | approximate nearest neighbor search with HNSW graphs in vector databases | Amora: Communication-Efficient Private ANN…, p. 3 | Lossless Compression of Proximity Graph Indexes…, p. 2 | VectorMaton: Efficient Vector Search with Pattern…, p. 3 |
+| en | text-to-SQL with large language models | Query Carefully: Detecting the Unanswerables in Text-to-SQL…, p. 2 | Both Ends Count! Just How Good are LLM Agents at…, p. 1 | ídem vectorial |
+| en | cardinality estimation for query optimization with machine learning | Supervised and LLM-Augmented Cardinality Estimation…, p. 3 | ídem BM25, p. 1 | SemCEB: A Cardinality Estimation Benchmark…, p. 3 |
+| en | evaluating hallucinations in retrieval-augmented generation | Enhancing Stock Market Information Retrieval with RAG…, p. 13 | Dual-Hypergraph Indexing: Bridging Knowledge Islands…, p. 1 | Guaranteeing Faithful Evidence Extraction in Speculative RAG…, p. 2 |
+| es | ¿Cómo estiman la cardinalidad de una consulta los optimizadores con aprendizaje? | Minigestor de base de datos multimodal (informe), p. 1 | SynQL: A Controllable and Scalable Rule-Based Framework…, p. 23 | ídem vectorial |
+| es | búsqueda aproximada de vecinos más cercanos en bases de datos vectoriales | Proyecto Integrador (enunciado), p. 10 | Minigestor de base de datos multimodal (informe), p. 5 | ídem vectorial |
+| es | ¿Cómo se evalúan los sistemas de recomendación secuencial? | Proyecto Integrador (enunciado), p. 29 | Data Processing for Offline Evaluation in Recommender Systems, p. 138 | ídem vectorial |
+| es | generar consultas SQL a partir de lenguaje natural con modelos de lenguaje | Minigestor de base de datos multimodal (informe), p. 1 | The Stochastic Shift: A New Evaluation Paradigm for Text-to-SQL, p. 4 | ídem vectorial |
+| es | ¿Qué pide el proyecto integrador del curso de Base de Datos 2 sobre el R-Tree? | Minigestor de base de datos multimodal (informe), p. 1 | ídem | ídem |
+
+En inglés los tres modos traen papers del tema. En español, **BM25 solo encuentra los dos
+documentos del curso**, los únicos en español del corpus, aunque la pregunta sea sobre otro
+tema; la búsqueda vectorial cruza el idioma y trae el paper en inglés que corresponde
+(recomendación secuencial, texto a SQL), y la híbrida la sigue porque los dos documentos del
+curso no aparecen en su lista. La de la cardinalidad en español no encuentra el paper de
+estimación de cardinalidad en el primer puesto en ninguno de los modos.
+
+**Conclusiones.**
+
+- Calcular los embeddings es el 97 % de la ingesta: 43 min en CPU contra 65 s de carga e
+  índices. Por eso la caché por huella del texto: una segunda siembra, o una en otro gestor,
+  tarda segundos (1,6 s la segunda).
+- Diferir los índices no ahorra nada frente a crearlos después con este volumen (67,1 s en
+  los dos casos), pero la migración puede declararlos antes sin pagar de más y la tabla nunca
+  queda sin índices a la vista.
+- int8 es la variante del servicio: más rápida con los hilos que usa la siembra, cuatro veces
+  más chica y a coseno 0,99 de fp32. Lo que cambia es el orden fino de los vecinos, y eso lo
+  decide la evaluación de recuperación (#87).
+- La búsqueda vectorial es la que hace posible preguntar en español a un corpus en inglés;
+  BM25 aporta las coincidencias exactas (nombres de sistemas, siglas) en inglés. La híbrida
+  junta las dos sin calibrar sus puntajes.
 
 # Tests
 

@@ -341,6 +341,7 @@ curl -s localhost:8003/search -H 'content-type: application/json' \
 | `query` | la pregunta, de 1 a 1 000 caracteres |
 | `mode` | `bm25`, `vector` o `hybrid` (por omisión) |
 | `k` | fragmentos, de 1 a 50 (10 por omisión) |
+| `filters` | opcional: `year_from` y `year_to` (incluidos) y `categories` (categorías primarias, hasta 16); un campo vacío no filtra y uno desconocido es un `422` |
 
 Cada resultado trae `rank`, `chunk_id`, `paper` (`paper_id`, `title`, `authors`, `year`,
 `url`, `file_path`, `media_type`, `license`), `page_start`, `page_end`, `text`, `score` (el
@@ -359,8 +360,31 @@ método no lo trajo.
   va de −1 a 1, y sumarlos exigiría normalizarlos. Los empates se resuelven por el mejor
   puesto y después por la clave.
 
-`Server-Timing` separa `embedding`, `bm25`, `vector` y `papers` (la metadata de los papers
-de los resultados, en una sola consulta con `IN`).
+`Server-Timing` separa `embedding`, `bm25`, `vector`, `papers` (la metadata de los papers
+de los resultados, en una sola consulta con `IN`) y `filter`.
+
+**El SQL de cada búsqueda.** La respuesta trae `queries`: cada consulta que corrió en el
+gestor, en orden, con su etapa (`filter`, `bm25`, `vector`, `papers`), su SQL con parámetros
+`$n` y cada parámetro como se muestra (JSON; el embedding, como `VECTOR(384)`). Es lo que la
+interfaz enseña en su panel de recuperación.
+
+**Filtros por año y categoría.** Son columnas de `rag_papers`, no de `rag_chunks`, y van al
+`WHERE` siempre como parámetros. Cada método los aplica por el camino que el gestor resuelve
+rápido; medido sobre los 98 585 fragmentos con la pregunta «learned index structures
+replacing b-trees» (Apple M4 Pro, gestor local):
+
+| Método | Cómo filtra | Con el filtro | La alternativa |
+|---|---|---|---|
+| BM25 | `SELECT paper_id FROM rag_papers WHERE …` y después `MATCH(content, $1) AND paper_id IN ($3, …)` | 49-288 ms (88 a 744 papers) | `JOIN rag_papers`: 13,7 s, porque el ranking entrega todos los fragmentos con algún término antes de filtrar |
+| Vectorial | `JOIN rag_papers p` con las condiciones sobre `p`, entre los 500 vecinos más cercanos (`FILTERED_VECTOR_CANDIDATES`) | 320-450 ms | `paper_id IN (…)` en la misma tabla: el gestor prefiltra recorriendo todos los fragmentos, 4,2 a 26,7 s |
+
+Con 50 candidatos, el filtro del año 2025 (88 papers, el 6 % del corpus) dejaba 12
+fragmentos; con 500, los 50. Un filtro todavía más estrecho puede devolver menos de `k` por
+el lado vectorial; el de BM25 recorre el ranking hasta llenar `k`. `POST /answers` acepta los
+mismos `filters` y recupera solo de esos papers.
+
+`GET /facets` da los años (sin los documentos que no tienen uno) y las categorías del
+corpus con cuántos papers tiene cada uno: lo que la interfaz ofrece como filtros.
 
 ## El idioma de la pregunta
 
@@ -415,7 +439,8 @@ curl -N localhost:8003/answers -H 'content-type: application/json' \
     -d '{"question": "¿Cómo reemplazan los índices aprendidos a los árboles B?"}'
 ```
 
-`question` es texto de 1 a 1 000 caracteres. La ruta hace, en orden:
+`question` es texto de 1 a 1 000 caracteres y `filters`, opcional, el de `/search`. La ruta
+hace, en orden:
 
 1. **Recupera** con la búsqueda híbrida de `POST /search` (BM25 y vecinos del HNSW en
    paralelo, 50 candidatos por lista, fusionados con RRF): `RAG_ANSWER_CHUNKS` fragmentos (12)

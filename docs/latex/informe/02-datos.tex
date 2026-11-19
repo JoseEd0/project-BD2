@@ -1,47 +1,39 @@
 \section{Dominio de datos}
 
-Se usan dos conjuntos de datos.
-
-\paragraph{Dataset de comercio electrónico (generado).} Modela clientes, pedidos, productos
-y categorías, además de tiendas con ubicación en Lima. Son seis tablas y cerca de
-30\,000 filas (tabla~\ref{tab:dataset}). Las tablas usan distintas organizaciones e
-índices, para poder mostrar todas las estructuras con los mismos datos.
-
-Los datos se generan con \texttt{demos/poblar\_ecommerce.py} a partir de una semilla fija,
-por lo que siempre salen iguales; el tamaño se cambia con la opción \texttt{-{}-escala}.
-Los seis CSV están en el repositorio y se pueden cargar desde la interfaz. Las tiendas se
-ubican dentro de doce distritos de Lima, lo que permite verificar consultas como
-\guillemotleft{}tiendas dentro de Miraflores\guillemotright{}.
+Se usó un dataset generado para la demostración y datos reales para cada experimento y cada
+aplicación (tabla~\ref{tab:datasets}). Los datos reales se descargan con un script y
+no se guardan en el repositorio; solo se versionan los CSV de la demostración.
 
 \begin{table}[H]
 \centering
-\caption{Tablas del dataset de demostración.}\label{tab:dataset}
+\caption{Conjuntos de datos usados.}\label{tab:datasets}
 \small
-\begin{tabular}{@{}lrL{5.0cm}ll@{}}
+\begin{tabular}{@{}L{4.6cm}cL{5.6cm}L{4.6cm}@{}}
 \toprule
-\textbf{Tabla} & \textbf{Filas} & \textbf{Columnas} & \textbf{Organización} & \textbf{Índice secundario} \\
+\textbf{Dataset} & \textbf{Parte} & \textbf{Contenido} & \textbf{Uso} \\
 \midrule
-\texttt{categorias}       & 12      & id, nombre & heap file & --- \\
-\texttt{clientes}         & 2\,000  & id, nombre, email, ciudad, fecha\_alta & heap file & hash en \texttt{ciudad} \\
-\texttt{productos}        & 800     & id, nombre, categoria\_id, precio, stock & B+ agrupado & --- \\
-\texttt{pedidos}          & 6\,000  & id, cliente\_id, fecha, estado, total & archivo secuencial & --- \\
-\texttt{detalle\_pedidos} & 18\,000 & id, pedido\_id, producto\_id, cantidad, precio\_unitario & heap file & B+ en \texttt{pedido\_id} \\
-\texttt{tiendas}          & 3\,000  & id, nombre, rubro, distrito, ubicacion & heap file & R-Tree en \texttt{ubicacion} \\
+Comercio electrónico (generado) & 1, 2 & 6 tablas, unas 30\,000 filas: clientes, pedidos, productos, categorías y 3\,000 tiendas en 12 distritos de Lima & demostración de cada organización e índice \\
+Lugares de OpenStreetMap & 2 & 128\,011 lugares con nombre del Perú, \texttt{POINT(lat, lon)} & experimento espacial y mapa \\
+Shopping Queries (ESCI), España & 3 & fichas de producto de Amazon en español, consultas reales y juicios E/S/C/I & experimento de texto \\
+Amazon Berkeley Objects (ABO) & 4 & fotos de producto con su categoría & experimento de imágenes \\
+Speech Commands & 4 & clips de voz de 1~s con la palabra dicha & experimento de audio \\
+Free Music Archive (\texttt{fma\_small}) & 4, 5 & 7\,994 pistas MP3 de 30~s (7.43~GiB) & catálogo de copyright \\
+Amazon Reviews 2023, instrumentos & 5 & 24\,587 productos, 57\,439 usuarios, 511\,836 compras, fotos & tienda \\
+arXiv cs.DB y cs.IR (licencias abiertas) & 5 & 1\,495 documentos, 98\,585 fragmentos de 200 a 499 palabras & RAG \\
+Labeled Faces in the Wild (LFW) & 5 & 13\,233 fotos de rostros con sus pares de verificación & evaluación de rostros \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\paragraph{Lugares de OpenStreetMap (reales).} Para la parte espacial se necesitaban puntos
-con una distribución real y no uniforme. El script \texttt{demos/descargar\_lugares.py}
-descarga de Geofabrik los puntos de interés del Perú (colegios, restaurantes, farmacias,
-bancos, gasolineras, etc.) y genera un CSV con las columnas \texttt{id}, \texttt{nombre},
-\texttt{rubro} y \texttt{ubicacion}, donde la ubicación tiene el formato
-\texttt{POINT(latitud, longitud)}. En total son 128\,011 lugares con nombre, de los cuales
-26\,606 están en Lima y Callao. Este dataset se usa en el experimento espacial y en la
-demostración del mapa.
+En los experimentos de las Partes~1 a~4 se tomaron subconjuntos anidados de 1\,000, 10\,000
+y 100\,000 elementos con una semilla fija, de modo que el conjunto pequeño está dentro del
+grande. En las Partes~3 y~4 las consultas no están en la base: en el audio se apartaron
+hablantes enteros. Las 209 tiendas de Lima de la tienda son lugares reales de
+OpenStreetMap y su inventario es sintético. Del corpus de arXiv solo entran papers con
+licencia CC BY, CC BY-SA o CC0, porque la aplicación sirve el PDF; se agregaron el
+enunciado y el informe anterior como material del curso.
 
-\paragraph{Tipos de datos.} El gestor soporta enteros, reales, booleanos, fechas, texto de
-longitud fija, bytes y puntos. Al cargar un CSV, el tipo de cada columna se infiere de sus
-valores. Las comparaciones solo se permiten entre tipos compatibles: por ejemplo,
-\texttt{WHERE id = 'abc'} da un error que indica la columna, en lugar de devolver cero
-filas.
+El gestor soporta enteros, reales, booleanos, fechas, texto de longitud fija,
+\texttt{TEXT}, bytes, puntos y \texttt{VECTOR(n)}. Al cargar un CSV el tipo de cada columna
+se infiere de sus valores, y las comparaciones solo se permiten entre tipos compatibles:
+\texttt{WHERE id = 'abc'} da un error que indica la columna en lugar de devolver cero filas.

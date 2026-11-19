@@ -7,20 +7,20 @@
 \newcommand{\codigo}{202310632}
 \newcommand{\carrera}{Ciencias de la Computación, UTEC}
 \newcommand{\curso}{Base de Datos 2 (2026-2)}
-\newcommand{\entrega}{Entrega parcial, semana 8}
+\newcommand{\entrega}{Entrega final, semana 15}
 \newcommand{\repositorio}{https://github.com/JoseEd0/project-BD2}
 
 % --- cifras que se sincronizan con el repositorio -------------------------------
-% Número de pruebas automáticas y cobertura de líneas y ramas de src/.
-\newcommand{\totalpruebas}{1315}
-\newcommand{\coberturapruebas}{99}
+% Número de pruebas automáticas (pytest --collect-only) y cobertura de líneas y ramas de src/.
+\newcommand{\totalpruebas}{4\,413}
+\newcommand{\coberturapruebas}{98}
 
 \begin{document}
 \thispagestyle{empty}
 
 {\Huge\bfseries Minigestor de base de datos multimodal\par}
 \vspace{2pt}
-{\Large Informe incremental: Parte 1 (relacional) y Parte 2 (espacial)\par}
+{\Large Informe final: Partes 1 a 5\par}
 \vspace{8pt}
 {\color{acento}\hrule height 1.2pt}
 \vspace{8pt}
@@ -37,14 +37,15 @@ Repositorio & \href{\repositorio}{\texttt{\repositorio}} \\
 \end{tabular}
 
 \vspace{8pt}
-Este informe corresponde a la entrega parcial del proyecto y cubre las Partes~1 y~2. El
-gestor está escrito en Python, sin ORM ni motor de base de datos externo: las estructuras
-de almacenamiento, los índices y los algoritmos que pide el enunciado están implementados
-en el proyecto. La Parte~1 incluye el almacenamiento en páginas, los índices B+ y hash, los
-algoritmos externos, el procesamiento de SQL, las transacciones y la interfaz. La Parte~2
-agrega el R-Tree, las consultas espaciales (por rango, k-NN y polígonos) y un panel de
-mapa. La sección~\ref{sec:experimentos} presenta los resultados experimentales; el
-experimento espacial usa lugares reales de OpenStreetMap y se compara con PostGIS.
+El gestor está escrito en Python, sin ORM ni motor de base de datos externo. Las
+estructuras de almacenamiento, los índices y los algoritmos que pide el enunciado se
+implementaron en el proyecto, con una excepción autorizada por el profesor: en la Parte~4,
+IVF, HNSW y k-means usan FAISS. La Parte~1 cubre el almacenamiento en páginas, los índices
+B+ y hash, los algoritmos externos, el SQL, las transacciones y la interfaz; la Parte~2, el
+R-Tree y el mapa; la Parte~3, el índice invertido con SPIMI y los rankings TF-IDF y BM25; la
+Parte~4, la búsqueda por similitud de imágenes y audio; y la Parte~5, las cuatro
+aplicaciones del Anexo~A como servicios que usan el gestor por su API. Cada parte tiene su
+comparación experimental medida en la sección~\ref{sec:experimentos}.
 
 \input{informe/01-arquitectura}
 \input{informe/02-datos}

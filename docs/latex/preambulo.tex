@@ -2,13 +2,15 @@
 
 \usepackage[T1]{fontenc}
 \usepackage[spanish,es-noquoting,es-tabla,es-nodecimaldot]{babel}
-\usepackage[a4paper,margin=2.1cm,top=2.3cm,bottom=2.2cm]{geometry}
+\usepackage[a4paper,margin=1.9cm,top=2.1cm,bottom=2.0cm]{geometry}
 \usepackage{amsmath,amssymb}
 \usepackage{booktabs}
 \usepackage{array}
+\usepackage{etoolbox}
 \usepackage{xcolor}
 \usepackage{tikz}
 \usepackage{float}
+\usepackage{placeins}
 \usepackage{listings}
 \usepackage{tcolorbox}
 \usepackage{enumitem}
@@ -17,7 +19,7 @@
 \usepackage[font=small,labelfont=bf,skip=4pt]{caption}
 \usepackage[hidelinks]{hyperref}
 
-\usetikzlibrary{positioning,arrows.meta}
+\usetikzlibrary{positioning,arrows.meta,fit}
 \tcbuselibrary{skins,breakable}
 
 % --- paleta ---------------------------------------------------------------
@@ -34,8 +36,10 @@
 % --- títulos, párrafos y encabezados ---------------------------------------
 \titleformat{\section}{\Large\bfseries\color{acento}}{\thesection}{0.7em}{}
 \titleformat{\subsection}{\large\bfseries}{\thesubsection}{0.6em}{}
-\titlespacing*{\section}{0pt}{14pt}{6pt}
-\titlespacing*{\subsection}{0pt}{10pt}{4pt}
+\titleformat{\subsubsection}{\normalsize\bfseries}{\thesubsubsection}{0.5em}{}
+\titlespacing*{\section}{0pt}{12pt}{5pt}
+\titlespacing*{\subsection}{0pt}{8pt}{3pt}
+\titlespacing*{\subsubsection}{0pt}{6pt}{2pt}
 \titlespacing*{\paragraph}{0pt}{7pt}{0.8em}
 \setlength{\parskip}{4pt}
 \setlength{\parindent}{0pt}
@@ -43,7 +47,7 @@
 \pagestyle{fancy}
 \fancyhf{}
 \fancyhead[L]{\small\color{gris}Minigestor de base de datos multimodal}
-\fancyhead[R]{\small\color{gris}Informe: Partes 1 y 2}
+\fancyhead[R]{\small\color{gris}Informe: Partes 1 a 5}
 \fancyfoot[C]{\small\color{gris}\thepage}
 \renewcommand{\headrulewidth}{0.4pt}
 
@@ -73,7 +77,8 @@
 }
 \lstdefinestyle{sql}{
   style=consola,
-  morekeywords={SELECT,FROM,WHERE,CREATE,TABLE,INDEX,USING,ORDER,BY,LIMIT,ON,AND,RTREE}
+  morekeywords={SELECT,FROM,WHERE,CREATE,TABLE,INDEX,USING,ORDER,BY,LIMIT,ON,AND,RTREE,
+                INVERTED,MATCH,BM25,TF_IDF,HNSW,IVF,WITH,SIMILAR_TO,DESC,AS}
 }
 \lstset{style=consola}
 
@@ -87,8 +92,26 @@
 }
 
 % Una gráfica de benchmarks/figures con su pie: [ancho]{archivo}{etiqueta}{pie}.
+% Las tablas de resultados van en letra chica para que quepan las cinco partes.
+\AtBeginEnvironment{table}{\setlength{\abovecaptionskip}{2pt}}
+\setlength{\textfloatsep}{8pt}
+% Más figuras y tablas por página de texto y sin páginas solo de figuras medio vacías.
+\renewcommand{\topfraction}{0.9}
+\renewcommand{\bottomfraction}{0.8}
+\renewcommand{\textfraction}{0.07}
+\renewcommand{\floatpagefraction}{0.85}
+\setcounter{totalnumber}{6}
+\setcounter{topnumber}{4}
+\setcounter{bottomnumber}{3}
+\makeatletter
+\setlength{\@fptop}{0pt}
+\setlength{\@fpsep}{10pt plus 2pt}
+\setlength{\@fpbot}{0pt plus 1fil}
+\makeatother
+\setlength{\intextsep}{6pt}
+
 \newcommand{\grafica}[4][\textwidth]{%
-  \begin{figure}[H]
+  \begin{figure}[!htb]
     \centering
     \includegraphics[width=#1]{../../benchmarks/figures/#2}
     \caption{#4}

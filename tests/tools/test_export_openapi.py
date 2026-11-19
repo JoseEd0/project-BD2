@@ -46,6 +46,15 @@ def test_the_copyright_contract_lives_next_to_its_interface(tmp_path: Path) -> N
     assert {"/detections", "/songs/{song_id}/audio"} <= set(paths)
 
 
+def test_the_papers_contract_lives_next_to_its_interface(tmp_path: Path) -> None:
+    export_contracts(tmp_path)
+    path = tmp_path / CONTRACTS["rag"].path
+    assert CONTRACTS["rag"].path == Path("apps/rag/web/openapi/rag.json")
+    schema = json.loads(path.read_text(encoding="utf-8"))
+    assert {"/search", "/answers", "/facets", "/papers/{paper_id}/pages/{page}"} <= set(schema["paths"])
+    assert "text/event-stream" in schema["paths"]["/answers"]["post"]["responses"]["200"]["content"]
+
+
 def test_exporting_twice_writes_the_same_bytes(tmp_path: Path) -> None:
     first = export_contracts(tmp_path / "first")
     second = export_contracts(tmp_path / "second")

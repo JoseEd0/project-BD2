@@ -33,6 +33,7 @@ import numpy as np
 from fastapi.testclient import TestClient
 
 from api.settings import IMPORT_DIRECTORIES_VARIABLE, STATEMENT_TIMEOUT_VARIABLE
+from appkit import redis_factory
 from benchmarks.common import Report, load_average, machine_description, results_directory
 from benchmarks.engine_process import engine_server
 from minigestor_client import AsyncClient, RetryPolicy, Timeouts
@@ -41,7 +42,6 @@ from shop.api import create_app
 from shop.catalog.rows import DatasetPaths, product_rows
 from shop.catalog.schema import HISTORY, PURCHASES
 from shop.recommend import queries
-from shop.recommend.cache import redis_client
 from shop.seed import run_seed
 from shop.settings import DATASET_DIRECTORY, SeedSettings, ShopSettings
 
@@ -176,8 +176,8 @@ def _recommendations(
         models_dir=arguments.models,
         max_search_limit=ON_THE_FLY_LIMIT,
     )
-    redis = redis_client(arguments.redis_url, settings.redis_timeout_seconds)
-    app = create_app(settings, text_encoder=NoTextEncoder(), cache_client=redis)
+    redis = redis_factory(arguments.redis_url, settings.redis_timeout_seconds)
+    app = create_app(settings, text_encoder=NoTextEncoder(), redis=redis)
     cold: list[float] = []
     warm: list[float] = []
     signals: dict[str, list[float]] = defaultdict(list)

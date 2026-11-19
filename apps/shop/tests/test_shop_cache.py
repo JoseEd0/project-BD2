@@ -1,11 +1,16 @@
-"""La caché de respuestas: acierto, fallo, invalidación por generación y Redis caído."""
+"""La caché de respuestas: acierto, fallo, TTL, invalidación por generación y Redis caído.
+Lo de prescindir de Redis (avisar una vez, la ventana de reintento) es de `appkit` y se
+prueba allí."""
 
 from __future__ import annotations
+
+from collections.abc import AsyncIterator
 
 import fakeredis
 import pytest
 from redis.exceptions import ConnectionError as RedisConnectionError
 
+from appkit import OptionalRedis
 from shop.recommend.cache import (
     PRODUCT_ENTITY,
     USER_ENTITY,
@@ -22,51 +27,49 @@ GUITAR = CacheEntry("producto", ((PRODUCT_ENTITY, "G"),), {"limite": 10})
 FOR_USER = CacheEntry("producto", ((PRODUCT_ENTITY, "G"), (USER_ENTITY, "U")), {"limite": 10})
 
 
-class Clock:
-    def __init__(self) -> None:
-        self.now = 0.0
-
-    def __call__(self) -> float:
-        return self.now
-
-
 class BrokenRedis(fakeredis.FakeAsyncRedis):
     async def execute_command(self, *args: object, **options: object) -> object:
         raise RedisConnectionError("sin conexión")
 
 
-def cache_on(client: fakeredis.FakeAsyncRedis, version: str = "v1") -> ResponseCache:
-    return ResponseCache(client, TTL_SECONDS, version, RETRY_SECONDS)
+@pytest.fixture
+def server() -> fakeredis.FakeServer:
+    return fakeredis.FakeServer()
 
 
-async def test_a_stored_response_is_a_hit():
-    cache = cache_on(fakeredis.FakeAsyncRedis())
+@pytest.fixture
+async def redis(server: fakeredis.FakeServer) -> AsyncIterator[OptionalRedis]:
+    optional = OptionalRedis(lambda: fakeredis.FakeAsyncRedis(server=server), RETRY_SECONDS)
+    async with optional.connected():
+        yield optional
+
+
+async def test_a_stored_response_is_a_hit(redis: OptionalRedis):
+    cache = ResponseCache(redis, TTL_SECONDS, "v1")
     missed = await cache.lookup(GUITAR)
     await cache.store(missed, b"{}")
     hit = await cache.lookup(GUITAR)
     assert (missed.status, hit.status, hit.payload) == (CacheStatus.MISS, CacheStatus.HIT, b"{}")
 
 
-async def test_other_parameters_or_version_miss():
-    client = fakeredis.FakeAsyncRedis()
-    cache = cache_on(client)
+async def test_other_parameters_or_version_miss(redis: OptionalRedis):
+    cache = ResponseCache(redis, TTL_SECONDS, "v1")
     await cache.store(await cache.lookup(GUITAR), b"{}")
     other = CacheEntry("producto", GUITAR.entities, {"limite": 5})
     assert (await cache.lookup(other)).status is CacheStatus.MISS
-    assert (await cache_on(client, "v2").lookup(GUITAR)).status is CacheStatus.MISS
+    assert (await ResponseCache(redis, TTL_SECONDS, "v2").lookup(GUITAR)).status is CacheStatus.MISS
 
 
-async def test_responses_expire_with_their_ttl():
-    client = fakeredis.FakeAsyncRedis()
-    cache = cache_on(client)
+async def test_responses_expire_with_their_ttl(redis: OptionalRedis, server: fakeredis.FakeServer):
+    cache = ResponseCache(redis, TTL_SECONDS, "v1")
     lookup = await cache.lookup(GUITAR)
     await cache.store(lookup, b"{}")
     assert lookup.key is not None
-    assert 0 < await client.ttl(lookup.key) <= TTL_SECONDS
+    assert 0 < await fakeredis.FakeAsyncRedis(server=server).ttl(lookup.key) <= TTL_SECONDS
 
 
-async def test_invalidating_a_product_or_a_user_drops_what_depends_on_it():
-    cache = cache_on(fakeredis.FakeAsyncRedis())
+async def test_invalidating_a_product_or_a_user_drops_what_depends_on_it(redis: OptionalRedis):
+    cache = ResponseCache(redis, TTL_SECONDS, "v1")
     for entry in (GUITAR, FOR_USER):
         await cache.store(await cache.lookup(entry), b"{}")
     await cache.invalidate([], ["U"])
@@ -76,8 +79,8 @@ async def test_invalidating_a_product_or_a_user_drops_what_depends_on_it():
     assert (await cache.lookup(GUITAR)).status is CacheStatus.MISS
 
 
-async def test_a_response_computed_before_an_invalidation_is_never_served():
-    cache = cache_on(fakeredis.FakeAsyncRedis())
+async def test_a_response_computed_before_an_invalidation_is_never_served(redis: OptionalRedis):
+    cache = ResponseCache(redis, TTL_SECONDS, "v1")
     before = await cache.lookup(GUITAR)
     await cache.invalidate(["G"], [])
     await cache.store(before, b"viejo")
@@ -85,20 +88,19 @@ async def test_a_response_computed_before_an_invalidation_is_never_served():
 
 
 async def test_without_redis_everything_bypasses():
-    cache = ResponseCache(None, TTL_SECONDS, "v1", RETRY_SECONDS)
-    lookup = await cache.lookup(GUITAR)
-    await cache.store(lookup, b"{}")
-    await cache.invalidate(["G"], ["U"])
+    optional = OptionalRedis(None, RETRY_SECONDS)
+    async with optional.connected():
+        cache = ResponseCache(optional, TTL_SECONDS, "v1")
+        lookup = await cache.lookup(GUITAR)
+        await cache.store(lookup, b"{}")
+        await cache.invalidate(["G"], ["U"])
     assert (lookup.status, lookup.key) == (CacheStatus.BYPASS, None)
 
 
-async def test_a_broken_redis_is_logged_once_and_retried_later(caplog: pytest.LogCaptureFixture):
-    clock = Clock()
-    broken = BrokenRedis()
-    cache = ResponseCache(broken, TTL_SECONDS, "v1", RETRY_SECONDS, clock)
-    assert (await cache.lookup(GUITAR)).status is CacheStatus.BYPASS
-    assert (await cache.lookup(GUITAR)).status is CacheStatus.BYPASS
-    await cache.invalidate(["G"], [])
-    assert len([record for record in caplog.records if "no responde" in record.message]) == 1
-    clock.now = RETRY_SECONDS + 1
-    assert (await cache.lookup(GUITAR)).status is CacheStatus.BYPASS
+async def test_a_broken_redis_bypasses_and_degrades_the_service():
+    optional = OptionalRedis(BrokenRedis, RETRY_SECONDS)
+    async with optional.connected():
+        cache = ResponseCache(optional, TTL_SECONDS, "v1")
+        assert (await cache.lookup(GUITAR)).status is CacheStatus.BYPASS
+        await cache.invalidate(["G"], [])
+        assert optional.degradation() is not None

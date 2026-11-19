@@ -13,14 +13,13 @@ import numpy as np
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from redis.asyncio import Redis
 from tests.shop.conftest import ENGINE_KEY, ENGINE_URL
 
+from appkit import RedisFactory, redis_factory
 from minigestor_client import AsyncClient
 from shop.api import create_app
 from shop.catalog.schema import COPURCHASES, HISTORY, PURCHASES
 from shop.recommend import queries
-from shop.recommend.cache import redis_client
 from shop.settings import ShopSettings
 
 GUITAR = "B000GUITAR"
@@ -38,7 +37,7 @@ class AnyTextEncoder:
         return np.zeros((len(texts), 512), dtype=np.float32)
 
 
-def shop_client(engine_app: FastAPI, tmp_path: Path, redis: Redis) -> TestClient:
+def shop_client(engine_app: FastAPI, tmp_path: Path, redis: RedisFactory) -> TestClient:
     settings = ShopSettings(
         engine_url=ENGINE_URL,  # type: ignore[arg-type]
         engine_key=ENGINE_KEY,  # type: ignore[arg-type]
@@ -49,14 +48,14 @@ def shop_client(engine_app: FastAPI, tmp_path: Path, redis: Redis) -> TestClient
         settings,
         text_encoder=AnyTextEncoder(),
         engine_transport=httpx.ASGITransport(app=engine_app),
-        cache_client=redis,
+        redis=redis,
     )
     return TestClient(app)
 
 
 @pytest.fixture
 def shop(seeded: None, engine_app: FastAPI, tmp_path: Path) -> Iterator[TestClient]:
-    with shop_client(engine_app, tmp_path, fakeredis.FakeAsyncRedis()) as client:
+    with shop_client(engine_app, tmp_path, fakeredis.FakeAsyncRedis) as client:
         yield client
 
 
@@ -197,12 +196,14 @@ def test_a_purchase_of_an_unknown_product_writes_nothing(shop: TestClient, engin
 def test_without_redis_the_service_still_answers(
     seeded: None, engine_app: FastAPI, tmp_path: Path, caplog: pytest.LogCaptureFixture
 ):
-    unreachable = redis_client(CLOSED_PORT_REDIS, REDIS_TIMEOUT_SECONDS)
+    unreachable = redis_factory(CLOSED_PORT_REDIS, REDIS_TIMEOUT_SECONDS)
     with shop_client(engine_app, tmp_path, unreachable) as shop:
         first = shop.get(f"/productos/{GUITAR}/recomendaciones")
         second = shop.get(f"/productos/{GUITAR}/recomendaciones")
         bought = shop.post("/usuarios/USER-C/compras", json={"producto": CABLE})
+        shop_health = shop.get("/health").json()
     assert [first.status_code, second.status_code, bought.status_code] == [200, 200, 201]
     assert first.headers["X-Cache"] == second.headers["X-Cache"] == "bypass"
+    assert shop_health["degraded"]["redis"].startswith("sin caché")
     warnings = [record for record in caplog.records if "Redis no responde" in record.message]
     assert len(warnings) == 1

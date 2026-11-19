@@ -55,9 +55,9 @@ flowchart LR
 | Aplicación | Carpeta | Contenedores | Abrir en | Del gestor usa |
 |---|---|---|---|---|
 | Copyright en audio (opción C) | [`apps/copyright/`](apps/copyright/README.md) | `copyright-api`, `copyright-web` | http://localhost:8101 | tramos de audio con HNSW sobre MFCC, consulta por segmentos, B+ e invertido |
-| Tienda con recomendaciones (opción B) | [`apps/shop/`](apps/shop/README.md) | `shop-api`, `shop-web` | http://localhost:8102 | secuencial, invertido en inglés, HNSW de SIFT y de CLIP, R-Tree y hash |
-| Preguntas a papers, RAG (opción A) | [`apps/rag/`](apps/rag/README.md) | `papers-api`, `papers-web` | http://localhost:8103 | `VECTOR(384)` con HNSW, invertido con BM25 y búsqueda híbrida |
-| Reconocimiento facial (opción D) | [`apps/faces/`](apps/faces/README.md) | `faces-api`, `faces-web` | http://localhost:8104 (cámara: https://&lt;ip&gt;:8404) | `VECTOR(128)` con HNSW, transacciones y Redis para los rastros |
+| Tienda con recomendaciones (opción B) | [`apps/shop/`](apps/shop/README.md) | `shop-api`, `shop-web` | http://localhost:8102 | secuencial, B+, invertido en inglés, HNSW de SIFT y de CLIP, R-Tree y hash; Redis para las recomendaciones |
+| Preguntas a papers, RAG (opción A) | [`apps/rag/`](apps/rag/README.md) | `papers-api`, `papers-web` | http://localhost:8103 | `VECTOR(384)` con HNSW, invertido con BM25 y búsqueda híbrida; responde con Claude Sonnet citando la página |
+| Reconocimiento facial (opción D) | [`apps/faces/`](apps/faces/README.md) | `faces-api`, `faces-web` | http://localhost:8104 (cámara: https://&lt;ip&gt;:8404) | `VECTOR(128)` con HNSW y transacciones; Redis para los rastros |
 | Consola del gestor (Partes 1 a 4) | [`frontend/`](frontend/README.md) | `console` | http://localhost:8080 | todo: SQL, plan, mapa, texto y multimedia |
 
 - **El gestor es el único servicio con estado** y vive en una red interna (`data`): no
@@ -71,9 +71,9 @@ flowchart LR
   [`apps/client`](apps/client/README.md) y arman su API con [`apps/kit`](apps/kit/README.md)
   (configuración, logs JSON, `X-Request-ID` de punta a punta, `/health`, `/ready` y
   migraciones). Lo comprueba [`tests/test_service_boundaries.py`](tests/test_service_boundaries.py).
-- **Redis** es la caché sin disco de las aplicaciones, en su propia red interna (`cache`).
-  Hoy la usa rostros para los rastros de cada sesión en vivo; si se cae, el servicio sigue
-  sin caché y lo dice en `/health`.
+- **Redis** es la caché sin disco de las aplicaciones, en su propia red interna (`cache`):
+  la tienda guarda ahí sus recomendaciones y rostros los rastros de cada sesión en vivo. Si
+  se cae, los servicios siguen sin caché y lo dicen en `/health`.
 
 Cómo se conecta una aplicación nueva está en [`apps/README.md`](apps/README.md#desplegar-una-app).
 

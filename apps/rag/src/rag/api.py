@@ -2,9 +2,11 @@
 
     uvicorn --factory rag.api:create_app --host 0.0.0.0 --port 8000
 
-- `POST /search`: los fragmentos más relevantes en modo BM25, vectorial o híbrido.
+- `POST /search`: los fragmentos más relevantes en modo BM25, vectorial o híbrido, con el
+  SQL de cada consulta que corrió.
 - `POST /answers`: la respuesta de Claude con citas `[n]`, en Server-Sent Events.
 - `GET /papers/{id}/pages/{n}` y `GET /papers/{id}/file`: la página citada y su archivo.
+- `GET /facets`: los años y las categorías del corpus, con cuántos papers tiene cada uno.
 
 Sin estado: el gestor guarda los fragmentos y sus índices, y cada réplica carga el modelo
 de embeddings al arrancar (`RAG_MODELS_DIR`). Además de las rutas de `appkit` (`/health`,
@@ -29,10 +31,19 @@ from .answering import Answerer
 from .budget import DailyBudget
 from .config import RagSettings, load_embedder, open_answer_model
 from .embeddings import Embedder
+from .facets import Facets, facets_of
 from .llm import AnswerModel
 from .papers import PageResponse, corpus_file, page_of, stored_paper
 from .schema import ID_LENGTH, SCHEMA
-from .search import DEFAULT_RESULTS, MAX_RESULTS, Retriever, SearchHit, SearchMode
+from .search import (
+    DEFAULT_RESULTS,
+    MAX_RESULTS,
+    ExecutedQuery,
+    Retriever,
+    SearchFilters,
+    SearchHit,
+    SearchMode,
+)
 from .sse import EVENT_STREAM_MEDIA_TYPE, EventStreamResponse
 
 NAME = "rag"
@@ -63,16 +74,19 @@ class SearchRequest(BaseModel):
     query: Question
     mode: SearchMode = SearchMode.HYBRID
     k: int = Field(default=DEFAULT_RESULTS, ge=1, le=MAX_RESULTS)
+    filters: SearchFilters | None = None
 
 
 class SearchResponse(BaseModel):
     query: str
     mode: SearchMode
     results: list[SearchHit]
+    queries: list[ExecutedQuery]
 
 
 class AnswerRequest(BaseModel):
     question: Question
+    filters: SearchFilters | None = None
 
 
 def embedder_of(request: Request) -> Embedder:
@@ -105,10 +119,20 @@ async def search(
     settings: Annotated[RagSettings, Depends(settings_of)],
 ) -> SearchResponse:
     """Los `k` fragmentos más relevantes para `query`, con su paper, sus páginas y sus
-    puntajes, de mejor a peor."""
+    puntajes, de mejor a peor, solo de los papers que cumplen `filters`; y el SQL de cada
+    consulta que corrió en el gestor."""
     retriever = Retriever(engine, embedder, rrf_k=settings.rrf_k)
-    hits = await retriever.search(body.query, body.mode, body.k)
-    return SearchResponse(query=body.query, mode=body.mode, results=hits)
+    hits = await retriever.search(body.query, body.mode, body.k, body.filters)
+    return SearchResponse(
+        query=body.query, mode=body.mode, results=hits, queries=retriever.executed
+    )
+
+
+@router.get("/facets")
+async def facets(engine: Engine) -> Facets:
+    """Los años y las categorías primarias del corpus con cuántos papers tiene cada uno: los
+    valores que admiten los filtros de `/search` y `/answers`."""
+    return await facets_of(engine)
 
 
 @router.post(
@@ -125,7 +149,7 @@ async def answers(
     """La respuesta a `question` en Server-Sent Events: `sources`, `delta`… y `done` (o
     `error`). Ver `rag.answering`. La búsqueda y el tope de gasto se resuelven antes de
     empezar: sus errores son respuestas JSON con su estado."""
-    prepared = await answerer.prepare(body.question, engine, embedder)
+    prepared = await answerer.prepare(body.question, engine, embedder, body.filters)
     return EventStreamResponse(answerer.events(prepared))
 
 

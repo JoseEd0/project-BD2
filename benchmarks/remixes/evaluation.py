@@ -35,7 +35,7 @@ ALL_VERSIONS = "todas"
 ROC = "roc"
 DETECTION = "deteccion"
 LOCALIZATION = "localizacion"
-BY_LENGTH = "por_largo"
+BY_FRAGMENTS = "por_fragmentos"
 LATENCY = "latencia"
 SCORES = "puntajes"
 PRECISION = "precisión"
@@ -132,6 +132,7 @@ def analyse(
         _add_localization(report, version, cases, chosen, remixes)
         _add_latency(report, version, group, remixes)
         _add_recall_by_length(report, version, group, chosen, length_bins, remixes)
+        _add_recall_by_fragments(report, version, group, chosen, remixes)
     return chosen
 
 
@@ -282,24 +283,54 @@ def _add_recall_by_length(
     bins: Sequence[float],
     remixes: int,
 ) -> None:
-    found: dict[int, list[bool]] = {index: [] for index in range(len(bins) - 1)}
+    claimed: dict[int, list[bool]] = {index: [] for index in range(len(bins) - 1)}
+    present: dict[int, list[bool]] = {index: [] for index in range(len(bins) - 1)}
     for upload in uploads:
-        claimed = {match.song_id for match in upload.case.detected if match.score >= chosen}
+        above = {match.song_id for match in upload.case.detected if match.score >= chosen}
+        anywhere = {match.song_id for match in upload.case.detected}
         for truth, seconds in zip(upload.case.truth, upload.lengths, strict=True):
             index = _bin_of(seconds, bins)
             if index is not None:
-                found[index].append(truth.song_id in claimed)
-    for index, outcomes in found.items():
+                claimed[index].append(truth.song_id in above)
+                present[index].append(truth.song_id in anywhere)
+    for index, outcomes in claimed.items():
         report.add(
             version,
             _bin_label(bins, index),
             remixes,
             0.0,
-            recall=round(sum(outcomes) / len(outcomes), DIGITS) if outcomes else None,
+            recall=_share(outcomes),
+            entre_las_coincidencias=_share(present[index]),
             fragmentos=len(outcomes),
             desde=bins[index],
             hasta=bins[index + 1],
         )
+
+
+def _add_recall_by_fragments(
+    report: Report, version: str, uploads: Sequence[Upload], chosen: float, remixes: int
+) -> None:
+    """El recall según cuántos fragmentos lleva el remix: con más fragmentos, cada uno cubre
+    menos ventanas de la subida."""
+    by_count: dict[int, list[bool]] = {}
+    for upload in uploads:
+        above = {match.song_id for match in upload.case.detected if match.score >= chosen}
+        for truth in upload.case.truth:
+            by_count.setdefault(len(upload.case.truth), []).append(truth.song_id in above)
+    for count, outcomes in sorted(by_count.items()):
+        report.add(
+            version,
+            BY_FRAGMENTS,
+            remixes,
+            0.0,
+            fragmentos_por_remix=count,
+            recall=_share(outcomes),
+            fragmentos=len(outcomes),
+        )
+
+
+def _share(outcomes: Sequence[bool]) -> float | None:
+    return round(sum(outcomes) / len(outcomes), DIGITS) if outcomes else None
 
 
 def length_bin_label(low: float, high: float) -> str:

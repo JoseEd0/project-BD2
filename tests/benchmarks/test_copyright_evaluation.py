@@ -7,6 +7,7 @@ import pytest
 from benchmarks.common import Report
 from benchmarks.remixes.evaluation import (
     ALL_VERSIONS,
+    BY_FRAGMENTS,
     F1,
     LATENCY,
     PRECISION,
@@ -162,6 +163,9 @@ def test_the_analysis_chooses_the_youden_threshold_and_measures_at_it():
     assert measured(report, "original", length_bin_label(7.5, 20.0))["recall"] == 1.0
     assert measured(report, "ruido", length_bin_label(7.5, 20.0))["recall"] == 0.0
     assert measured(report, "ruido", length_bin_label(5.0, 7.5))["fragmentos"] == 0
+    assert measured(report, "ruido", length_bin_label(7.5, 20.0))["entre_las_coincidencias"] == 0.0
+    by_fragments = measured(report, ALL_VERSIONS, BY_FRAGMENTS)
+    assert (by_fragments["fragmentos_por_remix"], by_fragments["recall"]) == (1, 0.5)
 
 
 def test_another_scoring_is_compared_on_the_same_matches():

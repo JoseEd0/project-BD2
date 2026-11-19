@@ -8,6 +8,7 @@ version = "0.1.0"
 description = "RAG sobre papers: corpus de arXiv, ingesta en el gestor y recuperación híbrida"
 requires-python = ">=3.11"
 dependencies = [
+    "anthropic>=1.0",
     "minigestor-kit",
     "numpy>=1.26",
     "onnxruntime>=1.20",

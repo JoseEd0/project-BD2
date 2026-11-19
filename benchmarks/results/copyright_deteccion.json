@@ -1,0 +1,1608 @@
+{
+  "name": "copyright_deteccion",
+  "parameters": {
+    "durations": [
+      30,
+      60,
+      180
+    ],
+    "repetitions": 10,
+    "cases": 20,
+    "held_out": 40,
+    "seed": 20261119,
+    "catalog_songs": 7954,
+    "window_seconds": 5.0,
+    "hop_seconds": 2.5,
+    "neighbours_per_window": 10,
+    "min_run_windows": 2,
+    "match_threshold": 0.45,
+    "upload_format": "MP3",
+    "machine": {
+      "procesador": "Apple M4 Pro",
+      "nucleos": 12,
+      "sistema": "macOS-27.0.1-arm64-arm-64bit",
+      "python": "3.12.11",
+      "carga_media_1_min": 4.94
+    },
+    "load_average_30": 5.11,
+    "load_average_60": 5.02,
+    "load_average_180": 4.86
+  },
+  "measurements": [
+    {
+      "technique": "pista del catálogo entera",
+      "operation": "control",
+      "dataset_size": 0,
+      "milliseconds": 85.946,
+      "extra": {
+        "cancion": 108299,
+        "puntaje_copiada": 0.996,
+        "puntaje_otra": 0.34,
+        "desfase_esperado": 0.0,
+        "desfase": 0.0,
+        "detectada": true,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "tramo de 15 s fuera de la rejilla",
+      "operation": "control",
+      "dataset_size": 0,
+      "milliseconds": 101.264,
+      "extra": {
+        "cancion": 108299,
+        "puntaje_copiada": 0.478,
+        "puntaje_otra": 0.33,
+        "desfase_esperado": 4.0,
+        "desfase": 5.0,
+        "detectada": true,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "tramo de 7,5 s",
+      "operation": "control",
+      "dataset_size": 0,
+      "milliseconds": 82.786,
+      "extra": {
+        "cancion": 108299,
+        "puntaje_copiada": 0.266,
+        "puntaje_otra": 0.176,
+        "desfase_esperado": -5.0,
+        "desfase": -5.0,
+        "detectada": false,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "pista no catalogada",
+      "operation": "control",
+      "dataset_size": 0,
+      "milliseconds": 82.874,
+      "extra": {
+        "cancion": 127331,
+        "puntaje_copiada": 0.0,
+        "puntaje_otra": 0.313,
+        "desfase_esperado": null,
+        "desfase": null,
+        "detectada": false,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "pista del catálogo entera",
+      "operation": "control",
+      "dataset_size": 1,
+      "milliseconds": 85.157,
+      "extra": {
+        "cancion": 23505,
+        "puntaje_copiada": 0.993,
+        "puntaje_otra": 0.23,
+        "desfase_esperado": 0.0,
+        "desfase": 0.0,
+        "detectada": true,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "tramo de 15 s fuera de la rejilla",
+      "operation": "control",
+      "dataset_size": 1,
+      "milliseconds": 82.169,
+      "extra": {
+        "cancion": 23505,
+        "puntaje_copiada": 0.477,
+        "puntaje_otra": 0.225,
+        "desfase_esperado": 4.0,
+        "desfase": 5.0,
+        "detectada": true,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "tramo de 7,5 s",
+      "operation": "control",
+      "dataset_size": 1,
+      "milliseconds": 79.126,
+      "extra": {
+        "cancion": 23505,
+        "puntaje_copiada": 0.27,
+        "puntaje_otra": 0.28,
+        "desfase_esperado": -5.0,
+        "desfase": -5.0,
+        "detectada": false,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "pista no catalogada",
+      "operation": "control",
+      "dataset_size": 1,
+      "milliseconds": 77.381,
+      "extra": {
+        "cancion": 87322,
+        "puntaje_copiada": 0.0,
+        "puntaje_otra": 0.28,
+        "desfase_esperado": null,
+        "desfase": null,
+        "detectada": false,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "pista del catálogo entera",
+      "operation": "control",
+      "dataset_size": 2,
+      "milliseconds": 78.753,
+      "extra": {
+        "cancion": 93716,
+        "puntaje_copiada": 0.995,
+        "puntaje_otra": 0.172,
+        "desfase_esperado": 0.0,
+        "desfase": 0.0,
+        "detectada": true,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "tramo de 15 s fuera de la rejilla",
+      "operation": "control",
+      "dataset_size": 2,
+      "milliseconds": 78.916,
+      "extra": {
+        "cancion": 93716,
+        "puntaje_copiada": 0.541,
+        "puntaje_otra": 0.183,
+        "desfase_esperado": 4.0,
+        "desfase": 5.0,
+        "detectada": true,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "tramo de 7,5 s",
+      "operation": "control",
+      "dataset_size": 2,
+      "milliseconds": 77.573,
+      "extra": {
+        "cancion": 93716,
+        "puntaje_copiada": 0.254,
+        "puntaje_otra": 0.357,
+        "desfase_esperado": -5.0,
+        "desfase": -5.0,
+        "detectada": false,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "pista no catalogada",
+      "operation": "control",
+      "dataset_size": 2,
+      "milliseconds": 77.999,
+      "extra": {
+        "cancion": 120112,
+        "puntaje_copiada": 0.0,
+        "puntaje_otra": 0.368,
+        "desfase_esperado": null,
+        "desfase": null,
+        "detectada": false,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "pista del catálogo entera",
+      "operation": "control",
+      "dataset_size": 3,
+      "milliseconds": 72.255,
+      "extra": {
+        "cancion": 110437,
+        "puntaje_copiada": 0.997,
+        "puntaje_otra": 0.61,
+        "desfase_esperado": 0.0,
+        "desfase": 0.0,
+        "detectada": true,
+        "falsa": true
+      }
+    },
+    {
+      "technique": "tramo de 15 s fuera de la rejilla",
+      "operation": "control",
+      "dataset_size": 3,
+      "milliseconds": 76.371,
+      "extra": {
+        "cancion": 110437,
+        "puntaje_copiada": 0.49,
+        "puntaje_otra": 0.443,
+        "desfase_esperado": 4.0,
+        "desfase": 5.0,
+        "detectada": true,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "tramo de 7,5 s",
+      "operation": "control",
+      "dataset_size": 3,
+      "milliseconds": 89.615,
+      "extra": {
+        "cancion": 110437,
+        "puntaje_copiada": 0.199,
+        "puntaje_otra": 0.575,
+        "desfase_esperado": -5.0,
+        "desfase": -5.0,
+        "detectada": false,
+        "falsa": true
+      }
+    },
+    {
+      "technique": "pista no catalogada",
+      "operation": "control",
+      "dataset_size": 3,
+      "milliseconds": 83.94,
+      "extra": {
+        "cancion": 94039,
+        "puntaje_copiada": 0.0,
+        "puntaje_otra": 0.671,
+        "desfase_esperado": null,
+        "desfase": null,
+        "detectada": false,
+        "falsa": true
+      }
+    },
+    {
+      "technique": "pista del catálogo entera",
+      "operation": "control",
+      "dataset_size": 4,
+      "milliseconds": 76.485,
+      "extra": {
+        "cancion": 123762,
+        "puntaje_copiada": 0.999,
+        "puntaje_otra": 0.194,
+        "desfase_esperado": 0.0,
+        "desfase": 0.0,
+        "detectada": true,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "tramo de 15 s fuera de la rejilla",
+      "operation": "control",
+      "dataset_size": 4,
+      "milliseconds": 78.222,
+      "extra": {
+        "cancion": 123762,
+        "puntaje_copiada": 0.652,
+        "puntaje_otra": 0.218,
+        "desfase_esperado": 4.0,
+        "desfase": 2.5,
+        "detectada": true,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "tramo de 7,5 s",
+      "operation": "control",
+      "dataset_size": 4,
+      "milliseconds": 78.516,
+      "extra": {
+        "cancion": 123762,
+        "puntaje_copiada": 0.382,
+        "puntaje_otra": 0.269,
+        "desfase_esperado": -5.0,
+        "desfase": -5.0,
+        "detectada": false,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "pista no catalogada",
+      "operation": "control",
+      "dataset_size": 4,
+      "milliseconds": 102.93,
+      "extra": {
+        "cancion": 120776,
+        "puntaje_copiada": 0.0,
+        "puntaje_otra": 0.218,
+        "desfase_esperado": null,
+        "desfase": null,
+        "detectada": false,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "pista del catálogo entera",
+      "operation": "control",
+      "dataset_size": 5,
+      "milliseconds": 84.091,
+      "extra": {
+        "cancion": 89350,
+        "puntaje_copiada": 1.0,
+        "puntaje_otra": 0.395,
+        "desfase_esperado": 0.0,
+        "desfase": 0.0,
+        "detectada": true,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "tramo de 15 s fuera de la rejilla",
+      "operation": "control",
+      "dataset_size": 5,
+      "milliseconds": 85.031,
+      "extra": {
+        "cancion": 89350,
+        "puntaje_copiada": 0.397,
+        "puntaje_otra": 0.485,
+        "desfase_esperado": 4.0,
+        "desfase": 2.5,
+        "detectada": false,
+        "falsa": true
+      }
+    },
+    {
+      "technique": "tramo de 7,5 s",
+      "operation": "control",
+      "dataset_size": 5,
+      "milliseconds": 78.483,
+      "extra": {
+        "cancion": 89350,
+        "puntaje_copiada": 0.2,
+        "puntaje_otra": 0.287,
+        "desfase_esperado": -5.0,
+        "desfase": -5.0,
+        "detectada": false,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "pista no catalogada",
+      "operation": "control",
+      "dataset_size": 5,
+      "milliseconds": 73.541,
+      "extra": {
+        "cancion": 126219,
+        "puntaje_copiada": 0.0,
+        "puntaje_otra": 0.194,
+        "desfase_esperado": null,
+        "desfase": null,
+        "detectada": false,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "pista del catálogo entera",
+      "operation": "control",
+      "dataset_size": 6,
+      "milliseconds": 82.314,
+      "extra": {
+        "cancion": 61587,
+        "puntaje_copiada": 0.998,
+        "puntaje_otra": 0.0,
+        "desfase_esperado": 0.0,
+        "desfase": 0.0,
+        "detectada": true,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "tramo de 15 s fuera de la rejilla",
+      "operation": "control",
+      "dataset_size": 6,
+      "milliseconds": 82.375,
+      "extra": {
+        "cancion": 61587,
+        "puntaje_copiada": 0.609,
+        "puntaje_otra": 0.176,
+        "desfase_esperado": 4.0,
+        "desfase": 5.0,
+        "detectada": true,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "tramo de 7,5 s",
+      "operation": "control",
+      "dataset_size": 6,
+      "milliseconds": 83.151,
+      "extra": {
+        "cancion": 61587,
+        "puntaje_copiada": 0.326,
+        "puntaje_otra": 0.381,
+        "desfase_esperado": -5.0,
+        "desfase": -5.0,
+        "detectada": false,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "pista no catalogada",
+      "operation": "control",
+      "dataset_size": 6,
+      "milliseconds": 83.353,
+      "extra": {
+        "cancion": 110263,
+        "puntaje_copiada": 0.0,
+        "puntaje_otra": 0.381,
+        "desfase_esperado": null,
+        "desfase": null,
+        "detectada": false,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "pista del catálogo entera",
+      "operation": "control",
+      "dataset_size": 7,
+      "milliseconds": 82.045,
+      "extra": {
+        "cancion": 132042,
+        "puntaje_copiada": 0.986,
+        "puntaje_otra": 0.245,
+        "desfase_esperado": 0.0,
+        "desfase": 0.0,
+        "detectada": true,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "tramo de 15 s fuera de la rejilla",
+      "operation": "control",
+      "dataset_size": 7,
+      "milliseconds": 74.977,
+      "extra": {
+        "cancion": 132042,
+        "puntaje_copiada": 0.45,
+        "puntaje_otra": 0.196,
+        "desfase_esperado": 4.0,
+        "desfase": 5.0,
+        "detectada": true,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "tramo de 7,5 s",
+      "operation": "control",
+      "dataset_size": 7,
+      "milliseconds": 73.969,
+      "extra": {
+        "cancion": 132042,
+        "puntaje_copiada": 0.196,
+        "puntaje_otra": 0.194,
+        "desfase_esperado": -5.0,
+        "desfase": -5.0,
+        "detectada": false,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "pista no catalogada",
+      "operation": "control",
+      "dataset_size": 7,
+      "milliseconds": 74.402,
+      "extra": {
+        "cancion": 44342,
+        "puntaje_copiada": 0.0,
+        "puntaje_otra": 0.198,
+        "desfase_esperado": null,
+        "desfase": null,
+        "detectada": false,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "pista del catálogo entera",
+      "operation": "control",
+      "dataset_size": 8,
+      "milliseconds": 86.585,
+      "extra": {
+        "cancion": 69198,
+        "puntaje_copiada": 0.995,
+        "puntaje_otra": 0.0,
+        "desfase_esperado": 0.0,
+        "desfase": 0.0,
+        "detectada": true,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "tramo de 15 s fuera de la rejilla",
+      "operation": "control",
+      "dataset_size": 8,
+      "milliseconds": 85.996,
+      "extra": {
+        "cancion": 69198,
+        "puntaje_copiada": 0.49,
+        "puntaje_otra": 0.172,
+        "desfase_esperado": 4.0,
+        "desfase": 5.0,
+        "detectada": true,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "tramo de 7,5 s",
+      "operation": "control",
+      "dataset_size": 8,
+      "milliseconds": 84.969,
+      "extra": {
+        "cancion": 69198,
+        "puntaje_copiada": 0.199,
+        "puntaje_otra": 0.342,
+        "desfase_esperado": -5.0,
+        "desfase": -5.0,
+        "detectada": false,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "pista no catalogada",
+      "operation": "control",
+      "dataset_size": 8,
+      "milliseconds": 83.881,
+      "extra": {
+        "cancion": 145777,
+        "puntaje_copiada": 0.0,
+        "puntaje_otra": 0.342,
+        "desfase_esperado": null,
+        "desfase": null,
+        "detectada": false,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "pista del catálogo entera",
+      "operation": "control",
+      "dataset_size": 9,
+      "milliseconds": 78.937,
+      "extra": {
+        "cancion": 141285,
+        "puntaje_copiada": 1.0,
+        "puntaje_otra": 0.193,
+        "desfase_esperado": 0.0,
+        "desfase": 0.0,
+        "detectada": true,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "tramo de 15 s fuera de la rejilla",
+      "operation": "control",
+      "dataset_size": 9,
+      "milliseconds": 81.073,
+      "extra": {
+        "cancion": 141285,
+        "puntaje_copiada": 0.568,
+        "puntaje_otra": 0.283,
+        "desfase_esperado": 4.0,
+        "desfase": 5.0,
+        "detectada": true,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "tramo de 7,5 s",
+      "operation": "control",
+      "dataset_size": 9,
+      "milliseconds": 82.534,
+      "extra": {
+        "cancion": 141285,
+        "puntaje_copiada": 0.372,
+        "puntaje_otra": 0.274,
+        "desfase_esperado": -5.0,
+        "desfase": -5.0,
+        "detectada": false,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "pista no catalogada",
+      "operation": "control",
+      "dataset_size": 9,
+      "milliseconds": 81.139,
+      "extra": {
+        "cancion": 3905,
+        "puntaje_copiada": 0.0,
+        "puntaje_otra": 0.261,
+        "desfase_esperado": null,
+        "desfase": null,
+        "detectada": false,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "pista del catálogo entera",
+      "operation": "control",
+      "dataset_size": 10,
+      "milliseconds": 81.136,
+      "extra": {
+        "cancion": 113027,
+        "puntaje_copiada": 0.992,
+        "puntaje_otra": 0.18,
+        "desfase_esperado": 0.0,
+        "desfase": 0.0,
+        "detectada": true,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "tramo de 15 s fuera de la rejilla",
+      "operation": "control",
+      "dataset_size": 10,
+      "milliseconds": 81.807,
+      "extra": {
+        "cancion": 113027,
+        "puntaje_copiada": 0.487,
+        "puntaje_otra": 0.186,
+        "desfase_esperado": 4.0,
+        "desfase": 5.0,
+        "detectada": true,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "tramo de 7,5 s",
+      "operation": "control",
+      "dataset_size": 10,
+      "milliseconds": 83.291,
+      "extra": {
+        "cancion": 113027,
+        "puntaje_copiada": 0.199,
+        "puntaje_otra": 0.452,
+        "desfase_esperado": -5.0,
+        "desfase": -5.0,
+        "detectada": false,
+        "falsa": true
+      }
+    },
+    {
+      "technique": "pista no catalogada",
+      "operation": "control",
+      "dataset_size": 10,
+      "milliseconds": 83.286,
+      "extra": {
+        "cancion": 51292,
+        "puntaje_copiada": 0.0,
+        "puntaje_otra": 0.728,
+        "desfase_esperado": null,
+        "desfase": null,
+        "detectada": false,
+        "falsa": true
+      }
+    },
+    {
+      "technique": "pista del catálogo entera",
+      "operation": "control",
+      "dataset_size": 11,
+      "milliseconds": 84.841,
+      "extra": {
+        "cancion": 70773,
+        "puntaje_copiada": 0.997,
+        "puntaje_otra": 0.276,
+        "desfase_esperado": 0.0,
+        "desfase": 0.0,
+        "detectada": true,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "tramo de 15 s fuera de la rejilla",
+      "operation": "control",
+      "dataset_size": 11,
+      "milliseconds": 85.173,
+      "extra": {
+        "cancion": 70773,
+        "puntaje_copiada": 0.661,
+        "puntaje_otra": 0.27,
+        "desfase_esperado": 4.0,
+        "desfase": 5.0,
+        "detectada": true,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "tramo de 7,5 s",
+      "operation": "control",
+      "dataset_size": 11,
+      "milliseconds": 84.819,
+      "extra": {
+        "cancion": 70773,
+        "puntaje_copiada": 0.376,
+        "puntaje_otra": 0.182,
+        "desfase_esperado": -5.0,
+        "desfase": -5.0,
+        "detectada": false,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "pista no catalogada",
+      "operation": "control",
+      "dataset_size": 11,
+      "milliseconds": 203.826,
+      "extra": {
+        "cancion": 106456,
+        "puntaje_copiada": 0.0,
+        "puntaje_otra": 0.164,
+        "desfase_esperado": null,
+        "desfase": null,
+        "detectada": false,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "pista del catálogo entera",
+      "operation": "control",
+      "dataset_size": 12,
+      "milliseconds": 127.217,
+      "extra": {
+        "cancion": 149082,
+        "puntaje_copiada": 0.999,
+        "puntaje_otra": 0.276,
+        "desfase_esperado": 0.0,
+        "desfase": 0.0,
+        "detectada": true,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "tramo de 15 s fuera de la rejilla",
+      "operation": "control",
+      "dataset_size": 12,
+      "milliseconds": 110.544,
+      "extra": {
+        "cancion": 149082,
+        "puntaje_copiada": 0.568,
+        "puntaje_otra": 0.186,
+        "desfase_esperado": 4.0,
+        "desfase": 5.0,
+        "detectada": true,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "tramo de 7,5 s",
+      "operation": "control",
+      "dataset_size": 12,
+      "milliseconds": 86.32,
+      "extra": {
+        "cancion": 149082,
+        "puntaje_copiada": 0.363,
+        "puntaje_otra": 0.437,
+        "desfase_esperado": -5.0,
+        "desfase": -5.0,
+        "detectada": false,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "pista no catalogada",
+      "operation": "control",
+      "dataset_size": 12,
+      "milliseconds": 88.05,
+      "extra": {
+        "cancion": 118489,
+        "puntaje_copiada": 0.0,
+        "puntaje_otra": 0.519,
+        "desfase_esperado": null,
+        "desfase": null,
+        "detectada": false,
+        "falsa": true
+      }
+    },
+    {
+      "technique": "pista del catálogo entera",
+      "operation": "control",
+      "dataset_size": 13,
+      "milliseconds": 78.1,
+      "extra": {
+        "cancion": 109543,
+        "puntaje_copiada": 0.996,
+        "puntaje_otra": 0.271,
+        "desfase_esperado": 0.0,
+        "desfase": 0.0,
+        "detectada": true,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "tramo de 15 s fuera de la rejilla",
+      "operation": "control",
+      "dataset_size": 13,
+      "milliseconds": 80.082,
+      "extra": {
+        "cancion": 109543,
+        "puntaje_copiada": 0.482,
+        "puntaje_otra": 0.185,
+        "desfase_esperado": 4.0,
+        "desfase": 5.0,
+        "detectada": true,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "tramo de 7,5 s",
+      "operation": "control",
+      "dataset_size": 13,
+      "milliseconds": 82.602,
+      "extra": {
+        "cancion": 109543,
+        "puntaje_copiada": 0.359,
+        "puntaje_otra": 0.18,
+        "desfase_esperado": -5.0,
+        "desfase": -5.0,
+        "detectada": false,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "pista no catalogada",
+      "operation": "control",
+      "dataset_size": 13,
+      "milliseconds": 82.237,
+      "extra": {
+        "cancion": 81543,
+        "puntaje_copiada": 0.0,
+        "puntaje_otra": 0.185,
+        "desfase_esperado": null,
+        "desfase": null,
+        "detectada": false,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "pista del catálogo entera",
+      "operation": "control",
+      "dataset_size": 14,
+      "milliseconds": 99.305,
+      "extra": {
+        "cancion": 112821,
+        "puntaje_copiada": 1.0,
+        "puntaje_otra": 0.296,
+        "desfase_esperado": 0.0,
+        "desfase": 0.0,
+        "detectada": true,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "tramo de 15 s fuera de la rejilla",
+      "operation": "control",
+      "dataset_size": 14,
+      "milliseconds": 87.859,
+      "extra": {
+        "cancion": 112821,
+        "puntaje_copiada": 0.498,
+        "puntaje_otra": 0.198,
+        "desfase_esperado": 4.0,
+        "desfase": 5.0,
+        "detectada": true,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "tramo de 7,5 s",
+      "operation": "control",
+      "dataset_size": 14,
+      "milliseconds": 82.958,
+      "extra": {
+        "cancion": 112821,
+        "puntaje_copiada": 0.39,
+        "puntaje_otra": 0.198,
+        "desfase_esperado": -5.0,
+        "desfase": 0.0,
+        "detectada": false,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "pista no catalogada",
+      "operation": "control",
+      "dataset_size": 14,
+      "milliseconds": 82.223,
+      "extra": {
+        "cancion": 67660,
+        "puntaje_copiada": 0.0,
+        "puntaje_otra": 0.233,
+        "desfase_esperado": null,
+        "desfase": null,
+        "detectada": false,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "pista del catálogo entera",
+      "operation": "control",
+      "dataset_size": 15,
+      "milliseconds": 84.453,
+      "extra": {
+        "cancion": 149370,
+        "puntaje_copiada": 0.997,
+        "puntaje_otra": 0.31,
+        "desfase_esperado": 0.0,
+        "desfase": 0.0,
+        "detectada": true,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "tramo de 15 s fuera de la rejilla",
+      "operation": "control",
+      "dataset_size": 15,
+      "milliseconds": 96.355,
+      "extra": {
+        "cancion": 149370,
+        "puntaje_copiada": 0.551,
+        "puntaje_otra": 0.263,
+        "desfase_esperado": 4.0,
+        "desfase": 5.0,
+        "detectada": true,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "tramo de 7,5 s",
+      "operation": "control",
+      "dataset_size": 15,
+      "milliseconds": 86.098,
+      "extra": {
+        "cancion": 149370,
+        "puntaje_copiada": 0.199,
+        "puntaje_otra": 0.258,
+        "desfase_esperado": -5.0,
+        "desfase": -5.0,
+        "detectada": false,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "pista no catalogada",
+      "operation": "control",
+      "dataset_size": 15,
+      "milliseconds": 85.45,
+      "extra": {
+        "cancion": 134443,
+        "puntaje_copiada": 0.0,
+        "puntaje_otra": 0.263,
+        "desfase_esperado": null,
+        "desfase": null,
+        "detectada": false,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "pista del catálogo entera",
+      "operation": "control",
+      "dataset_size": 16,
+      "milliseconds": 80.171,
+      "extra": {
+        "cancion": 55100,
+        "puntaje_copiada": 0.999,
+        "puntaje_otra": 0.278,
+        "desfase_esperado": 0.0,
+        "desfase": 0.0,
+        "detectada": true,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "tramo de 15 s fuera de la rejilla",
+      "operation": "control",
+      "dataset_size": 16,
+      "milliseconds": 77.751,
+      "extra": {
+        "cancion": 55100,
+        "puntaje_copiada": 0.485,
+        "puntaje_otra": 0.28,
+        "desfase_esperado": 4.0,
+        "desfase": 5.0,
+        "detectada": true,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "tramo de 7,5 s",
+      "operation": "control",
+      "dataset_size": 16,
+      "milliseconds": 75.206,
+      "extra": {
+        "cancion": 55100,
+        "puntaje_copiada": 0.2,
+        "puntaje_otra": 0.298,
+        "desfase_esperado": -5.0,
+        "desfase": -5.0,
+        "detectada": false,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "pista no catalogada",
+      "operation": "control",
+      "dataset_size": 16,
+      "milliseconds": 75.347,
+      "extra": {
+        "cancion": 10675,
+        "puntaje_copiada": 0.0,
+        "puntaje_otra": 0.298,
+        "desfase_esperado": null,
+        "desfase": null,
+        "detectada": false,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "pista del catálogo entera",
+      "operation": "control",
+      "dataset_size": 17,
+      "milliseconds": 82.196,
+      "extra": {
+        "cancion": 149727,
+        "puntaje_copiada": 0.998,
+        "puntaje_otra": 0.272,
+        "desfase_esperado": 0.0,
+        "desfase": 0.0,
+        "detectada": true,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "tramo de 15 s fuera de la rejilla",
+      "operation": "control",
+      "dataset_size": 17,
+      "milliseconds": 82.786,
+      "extra": {
+        "cancion": 149727,
+        "puntaje_copiada": 0.562,
+        "puntaje_otra": 0.188,
+        "desfase_esperado": 4.0,
+        "desfase": 5.0,
+        "detectada": true,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "tramo de 7,5 s",
+      "operation": "control",
+      "dataset_size": 17,
+      "milliseconds": 81.377,
+      "extra": {
+        "cancion": 149727,
+        "puntaje_copiada": 0.379,
+        "puntaje_otra": 0.222,
+        "desfase_esperado": -5.0,
+        "desfase": -5.0,
+        "detectada": false,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "pista no catalogada",
+      "operation": "control",
+      "dataset_size": 17,
+      "milliseconds": 84.905,
+      "extra": {
+        "cancion": 54465,
+        "puntaje_copiada": 0.0,
+        "puntaje_otra": 0.222,
+        "desfase_esperado": null,
+        "desfase": null,
+        "detectada": false,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "pista del catálogo entera",
+      "operation": "control",
+      "dataset_size": 18,
+      "milliseconds": 78.109,
+      "extra": {
+        "cancion": 13670,
+        "puntaje_copiada": 0.992,
+        "puntaje_otra": 0.162,
+        "desfase_esperado": 0.0,
+        "desfase": 0.0,
+        "detectada": true,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "tramo de 15 s fuera de la rejilla",
+      "operation": "control",
+      "dataset_size": 18,
+      "milliseconds": 80.427,
+      "extra": {
+        "cancion": 13670,
+        "puntaje_copiada": 0.544,
+        "puntaje_otra": 0.161,
+        "desfase_esperado": 4.0,
+        "desfase": 2.5,
+        "detectada": true,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "tramo de 7,5 s",
+      "operation": "control",
+      "dataset_size": 18,
+      "milliseconds": 80.091,
+      "extra": {
+        "cancion": 13670,
+        "puntaje_copiada": 0.265,
+        "puntaje_otra": 0.247,
+        "desfase_esperado": -5.0,
+        "desfase": -5.0,
+        "detectada": false,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "pista no catalogada",
+      "operation": "control",
+      "dataset_size": 18,
+      "milliseconds": 80.469,
+      "extra": {
+        "cancion": 110111,
+        "puntaje_copiada": 0.0,
+        "puntaje_otra": 0.247,
+        "desfase_esperado": null,
+        "desfase": null,
+        "detectada": false,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "pista del catálogo entera",
+      "operation": "control",
+      "dataset_size": 19,
+      "milliseconds": 78.573,
+      "extra": {
+        "cancion": 17605,
+        "puntaje_copiada": 0.998,
+        "puntaje_otra": 0.273,
+        "desfase_esperado": 0.0,
+        "desfase": 0.0,
+        "detectada": true,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "tramo de 15 s fuera de la rejilla",
+      "operation": "control",
+      "dataset_size": 19,
+      "milliseconds": 78.328,
+      "extra": {
+        "cancion": 17605,
+        "puntaje_copiada": 0.381,
+        "puntaje_otra": 0.263,
+        "desfase_esperado": 4.0,
+        "desfase": 5.0,
+        "detectada": false,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "tramo de 7,5 s",
+      "operation": "control",
+      "dataset_size": 19,
+      "milliseconds": 77.681,
+      "extra": {
+        "cancion": 17605,
+        "puntaje_copiada": 0.259,
+        "puntaje_otra": 0.274,
+        "desfase_esperado": -5.0,
+        "desfase": -5.0,
+        "detectada": false,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "pista no catalogada",
+      "operation": "control",
+      "dataset_size": 19,
+      "milliseconds": 77.87,
+      "extra": {
+        "cancion": 10374,
+        "puntaje_copiada": 0.0,
+        "puntaje_otra": 0.36,
+        "desfase_esperado": null,
+        "desfase": null,
+        "detectada": false,
+        "falsa": false
+      }
+    },
+    {
+      "technique": "mínimo",
+      "operation": "pista del catálogo entera",
+      "dataset_size": 7954,
+      "milliseconds": 0.0,
+      "extra": {
+        "puntaje": 0.986
+      }
+    },
+    {
+      "technique": "mediana",
+      "operation": "pista del catálogo entera",
+      "dataset_size": 7954,
+      "milliseconds": 0.0,
+      "extra": {
+        "puntaje": 0.997
+      }
+    },
+    {
+      "technique": "máximo",
+      "operation": "pista del catálogo entera",
+      "dataset_size": 7954,
+      "milliseconds": 0.0,
+      "extra": {
+        "puntaje": 1.0
+      }
+    },
+    {
+      "technique": "mínimo",
+      "operation": "tramo de 15 s fuera de la rejilla",
+      "dataset_size": 7954,
+      "milliseconds": 0.0,
+      "extra": {
+        "puntaje": 0.381
+      }
+    },
+    {
+      "technique": "mediana",
+      "operation": "tramo de 15 s fuera de la rejilla",
+      "dataset_size": 7954,
+      "milliseconds": 0.0,
+      "extra": {
+        "puntaje": 0.494
+      }
+    },
+    {
+      "technique": "máximo",
+      "operation": "tramo de 15 s fuera de la rejilla",
+      "dataset_size": 7954,
+      "milliseconds": 0.0,
+      "extra": {
+        "puntaje": 0.661
+      }
+    },
+    {
+      "technique": "mínimo",
+      "operation": "tramo de 7,5 s",
+      "dataset_size": 7954,
+      "milliseconds": 0.0,
+      "extra": {
+        "puntaje": 0.196
+      }
+    },
+    {
+      "technique": "mediana",
+      "operation": "tramo de 7,5 s",
+      "dataset_size": 7954,
+      "milliseconds": 0.0,
+      "extra": {
+        "puntaje": 0.266
+      }
+    },
+    {
+      "technique": "máximo",
+      "operation": "tramo de 7,5 s",
+      "dataset_size": 7954,
+      "milliseconds": 0.0,
+      "extra": {
+        "puntaje": 0.39
+      }
+    },
+    {
+      "technique": "mínimo",
+      "operation": "pista no catalogada",
+      "dataset_size": 7954,
+      "milliseconds": 0.0,
+      "extra": {
+        "puntaje": 0.164
+      }
+    },
+    {
+      "technique": "mediana",
+      "operation": "pista no catalogada",
+      "dataset_size": 7954,
+      "milliseconds": 0.0,
+      "extra": {
+        "puntaje": 0.272
+      }
+    },
+    {
+      "technique": "máximo",
+      "operation": "pista no catalogada",
+      "dataset_size": 7954,
+      "milliseconds": 0.0,
+      "extra": {
+        "puntaje": 0.728
+      }
+    },
+    {
+      "technique": "mínimo",
+      "operation": "otras canciones",
+      "dataset_size": 7954,
+      "milliseconds": 0.0,
+      "extra": {
+        "puntaje": 0.0
+      }
+    },
+    {
+      "technique": "mediana",
+      "operation": "otras canciones",
+      "dataset_size": 7954,
+      "milliseconds": 0.0,
+      "extra": {
+        "puntaje": 0.263
+      }
+    },
+    {
+      "technique": "máximo",
+      "operation": "otras canciones",
+      "dataset_size": 7954,
+      "milliseconds": 0.0,
+      "extra": {
+        "puntaje": 0.61
+      }
+    },
+    {
+      "technique": "p50",
+      "operation": "latencia",
+      "dataset_size": 30,
+      "milliseconds": 79.825,
+      "extra": {
+        "ventanas": 11,
+        "ms_por_ventana": 7.257,
+        "copias": 10,
+        "encontradas": 10
+      }
+    },
+    {
+      "technique": "p95",
+      "operation": "latencia",
+      "dataset_size": 30,
+      "milliseconds": 87.223,
+      "extra": {
+        "ventanas": 11,
+        "ms_por_ventana": 7.929,
+        "copias": 10,
+        "encontradas": 10
+      }
+    },
+    {
+      "technique": "probe",
+      "operation": "etapas",
+      "dataset_size": 30,
+      "milliseconds": 0.088,
+      "extra": {}
+    },
+    {
+      "technique": "loudness",
+      "operation": "etapas",
+      "dataset_size": 30,
+      "milliseconds": 24.561,
+      "extra": {}
+    },
+    {
+      "technique": "segments",
+      "operation": "etapas",
+      "dataset_size": 30,
+      "milliseconds": 50.02,
+      "extra": {}
+    },
+    {
+      "technique": "decode",
+      "operation": "etapas",
+      "dataset_size": 30,
+      "milliseconds": 20.655,
+      "extra": {}
+    },
+    {
+      "technique": "extraction",
+      "operation": "etapas",
+      "dataset_size": 30,
+      "milliseconds": 23.675,
+      "extra": {}
+    },
+    {
+      "technique": "search",
+      "operation": "etapas",
+      "dataset_size": 30,
+      "milliseconds": 0.463,
+      "extra": {}
+    },
+    {
+      "technique": "voting",
+      "operation": "etapas",
+      "dataset_size": 30,
+      "milliseconds": 0.264,
+      "extra": {}
+    },
+    {
+      "technique": "songs",
+      "operation": "etapas",
+      "dataset_size": 30,
+      "milliseconds": 3.356,
+      "extra": {}
+    },
+    {
+      "technique": "p50",
+      "operation": "latencia",
+      "dataset_size": 60,
+      "milliseconds": 157.428,
+      "extra": {
+        "ventanas": 23,
+        "ms_por_ventana": 6.845,
+        "copias": 10,
+        "encontradas": 10
+      }
+    },
+    {
+      "technique": "p95",
+      "operation": "latencia",
+      "dataset_size": 60,
+      "milliseconds": 165.354,
+      "extra": {
+        "ventanas": 23,
+        "ms_por_ventana": 7.189,
+        "copias": 10,
+        "encontradas": 10
+      }
+    },
+    {
+      "technique": "probe",
+      "operation": "etapas",
+      "dataset_size": 60,
+      "milliseconds": 0.088,
+      "extra": {}
+    },
+    {
+      "technique": "loudness",
+      "operation": "etapas",
+      "dataset_size": 60,
+      "milliseconds": 50.87,
+      "extra": {}
+    },
+    {
+      "technique": "segments",
+      "operation": "etapas",
+      "dataset_size": 60,
+      "milliseconds": 99.072,
+      "extra": {}
+    },
+    {
+      "technique": "decode",
+      "operation": "etapas",
+      "dataset_size": 60,
+      "milliseconds": 42.005,
+      "extra": {}
+    },
+    {
+      "technique": "extraction",
+      "operation": "etapas",
+      "dataset_size": 60,
+      "milliseconds": 48.291,
+      "extra": {}
+    },
+    {
+      "technique": "search",
+      "operation": "etapas",
+      "dataset_size": 60,
+      "milliseconds": 0.626,
+      "extra": {}
+    },
+    {
+      "technique": "voting",
+      "operation": "etapas",
+      "dataset_size": 60,
+      "milliseconds": 0.561,
+      "extra": {}
+    },
+    {
+      "technique": "songs",
+      "operation": "etapas",
+      "dataset_size": 60,
+      "milliseconds": 4.704,
+      "extra": {}
+    },
+    {
+      "technique": "p50",
+      "operation": "latencia",
+      "dataset_size": 180,
+      "milliseconds": 489.801,
+      "extra": {
+        "ventanas": 71,
+        "ms_por_ventana": 6.899,
+        "copias": 30,
+        "encontradas": 30
+      }
+    },
+    {
+      "technique": "p95",
+      "operation": "latencia",
+      "dataset_size": 180,
+      "milliseconds": 531.923,
+      "extra": {
+        "ventanas": 71,
+        "ms_por_ventana": 7.492,
+        "copias": 30,
+        "encontradas": 30
+      }
+    },
+    {
+      "technique": "probe",
+      "operation": "etapas",
+      "dataset_size": 180,
+      "milliseconds": 0.106,
+      "extra": {}
+    },
+    {
+      "technique": "loudness",
+      "operation": "etapas",
+      "dataset_size": 180,
+      "milliseconds": 159.406,
+      "extra": {}
+    },
+    {
+      "technique": "segments",
+      "operation": "etapas",
+      "dataset_size": 180,
+      "milliseconds": 308.304,
+      "extra": {}
+    },
+    {
+      "technique": "decode",
+      "operation": "etapas",
+      "dataset_size": 180,
+      "milliseconds": 128.0,
+      "extra": {}
+    },
+    {
+      "technique": "extraction",
+      "operation": "etapas",
+      "dataset_size": 180,
+      "milliseconds": 160.391,
+      "extra": {}
+    },
+    {
+      "technique": "search",
+      "operation": "etapas",
+      "dataset_size": 180,
+      "milliseconds": 1.461,
+      "extra": {}
+    },
+    {
+      "technique": "voting",
+      "operation": "etapas",
+      "dataset_size": 180,
+      "milliseconds": 1.637,
+      "extra": {}
+    },
+    {
+      "technique": "songs",
+      "operation": "etapas",
+      "dataset_size": 180,
+      "milliseconds": 13.282,
+      "extra": {}
+    }
+  ]
+}

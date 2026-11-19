@@ -17,6 +17,7 @@ from benchmarks.plots.drawing import (
     compose,
     draw,
     horizontal_limits,
+    interval_values,
     load,
     points_of,
     segment_values,
@@ -38,9 +39,13 @@ from benchmarks.plots.model import (
     BreakdownFigure,
     BreakdownPanel,
     Figure,
+    IntervalBar,
+    IntervalFigure,
+    IntervalPanel,
     Line,
     Segment,
     Series,
+    Shade,
     StackedBar,
     Style,
     Technique,
@@ -404,3 +409,56 @@ def test_an_xy_figure_is_written_to_disk(tmp_path: Path):
     pytest.importorskip("matplotlib")
     figure = XYFigure("xy", "xy", "Título", "Subtítulo", columns=1, panels=(XY_PANEL,))
     assert draw(figure, XY_REPORT, tmp_path).stat().st_size > 10_000
+
+
+INTERVAL_REPORT = {
+    "name": "intervalos",
+    "parameters": {"usuarios": 40},
+    "measurements": [
+        {"technique": "a", "operation": "prueba", "dataset_size": 40, "milliseconds": 0.0,
+         "extra": {"hit": 0.2, "hit_bajo": 0.1, "hit_alto": 0.3, "rotulo": "pesos 1"}},
+        {"technique": "b", "operation": "prueba", "dataset_size": 40, "milliseconds": 0.0,
+         "extra": {"ndcg": 0.5, "ndcg_bajo": 0.4, "ndcg_alto": 0.6}},
+    ],
+}
+SIGNAL_SHADE = Shade("señal", BLUE)
+INTERVALS = IntervalFigure(
+    filename="intervalos",
+    report="intervalos",
+    title="Medidas con intervalo",
+    subtitle="{usuarios} usuarios",
+    columns=2,
+    panels=(
+        IntervalPanel(
+            "Hit",
+            "fracción",
+            "hit",
+            (
+                IntervalBar("uno", "a", "prueba", SIGNAL_SHADE),
+                IntervalBar("dos", "b", "prueba", SIGNAL_SHADE),
+            ),
+        ),
+        IntervalPanel("Hit", "fracción", "hit", (IntervalBar("uno", "a", "prueba", SIGNAL_SHADE),),
+                      label_field="rotulo"),
+    ),
+)
+
+
+def test_an_interval_bar_takes_its_ends_and_skips_what_lacks_the_field():
+    plain, labelled = INTERVALS.panels
+    assert interval_values(INTERVAL_REPORT, plain) == [("uno", "señal", 0.2, 0.1, 0.3)]
+    assert interval_values(INTERVAL_REPORT, labelled)[0][0] == "pesos 1"
+
+
+def test_an_interval_figure_labels_each_value_and_cites_its_parameters(tmp_path: Path):
+    pytest.importorskip("matplotlib")
+    from matplotlib import pyplot
+
+    canvas = compose(INTERVALS, INTERVAL_REPORT)
+    first = canvas.axes[0]
+    assert [text.get_text() for text in first.texts] == ["0.200"]
+    assert first.get_xlim()[1] > 0.3
+    texts = [text.get_text() for text in canvas.texts]
+    assert "40 usuarios" in texts
+    pyplot.close(canvas)
+    assert draw(INTERVALS, INTERVAL_REPORT, tmp_path).stat().st_size > 10_000

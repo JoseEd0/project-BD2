@@ -3,8 +3,9 @@
 Hay dos clases principales de figura: `Figure`, con una línea por técnica frente al tamaño
 de los datos en ejes logarítmicos, y `BarFigure`, con barras agrupadas en un eje lineal de 0
 a 1 para medidas que son fracciones, como la precisión. `BreakdownFigure` desglosa en barras
-apiladas las cifras de una sola ejecución, y `XYFigure` dibuja curvas de dos magnitudes
-cualesquiera guardadas como listas, como una ROC.
+apiladas las cifras de una sola ejecución, `XYFigure` dibuja curvas de dos magnitudes
+cualesquiera guardadas como listas, como una ROC, e `IntervalFigure` pone cada medida con su
+intervalo de confianza.
 """
 
 from __future__ import annotations
@@ -303,3 +304,63 @@ class XYFigure:
     columns: int
     panels: tuple[XYPanel, ...]
     legend_columns: int = 0
+
+
+# Las claves de `extra` con los extremos del intervalo de una medida `campo`: `campo_bajo` y
+# `campo_alto`, como las guarda la evaluación de la tienda.
+LOW_SUFFIX = "_bajo"
+HIGH_SUFFIX = "_alto"
+
+
+@dataclass(frozen=True, slots=True)
+class Shade:
+    """Qué clase de barra es (una señal sola, una fusión, una referencia): su rótulo en la
+    leyenda y su color."""
+
+    label: str
+    color: str
+
+
+@dataclass(frozen=True, slots=True)
+class IntervalBar:
+    """Una barra con su intervalo: su rótulo, la medida de la que sale y su clase."""
+
+    label: str
+    technique: str
+    operation: str
+    shade: Shade
+
+
+@dataclass(frozen=True, slots=True)
+class IntervalPanel:
+    """Barras horizontales de una medida con su intervalo de confianza: el valor sale de
+    `field` y los extremos, de `field` con `LOW_SUFFIX` y `HIGH_SUFFIX`. Con `label_field`,
+    el rótulo de cada barra sale de esa clave de su medida (lo que solo se sabe al medir,
+    como los pesos ganadores de una búsqueda)."""
+
+    title: str
+    axis: str
+    field: str
+    bars: tuple[IntervalBar, ...]
+    label_field: str | None = None
+
+    @property
+    def low_field(self) -> str:
+        return f"{self.field}{LOW_SUFFIX}"
+
+    @property
+    def high_field(self) -> str:
+        return f"{self.field}{HIGH_SUFFIX}"
+
+
+@dataclass(frozen=True, slots=True)
+class IntervalFigure:
+    """Una imagen de medidas con intervalo, de una sola ejecución: los paneles van en filas
+    de `columns`, y cada uno tiene su propio eje lineal desde 0."""
+
+    filename: str
+    report: str
+    title: str
+    subtitle: str
+    columns: int
+    panels: tuple[IntervalPanel, ...]

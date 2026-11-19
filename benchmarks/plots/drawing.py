@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from math import ceil, floor, log10
 from pathlib import Path
 from typing import Any, TypeVar
@@ -19,6 +19,8 @@ from benchmarks.plots.model import (
     CurvePanel,
     Figure,
     GalleryFigure,
+    IntervalFigure,
+    IntervalPanel,
     Line,
     Panel,
     Series,
@@ -66,6 +68,10 @@ from benchmarks.plots.style import (
     HEADER_BOTTOM,
     HEADER_TOP,
     INK,
+    INTERVAL_CAP,
+    INTERVAL_LABEL_DECIMALS,
+    INTERVAL_LABEL_ROOM,
+    INTERVAL_LINE_WIDTH,
     LABEL_SIZE,
     LEADER_EXTRA,
     LEADER_THRESHOLD,
@@ -218,7 +224,9 @@ def _top(group: tuple[float, int], gap: float) -> float:
     return total / count + (count - 1) * gap / 2
 
 
-AnyFigure = Figure | BarFigure | CurveFigure | GalleryFigure | BreakdownFigure | XYFigure
+AnyFigure = (
+    Figure | BarFigure | CurveFigure | GalleryFigure | BreakdownFigure | XYFigure | IntervalFigure
+)
 
 
 def compose(figure: AnyFigure, report: dict[str, Any]) -> Any:
@@ -233,6 +241,8 @@ def compose(figure: AnyFigure, report: dict[str, Any]) -> Any:
         return _compose_breakdown(figure, report)
     if isinstance(figure, XYFigure):
         return _compose_xy(figure, report)
+    if isinstance(figure, IntervalFigure):
+        return _compose_intervals(figure, report)
     return _compose_lines(figure, report)
 
 
@@ -986,3 +996,99 @@ def _axis_scale(
     set_limits(low, high)
     found = MaxNLocator(nbins=XY_TICKS, steps=XY_TICK_STEPS).tick_values(low, high)
     ticks.set_major_locator(FixedLocator([tick for tick in found if low <= tick <= high]))
+
+
+def interval_values(
+    report: dict[str, Any], panel: IntervalPanel
+) -> list[tuple[str, str, float, float, float]]:
+    """Por barra medida: su rótulo, su clase, el valor y los extremos de su intervalo. Una
+    barra sin medida, o sin su campo, no se dibuja."""
+    found = []
+    for bar in panel.bars:
+        extra = next(
+            (
+                item["extra"]
+                for item in report["measurements"]
+                if (item["technique"], item["operation"]) == (bar.technique, bar.operation)
+            ),
+            None,
+        )
+        if extra is None or panel.field not in extra:
+            continue
+        label = str(extra[panel.label_field]) if panel.label_field else bar.label
+        found.append(
+            (
+                label,
+                bar.shade.label,
+                float(extra[panel.field]),
+                float(extra[panel.low_field]),
+                float(extra[panel.high_field]),
+            )
+        )
+    return found
+
+
+def _compose_intervals(figure: IntervalFigure, report: dict[str, Any]) -> Any:
+    """El subtítulo puede citar los parámetros de la ejecución, como el tamaño de la
+    muestra."""
+    plt = _start_drawing()
+    figure = replace(figure, subtitle=figure.subtitle.format_map(report["parameters"]))
+    rows = -(-len(figure.panels) // figure.columns)
+    bars = max(len(panel.bars) for panel in figure.panels)
+    shades = {bar.shade.label for panel in figure.panels for bar in panel.bars}
+    header = _header_height(figure.subtitle, 1)
+    row_height = max(BREAKDOWN_ROW_HEIGHT * bars, BREAKDOWN_MIN_HEIGHT)
+    width = BREAKDOWN_PANEL_WIDTH * figure.columns
+    height = row_height * rows + header
+    canvas, grid = plt.subplots(
+        rows, figure.columns, figsize=(width, height), dpi=DPI, squeeze=False
+    )
+    canvas.set_facecolor(SURFACE)
+    axes = [axis for row in grid for axis in row]
+    for axis, panel in zip(axes, figure.panels, strict=False):
+        _draw_interval_panel(axis, panel, report)
+    for axis in axes[len(figure.panels) :]:
+        axis.set_visible(False)
+    _draw_header(canvas, figure, height, len(shades))
+    canvas.tight_layout(
+        rect=(0.0, 0.0, 1.0, 1.0 - header / height), w_pad=PANEL_GAP, h_pad=ROW_GAP
+    )
+    return canvas
+
+
+def _draw_interval_panel(axis: Any, panel: IntervalPanel, report: dict[str, Any]) -> None:
+    measured = interval_values(report, panel)
+    colors = {bar.shade.label: bar.shade.color for bar in panel.bars}
+    positions = list(range(len(measured)))[::-1]
+    for position, (_, shade, value, low, high) in zip(positions, measured, strict=True):
+        axis.barh(
+            position, value, height=BREAKDOWN_BAR_SHARE, color=colors[shade], label=shade,
+            zorder=3,
+        )
+        axis.errorbar(
+            value, position, xerr=[[value - low], [high - value]], fmt="none", ecolor=INK,
+            elinewidth=INTERVAL_LINE_WIDTH, capsize=INTERVAL_CAP, zorder=4,
+        )
+    highest = max((high for *_, high in measured), default=0.0)
+    for position, (_, _, value, _, high) in zip(positions, measured, strict=True):
+        axis.text(
+            high + highest * BREAKDOWN_LABEL_GAP,
+            position,
+            f"{value:.{INTERVAL_LABEL_DECIMALS}f}",
+            va="center",
+            color=SECONDARY_INK,
+            fontsize=BAR_LABEL_SIZE + 1,
+        )
+    axis.set_facecolor(SURFACE)
+    limit = highest * INTERVAL_LABEL_ROOM or 1.0
+    axis.set_xlim(0.0, limit)
+    axis.set_xticks([tick for tick in axis.get_xticks() if 0.0 <= tick <= limit])
+    axis.set_yticks(positions, [label for label, *_ in measured])
+    axis.grid(visible=True, axis="x", color=GRID, linewidth=0.8, linestyle="solid", zorder=0)
+    axis.set_axisbelow(True)
+    for side in ("top", "right", "left"):
+        axis.spines[side].set_visible(False)
+    axis.spines["bottom"].set_color(AXIS)
+    axis.tick_params(axis="both", colors=MUTED_INK, length=0, labelsize=LABEL_SIZE)
+    axis.set_xlabel(panel.axis, color=SECONDARY_INK, fontsize=LABEL_SIZE)
+    axis.set_title(panel.title, color=INK, fontsize=PANEL_TITLE_SIZE, loc="left", pad=TITLE_PAD)

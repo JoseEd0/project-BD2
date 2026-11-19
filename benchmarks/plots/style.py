@@ -157,3 +157,10 @@ GALLERY_ROW_GAP = 2.4
 # Una clase más larga se corta con «…»: a 8.5 pt, unos 20 caracteres caben en la celda.
 GALLERY_LABEL_CHARACTERS = 20
 ELLIPSIS = "\N{HORIZONTAL ELLIPSIS}"
+
+# Medidas con intervalo: barras horizontales como los desgloses, con el intervalo de confianza
+# en tinta y el valor rotulado tras su extremo derecho, con aire para ese rótulo.
+INTERVAL_LINE_WIDTH = 1.1
+INTERVAL_CAP = 3.0
+INTERVAL_LABEL_DECIMALS = 3
+INTERVAL_LABEL_ROOM = 1.3

@@ -55,13 +55,26 @@ jobs:
         run: uv run --no-sync python -m shop.clip models --salida "$SHOP_MODELS_DIR"
         env:
           SHOP_MODELS_DIR: ${{ runner.temp }}/shop-models
+      - name: Modelo de embeddings del RAG en caché
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/rag-models
+          key: rag-models-${{ hashFiles('apps/rag/src/rag/models.py') }}
+      - name: Modelo de embeddings del RAG
+        # Las dos variantes: fp32 se compara con la referencia de PyTorch a 1e-5, int8 es la
+        # que usa el servicio.
+        run: uv run --no-sync python -m rag.models --salida "$RAG_MODELS_DIR" --variante int8 --variante fp32
+        env:
+          RAG_MODELS_DIR: ${{ runner.temp }}/rag-models
       - name: Pytest
-        # Con FACES_MODELS_DIR y SHOP_MODELS_DIR definidas, un test sin sus modelos falla en vez
+        # Con FACES_MODELS_DIR, SHOP_MODELS_DIR y RAG_MODELS_DIR definidas, un test sin sus
+        # modelos falla en vez
         # de saltarse.
         run: uv run --no-sync python -m pytest -q
         env:
           FACES_MODELS_DIR: ${{ runner.temp }}/faces-models
           SHOP_MODELS_DIR: ${{ runner.temp }}/shop-models
+          RAG_MODELS_DIR: ${{ runner.temp }}/rag-models
 
   frontend:
     name: Frontend

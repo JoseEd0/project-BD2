@@ -117,6 +117,38 @@ def test_two_spliced_songs_are_two_runs_with_their_own_offsets():
     ]
 
 
+def test_a_stray_vote_next_to_a_run_does_not_shift_its_offset():
+    """El caso de #137: la ventana del empalme vota casi igual por el tramo de antes y por el
+    suyo, y un tramo «hub» de la canción copiada aparece entre los vecinos de la ventana
+    siguiente, que ya es de otra canción. Ese voto le da al desfase +1 una ventana de apoyo
+    más que al 0, pero la racha y sus tramos son los mismos: el desfase sigue siendo 0."""
+    windows = [window(0, segment(COPIED, 0, 1.0))]
+    windows += [
+        window(position, segment(COPIED, position, 1.0), segment(COPIED, position - 1, 0.7))
+        for position in range(1, 5)
+    ]
+    windows.append(window(5, segment(COPIED, 4, 0.76), segment(COPIED, 5, 0.75)))
+    windows.append(window(6, segment(OTHER, 0, 1.0), segment(COPIED, 4, 0.6)))
+    windows += [window(position, segment(OTHER, position - 6, 1.0)) for position in range(7, 10)]
+    runs = aligned_runs(windows, PARAMETERS)
+    assert [summary(run) for run in runs] == [(COPIED, 0.0, 0, 5), (OTHER, 15.0, 6, 9)]
+
+
+def test_an_aligned_copy_keeps_its_offset_when_the_overlapping_segments_score_almost_as_high():
+    windows = [
+        window(
+            position,
+            segment(COPIED, position + 3, 0.95),
+            segment(COPIED, position + 2, 0.94),
+            segment(COPIED, position + 4, 0.94),
+        )
+        for position in range(8)
+    ]
+    (run,) = aligned_runs(windows, PARAMETERS)
+    assert summary(run) == (COPIED, -7.5, 0, 7)
+    assert run.similarities == (0.95,) * 8
+
+
 def test_the_same_song_copied_twice_is_a_run_per_offset():
     windows = copy_of(COPIED, range(4), original_first=0)
     windows += copy_of(COPIED, range(4, 8), original_first=6)

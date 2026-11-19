@@ -216,6 +216,9 @@ idea de Shazam y de Content ID). Por cada canción candidata:
   un tramo del catálogo que se parece a todo (un «hub» del índice) aparece en muchas
   ventanas seguidas con un desfase que crece un salto por ventana, y sin esa condición la
   tolerancia lo encadenaría;
+- el desfase que se reporta es el que votan más de los tramos elegidos de la racha, no el
+  desfase con que se buscó: un tramo suelto de la misma canción entre los vecinos de la ventana
+  siguiente le da un voto de apoyo de más a un desfase vecino, que gana con la misma racha (#137);
 - las rachas de `MIN_RUN_WINDOWS` ventanas o más (2: 7,5 s de audio) son coincidencias; sus
   ventanas ya no votan por otro desfase de la misma canción y se sigue con el siguiente. Una
   subida de una sola ventana pide rachas de una.

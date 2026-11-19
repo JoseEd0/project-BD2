@@ -18,7 +18,10 @@ subida tengan por vecina a la misma canción con el **mismo desfase** `t_subida 
    que se parece a todo (un «hub» del índice) aparece en muchas ventanas seguidas, su
    desfase crece un salto por ventana y, sin esta condición, la tolerancia lo encadenaría en
    una racha que no copia nada;
-4. las rachas que llegan a `min_run_windows` son coincidencias, y sus ventanas ya no votan
+4. el desfase de cada racha es el que votan más de sus tramos elegidos, no el desfase con
+   que se buscó: los dos difieren cuando un tramo suelto le da un voto de apoyo de más a un
+   desfase vecino, y lo que se reporta son esos tramos;
+5. las rachas que llegan a `min_run_windows` son coincidencias, y sus ventanas ya no votan
    por otro desfase de la misma canción; se repite con el siguiente desfase hasta que
    ninguno alcanza.
 
@@ -100,7 +103,7 @@ class Run:
 
     Attributes:
         song_id: la canción del catálogo.
-        offset_seconds: `t_subida - t_original` del desfase con más apoyo.
+        offset_seconds: `t_subida - t_original` que votan más de sus tramos elegidos.
         first_window, last_window: posiciones de la primera y la última ventana, incluidas.
         upload: el tramo de la subida que cubren.
         original: el tramo del original que cubren sus mejores vecinos.
@@ -202,7 +205,7 @@ def _song_runs(
     while (offset := _best_offset(remaining, tried, min_run)) is not None:
         tried.add(offset)
         found = [chain for chain in _advancing_chains(remaining, offset) if len(chain) >= min_run]
-        runs.extend(_run_of(song_id, offset * hop, chain, windows) for chain in found)
+        runs.extend(_run_of(song_id, chain, windows, hop) for chain in found)
         consumed = {vote.window for chain in found for vote in chain}
         remaining = [vote for vote in remaining if vote.window not in consumed]
     return runs
@@ -292,14 +295,27 @@ def _follower(candidates: list[_Vote], chain: list[_Vote]) -> _Vote | None:
     )
 
 
-def _run_of(
-    song_id: int, offset_seconds: float, chain: list[_Vote], windows: Sequence[QueryWindow]
-) -> Run:
+def _chain_offset(chain: list[_Vote]) -> int:
+    """El desfase de una racha: el que votan más de sus tramos elegidos; a igual número, el de
+    más similitud sumada y después el menor.
+
+    No es el desfase con que se buscó la racha: ese gana por apoyo, y un tramo «hub» que vota
+    junto a la racha, en una ventana que ya no la continúa, puede darle una ventana de apoyo
+    más a un desfase vecino y hacerlo ganar con la misma racha. Los tramos elegidos son los
+    que se reportan, así que su desfase es el que se lee en `original` frente a `upload`.
+    """
+    tally: defaultdict[int, list[float]] = defaultdict(list)
+    for vote in chain:
+        tally[vote.offset_hops].append(vote.neighbour.similarity)
+    return max(tally, key=lambda offset: (len(tally[offset]), sum(tally[offset]), -offset))
+
+
+def _run_of(song_id: int, chain: list[_Vote], windows: Sequence[QueryWindow], hop: float) -> Run:
     chosen = [vote.neighbour for vote in chain]
     first, last = chain[0].window, chain[-1].window
     return Run(
         song_id=song_id,
-        offset_seconds=offset_seconds,
+        offset_seconds=_chain_offset(chain) * hop,
         first_window=first,
         last_window=last,
         upload=Span(windows[first].start, windows[last].end),

@@ -70,6 +70,22 @@
   },
   "measurements": [
     {
+      "technique": "azar",
+      "operation": "roc",
+      "dataset_size": 400,
+      "milliseconds": 0.0,
+      "extra": {
+        "tpr": [
+          0.0,
+          1.0
+        ],
+        "fpr": [
+          0.0,
+          1.0
+        ]
+      }
+    },
+    {
       "technique": "original",
       "operation": "roc",
       "dataset_size": 400,
@@ -387,6 +403,16 @@
           0.005,
           0.0
         ]
+      }
+    },
+    {
+      "technique": "umbral elegido",
+      "operation": "original",
+      "dataset_size": 400,
+      "milliseconds": 0.0,
+      "extra": {
+        "tpr": 0.546,
+        "fpr": 0.29
       }
     },
     {
@@ -867,6 +893,16 @@
       }
     },
     {
+      "technique": "umbral elegido",
+      "operation": "ruido 30 dB",
+      "dataset_size": 400,
+      "milliseconds": 0.0,
+      "extra": {
+        "tpr": 0.338,
+        "fpr": 0.335
+      }
+    },
+    {
       "technique": "precisión",
       "operation": "ruido 30 dB",
       "dataset_size": 400,
@@ -1341,6 +1377,16 @@
           0.005,
           0.0
         ]
+      }
+    },
+    {
+      "technique": "umbral elegido",
+      "operation": "ruido 20 dB",
+      "dataset_size": 400,
+      "milliseconds": 0.0,
+      "extra": {
+        "tpr": 0.185,
+        "fpr": 0.36
       }
     },
     {
@@ -1821,6 +1867,16 @@
       }
     },
     {
+      "technique": "umbral elegido",
+      "operation": "ruido 10 dB",
+      "dataset_size": 400,
+      "milliseconds": 0.0,
+      "extra": {
+        "tpr": 0.03,
+        "fpr": 0.475
+      }
+    },
+    {
       "technique": "precisión",
       "operation": "ruido 10 dB",
       "dataset_size": 400,
@@ -2295,6 +2351,16 @@
           0.015,
           0.0
         ]
+      }
+    },
+    {
+      "technique": "umbral elegido",
+      "operation": "tempo +5 %",
+      "dataset_size": 400,
+      "milliseconds": 0.0,
+      "extra": {
+        "tpr": 0.084,
+        "fpr": 0.28
       }
     },
     {
@@ -2775,6 +2841,16 @@
       }
     },
     {
+      "technique": "umbral elegido",
+      "operation": "tempo -5 %",
+      "dataset_size": 400,
+      "milliseconds": 0.0,
+      "extra": {
+        "tpr": 0.076,
+        "fpr": 0.245
+      }
+    },
+    {
       "technique": "precisión",
       "operation": "tempo -5 %",
       "dataset_size": 400,
@@ -3249,6 +3325,16 @@
           0.005,
           0.0
         ]
+      }
+    },
+    {
+      "technique": "umbral elegido",
+      "operation": "tono +1",
+      "dataset_size": 400,
+      "milliseconds": 0.0,
+      "extra": {
+        "tpr": 0.069,
+        "fpr": 0.33
       }
     },
     {
@@ -3729,6 +3815,16 @@
       }
     },
     {
+      "technique": "umbral elegido",
+      "operation": "tono -1",
+      "dataset_size": 400,
+      "milliseconds": 0.0,
+      "extra": {
+        "tpr": 0.053,
+        "fpr": 0.32
+      }
+    },
+    {
       "technique": "precisión",
       "operation": "tono -1",
       "dataset_size": 400,
@@ -4203,6 +4299,16 @@
           0.005,
           0.0
         ]
+      }
+    },
+    {
+      "technique": "umbral elegido",
+      "operation": "MP3 64 kbps",
+      "dataset_size": 400,
+      "milliseconds": 0.0,
+      "extra": {
+        "tpr": 0.536,
+        "fpr": 0.33
       }
     },
     {
@@ -4683,6 +4789,16 @@
       }
     },
     {
+      "technique": "umbral elegido",
+      "operation": "pasa bajos 4 kHz",
+      "dataset_size": 400,
+      "milliseconds": 0.0,
+      "extra": {
+        "tpr": 0.015,
+        "fpr": 0.515
+      }
+    },
+    {
       "technique": "precisión",
       "operation": "pasa bajos 4 kHz",
       "dataset_size": 400,
@@ -5157,6 +5273,16 @@
           0.01,
           0.0
         ]
+      }
+    },
+    {
+      "technique": "umbral elegido",
+      "operation": "volumen -1 dB",
+      "dataset_size": 400,
+      "milliseconds": 0.0,
+      "extra": {
+        "tpr": 0.467,
+        "fpr": 0.32
       }
     },
     {
@@ -5637,6 +5763,16 @@
       }
     },
     {
+      "technique": "umbral elegido",
+      "operation": "volumen -3 dB",
+      "dataset_size": 400,
+      "milliseconds": 0.0,
+      "extra": {
+        "tpr": 0.112,
+        "fpr": 0.32
+      }
+    },
+    {
       "technique": "precisión",
       "operation": "volumen -3 dB",
       "dataset_size": 400,
@@ -6114,6 +6250,16 @@
       }
     },
     {
+      "technique": "umbral elegido",
+      "operation": "volumen -12 dB",
+      "dataset_size": 400,
+      "milliseconds": 0.0,
+      "extra": {
+        "tpr": 0.0,
+        "fpr": 0.375
+      }
+    },
+    {
       "technique": "precisión",
       "operation": "volumen -12 dB",
       "dataset_size": 400,
@@ -6588,6 +6734,16 @@
           0.01,
           0.0
         ]
+      }
+    },
+    {
+      "technique": "umbral elegido",
+      "operation": "todas",
+      "dataset_size": 400,
+      "milliseconds": 0.0,
+      "extra": {
+        "tpr": 0.193,
+        "fpr": 0.346
       }
     },
     {

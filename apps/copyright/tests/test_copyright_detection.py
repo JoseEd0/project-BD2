@@ -78,12 +78,28 @@ def test_a_shifted_copy_reports_its_offset_and_both_spans():
 
 def test_a_copy_off_the_catalog_grid_votes_two_neighbouring_offsets_and_stays_one_run():
     windows = [
-        window(position, segment(COPIED, position + (position % 2), 0.8 + 0.01 * position))
+        window(
+            position,
+            segment(COPIED, position, 0.9 - 0.1 * (position % 2)),
+            segment(COPIED, position + 1, 0.8 + 0.1 * (position % 2)),
+        )
         for position in range(8)
     ]
     (run,) = aligned_runs(windows, PARAMETERS)
     assert (run.first_window, run.last_window, run.windows) == (0, 7, 8)
     assert run.offset_seconds in (0.0, -HOP)
+
+
+def test_the_original_has_to_advance_with_the_upload():
+    hub = [window(position, segment(COPIED, 4, 0.95)) for position in range(6)]
+    assert {run.windows for run in aligned_runs(hub, PARAMETERS)} == {2}
+    repeated = [
+        window(position, segment(COPIED, position, 0.9), segment(COPIED, 0, 0.99))
+        for position in range(4)
+    ]
+    (run,) = aligned_runs(repeated, PARAMETERS)
+    assert summary(run) == (COPIED, 0.0, 0, 3)
+    assert run.similarities == (0.99, 0.99, 0.9, 0.9)
 
 
 def test_votes_two_hops_apart_do_not_agree():

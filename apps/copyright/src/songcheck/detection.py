@@ -11,9 +11,16 @@ subida tengan por vecina a la misma canción con el **mismo desfase** `t_subida 
 2. el apoyo de un desfase son las ventanas con algún voto a un salto o menos de él: una copia
    que no empieza en la rejilla del catálogo reparte sus votos entre dos desfases vecinos;
    a igual apoyo gana el pico del histograma, la mayor similitud por ese desfase exacto;
-3. el desfase con más apoyo da las rachas de ventanas consecutivas que lo apoyan; las que
-   llegan a `min_run_windows` son coincidencias, y sus ventanas ya no votan por otro desfase
-   de la misma canción; se repite con el siguiente desfase hasta que ninguno alcanza.
+3. el desfase con más apoyo da las rachas de ventanas consecutivas que lo apoyan **y en las
+   que el original avanza**: el tramo elegido para cada ventana no puede repetirse en más de
+   dos ventanas seguidas ni ir hacia atrás. Una copia fuera de la rejilla repite tramo una
+   vez, porque cada tramo del catálogo solapa mucho con dos ventanas de la subida; un tramo
+   que se parece a todo (un «hub» del índice) aparece en muchas ventanas seguidas, su
+   desfase crece un salto por ventana y, sin esta condición, la tolerancia lo encadenaría en
+   una racha que no copia nada;
+4. las rachas que llegan a `min_run_windows` son coincidencias, y sus ventanas ya no votan
+   por otro desfase de la misma canción; se repite con el siguiente desfase hasta que
+   ninguno alcanza.
 
 Puntaje = similitud media de la racha · cobertura, y la cobertura es la fracción de las
 ventanas que las dos grabaciones podrían compartir: `ventanas de la racha / min(ventanas de
@@ -194,10 +201,9 @@ def _song_runs(
     tried: set[int] = set()
     while (offset := _best_offset(remaining, tried, min_run)) is not None:
         tried.add(offset)
-        aligned = _best_aligned_votes(remaining, offset)
-        found = [group for group in _consecutive_groups(sorted(aligned)) if len(group) >= min_run]
-        runs.extend(_run_of(song_id, offset * hop, group, aligned, windows) for group in found)
-        consumed = {position for group in found for position in group}
+        found = [chain for chain in _advancing_chains(remaining, offset) if len(chain) >= min_run]
+        runs.extend(_run_of(song_id, offset * hop, chain, windows) for chain in found)
+        consumed = {vote.window for chain in found for vote in chain}
         remaining = [vote for vote in remaining if vote.window not in consumed]
     return runs
 
@@ -243,30 +249,60 @@ def _vote_rank(vote: _Vote, offset: int) -> tuple[float, int, float]:
     return (-vote.neighbour.similarity, abs(vote.offset_hops - offset), vote.neighbour.start)
 
 
-def _consecutive_groups(positions: list[int]) -> list[list[int]]:
-    groups: list[list[int]] = []
-    for position in positions:
-        if groups and groups[-1][-1] == position - 1:
-            groups[-1].append(position)
+def _advancing_chains(votes: list[_Vote], offset: int) -> list[list[_Vote]]:
+    """Las rachas de ventanas consecutivas con un voto a un salto o menos de `offset` cuyo
+    tramo hace avanzar al original (ver `_follower`). Cada ventana se queda con su mejor voto
+    que lo haga; si ninguno lo hace, empieza otra racha con el mejor."""
+    candidates = _aligned_by_window(votes, offset)
+    chains: list[list[_Vote]] = []
+    for position in sorted(candidates):
+        chain = chains[-1] if chains and chains[-1][-1].window == position - 1 else None
+        follower = None if chain is None else _follower(candidates[position], chain)
+        if chain is not None and follower is not None:
+            chain.append(follower)
         else:
-            groups.append([position])
-    return groups
+            chains.append([candidates[position][0]])
+    return chains
+
+
+def _aligned_by_window(votes: list[_Vote], offset: int) -> dict[int, list[_Vote]]:
+    """Los votos a un salto o menos de `offset` de cada ventana, del mejor al peor."""
+    aligned: defaultdict[int, list[_Vote]] = defaultdict(list)
+    for vote in votes:
+        if abs(vote.offset_hops - offset) <= OFFSET_TOLERANCE_HOPS:
+            aligned[vote.window].append(vote)
+    return {
+        window: sorted(found, key=lambda vote: _vote_rank(vote, offset))
+        for window, found in aligned.items()
+    }
+
+
+def _follower(candidates: list[_Vote], chain: list[_Vote]) -> _Vote | None:
+    """El mejor voto que sigue a `chain`: un tramo posterior al último, o el mismo si el
+    último no lo repetía ya."""
+    last = chain[-1].neighbour.start
+    repeated = len(chain) > 1 and chain[-2].neighbour.start == last
+    return next(
+        (
+            vote
+            for vote in candidates
+            if vote.neighbour.start > last or (vote.neighbour.start == last and not repeated)
+        ),
+        None,
+    )
 
 
 def _run_of(
-    song_id: int,
-    offset_seconds: float,
-    group: list[int],
-    aligned: dict[int, _Vote],
-    windows: Sequence[QueryWindow],
+    song_id: int, offset_seconds: float, chain: list[_Vote], windows: Sequence[QueryWindow]
 ) -> Run:
-    chosen = [aligned[position].neighbour for position in group]
+    chosen = [vote.neighbour for vote in chain]
+    first, last = chain[0].window, chain[-1].window
     return Run(
         song_id=song_id,
         offset_seconds=offset_seconds,
-        first_window=group[0],
-        last_window=group[-1],
-        upload=Span(windows[group[0]].start, windows[group[-1]].end),
+        first_window=first,
+        last_window=last,
+        upload=Span(windows[first].start, windows[last].end),
         original=Span(min(item.start for item in chosen), max(item.end for item in chosen)),
         similarities=tuple(item.similarity for item in chosen),
     )

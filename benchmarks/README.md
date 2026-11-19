@@ -26,6 +26,8 @@ gráficas de [`figures/`](figures/) y todas las tablas de este documento.
 .venv/bin/python -m benchmarks.faces_service_benchmark --lfw data/datasets/lfw/lfw \
     --models data/models/faces --people 1000 --checkpoints 100 250 500 1000 --queries 200 \
     --thresholds 0.363 0.4 0.45 0.5 0.55
+.venv/bin/python -m benchmarks.copyright_catalog_benchmark --data-dir data/datasets \
+    --sizes 1000 2000 4000 8000 --threads 8
 .venv/bin/python -m benchmarks.plot              # redibuja todas las gráficas
 ```
 
@@ -123,6 +125,7 @@ docker compose --profile bench down       # apaga PostgreSQL
 | [9. Carga masiva](#9-carga-masiva--ndjson-contra-insert-con-parámetros-por-http) | NDJSON vs `INSERT` con parámetros por HTTP; cuándo construir un índice | [ingesta](figures/ingesta.png) |
 | [10. Carga de la tienda](#10-carga-de-la-tienda--el-catálogo-entero-con-sift-y-clip) | tiempo de cada tabla e índice, SIFT vs CLIP, y espacio del catálogo de Amazon en el gestor | [carga](figures/tienda-carga.png) |
 | [11. Servicio de rostros](#11-servicio-de-rostros--registro-reconocimiento-y-conjunto-abierto) | registrar una toma y reconocer por el API según el tamaño de la galería; umbrales de coseno 1:N y duplicados falsos con LFW | [reconocer](figures/rostros-servicio-reconocer.png), [conjunto abierto](figures/rostros-servicio-conjunto-abierto.png) |
+| [12. Catálogo de copyright](#12-catálogo-de-copyright--descargar-cargar-e-indexar-fma-por-tramos) | descargar fma_small por rangos, cargar 83 290 tramos por NDJSON y construir su HNSW, según el tamaño del catálogo; disco del gestor | [catálogo](figures/copyright-catalogo.png) |
 
 **Cómo leer las gráficas.** Cada una es una fila de paneles, uno por operación, con el
 número de filas en horizontal y una línea por técnica. Los dos ejes son logarítmicos: los
@@ -1698,6 +1701,92 @@ caché (sin él, una vacía, y se miden todas las fotos).
 
 Tarda de 6 a 8 minutos. Las FPIR, FNIR, duplicados falsos, rechazos y medidas no dependen
 de la carga del equipo: salieron idénticos en las cuatro ejecuciones que se hicieron.
+
+## 12. Catálogo de copyright — descargar, cargar e indexar FMA por tramos
+
+`copyright_catalog_benchmark.py` mide el catálogo de canciones originales del servicio de
+copyright (Parte 5, opción C, issue #75; ver [`apps/copyright/`](../apps/copyright/README.md)):
+las pistas de `fma_small` (MP3 de 30 s) cortadas en **tramos de 5 s cada 2,5 s**
+(`pista.mp3#t=a,b`), cargadas en el gestor por HTTP y con un HNSW coseno sobre sus MFCC en
+bolsa de palabras. Corre **el código del trabajo de carga del servicio**
+(`songcheck.seed.load_catalog`) contra un gestor nuevo por tamaño, servido por uvicorn en un
+hilo del mismo proceso: así se pueden cronometrar por dentro las partes del `CREATE INDEX`
+(se envuelven `Vocabulary.train`, `Vocabulary.word_counts` e `IndexedVectors.rebuild`/`save`;
+la extracción de MFCC, que corre en los procesos de extracción, es el resto).
+
+**Qué se mide.** La descarga del catálogo (`prepare_catalog`: metadatos, índice del `.zip`,
+pistas por rangos verificadas con su CRC-32 y la decodificación completa de cada una); por
+cada tamaño —una muestra con semilla de 1 000, 2 000 y 4 000 canciones, y el catálogo
+entero—, la carga NDJSON de `cr_canciones` y `cr_segmentos`, el `CREATE INDEX` partido, una
+segunda ejecución de la carga y el disco del gestor por estructura.
+
+**Dónde corrió.** Apple M4 Pro (12 núcleos), macOS, Python 3.12, con 12 procesos de
+extracción y una conexión doméstica. **La máquina estaba cargada**: otros procesos dejaron la
+carga media entre 21 y 37 durante la medida (está en el JSON), así que los tiempos de carga
+son cotas altas; la descarga depende sobre todo de la red.
+
+### Resultados medidos
+
+![Cargar e indexar el catálogo de copyright](figures/copyright-catalogo.png)
+
+**Descarga.** De las 8 000 pistas, 2 000 ya estaban en disco (las de la demo de la Parte 4),
+se verificaron por su CRC-32 y no se pidieron. Las otras **5 997 (5,58 GiB) bajaron en
+909,6 s** (15,2 min, 6,6 MB/s con 8 conexiones). Quedaron fuera seis: tres sin audio (menos
+de 2 KB, por el índice del `.zip`) y tres cuyo MP3 se corta a mitad (098565, 098567 y 098569:
+libsndfile lee la cabecera pero no las decodifica). El catálogo son **7 994 canciones, 7,43
+GiB de audio**.
+
+| Canciones | Tramos | `cr_canciones` | `cr_segmentos` | `CREATE INDEX` | Total | Segunda ejecución | Disco del gestor |
+|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1 000 | 10 422 | 0,80 s | 8,45 s | 27,75 s | 37,1 s | 0,13 s | 29,4 MiB |
+| 2 000 | 20 823 | 1,87 s | 20,48 s | 43,41 s | 65,8 s | 0,21 s | 58,5 MiB |
+| 4 000 | 41 650 | 4,79 s | 53,46 s | 77,62 s | 135,9 s | 0,46 s | 116,9 MiB |
+| **7 994** | **83 290** | 10,36 s | 97,78 s | **190,45 s** | **298,7 s** | **0,75 s** | **233,6 MiB** |
+
+Dentro del `CREATE INDEX` y en disco:
+
+| Canciones | Extraer MFCC | Vocabulario (k-means) | Cuantizar | Llenar y guardar el HNSW | Tablas | Almacén de características | HNSW |
+|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1 000 | 18,31 s | 0,84 s | 8,15 s | 0,45 s | 3,8 MiB | 13,8 MiB | 11,7 MiB |
+| 2 000 | 24,30 s | 1,00 s | 17,16 s | 0,95 s | 7,6 MiB | 27,6 MiB | 23,4 MiB |
+| 4 000 | 37,69 s | 1,04 s | 36,41 s | 2,48 s | 15,0 MiB | 55,2 MiB | 46,8 MiB |
+| 7 994 | 53,74 s | 0,83 s | **132,11 s** | 3,78 s | 29,8 MiB | 110,2 MiB | 93,5 MiB |
+
+### Conclusiones
+
+- **El catálogo entero queda listo en 5 min sobre la descarga**: 83 290 tramos cargados e
+  indexados en 298,7 s, y **una segunda ejecución tarda 0,75 s** (cuenta filas y encuentra el
+  índice): el trabajo de carga se puede correr en cada despliegue.
+- **Lo caro del índice ya no es extraer, es cuantizar.** La extracción corre en 12 procesos
+  y crece menos que el catálogo (18 s → 54 s de 1 000 a 7 994 canciones, gracias también a
+  que cada pista se decodifica una vez para sus 10 u 11 tramos); la cuantización —asignar
+  cada ventana MFCC a su palabra— corre en el proceso del gestor, de a un tramo, y crece en
+  proporción: con el catálogo entero es el **69 %** del `CREATE INDEX` (132 de 190 s). Llevarla
+  a los procesos de extracción es la mejora siguiente; queda fuera de este issue porque es
+  del motor.
+- **El vocabulario y el grafo no pesan**: k-means sobre la muestra fija de 2 000 tramos tarda
+  lo mismo con cualquier catálogo (≈ 1 s) y FAISS arma el HNSW de 83 290 vectores de 256
+  dimensiones en 3,8 s.
+- **El disco crece lineal, 2,9 KiB por tramo**: 1,15 KiB del HNSW (el vector de 256 `float32`
+  más sus vecinos), 1,36 KiB del almacén de características (los conteos de palabras, la
+  fuente de verdad del índice) y 0,37 KiB de las dos tablas. El catálogo de 7,43 GiB de
+  audio ocupa 233,6 MiB en el gestor, un 3 %: el gestor guarda rutas, no audio.
+- **Cargar las filas cuesta un tercio del total**: 83 290 tramos por NDJSON a 852 filas/s,
+  por debajo de las ~1 800 de la sección 9 por la carga de la máquina y por la ruta de cada
+  tramo (unos 110 caracteres). Como allí, lo que pesa es el B+ de la clave primaria.
+
+### Reproducirlo
+
+```bash
+uv run --no-sync python -m benchmarks.copyright_catalog_benchmark \
+    --data-dir data/datasets --sizes 1000 2000 4000 8000 --threads 8
+uv run --no-sync python -m benchmarks.plot
+```
+
+`--data-dir` es la carpeta de datasets (el catálogo queda en `fma_small/`; si ya está, no se
+baja de nuevo), `--threads` las descargas a la vez, `--seed` la muestra de cada tamaño y
+`--workspace` dónde crear los gestores temporales. La medida publicada tardó unos 25 min,
+15 de ellos en la descarga.
 
 ## Gráficas
 

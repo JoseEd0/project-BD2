@@ -1,0 +1,445 @@
+{
+  "name": "copyright_catalogo",
+  "parameters": {
+    "sizes": [
+      1000,
+      2000,
+      4000,
+      8000
+    ],
+    "seed": 20261118,
+    "threads": 8,
+    "window_seconds": 5.0,
+    "hop_seconds": 2.5,
+    "machine": {
+      "procesador": "Apple M4 Pro",
+      "nucleos": 12,
+      "sistema": "macOS-27.0.1-arm64-arm-64bit",
+      "python": "3.12.11",
+      "carga_media_1_min": 7.2
+    },
+    "load_average_1000": 21.33,
+    "load_average_2000": 23.52,
+    "load_average_4000": 36.88,
+    "load_average_8000": 35.06
+  },
+  "measurements": [
+    {
+      "technique": "descarga",
+      "operation": "total",
+      "dataset_size": 7994,
+      "milliseconds": 909570.72,
+      "extra": {
+        "bajadas": 5997,
+        "bajado_kib": 5851814.3,
+        "ya_sanas": 2000,
+        "ilegibles": 3,
+        "audio_kib": 7787434.1
+      }
+    },
+    {
+      "technique": "cr_canciones (NDJSON)",
+      "operation": "carga",
+      "dataset_size": 1000,
+      "milliseconds": 803.6510420497507,
+      "extra": {
+        "filas": 1000
+      }
+    },
+    {
+      "technique": "cr_segmentos (NDJSON)",
+      "operation": "carga",
+      "dataset_size": 1000,
+      "milliseconds": 8448.789792018943,
+      "extra": {
+        "filas": 10422
+      }
+    },
+    {
+      "technique": "CREATE INDEX HNSW",
+      "operation": "carga",
+      "dataset_size": 1000,
+      "milliseconds": 27753.609583014622,
+      "extra": {
+        "filas": 10422
+      }
+    },
+    {
+      "technique": "total",
+      "operation": "carga",
+      "dataset_size": 1000,
+      "milliseconds": 37112.75,
+      "extra": {
+        "filas": 10422
+      }
+    },
+    {
+      "technique": "extraer MFCC",
+      "operation": "partes del CREATE INDEX",
+      "dataset_size": 1000,
+      "milliseconds": 18308.439,
+      "extra": {}
+    },
+    {
+      "technique": "vocabulario (k-means)",
+      "operation": "partes del CREATE INDEX",
+      "dataset_size": 1000,
+      "milliseconds": 844.519,
+      "extra": {}
+    },
+    {
+      "technique": "cuantizar",
+      "operation": "partes del CREATE INDEX",
+      "dataset_size": 1000,
+      "milliseconds": 8153.312,
+      "extra": {}
+    },
+    {
+      "technique": "llenar y guardar el HNSW",
+      "operation": "partes del CREATE INDEX",
+      "dataset_size": 1000,
+      "milliseconds": 447.339,
+      "extra": {}
+    },
+    {
+      "technique": "total",
+      "operation": "segunda ejecución",
+      "dataset_size": 1000,
+      "milliseconds": 129.487,
+      "extra": {
+        "filas_cargadas": 0,
+        "indice_creado": false
+      }
+    },
+    {
+      "technique": "tablas",
+      "operation": "disco",
+      "dataset_size": 1000,
+      "milliseconds": 0.0,
+      "extra": {
+        "kib": 3926.8
+      }
+    },
+    {
+      "technique": "almacén de características",
+      "operation": "disco",
+      "dataset_size": 1000,
+      "milliseconds": 0.0,
+      "extra": {
+        "kib": 14169.8
+      }
+    },
+    {
+      "technique": "HNSW",
+      "operation": "disco",
+      "dataset_size": 1000,
+      "milliseconds": 0.0,
+      "extra": {
+        "kib": 11981.0
+      }
+    },
+    {
+      "technique": "cr_canciones (NDJSON)",
+      "operation": "carga",
+      "dataset_size": 2000,
+      "milliseconds": 1872.0955000026152,
+      "extra": {
+        "filas": 2000
+      }
+    },
+    {
+      "technique": "cr_segmentos (NDJSON)",
+      "operation": "carga",
+      "dataset_size": 2000,
+      "milliseconds": 20480.25929101277,
+      "extra": {
+        "filas": 20823
+      }
+    },
+    {
+      "technique": "CREATE INDEX HNSW",
+      "operation": "carga",
+      "dataset_size": 2000,
+      "milliseconds": 43405.86454200093,
+      "extra": {
+        "filas": 20823
+      }
+    },
+    {
+      "technique": "total",
+      "operation": "carga",
+      "dataset_size": 2000,
+      "milliseconds": 65817.309,
+      "extra": {
+        "filas": 20823
+      }
+    },
+    {
+      "technique": "extraer MFCC",
+      "operation": "partes del CREATE INDEX",
+      "dataset_size": 2000,
+      "milliseconds": 24296.038,
+      "extra": {}
+    },
+    {
+      "technique": "vocabulario (k-means)",
+      "operation": "partes del CREATE INDEX",
+      "dataset_size": 2000,
+      "milliseconds": 1001.987,
+      "extra": {}
+    },
+    {
+      "technique": "cuantizar",
+      "operation": "partes del CREATE INDEX",
+      "dataset_size": 2000,
+      "milliseconds": 17161.338,
+      "extra": {}
+    },
+    {
+      "technique": "llenar y guardar el HNSW",
+      "operation": "partes del CREATE INDEX",
+      "dataset_size": 2000,
+      "milliseconds": 946.501,
+      "extra": {}
+    },
+    {
+      "technique": "total",
+      "operation": "segunda ejecución",
+      "dataset_size": 2000,
+      "milliseconds": 213.877,
+      "extra": {
+        "filas_cargadas": 0,
+        "indice_creado": false
+      }
+    },
+    {
+      "technique": "tablas",
+      "operation": "disco",
+      "dataset_size": 2000,
+      "milliseconds": 0.0,
+      "extra": {
+        "kib": 7734.8
+      }
+    },
+    {
+      "technique": "almacén de características",
+      "operation": "disco",
+      "dataset_size": 2000,
+      "milliseconds": 0.0,
+      "extra": {
+        "kib": 28257.8
+      }
+    },
+    {
+      "technique": "HNSW",
+      "operation": "disco",
+      "dataset_size": 2000,
+      "milliseconds": 0.0,
+      "extra": {
+        "kib": 23938.9
+      }
+    },
+    {
+      "technique": "cr_canciones (NDJSON)",
+      "operation": "carga",
+      "dataset_size": 4000,
+      "milliseconds": 4791.843916988,
+      "extra": {
+        "filas": 4000
+      }
+    },
+    {
+      "technique": "cr_segmentos (NDJSON)",
+      "operation": "carga",
+      "dataset_size": 4000,
+      "milliseconds": 53457.657957973424,
+      "extra": {
+        "filas": 41650
+      }
+    },
+    {
+      "technique": "CREATE INDEX HNSW",
+      "operation": "carga",
+      "dataset_size": 4000,
+      "milliseconds": 77615.68383302074,
+      "extra": {
+        "filas": 41650
+      }
+    },
+    {
+      "technique": "total",
+      "operation": "carga",
+      "dataset_size": 4000,
+      "milliseconds": 135936.148,
+      "extra": {
+        "filas": 41650
+      }
+    },
+    {
+      "technique": "extraer MFCC",
+      "operation": "partes del CREATE INDEX",
+      "dataset_size": 4000,
+      "milliseconds": 37693.238,
+      "extra": {}
+    },
+    {
+      "technique": "vocabulario (k-means)",
+      "operation": "partes del CREATE INDEX",
+      "dataset_size": 4000,
+      "milliseconds": 1038.886,
+      "extra": {}
+    },
+    {
+      "technique": "cuantizar",
+      "operation": "partes del CREATE INDEX",
+      "dataset_size": 4000,
+      "milliseconds": 36408.268,
+      "extra": {}
+    },
+    {
+      "technique": "llenar y guardar el HNSW",
+      "operation": "partes del CREATE INDEX",
+      "dataset_size": 4000,
+      "milliseconds": 2475.291,
+      "extra": {}
+    },
+    {
+      "technique": "total",
+      "operation": "segunda ejecución",
+      "dataset_size": 4000,
+      "milliseconds": 461.086,
+      "extra": {
+        "filas_cargadas": 0,
+        "indice_creado": false
+      }
+    },
+    {
+      "technique": "tablas",
+      "operation": "disco",
+      "dataset_size": 4000,
+      "milliseconds": 0.0,
+      "extra": {
+        "kib": 15346.8
+      }
+    },
+    {
+      "technique": "almacén de características",
+      "operation": "disco",
+      "dataset_size": 4000,
+      "milliseconds": 0.0,
+      "extra": {
+        "kib": 56477.8
+      }
+    },
+    {
+      "technique": "HNSW",
+      "operation": "disco",
+      "dataset_size": 4000,
+      "milliseconds": 0.0,
+      "extra": {
+        "kib": 47885.1
+      }
+    },
+    {
+      "technique": "cr_canciones (NDJSON)",
+      "operation": "carga",
+      "dataset_size": 7994,
+      "milliseconds": 10355.340082955081,
+      "extra": {
+        "filas": 7994
+      }
+    },
+    {
+      "technique": "cr_segmentos (NDJSON)",
+      "operation": "carga",
+      "dataset_size": 7994,
+      "milliseconds": 97783.61633396707,
+      "extra": {
+        "filas": 83290
+      }
+    },
+    {
+      "technique": "CREATE INDEX HNSW",
+      "operation": "carga",
+      "dataset_size": 7994,
+      "milliseconds": 190446.8937080237,
+      "extra": {
+        "filas": 83290
+      }
+    },
+    {
+      "technique": "total",
+      "operation": "carga",
+      "dataset_size": 7994,
+      "milliseconds": 298685.865,
+      "extra": {
+        "filas": 83290
+      }
+    },
+    {
+      "technique": "extraer MFCC",
+      "operation": "partes del CREATE INDEX",
+      "dataset_size": 7994,
+      "milliseconds": 53736.181,
+      "extra": {}
+    },
+    {
+      "technique": "vocabulario (k-means)",
+      "operation": "partes del CREATE INDEX",
+      "dataset_size": 7994,
+      "milliseconds": 825.16,
+      "extra": {}
+    },
+    {
+      "technique": "cuantizar",
+      "operation": "partes del CREATE INDEX",
+      "dataset_size": 7994,
+      "milliseconds": 132105.718,
+      "extra": {}
+    },
+    {
+      "technique": "llenar y guardar el HNSW",
+      "operation": "partes del CREATE INDEX",
+      "dataset_size": 7994,
+      "milliseconds": 3779.834,
+      "extra": {}
+    },
+    {
+      "technique": "total",
+      "operation": "segunda ejecución",
+      "dataset_size": 7994,
+      "milliseconds": 748.507,
+      "extra": {
+        "filas_cargadas": 0,
+        "indice_creado": false
+      }
+    },
+    {
+      "technique": "tablas",
+      "operation": "disco",
+      "dataset_size": 7994,
+      "milliseconds": 0.0,
+      "extra": {
+        "kib": 30506.8
+      }
+    },
+    {
+      "technique": "almacén de características",
+      "operation": "disco",
+      "dataset_size": 7994,
+      "milliseconds": 0.0,
+      "extra": {
+        "kib": 112881.8
+      }
+    },
+    {
+      "technique": "HNSW",
+      "operation": "disco",
+      "dataset_size": 7994,
+      "milliseconds": 0.0,
+      "extra": {
+        "kib": 95763.2
+      }
+    }
+  ]
+}

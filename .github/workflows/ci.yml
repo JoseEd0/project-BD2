@@ -46,11 +46,22 @@ jobs:
         run: uv run --no-sync python -m faces models --salida "$FACES_MODELS_DIR"
         env:
           FACES_MODELS_DIR: ${{ runner.temp }}/faces-models
+      - name: CLIP de la tienda en caché
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/shop-models
+          key: shop-models-${{ hashFiles('apps/shop/src/shop/clip/models.py') }}
+      - name: CLIP de la tienda
+        run: uv run --no-sync python -m shop.clip models --salida "$SHOP_MODELS_DIR"
+        env:
+          SHOP_MODELS_DIR: ${{ runner.temp }}/shop-models
       - name: Pytest
-        # Con FACES_MODELS_DIR definida, un test de rostros sin sus modelos falla en vez de saltarse.
+        # Con FACES_MODELS_DIR y SHOP_MODELS_DIR definidas, un test sin sus modelos falla en vez
+        # de saltarse.
         run: uv run --no-sync python -m pytest -q
         env:
           FACES_MODELS_DIR: ${{ runner.temp }}/faces-models
+          SHOP_MODELS_DIR: ${{ runner.temp }}/shop-models
 
   frontend:
     name: Frontend

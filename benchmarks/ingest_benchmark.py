@@ -45,12 +45,8 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import shutil
-import socket
 import statistics
-import subprocess
-import sys
 import tempfile
 import time
 from collections.abc import Callable, Iterator, Sequence
@@ -64,12 +60,8 @@ import httpx
 import numpy as np
 
 from api.settings import (
-    CORS_ORIGINS_VARIABLE,
-    DATA_DIRECTORY_VARIABLE,
     INGEST_BATCH_ROWS_VARIABLE,
-    LOG_LEVEL_VARIABLE,
     MAX_REQUEST_BYTES_VARIABLE,
-    SERVICE_KEYS_VARIABLE,
     STATEMENT_TIMEOUT_VARIABLE,
 )
 from benchmarks.common import (
@@ -82,6 +74,7 @@ from benchmarks.common import (
     random_stream,
     results_directory,
 )
+from benchmarks.engine_process import engine_server
 from benchmarks.ingest.names import (
     HNSW_AFTER,
     HNSW_EMPTY,
@@ -114,10 +107,6 @@ DEFAULT_DIMENSION = 384
 DEFAULT_REPETITIONS = 1
 DEFAULT_THREADS = 1
 DEFAULT_SEED = 20261118
-LOOPBACK = "127.0.0.1"
-ANY_FREE_PORT = 0
-CORS_ORIGIN = "http://localhost"
-SERVER_LOG_LEVEL = "WARNING"
 OPENMP_THREADS_VARIABLE = "OMP_NUM_THREADS"
 # Un lote de mil filas con VECTOR(384) viaja en el JSON de un INSERT en unos 8 MiB, justo el
 # límite por omisión: el experimento lo sube para que el INSERT por lotes use los mismos
@@ -125,9 +114,6 @@ OPENMP_THREADS_VARIABLE = "OMP_NUM_THREADS"
 REQUEST_BYTES_LIMIT = 256 * 1024 * 1024
 # Un CREATE INDEX sobre 50 000 vectores no se corta, pero el INSERT de un lote grande sí.
 STATEMENT_TIMEOUT_SECONDS = 600
-SERVER_START_SECONDS = 60.0
-SERVER_POLL_SECONDS = 0.05
-HEALTH_PATH = "/health"
 QUERY_PATH = "/query"
 NDJSON_MEDIA_TYPE = "application/x-ndjson"
 # Filas por trozo del cuerpo NDJSON: el cliente las convierte a JSON mientras el servidor
@@ -415,61 +401,14 @@ def _point_workload(size: int, seed: int) -> Workload:
 @contextmanager
 def _engine_server(directory: Path, settings: Settings) -> Iterator[str]:
     """Un uvicorn en otro proceso, sobre `directory`, hasta salir del bloque."""
-    port = _free_port()
-    environment = {key: value for key, value in os.environ.items() if key != SERVICE_KEYS_VARIABLE}
-    environment.update(
-        {
-            DATA_DIRECTORY_VARIABLE: str(directory),
-            CORS_ORIGINS_VARIABLE: CORS_ORIGIN,
-            STATEMENT_TIMEOUT_VARIABLE: str(STATEMENT_TIMEOUT_SECONDS),
-            MAX_REQUEST_BYTES_VARIABLE: str(REQUEST_BYTES_LIMIT),
-            INGEST_BATCH_ROWS_VARIABLE: str(settings.batch_rows),
-            LOG_LEVEL_VARIABLE: SERVER_LOG_LEVEL,
-            OPENMP_THREADS_VARIABLE: str(settings.threads),
-        }
-    )
-    command = [
-        sys.executable,
-        "-m",
-        "uvicorn",
-        "--factory",
-        "api.main:app_from_environment",
-        "--host",
-        LOOPBACK,
-        "--port",
-        str(port),
-        "--log-level",
-        SERVER_LOG_LEVEL.lower(),
-    ]
-    server = subprocess.Popen(command, env=environment)
-    base_url = f"http://{LOOPBACK}:{port}"
-    try:
-        _wait_until_healthy(base_url, server)
+    environment = {
+        STATEMENT_TIMEOUT_VARIABLE: str(STATEMENT_TIMEOUT_SECONDS),
+        MAX_REQUEST_BYTES_VARIABLE: str(REQUEST_BYTES_LIMIT),
+        INGEST_BATCH_ROWS_VARIABLE: str(settings.batch_rows),
+        OPENMP_THREADS_VARIABLE: str(settings.threads),
+    }
+    with engine_server(directory, environment) as base_url:
         yield base_url
-    finally:
-        server.terminate()
-        server.wait()
-
-
-def _wait_until_healthy(base_url: str, server: subprocess.Popen[bytes]) -> None:
-    deadline = time.monotonic() + SERVER_START_SECONDS
-    while time.monotonic() < deadline:
-        if server.poll() is not None:
-            raise RuntimeError(f"el servidor terminó al arrancar con código {server.returncode}")
-        try:
-            if httpx.get(base_url + HEALTH_PATH).status_code == httpx.codes.OK:
-                return
-        except httpx.TransportError:
-            pass
-        time.sleep(SERVER_POLL_SECONDS)
-    raise RuntimeError(f"el servidor no respondió en {SERVER_START_SECONDS:g} s")
-
-
-def _free_port() -> int:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
-        probe.bind((LOOPBACK, ANY_FREE_PORT))
-        port: int = probe.getsockname()[1]
-        return port
 
 
 def _successful(response: httpx.Response) -> dict[str, Any]:

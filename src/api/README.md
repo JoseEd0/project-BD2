@@ -288,8 +288,9 @@ salto de línea— y rechaza su lote. La memoria queda acotada por un lote de l�
 
 **Índices.** Si la tabla tiene filas, cada lote es una transacción propia, como un
 `INSERT` en autocommit: bloquea la tabla mientras escribe y la suelta entre lotes, y los
-índices se mantienen fila a fila. Si la tabla está **vacía** y tiene un R-Tree, un índice
-invertido, un HNSW o un IVF, esos índices no se tocan durante la carga: al terminar se
+índices se mantienen fila a fila. Si la tabla está **vacía** —sin filas vivas, también si se
+vació con `DELETE`— y tiene un R-Tree, un índice invertido, un HNSW o un IVF, esos índices se
+descartan (las lápidas de lo borrado incluidas) y no se tocan durante la carga: al terminar se
 construyen de una vez con todas las filas (carga STR del R-Tree, SPIMI, todos los vectores
 de una vez en FAISS), que es mucho más barato (ver `benchmarks/README.md`). Mientras tanto
 la carga retiene la tabla en exclusiva: con los índices a medias, una lectura respondería

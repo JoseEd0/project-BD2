@@ -47,10 +47,22 @@ QUERIES = (
     "SELECT id FROM t WHERE grupo = 3 ORDER BY id",
     "SELECT COUNT(*) FROM t",
 )
+# Sin LIMIT: en una tabla vaciada las filas nuevas caen en otros huecos del heap, y un empate
+# de puntaje en el corte se resolvería distinto. Con k = ROWS, cada índice de vectores
+# devuelve todas sus filas, sin entradas viejas ni repetidas.
+EVERY_ROW_QUERIES = (
+    "SELECT id FROM t WHERE distancia(lugar, POINT(-12.0, -77.0)) < 40000",
+    "SELECT id FROM t ORDER BY distancia(lugar, POINT(-12.1, -77.1)) LIMIT 15",
+    "SELECT id, SCORE() FROM t WHERE MATCH(texto, 'mesa azul') USING BM25",
+    "SELECT id, SCORE() FROM t WHERE MATCH(texto, 'silla cafe') USING TF_IDF",
+    "SELECT id FROM t WHERE MATCH(texto, 'libro AND NOT radio')",
+    f"SELECT id FROM t WHERE SIMILAR_TO(emb, [0.3, -0.2, 0.9, 0.1], k = {ROWS}) USING HNSW",
+    f"SELECT id FROM t WHERE SIMILAR_TO(emb, [0.3, -0.2, 0.9, 0.1], k = {ROWS}) USING IVF",
+)
 
 
-def rows(count: int) -> list[JsonRow]:
-    generator = random.Random(SEED)
+def rows(count: int, seed: int = SEED) -> list[JsonRow]:
+    generator = random.Random(seed)
     return [
         {
             "id": key,
@@ -94,25 +106,51 @@ def answers(engine: Engine) -> list[tuple]:
     return [engine.execute(sql).rows for sql in QUERIES]
 
 
+def every_row_answers(engine: Engine) -> list[list[tuple]]:
+    return [sorted(engine.execute(sql).rows) for sql in EVERY_ROW_QUERIES]
+
+
 def test_only_the_indexes_with_a_bulk_build_are_deferred(make_engine):
     engine = make_engine("diferida")
     assert sorted(engine.table("t").defer_bulk_indexes()) == list(BULK_INDEXES)
     engine.table("t").build_deferred_indexes()
 
 
+def load_one_by_one(engine: Engine, loaded: list[JsonRow]) -> None:
+    for batch in batches(loaded):
+        engine.run(LoadRowsStatement("t", batch))
+
+
+def load_in_bulk(engine: Engine, loaded: list[JsonRow]) -> None:
+    table = engine.table("t")
+    table.defer_bulk_indexes()
+    load_one_by_one(engine, loaded)
+    table.build_deferred_indexes()
+
+
 def test_a_bulk_build_answers_like_rows_indexed_one_by_one(make_engine):
     loaded = rows(ROWS)
     incremental, bulk = make_engine("fila_a_fila"), make_engine("de_una_vez")
-    for batch in batches(loaded):
-        incremental.run(LoadRowsStatement("t", batch))
-    table = bulk.table("t")
-    table.defer_bulk_indexes()
-    for batch in batches(loaded):
-        bulk.run(LoadRowsStatement("t", batch))
-    table.build_deferred_indexes()
+    load_one_by_one(incremental, loaded)
+    load_in_bulk(bulk, loaded)
     expected = answers(incremental)
     assert all(expected), "cada consulta tiene que devolver algo para que la comparación diga algo"
     assert answers(bulk) == expected
+
+
+def test_a_table_emptied_by_delete_builds_its_indexes_like_a_new_one(make_engine):
+    """Las filas borradas dejan lápidas en el invertido y huecos en el heap que las nuevas
+    reutilizan con otro contenido: nada de eso llega a los índices construidos de nuevo,
+    ni a los puntajes de BM25."""
+    loaded = rows(ROWS)
+    new, emptied = make_engine("nueva"), make_engine("vaciada")
+    load_one_by_one(emptied, rows(ROWS, seed=SEED + 1))
+    emptied.execute("DELETE FROM t")
+    load_in_bulk(new, loaded)
+    load_in_bulk(emptied, loaded)
+    expected = every_row_answers(new)
+    assert all(expected)
+    assert every_row_answers(emptied) == expected
 
 
 def test_deferred_indexes_survive_reopening(make_engine, tmp_path: Path, config: EngineConfig):

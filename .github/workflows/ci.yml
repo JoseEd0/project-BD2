@@ -127,17 +127,21 @@ jobs:
       - name: Playwright
         run: for app in $WEB_APPS; do npm --prefix "$app" run e2e; done
       - name: Imagen de la plantilla
-        # Con `apps/` como contexto, como la de cada interfaz: si el kit deja de llegar a la
-        # imagen, falla aquí y no en el compose.
+        # La imagen común de las interfaces, con `apps/` como contexto: si el kit deja de
+        # llegar a la imagen, falla aquí y no en el compose. Con el sistema de archivos de solo
+        # lectura, como en el compose, y sin certificado: solo HTTP.
         run: |
-          docker build --file apps/web-kit/template/Dockerfile --tag minigestor-template-web apps
-          docker run --detach --name template-web --publish 8090:8080 \
+          docker build --file apps/web-kit/docker/Dockerfile --build-arg APP_DIR=web-kit/template \
+            --tag minigestor-template-web apps
+          docker run --detach --name template-web --publish 8090:8080 --read-only \
+            --tmpfs /tmp --tmpfs /etc/nginx/conf.d:uid=101,gid=101 \
             --env API_UPSTREAM=http://127.0.0.1:9 minigestor-template-web
           for attempt in 1 2 3 4 5 6 7 8 9 10; do
             curl --fail --silent --output /dev/null http://localhost:8090/ && break
             sleep 1
           done
           curl --fail --silent --show-error http://localhost:8090/otra/ruta | grep -q applyThemePreference
+          curl --silent --head http://localhost:8090/ | grep -qi "content-security-policy: .*'sha256-"
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://localhost:8090/api/health)" = 502
       - name: Trazas de Playwright
         if: failure()

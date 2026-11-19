@@ -83,6 +83,45 @@ permitir su hash. El texto exacto depende de cómo se cargó el kit al construir
 los tipos dejando espacios), así que el hash se calcula sobre el `index.html` construido, con
 `inlineScriptHash(script)`, o con `themeBootScriptHash()` en el mismo proceso del build.
 
+## Imagen y nginx
+
+Todas las interfaces se sirven con la misma imagen, [`docker/Dockerfile`](docker/Dockerfile),
+construida con `apps/` como contexto y la carpeta de la interfaz en `APP_DIR`:
+
+```bash
+docker build --file apps/web-kit/docker/Dockerfile --build-arg APP_DIR=shop/web apps
+```
+
+Compila la interfaz con el kit y la sirve con nginx sin privilegios
+([`docker/nginx/`](docker/nginx/)). Una sola configuración para las cuatro apps; lo que cambia
+de una a otra son variables que pone su `compose.yaml`:
+
+| Variable | Para qué | Por omisión |
+|---|---|---|
+| `API_UPSTREAM` | la API de la app: el único destino de `/api/` (y del WebSocket) | `http://api:8000` |
+| `API_TIMEOUT` | plazo de una respuesta de la API | `60s` |
+| `API_MAX_BODY_SIZE` | lo más que se puede subir en una petición (`413` si pasa) | `1m` |
+| `API_RATE_LIMIT`, `API_RATE_BURST` | peticiones a `/api/` por IP y su ráfaga (`429` si pasa) | `20r/s`, `40` |
+| `WEB_PERMISSIONS_POLICY` | `Permissions-Policy`: la cámara o el micrófono, solo en la app que los usa | todo apagado |
+| `WEB_PORT`, `WEB_TLS_PORT` | puertos HTTP y HTTPS dentro del contenedor | `8080`, `8443` |
+| `TLS_CERTIFICATE`, `TLS_CERTIFICATE_KEY` | certificado y clave montados; sin ellos, solo HTTP | `/etc/nginx/certs/{cert,key}.pem` |
+| `HSTS_MAX_AGE` | `Strict-Transport-Security`, solo en las respuestas por HTTPS | un año |
+| `DNS_TTL` | cada cuánto vuelve a resolver la API (réplicas nuevas con `--scale`) | `10s` |
+
+- **`/api/`** se reenvía sin el prefijo y tal como llegó (sin decodificar) a una variable, así
+  que nginx resuelve el nombre con el DNS de Docker en cada petición y reparte entre todas
+  las réplicas de la API. Pasa el `X-Request-ID` que trae la petición (lo pone el kit) o uno
+  nuevo, y su log JSON (`"logger": "nginx"`) dice ese id y la réplica que respondió
+  (`upstream`).
+- **CSP** sin `'unsafe-inline'`: al construir, [`scripts/csp-script-hashes.ts`](scripts/csp-script-hashes.ts)
+  mide el hash de cada guion en línea del `index.html` construido (el del tema) y nginx lo pone
+  en `script-src`. Además `X-Content-Type-Options`, `Referrer-Policy`,
+  `Cross-Origin-Opener-Policy`, `frame-ancestors 'none'` y gzip.
+- **HTTPS**: si hay un certificado montado, `25-tls.sh` añade al arrancar el mismo sitio por
+  `WEB_TLS_PORT`. El certificado lo genera `deploy/certs.sh` (ver el README raíz).
+- El sistema de archivos puede ser de solo lectura: nginx escribe solo en `/tmp` y en
+  `/etc/nginx/conf.d`, que el compose monta como `tmpfs`.
+
 ## Crear la interfaz de una aplicación
 
 La plantilla vive en [`template/`](template/), a la misma profundidad que
@@ -97,10 +136,8 @@ rm -rf apps/shop/web/node_modules apps/shop/web/dist
 1. En `package.json`, el nombre (`minigestor-shop-web`); después `npm --prefix apps/shop/web
    install` reescribe el `package-lock.json` con la nueva ruta del kit.
 2. En `src/identity.ts`, el id, el nombre y el prefijo del API si no es `/api`.
-3. En el `Dockerfile`, `ARG APP_DIR=shop/web` (las dos veces). La imagen se construye con
-   `apps/` como contexto:
-   `docker build --file apps/shop/web/Dockerfile apps`. El puerto publicado (`8102` para la
-   tienda) y `API_UPSTREAM` los pone su `compose.yaml` (#72).
+3. Nada para la imagen: todas las interfaces usan la de [`docker/`](docker/) (ver *Imagen y
+   nginx*) con `APP_DIR=shop/web`, y el `compose.yaml` de la app pone su puerto y su API.
 4. Registrar el contrato del servicio en `tools/export_openapi.py` con la ruta
    `apps/shop/web/openapi/shop.json` y correr `npm --prefix apps/shop/web run contracts`.
 5. Reemplazar `src/styles.css`, las páginas y este marcador por la interfaz que define el
@@ -120,7 +157,7 @@ npm --prefix apps/web-kit/template ci
 npm --prefix apps/web-kit/template run build
 npm --prefix apps/web-kit/template test
 npm --prefix apps/web-kit/template run e2e # después de build
-docker build --file apps/web-kit/template/Dockerfile apps
+docker build --file apps/web-kit/docker/Dockerfile --build-arg APP_DIR=web-kit/template apps
 ```
 
 Node 22.18 o posterior; la CI y las imágenes usan 22.23.4.

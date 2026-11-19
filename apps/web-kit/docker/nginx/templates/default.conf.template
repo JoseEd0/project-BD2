@@ -1,0 +1,50 @@
+# El nginx de una app: sirve su interfaz y reenvía /api solo a su propia API. La imagen de
+# nginx sustituye las variables de entorno (`${...}`) al arrancar; las de nginx (`$...`)
+# quedan para cada petición.
+
+gzip on;
+gzip_vary on;
+gzip_min_length 1024;
+gzip_types text/plain text/css application/javascript application/json image/svg+xml
+           application/manifest+json;
+
+# El id que trae la petición (lo pone el kit web en cada llamada) si es válido para el API, o
+# uno nuevo: el mismo viaja a la API y al gestor y sale en el log de los tres.
+map $http_x_request_id $request_trace_id {
+    "~^[A-Za-z0-9._:-]{1,128}$" $http_x_request_id;
+    default                     $request_id;
+}
+
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ""      close;
+}
+
+# Solo por HTTPS: por HTTP el navegador la ignora, y enviarla en la red local no sirve.
+map $https $strict_transport_security {
+    on      "max-age=${HSTS_MAX_AGE}";
+    default "";
+}
+
+# La ruta del API sin su prefijo, tal como llegó (sin decodificar) y con su query string.
+map $request_uri $api_request_uri {
+    "~^/api(?<api_path>/.*)$" $api_path;
+    default                   /;
+}
+
+limit_req_zone $binary_remote_addr zone=api_per_ip:10m rate=${API_RATE_LIMIT};
+limit_req_status 429;
+
+# El DNS de Docker: con `--scale`, el nombre de la API resuelve a cada réplica, y nginx
+# reparte entre ellas; volver a preguntar cada DNS_TTL encuentra las que se suman después.
+resolver ${NGINX_LOCAL_RESOLVERS} valid=${DNS_TTL} ipv6=off;
+
+log_format app escape=json
+    '{"time":"$time_iso8601","logger":"nginx","request_id":"$request_trace_id",'
+    '"method":"$request_method","path":"$uri","status":$status,'
+    '"upstream":"$upstream_addr","duration_s":$request_time,"remote":"$remote_addr"}';
+
+server {
+    listen ${WEB_PORT};
+    include /etc/nginx/conf.d/app/server.conf;
+}

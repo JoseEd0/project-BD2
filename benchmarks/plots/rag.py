@@ -17,7 +17,7 @@ from benchmarks.rag.names import (
 )
 from rag.models import ModelVariant
 
-THROUGHPUT = Measure("rendimiento (fragmentos/s)", "frag./s")
+THROUGHPUT = Measure("rendimiento (frag./s)", "frag./s")
 VARIANTS = (
     Technique(ModelVariant.FP32.value, Style(BLUE, "o"), "fp32"),
     Technique(ModelVariant.INT8.value, Style(ORANGE, "s"), "int8 (cuantizado)"),

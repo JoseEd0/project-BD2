@@ -31,6 +31,12 @@ gráficas de [`figures/`](figures/) y todas las tablas de este documento.
 .venv/bin/python -m benchmarks.faces_stream_benchmark --api-url http://127.0.0.1:<web>/api \
     --target nginx=ws://127.0.0.1:<web>/api/ws/recognize \
     --target directo=ws://127.0.0.1:<api>/ws/recognize --frames 300 --warmup 20 --fps 10
+.venv/bin/python -m benchmarks.faces_evaluation_benchmark --lfw data/datasets/lfw \
+    --models data/models/faces --fars 0.01 0.001 0.0001 0.00001 \
+    --thresholds 0.363 0.45 0.47 0.5 --gallery-size 1000 --target-fpir 0.01
+.venv/bin/python -m benchmarks.faces_cache_benchmark --api-url http://127.0.0.1:<web>/api \
+    --url ws://127.0.0.1:<web>/api/ws/recognize --speeds 0 16 32 40 48 56 64 96 \
+    --frames 200 --warmup 20 --fps 10
 .venv/bin/python -m benchmarks.plot              # redibuja todas las gráficas
 ```
 
@@ -113,6 +119,8 @@ docker compose --profile bench down       # apaga PostgreSQL
 | `--features-dir` | guarda las características y las reutiliza en la siguiente ejecución |
 | `--data-dir`, `--models`, `--engine-data-dir`, `--embeddings-dir` | carpeta de datasets, de CLIP, del gestor y de la caché de embeddings (carga de la tienda) |
 | `--clip-batch-size`, `--preprocess-workers` | fotos por pasada de CLIP e hilos que las preparan |
+| `--fars`, `--gallery-size`, `--target-fpir`, `--embeddings-cache` | FAR a los que se busca el TAR, galería y tasa de desconocidos aceptados con que se calibra el umbral de reconocer, y dónde guardar los embeddings de LFW (rostros en LFW) |
+| `--speeds`, `--fps` | velocidades del rostro y cuadros por segundo de la caché de rastros |
 | `--output` | dónde dejar el JSON |
 
 | Experimento | Qué compara | Gráficas |
@@ -132,6 +140,7 @@ docker compose --profile bench down       # apaga PostgreSQL
 | [13. Ingesta del RAG](#13-ingesta-del-rag--embeddings-e5-en-onnx-y-carga-con-bm25-y-hnsw) | multilingual-e5-small fp32 vs int8 en ONNX por hilos; siembra de 98 585 fragmentos y cada etapa de la carga (NDJSON, índice invertido, HNSW) | [embeddings](figures/rag-embeddings.png), [carga](figures/rag-ingesta.png) |
 | [14. Detección de copyright](#14-detección-de-copyright--latencia-de-post-detections-y-casos-de-control) | latencia de `POST /detections` por duración de la subida y sus etapas; puntajes de copias enteras, tramos de 15 y 7,5 s y pistas no catalogadas frente al umbral | [latencia](figures/copyright-deteccion.png), [etapas](figures/copyright-deteccion-etapas.png), [puntajes](figures/copyright-deteccion-puntajes.png) |
 | [15. Rostros en vivo](#15-rostros-en-vivo--latencia-por-cuadro-por-websocket) | un cuadro de punta a punta por WebSocket, por el nginx o directo a la API, con y sin la caché de rastros en Redis, con cada etapa | [en vivo](figures/rostros-tiempo-real.png) |
+| [16. Rostros en LFW](#16-rostros-en-lfw--verificación-identificación-latencia-y-caché) | verificación con el protocolo de LFW (exactitud por pliegues, TAR a FAR fijo, ROC) y umbrales calibrados; identificación en el gestor, HNSW vs búsqueda exacta; p99 de cada etapa; aciertos de la caché de rastros según la velocidad del rostro | [verificación](figures/rostros-evaluacion-verificacion.png), [identificación](figures/rostros-evaluacion-identificacion.png), [latencia](figures/rostros-evaluacion-latencia.png), [caché](figures/rostros-cache.png) |
 
 **Cómo leer las gráficas.** Cada una es una fila de paneles, uno por operación, con el
 número de filas en horizontal y una línea por técnica. Los dos ejes son logarítmicos: los
@@ -1311,7 +1320,7 @@ foto por foto, con un hilo de OpenCV:
 con otros procesos en el equipo); con más hilos OpenCV reparte la red, y en el servidor de
 Docker la cifra será otra. Las fotos ampliadas no tienen más detalle que la original de
 250 px: miden el costo de su tamaño, no la precisión con fotos grandes. La exactitud de la
-verificación con los pares de LFW y el umbral del conjunto abierto se miden aparte (#92).
+verificación con los pares de LFW y el umbral del conjunto abierto se miden en la sección 16.
 
 ## 8. Tramos de audio y consulta por segmentos
 
@@ -1663,8 +1672,9 @@ inclinación −13° / −1° / 15°.
   comparar dos fotos (1:1); contra una galería, un desconocido tiene N oportunidades de
   pasarlo y la FPIR crece con N: 9 % con 100 personas y 46,5 % con 1 000. Con 0,45 queda en
   1 a 2 % en todos los tamaños medidos, a cambio de una FNIR de 5 a 11 % (con 100 a 200
-  consultas por tamaño, cada punto es una o dos consultas). El servicio usa 0,45 para reconocer y para el aviso de «te pareces mucho», y
-  0,50 para decir «ya estás registrado como X»; #92 los calibrará a un FAR fijo.
+  consultas por tamaño, cada punto es una o dos consultas). El servicio usaba 0,45 para
+  reconocer y para el aviso de «te pareces mucho», y 0,50 para decir «ya estás registrado
+  como X»; la sección 16 los calibró a un FAR fijo y subió los dos primeros a 0,47.
 - **Los duplicados falsos siguen la misma curva.** Bloquear desde 0,363 habría impedido
   registrarse a un tercio de las personas mientras la galería crecía a 1 000; desde 0,45, al
   1,1 %, y decir un nombre equivocado (0,50), al 0,26 %.
@@ -2009,7 +2019,7 @@ celular se suma su ida y vuelta, y por el túnel, la de Internet. El máximo de 
 camino directo con caché es un solo cuadro, con el equipo cargado. La contrapresión no se
 ve aquí porque el cliente espera cada respuesta; la prueba con un productor rápido está en
 [`test_faces_realtime_connection.py`](../apps/faces/tests/test_faces_realtime_connection.py).
-El efecto de la caché según cuántas personas haya y cuánto se muevan es parte de #92.
+El efecto de la caché según cuánto se mueve el rostro está en la sección 16.
 
 ### Reproducirlo
 
@@ -2031,6 +2041,185 @@ docker compose -p rostros-bench down --volumes
 pide el plan de registro de dos tomas de frente (las fotos de prueba no tienen otras poses) y
 pone otro nombre a las imágenes para no reemplazar las del despliegue de siempre. Tarda unos
 dos minutos más la construcción de las imágenes.
+
+## 16. Rostros en LFW — verificación, identificación, latencia y caché
+
+`faces_evaluation_benchmark.py` califica el reconocedor del servicio de rostros
+([`apps/faces`](../apps/faces/README.md), #92) con LFW: describe las 13 233 fotos con el
+pipeline del servicio (YuNet y SFace, un hilo) y, en las 1 033 en que YuNet ve más de un
+rostro (sección 7), toma **el más cercano al centro**, que en LFW es la persona que nombra
+la foto. En las 12 sin rostro, el par cuenta con coseno −1: se rechaza siempre (10 de los
+6 000 pares del protocolo). Con esos embeddings:
+
+- **verificación (1:1)** con el protocolo de `pairs.txt`: 10 pliegues de 300 pares de la
+  misma persona y 300 de personas distintas; el umbral de cada pliegue se elige con los
+  otros nueve (el que más pares clasifica bien) y se prueba con él;
+- **TAR a un FAR fijo** y la ROC con esos 6 000 pares y con **todos los pares** de LFW: los
+  242 000 de fotos de una misma persona y los 16,5 millones de la primera foto de cada
+  persona contra la de cada otra. 3 000 pares de personas distintas no miden un FAR por
+  debajo de 1/3 000; 16,5 millones llegan a 10⁻⁷;
+- **identificación (1:N) en el gestor**: una tabla `VECTOR(128)` con la primera foto de
+  cada una de las 1 679 personas con dos o más fotos y un HNSW coseno; cada otra foto de
+  esas personas (7 481 sondas) y la única foto de las demás (4 061 desconocidas) se buscan
+  con `SIMILAR_TO(embedding, $1, k = 1)` por SQL. La misma consulta con `METRIC = dot`, que
+  el índice no ordena, es la búsqueda exacta del gestor; numpy, la referencia.
+
+`faces_cache_benchmark.py` mide la caché de rastros del reconocimiento en vivo (sección 15)
+según cuánto se mueve el rostro, contra el compose: un retrato que cruza cuadros de
+1 280 x 720 de izquierda a derecha a `v` px por cuadro (el rostro mide 87 px de ancho, por
+encima de los 80 que pide el reconocimiento), a 10 cuadros por segundo, 200 cuadros por
+velocidad con la caché y sin ella. El cuadro es ancho a propósito: un rastro perdido se
+recuerda 1 s, y si el rostro volviera antes por donde pasó —rebotando en un cuadro
+angosto— el rastro viejo lo recogería (una primera versión con cuadros de 640 px daba un
+80 % de aciertos a 160 px por cuadro por eso).
+
+**Dónde corrió.** Apple M4 Pro (12 núcleos), macOS, OpenCV 5.0.0, un hilo de OpenCV y de
+FAISS; el compose en Docker Desktop. Otros trabajos ocupaban el equipo: carga media de 9 a
+11 durante la evaluación y de 4,6 a 21 durante la caché, con la máquina de Docker de 1,5 a 4,1 (cada pasada guarda
+la suya).
+
+![Rostros: verificación con los pares de LFW](figures/rostros-evaluacion-verificacion.png)
+
+| Verificación (SFace, rostro del centro) | Valor |
+|---|---:|
+| exactitud, 10 pliegues | **99,30 % ± 0,40 %** (de 98,50 a 100 %) |
+| umbral elegido en cada pliegue | 0,336 en nueve, 0,330 en uno |
+| TAR a FAR 10⁻² (protocolo / todos los pares) | 99,23 % / 99,72 % |
+| TAR a FAR 10⁻³ (protocolo / todos los pares) | **98,50 %** (umbral 0,375) / **99,64 %** (umbral 0,361) |
+| TAR a FAR 10⁻⁴ (todos los pares) | 99,40 % (umbral 0,417) |
+| TAR a FAR 10⁻⁵ (todos los pares) | 98,81 % (umbral 0,470) |
+
+La desviación es la de las diez exactitudes (población). El protocolo da un TAR menor que
+todos los pares porque sus pares de la misma persona se eligieron difíciles; los
+umbrales, en cambio, salen de los impostores, y ahí 16,5 millones afinan lo que 3 000 no
+pueden (a FAR 10⁻³ el protocolo deja pasar 3 impostores).
+
+| Umbral | Uso en el servicio | TAR (todos los pares) | FAR (todos los pares) | Desconocidas aceptadas con 1 679 personas (FPIR) | Registradas perdidas (FNIR) |
+|---:|---|---:|---:|---:|---:|
+| 0,336 | máxima exactitud en los pliegues | 99,67 % | 2,5 · 10⁻³ | — | — |
+| **0,363** | misma persona que las tomas anteriores (1:1) | 99,63 % | 9,1 · 10⁻⁴ | 66,5 % | 1,5 % |
+| 0,45 | reconocer, **antes** de #92 | 99,12 % | 2,3 · 10⁻⁵ | 3,4 % | 3,0 % |
+| **0,47** | reconocer y «te pareces mucho», **desde #92** | 98,80 % | 1,0 · 10⁻⁵ | 1,6 % | 3,7 % |
+| **0,50** | «ya estás registrado como X» | 98,06 % | 4,6 · 10⁻⁶ | 0,64 % | 5,4 % |
+
+![Rostros: identificación en el gestor](figures/rostros-evaluacion-identificacion.png)
+
+| Identificación, 1 679 personas | Rank-1 | Acuerdo con la exacta | p50 | p95 | p99 |
+|---|---:|---:|---:|---:|---:|
+| HNSW del gestor (por SQL) | 98,60 % | 99,83 % | 0,21 ms | 0,24 ms | 0,32 ms |
+| exacta del gestor (`METRIC = dot`) | 98,72 % | 100 % | 0,20 ms | 0,23 ms | 0,34 ms |
+| exacta con numpy (referencia) | 98,72 % | 100 % | — | — | — |
+
+Construir el HNSW de 1 679 vectores tardó 79 ms. Las FPIR y FNIR de la exacta difieren de
+las del HNSW en menos de 0,2 puntos desde 0,45 (la figura las superpone); a 0,363 el HNSW
+acepta 1,2 puntos menos de desconocidas, porque a veces no encuentra al vecino más
+parecido.
+
+![Rostros: latencia de cada etapa](figures/rostros-evaluacion-latencia.png)
+
+| Etapa | Medida en | p50 | p95 | p99 |
+|---|---|---:|---:|---:|
+| decodificar | 13 221 fotos de LFW (250 px) | 0,43 ms | 0,50 ms | 0,75 ms |
+| detectar (YuNet) | ídem | 3,70 ms | 4,20 ms | 5,57 ms |
+| alinear | ídem | 0,05 ms | 0,06 ms | 0,07 ms |
+| embeber (SFace) | ídem | 13,31 ms | 15,19 ms | 23,89 ms |
+| total del pipeline | ídem | 17,50 ms | 20,10 ms | 29,64 ms |
+| buscar (HNSW por SQL, en proceso) | 11 542 búsquedas, 1 679 personas | 0,21 ms | 0,24 ms | 0,32 ms |
+| red y espera (WebSocket por el nginx) | 8 pasadas sin caché, 1 600 cuadros de 1 280 x 720 | 2,7 a 3,5 ms | 4,1 a 6,2 ms | 4,8 a 11,9 ms |
+
+La sección 7 da decodificar y detectar según el tamaño de la foto, y la 15 cada etapa de
+un cuadro por WebSocket; aquí se suman el p99 y la red. «Red y espera» es la latencia del
+cliente menos las etapas medidas en el servidor; de cada pasada se guardan sus percentiles,
+así que se da el rango entre pasadas.
+
+![Rostros en vivo: la caché de rastros según la velocidad](figures/rostros-cache.png)
+
+| Velocidad (px por cuadro) | Aciertos | p50 con caché | p50 sin caché | Ahorro p50 | Ahorro medio | p99 con / sin caché |
+|---:|---:|---:|---:|---:|---:|---:|
+| 0 | **95,0 %** | 16,2 ms | 20,7 ms | 4,5 ms | 5,9 ms | 28,8 / 33,5 ms |
+| 16 | 93,5 % | 15,3 ms | 22,2 ms | 6,9 ms | 7,0 ms | 33,0 / 31,6 ms |
+| 32 | 93,5 % | 14,2 ms | 24,0 ms | 9,7 ms | 8,9 ms | 27,8 / 38,5 ms |
+| 40 | 92,0 % | 17,0 ms | 22,7 ms | 5,7 ms | 7,2 ms | 30,7 / 50,2 ms |
+| 48 | 3,5 % | 23,6 ms | 23,9 ms | 0,3 ms | −3,8 ms | 75,5 / 29,3 ms |
+| 56 | 0 % | 24,4 ms | 24,7 ms | 0,3 ms | −0,1 ms | 44,0 / 31,6 ms |
+| 64 | 0 % | 25,3 ms | 25,0 ms | −0,3 ms | 2,1 ms | 32,0 / 65,8 ms |
+| 96 | 0 % | 24,8 ms | 24,5 ms | −0,4 ms | −0,1 ms | 30,3 / 31,4 ms |
+
+200 cuadros por pasada tras 20 de calentamiento. El ahorro medio es la diferencia de las
+medias de las dos pasadas; con 0 % de aciertos, lo que queda es ruido de una pasada a otra
+(la carga del equipo cambió de 21 a 5 durante la medida). Las tasas de aciertos salieron
+idénticas en las dos ejecuciones que se hicieron.
+
+### Conclusiones
+
+- **SFace con el rostro del centro llega a 99,30 % ± 0,40 % en LFW**, y el umbral que
+  eligen los pliegues casi no se mueve (0,336 en nueve de diez): la frontera entre
+  personas está bien definida y no depende de qué pares se usen para elegirla.
+- **El umbral de 1:1 (0,363) no cambia.** Lo publica OpenCV y los datos lo confirman: queda
+  entre el de máxima exactitud (0,336) y el de FAR 10⁻³ (0,361 con todos los pares, 0,375
+  con los 3 000 del protocolo). Con él, 9 de cada 10 000 pares de personas distintas pasan
+  y el 99,6 % de los de la misma persona también: es lo que se pide para comparar una toma
+  con las anteriores del mismo registro.
+- **El umbral de reconocer sube de 0,45 a 0,47.** Un desconocido se compara con toda la
+  galería: con N personas y una meta de 1 % de desconocidos aceptados, cada comparación
+  puede aceptar a lo sumo 0,01 / N impostores. Con N = 1 000 son 10⁻⁵, y en los 16,5
+  millones de pares ese FAR está en 0,470. Medido con 1 679 personas en el gestor, la FPIR
+  baja de 3,4 % a 1,6 % y la FNIR sube de 3,0 % a 3,7 %. El aviso de «te pareces mucho» usa
+  el mismo umbral, como antes; «ya estás registrado» se queda en 0,50 (FAR 4,6 · 10⁻⁶).
+- **El HNSW del gestor responde casi como la búsqueda exacta**: coincide en el primer
+  vecino en 7 468 de 7 481 sondas (99,83 %) y pierde 0,12 puntos de rank-1. Con 1 679
+  vectores, las dos tardan lo mismo, 0,2 ms por SQL: el costo es analizar y planificar la
+  consulta, no comparar 1 679 vectores de 128 dimensiones.
+- **El umbral de verificación no sirve para reconocer**: a 0,363, el 66,5 % de las 4 061
+  desconocidas sale como alguien de la galería de 1 679 (con 1 000, la sección 11 midió
+  46,5 %). Y hay un piso: de 0,58 a 0,60, el más alto que se prueba, siguen aceptadas 10
+  desconocidas, y no son errores del modelo: tres son la misma persona escrita de otra
+  forma (*Hasan Wirayuda* y *Hassan Wirajuda*, *Sung Hong Choi* y *Choi Sung-hong*,
+  *Yingfan Wang* y *Wang Yingfan*), una es la gemela de alguien de la galería (las Olsen),
+  dos son hermanas y en otras la foto muestra también a la persona con que se confunde.
+- **Lo que domina la latencia es SFace**: 13 de los 17,5 ms de una foto, y en el p99 sube a
+  24 ms con el equipo cargado; buscar en el gestor es el 1 %. La red local y el nginx suman 3 ms en la mediana y hasta
+  12 en el p99.
+- **La caché de rastros acierta en el 92 a 95 % de los cuadros mientras el rostro se mueve
+  hasta 40 px por cuadro** (400 px por segundo a 10 cuadros por segundo: un tercio del
+  ancho de un cuadro de 720p cada segundo) y ahorra de 4,5 a 10 ms por cuadro, del 22 al
+  40 % de la mediana. Lo que no acierta es un cuadro de cada 20 —se vuelve a verificar cada 2 s— y
+  el que vuelve a entrar por la izquierda.
+- **Pasados los 47 px el rastro se rompe de golpe**, como predice el IoU: con un rostro de
+  87 px de ancho, un salto de *d* px deja un IoU de (87 − *d*) / (87 + *d*), que baja de 0,3
+  en *d* = 47. A 48 px solo aciertan los cuadros en que el detector da una caja algo más
+  ancha (3,5 %), y desde 56 px ninguno: cada cuadro abre un rastro nuevo y paga el camino
+  completo, igual que sin caché. El umbral de IoU es lo que fija la velocidad máxima, en
+  proporción al tamaño del rostro: uno más cerca de la cámara tolera saltos mayores.
+
+**Lo que esta medida no dice.** LFW son fotos de prensa de 250 px, casi todas de frente y
+bien iluminadas; con selfies de celular a contraluz el TAR será menor y los umbrales
+deberían revisarse con fotos de la propia aplicación. La galería del servicio guarda tres
+tomas por persona (de frente y giradas) y no una: cada desconocido hace tres comparaciones
+por persona, lo que empuja la FPIR hacia arriba, y cada registrada tiene tres
+oportunidades, lo que baja la FNIR. Con 4 061 desconocidas, un punto de FPIR son 41
+consultas. La caché se midió con un solo rostro que se mueve en línea recta; varias
+personas que se cruzan pueden intercambiar rastros.
+
+### Reproducirlo
+
+```bash
+.venv/bin/python -m faces lfw --salida data/datasets/lfw
+.venv/bin/python -m faces models --salida data/models/faces
+.venv/bin/python -m benchmarks.faces_evaluation_benchmark --lfw data/datasets/lfw \
+    --models data/models/faces --fars 0.01 0.001 0.0001 0.00001 \
+    --thresholds 0.363 0.45 0.47 0.5 --gallery-size 1000 --target-fpir 0.01
+# la caché, con el compose de la sección 15 levantado:
+.venv/bin/python -m benchmarks.faces_cache_benchmark --api-url http://127.0.0.1:<web>/api \
+    --url ws://127.0.0.1:<web>/api/ws/recognize --speeds 0 16 32 40 48 56 64 96 \
+    --frames 200 --warmup 20 --fps 10 --compose-project rostros-bench
+.venv/bin/python -m benchmarks.plot
+```
+
+La evaluación tarda unos cinco minutos, cuatro de ellos en describir las 13 233 fotos;
+`--embeddings-cache archivo.npz` las guarda y las reutiliza. Las exactitudes, umbrales,
+TAR, rank-1 y tasas no dependen de la carga del equipo: salieron idénticos en las tres
+ejecuciones que se hicieron. La caché tarda unos siete minutos.
 
 ## Gráficas
 

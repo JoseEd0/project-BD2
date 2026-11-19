@@ -29,7 +29,7 @@ describe("local pre-check", () => {
   });
 });
 
-const GATE = { stableResults: 2, minIntervalMs: 1000, afterRejectionMs: 2000, blindIntervalMs: 3000, hintMaxAgeMs: 1500 };
+const GATE = { stableResults: 2, minIntervalMs: 1000, afterRejectionMs: 2000, rejectionBackoff: 2, maxAfterRejectionMs: 6000, blindIntervalMs: 3000, hintMaxAgeMs: 1500 };
 
 describe("shot gate", () => {
   it("shoots after the face holds still in the oval", () => {
@@ -71,6 +71,33 @@ describe("shot gate", () => {
     gate.observe(null, 1600);
     expect(gate.shouldShoot(2000)).toBe(false);
     expect(gate.shouldShoot(2100)).toBe(true);
+  });
+
+  it("waits longer after each rejection in a row, up to a ceiling, and resets on success", () => {
+    const gate = new ShotGate(0, { ...GATE, hintMaxAgeMs: 60_000 });
+    const nextAllowed = (from: number) => {
+      let at = from;
+      while (!gate.shouldShoot(at)) {
+        at += 100;
+      }
+      return at - from;
+    };
+    const reject = (at: number) => {
+      gate.shot(at);
+      gate.answered(false, at);
+      gate.observe(null, at + 1);
+      gate.observe(null, at + 2);
+    };
+    reject(10_000);
+    expect(nextAllowed(10_000)).toBe(2000);
+    reject(20_000);
+    expect(nextAllowed(20_000)).toBe(4000);
+    reject(30_000);
+    expect(nextAllowed(30_000)).toBe(6000);
+    gate.shot(40_000);
+    gate.answered(true, 40_000);
+    reject(50_000);
+    expect(nextAllowed(50_000)).toBe(2000);
   });
 
   it("gives the socket time for its first box, then shoots blind and slowly", () => {

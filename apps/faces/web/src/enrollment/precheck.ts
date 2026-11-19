@@ -8,7 +8,11 @@ import type { StreamFace } from "../realtime/protocol";
 export type PrecheckIssue = "no-face" | "many-faces" | "too-far" | "too-close" | "off-center";
 
 export interface PrecheckOptions {
-  /** Ancho mínimo y máximo de la cara, como fracción del ancho del cuadro. */
+  /**
+   * Ancho mínimo y máximo de la cara, como fracción del lado **menor** del cuadro: así vale
+   * igual con la cámara apaisada (escritorio) que vertical (celular). Con 0,18 la cara de una
+   * toma de 1 280 x 720 mide unos 130 px, sobre los 80 que exige el servidor.
+   */
   readonly minWidthFraction: number;
   readonly maxWidthFraction: number;
   /** Cuánto se puede alejar el centro de la cara del centro del óvalo, en fracción del cuadro. */
@@ -20,8 +24,8 @@ export interface PrecheckOptions {
 }
 
 export const PRECHECK: PrecheckOptions = {
-  minWidthFraction: 0.2,
-  maxWidthFraction: 0.8,
+  minWidthFraction: 0.18,
+  maxWidthFraction: 0.85,
   centerTolerance: 0.2,
   guideCenterY: 0.4,
   backgroundFaceRatio: 0.5,
@@ -44,7 +48,7 @@ export function precheck(faces: readonly StreamFace[], frame: Size, options: Pre
   if (peers.length > 1) {
     return "many-faces";
   }
-  const widthFraction = largest.box.width / frame.width;
+  const widthFraction = largest.box.width / Math.min(frame.width, frame.height);
   if (widthFraction < options.minWidthFraction) {
     return "too-far";
   }
@@ -66,6 +70,12 @@ export interface ShotGateOptions {
   readonly minIntervalMs: number;
   /** Tras un rechazo, tiempo para leer el mensaje y corregir antes de la siguiente. */
   readonly afterRejectionMs: number;
+  /**
+   * Cada rechazo seguido multiplica esa espera, hasta `maxAfterRejectionMs`: la sesión tiene
+   * pocos intentos, y quien no logra girar la cabeza no debe gastarlos en un minuto.
+   */
+  readonly rejectionBackoff: number;
+  readonly maxAfterRejectionMs: number;
   /** Sin respuestas del socket (caído o lento), se dispara cada tanto igual. */
   readonly blindIntervalMs: number;
   /** Cuánto vale la última respuesta del socket antes de considerarlo mudo. */
@@ -76,6 +86,8 @@ export const SHOT_GATE: ShotGateOptions = {
   stableResults: 2,
   minIntervalMs: 1_200,
   afterRejectionMs: 2_200,
+  rejectionBackoff: 1.5,
+  maxAfterRejectionMs: 8_000,
   blindIntervalMs: 3_000,
   hintMaxAgeMs: 2_000,
 };
@@ -90,6 +102,7 @@ export class ShotGate {
   private lastHintAt: number;
   private nextShotAt = Number.NEGATIVE_INFINITY;
   private inFlight = false;
+  private rejectionsInARow = 0;
 
   /** `now` es cuando empieza a mirar: el socket tiene `hintMaxAgeMs` para dar su primera caja. */
   constructor(now: number, private readonly options: ShotGateOptions = SHOT_GATE) {
@@ -120,6 +133,12 @@ export class ShotGate {
   answered(accepted: boolean, now: number): void {
     this.inFlight = false;
     this.stable = 0;
-    this.nextShotAt = now + (accepted ? this.options.minIntervalMs : this.options.afterRejectionMs);
+    this.rejectionsInARow = accepted ? 0 : this.rejectionsInARow + 1;
+    this.nextShotAt = now + (accepted ? this.options.minIntervalMs : this.rejectionWaitMs());
+  }
+
+  private rejectionWaitMs(): number {
+    const grown = this.options.afterRejectionMs * this.options.rejectionBackoff ** (this.rejectionsInARow - 1);
+    return Math.min(grown, this.options.maxAfterRejectionMs);
   }
 }

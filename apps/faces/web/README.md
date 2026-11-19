@@ -61,8 +61,10 @@ en paralelo solo para saber **dónde está la cara**, y una compuerta
 ([`precheck.ts`](src/enrollment/precheck.ts)) dispara la toma (JPEG de 1 280 px al 90 %,
 `POST …/shots`) cuando la cara está centrada en el óvalo y con buen tamaño en dos respuestas
 seguidas; una a la vez, a no menos de 1,2 s entre tomas (el nginx admite 5 peticiones por
-segundo por IP) y 2,2 s después de un rechazo, para leer el motivo. Si el socket no responde,
-dispara a ciegas cada 3 s y deja que juzgue el servidor; «Tomar ahora» dispara a mano.
+segundo por IP) y 2,2 s después de un rechazo, para leer el motivo; cada rechazo seguido
+alarga esa espera una vez y media, hasta 8 s, porque la sesión tiene 20 intentos. Con 5 o menos
+las tomas ya no salen solas. Si el socket no responde, dispara a ciegas cada 3 s y deja que
+juzgue el servidor; «Tomar ahora» dispara a mano.
 
 El mensaje de cada rechazo es el del API, tal cual; la pose que falta se dice con el mensaje
 del servidor y una flecha hacia el lado correcto **de la pantalla** (la izquierda de la
@@ -114,8 +116,10 @@ certificado:
 
 1. Abrir la dirección en **Safari (iPhone)** y en **Chrome (Android)**; el inicio dice
    «Servicio disponible».
-2. Instalar: Compartir › «Agregar a inicio» (iPhone) o el aviso «Instalar app» (Android);
-   abrirla desde el ícono, sin barra del navegador.
+2. Instalar **por el túnel** (con el certificado local el navegador no registra el service
+   worker, así que la app funciona pero no se instala): Compartir › «Agregar a inicio»
+   (iPhone) o el aviso «Instalar app» (Android); abrirla desde el ícono, sin barra del
+   navegador.
 3. Registrarse: el consentimiento no deja seguir sin marcar la casilla; el permiso de cámara
    se pide una vez; la vista previa de la frontal está espejada.
 4. Con poca luz o tapando media cara, el aviso dice qué corregir y no se gastan tomas; al

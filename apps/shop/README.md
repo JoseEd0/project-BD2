@@ -5,10 +5,11 @@ del gestor: compras conjuntas (relacional), fotos (vectorial), descripciones (te
 stock en tiendas cercanas (espacial). Como todo servicio de la Parte 5, usa el gestor solo
 por su API REST ([`apps/README.md`](../README.md)).
 
-Por ahora el paquete `shop` trae **el dataset** (#79): compras reales para que la
-evaluación del recomendador (Hit@10, NDCG@10) sea honesta, fichas y fotos de los productos,
-y tiendas reales de Lima. La ingesta en el gestor, el recomendador y su página llegan en
-#80 a #83.
+El paquete `shop` trae **el dataset** (#79): compras reales para que la evaluación del
+recomendador (Hit@10, NDCG@10) sea honesta, fichas y fotos de los productos, y tiendas
+reales de Lima; y **el catálogo en el gestor** (#80): el esquema, la carga, las dos
+representaciones visuales (SIFT de la Parte 4 y CLIP en ONNX) y un API de lectura. El
+recomendador y su página llegan en #81 a #83.
 
 | Módulo | Qué hace |
 |---|---|
@@ -19,6 +20,12 @@ y tiendas reales de Lima. La ingesta en el gestor, el recomendador y su página 
 | [`images.py`](src/shop/dataset/images.py) | fotos: bajar, reducir, recodificar, deduplicar y reanudar |
 | [`stores.py`](src/shop/dataset/stores.py) | tiendas de Lima y su inventario sintético con semilla |
 | [`prepare.py`](src/shop/dataset/prepare.py) | todo junto: tablas y manifiesto |
+| [`clip/`](src/shop/clip/) | CLIP en ONNX: modelos fijados, preprocesado, tokenizador, las dos torres, caché y lotes |
+| [`catalog/schema.py`](src/shop/catalog/schema.py) | las tablas e índices del catálogo, como migraciones repetibles |
+| [`catalog/rows.py`](src/shop/catalog/rows.py) | de los CSV a las filas de la carga masiva |
+| [`seed/`](src/shop/seed/) | `python -m shop.seed`: la carga, repetible y reanudable |
+| [`api/`](src/shop/api/) | `shop.api:create_app`: ficha, búsqueda de texto, fotos por texto y tiendas cercanas |
+| [`settings.py`](src/shop/settings.py) | la configuración `SHOP_*` del API y de la carga |
 
 ## Por qué Amazon Reviews 2023, instrumentos musicales
 
@@ -238,8 +245,248 @@ anterior, así que esa cifra no incluye sus 632 MB. Su memoria máxima fue de 41
 segunda ejecución tardó **10,6 s**: no pidió nada a la red, no añadió ninguna línea a
 `images.jsonl` y dejó los cinco CSV y el manifiesto idénticos byte a byte.
 
+## El catálogo en el gestor (#80)
+
+La tienda guarda todo en el gestor y le habla solo por HTTP, con `minigestor_client` y
+`appkit` ([`apps/README.md`](../README.md)). Cada una de las cuatro clases de datos del
+gestor tiene su tabla e índice:
+
+| Tabla | Organización e índices | Filas |
+|---|---|---:|
+| `shop_productos` | heap con B+ sobre `id`; **invertido en inglés** sobre `texto`; **HNSW de SIFT** sobre `imagen` | 24 587 |
+| `shop_clip` | heap con B+ sobre `id`; **HNSW** (coseno) sobre `embedding VECTOR(512)` | 24 580 |
+| `shop_usuarios` | heap con B+ sobre `id` | 57 439 |
+| `shop_compras` | **archivo secuencial** por `id`, la posición de la compra en orden cronológico | 511 836 |
+| `shop_tiendas` | heap con B+ sobre `id`; **R-Tree** sobre `ubicacion POINT` | 209 |
+| `shop_inventario` | heap; **hash extendible** sobre `producto` | 209 000 |
+
+Decisiones:
+
+- **Los productos no son un B+ agrupado**, sino un heap con el B+ de la clave: el gestor solo
+  pone índices secundarios sobre un heap (las filas de un B+ agrupado se mueven al dividir
+  un nodo), y esta tabla necesita el invertido y el de SIFT.
+- **`texto` = título, viñetas y descripción.** El invertido cubre una columna, así que el
+  texto que se busca se guarda junto (y `descripcion`, viñetas y párrafos, para mostrarlo).
+  El idioma es el inglés de las fichas: `WITH (idioma = 'en')` elige el stemmer y las
+  stopwords en inglés del gestor, que ya existían (la Parte 3 los trae para `es` y `en`), así
+  que «guitars» encuentra «guitar» y «the» no cuenta.
+- **Las compras van ordenadas por fecha** en el archivo secuencial: la clave es su posición
+  cronológica (1, 2, 3…), porque el instante no es único (511 563 instantes distintos para
+  511 836 compras) y la clave del secuencial sí. Llegan en ese orden, así que cada una va
+  al final de la última página, sin desbordamiento ni reorganizaciones.
+- **CLIP va en su propia tabla.** Así su carga, su índice y su caché se miden y se rehacen
+  aparte, y una foto compartida por dos productos (272) se calcula una vez. Los siete
+  productos sin foto no tienen fila en `shop_clip` y tienen `imagen` en `NULL`, que el índice
+  de SIFT deja fuera.
+- **Los índices que se construyen de una vez se crean con la tabla vacía** (en las
+  migraciones), y la carga masiva los construye al final con todas las filas (#69): el
+  invertido con SPIMI, el R-Tree con STR y el HNSW con todos los vectores. El de **SIFT** no
+  puede: entrena su vocabulario con las fotos de la tabla, así que la carga lo crea después.
+
+### CLIP en ONNX, sin PyTorch
+
+| | |
+|---|---|
+| Modelo | CLIP ViT-B/32 de OpenAI, exportación a ONNX de Xenova ([`Xenova/clip-vit-base-patch32`](https://huggingface.co/Xenova/clip-vit-base-patch32), revisión `6b7c523`) |
+| Licencia | MIT, la del modelo de OpenAI |
+| Torre de imagen | `onnx/vision_model.onnx`, 351 685 709 bytes, SHA-256 `fd6e1402…b8270d7d40` |
+| Torre de texto | `onnx/text_model.onnx`, 254 058 553 bytes, SHA-256 `3f6571f5…7bfada8cc` |
+| Tokenizador | `tokenizer.json`, 2 224 119 bytes, SHA-256 `f7f3b7af…7f697a90cd` |
+| Precisión | `float32`, sin cuantizar: el embedding es el del modelo publicado |
+
+`python -m shop.clip models --salida data/models/shop` (o `$SHOP_MODELS_DIR`) los baja con
+`appkit.download.fetch_verified`, que los acepta solo con el SHA-256 que publica el Hub (las
+sumas completas están en [`models.py`](src/shop/clip/models.py)). Corren en onnxruntime.
+
+- **Preprocesado** ([`preprocessing.py`](src/shop/clip/preprocessing.py)): RGB, lado menor a
+  224 px con interpolación bicúbica, recorte central de 224 x 224 y normalización con la media
+  y la desviación de cada canal de OpenAI. Es el `CLIPImageProcessor` de Hugging Face paso a
+  paso; los tests comparan con sus valores (transformers 4.57.1) sobre cuatro imágenes
+  sintéticas, con tolerancia 1e-5.
+- **Tokenizador** ([`tokenizer.py`](src/shop/clip/tokenizer.py)): la librería `tokenizers`
+  con el `tokenizer.json` del modelo, truncado a 77 tokens sin perder el `<|endoftext|>`. Los
+  tests comparan los ids con el `CLIPTokenizer` en Python de Hugging Face, que implementa el
+  BPE de OpenAI por su cuenta. Un lote se rellena con `<|endoftext|>`: la torre toma el
+  embedding en el primero y su máscara causal impide que el relleno lo cambie (medido:
+  diferencia máxima 3e-6).
+- **Las dos torres** ([`encoder.py`](src/shop/clip/encoder.py)) dan 512 dimensiones con norma
+  1, así que el producto punto es el coseno, la métrica del HNSW, y un texto se compara
+  directamente con las fotos: eso es buscar fotos con palabras.
+- **Caché** ([`cache.py`](src/shop/clip/cache.py)): un archivo de registros
+  `SHA-256 de la foto + 512 float32` que solo crece, uno por modelo. Una foto que ya pasó por
+  CLIP no vuelve a pasar; un registro cortado por una caída se descarta al abrir.
+- **Lotes** ([`batches.py`](src/shop/clip/batches.py)): las fotos que faltan se decodifican
+  y preprocesan en hilos y entran a la torre de a 32; en memoria nunca hay más que un lote
+  (unos 20 MB de píxeles).
+
+### Cargar el catálogo
+
+```bash
+uv run python -m shop.dataset prepare --data-dir data/datasets     # el dataset (#79)
+uv run python -m shop.clip models --salida data/models/shop         # CLIP (577 MiB)
+SHOP_ENGINE_URL=http://localhost:8000 SHOP_ENGINE_KEY=… SHOP_MIGRATION_KEY=… \
+SHOP_DATA_DIR=data/datasets SHOP_MODELS_DIR=data/models/shop \
+    uv run python -m shop.seed --informe carga.json
+```
+
+En orden: las migraciones (las mismas que aplica el API al arrancar), las cinco tablas por
+carga masiva NDJSON, el `CREATE INDEX` de SIFT, y CLIP (embeddings con su caché y la carga de
+`shop_clip`). Cada paso deja una línea de avance en el log, y `--informe` guarda sus tiempos.
+
+- **Repetible.** Una tabla con todas las filas del manifiesto no se vuelve a cargar y un
+  índice que existe no se vuelve a crear: la segunda ejecución tarda 0,27 s y no carga ni
+  la torre de imagen.
+- **Reanudable.** Cada lote de la carga se confirma por separado y las filas entran en el
+  orden del CSV, así que una tabla a medias tiene exactamente sus primeras `n` filas; la
+  siguiente ejecución envía desde la `n + 1`. Una tabla con más filas que el dataset detiene
+  la carga en vez de adivinar.
+- **El gestor tiene que poder leer las fotos.** La columna `imagen` guarda la ruta de cada
+  foto **vista desde el gestor**, que es quien las abre para SIFT, y el gestor solo lee
+  dentro de su directorio de datos y de `MINIGESTOR_IMPORT_DIRS`. Si el gestor ve la carpeta
+  de datasets en otra ruta que la carga, `SHOP_ENGINE_DATA_DIR` le dice cuál; sin ella, la
+  misma `SHOP_DATA_DIR`. En el compose los dos la montan en `/app/data/datasets`, que ya está
+  entre los directorios de importación del gestor.
+- **Clave `admin`.** La carga crea tablas e índices: usa `SHOP_MIGRATION_KEY` (o, sin ella,
+  `SHOP_ENGINE_KEY`), con un plazo por petición de una hora (`SHOP_JOB_TIMEOUT_SECONDS`): la
+  respuesta de una carga llega después de construir sus índices, y la del índice de SIFT,
+  después de extraer las 24 308 fotos.
+
+| Variable (`SHOP_`) | Para qué | Por omisión |
+|---|---|---|
+| `DATA_DIR` | carpeta de datasets; la tienda está en `<DATA_DIR>/amazon_musical_instruments/` | obligatoria |
+| `MODELS_DIR` | carpeta de CLIP | obligatoria |
+| `ENGINE_DATA_DIR` | la carpeta de datasets vista desde el gestor | `DATA_DIR` |
+| `EMBEDDINGS_DIR` | caché de embeddings | `<dataset>/embeddings` |
+| `CLIP_BATCH_SIZE` | fotos por pasada de la torre de imagen | 32 |
+| `PREPROCESS_WORKERS` | hilos que decodifican y preparan las fotos | uno por núcleo |
+| `CLIP_THREADS` | hilos de onnxruntime (0: los elige él) | 0 |
+| `PROGRESS_ROWS` | cada cuántas filas se informa el avance | 50 000 |
+| `JOB_TIMEOUT_SECONDS` | plazo de cada petición de la carga | 3 600 |
+
+### El API
+
+`uvicorn --factory shop.api:create_app`, hecha con `appkit.create_service_app`: `/health`,
+`/ready`, migraciones al arrancar, `X-Request-ID` y `Server-Timing` (`clip` y `gestor`).
+Carga la torre de texto de CLIP al arrancar (`SHOP_MODELS_DIR`). Todo el texto del usuario
+viaja como parámetro (`$1`), nunca dentro del SQL.
+
+| Ruta | Consulta del gestor |
+|---|---|
+| `GET /productos/{id}` | igualdad sobre el B+ de `id` |
+| `GET /busqueda/texto?q=&limite=` | `MATCH(texto, $1) USING BM25` sobre el invertido en inglés; `q` admite `AND`, `OR`, `NOT` y paréntesis |
+| `GET /busqueda/imagenes?q=&limite=` | el embedding de `q` con la torre de texto, y `SIMILAR_TO(embedding, $1, k = $2)` sobre el HNSW de CLIP |
+| `GET /tiendas/cercanas?lat=&lon=&limite=` | `ORDER BY distancia(ubicacion, $1) LIMIT $2`, k vecinos con el R-Tree, en metros |
+
+`limite` va de 1 a `SHOP_MAX_SEARCH_LIMIT` (100; por omisión `SHOP_SEARCH_LIMIT`, 10). Las
+recomendaciones son de #81.
+
+### Con Docker
+
+[`compose.yaml`](compose.yaml), incluido desde el raíz, sigue «Desplegar una app» de
+[`apps/README.md`](../README.md): `shop-api` (redes `data` y `shop`), `shop-web` en 8102 y
+8402 (la plantilla del kit web hasta que llegue la interfaz, #83), `shop-seed` (perfil
+`seed`) y `shop-tunnel` (perfil `tunnel`). [`docker-build.sh`](docker-build.sh) baja y
+verifica CLIP al construir la imagen, que arranca sin red.
+
+```bash
+python -m tools.compose_keys                 # claves de cada servicio en .env
+docker compose up --build --detach --wait
+docker compose run --rm shop-seed            # carga data/datasets/amazon_musical_instruments
+curl http://localhost:8102/api/productos/B07YM5ZHS9
+```
+
+`shop-seed` monta la carpeta de datasets de solo lectura en `/app/data/datasets`, la misma
+ruta que el gestor; su caché de embeddings vive en el `tmpfs` del contenedor. La CI levanta
+el compose, carga dos veces el dataset diminuto de los tests
+([`tests/tiny_dataset.py`](tests/tiny_dataset.py)) y lee un producto por el puerto 8102.
+
+### Tests
+
+```bash
+uv run pytest apps/shop -q     # CLIP, filas, caché; los del modelo con SHOP_MODELS_DIR
+uv run pytest tests/shop -q    # la carga y el API contra el gestor real, en el mismo proceso
+```
+
+Los de [`tests/shop/`](../../tests/shop/) usan un dataset de cinco productos con fotos
+sintéticas y una torre de imagen de mentira (la de verdad se prueba en `apps/shop`):
+cargan todo, comprueban los `NULL`, el orden de las compras y una consulta de cada clase
+(`MATCH`, `SIMILAR_TO` sobre SIFT y sobre CLIP, `distancia`), que una segunda carga no
+repite nada, que una carga cortada sigue en su fila siguiente, que la caché evita volver a
+calcular CLIP y que sin el directorio de importación el gestor no lee las fotos.
+
+### Medido: cargar todo el dataset
+
+`python -m benchmarks.shop_seed_benchmark` corre esta misma carga contra **un gestor de
+verdad en otro proceso** (uvicorn, como en Docker; el directorio de datos fue
+`data/tienda-gestor/` de este repositorio, vacío al empezar) y con la caché de embeddings
+vacía. Apple M4 Pro (12 núcleos), macOS, Python 3.12; carga media de 8,7 al empezar, con
+otros procesos en el equipo. Cifras crudas en
+[`benchmarks/results/tienda_carga.json`](../../benchmarks/results/tienda_carga.json); una
+ejecución anterior, igual salvo por el cálculo de la cola, dio las mismas cifras a un 3 %.
+
+![Tienda: cargar el catálogo en el gestor](../../benchmarks/figures/tienda-carga.png)
+
+| Paso | Filas | Tiempo | Filas/s |
+|---|---:|---:|---:|
+| migraciones (10 sentencias) | | 0,04 s | |
+| `shop_tiendas`, con su R-Tree al final | 209 | 0,03 s | 6 725 |
+| `shop_productos`, con su invertido al final | 24 587 | 15,4 s | 1 593 |
+| `shop_usuarios` | 57 439 | 11,6 s | 4 969 |
+| `shop_compras` (secuencial) | 511 836 | 40,0 s | 12 787 |
+| `shop_inventario`, con su hash fila a fila | 209 000 | 5,4 s | 38 603 |
+| SIFT: `CREATE INDEX … USING HNSW (imagen)` | 24 580 fotos | 71,5 s | |
+| CLIP: embeddings de las fotos distintas | 24 308 fotos | 137,8 s | 176 fotos/s |
+| `shop_clip`, con su HNSW al final | 24 580 | 16,9 s | 1 455 |
+| **total** | | **299,0 s** | |
+| segunda ejecución | | 0,27 s | |
+
+Cada índice por separado: el benchmark lo borra y lo vuelve a crear con su migración sobre
+la tabla llena, por el mismo camino de construcción que usa la carga.
+
+| Índice | Filas | `CREATE INDEX` |
+|---|---:|---:|
+| invertido en inglés (`texto`) | 24 587 | 3,00 s |
+| HNSW de CLIP (512 dimensiones, coseno) | 24 580 | 0,81 s |
+| hash extendible (`producto` del inventario) | 209 000 | 2,44 s |
+| R-Tree (`ubicacion`) | 209 | 0,004 s |
+| SIFT: extraer, vocabulario de 256 palabras, TF-IDF y HNSW | 24 580 | 71,5 s |
+
+| Tabla | Datos | Índices | Total |
+|---|---:|---:|---:|
+| `shop_productos` | 68,6 MiB (heap 12,0 y textos 56,6) | 77,4 MiB: SIFT 60,2, invertido 16,4, B+ 0,8 | 146,0 MiB |
+| `shop_clip` | 96,0 MiB | 52,4 MiB: HNSW 51,6, B+ 0,8 | 148,4 MiB |
+| `shop_compras` | 41,7 MiB | — | 41,7 MiB |
+| `shop_inventario` | 5,6 MiB | 5,3 MiB | 10,9 MiB |
+| `shop_usuarios` | 2,8 MiB | 5,1 MiB | 7,9 MiB |
+| `shop_tiendas` | 0,03 MiB | 0,02 MiB | 0,05 MiB |
+| **el gestor entero** | | | **354,8 MiB** |
+
+Conclusiones:
+
+- **CLIP es casi la mitad de la carga** (138 de 299 s): 176 fotos por segundo con las dos
+  torres en `float32` en la CPU. La caché lo vuelve un pago único: si el gestor pierde
+  `shop_clip`, volver a cargarla lee 24 308 vectores del disco en lugar de pasar las fotos
+  otra vez por CLIP (lo prueba `test_a_reseed_of_a_new_engine_reuses_the_embedding_cache`).
+- **SIFT cuesta la mitad que CLIP en tiempo, y más en espacio de índice**: 71,5 s de
+  `CREATE INDEX`, casi todo extraer SIFT de 24 580 fotos en 12 procesos, contra 138 s de
+  embeddings más 0,8 s de HNSW. Su índice ocupa 60 MiB (el almacén de palabras de cada foto,
+  32 MiB, más el HNSW), más que el HNSW de CLIP (52 MiB). Cuál de las dos señales recomienda
+  mejor lo mide #82.
+- **Construir al final paga**: el invertido de 24 587 fichas en 3,0 s y el HNSW de 24 580
+  vectores en 0,8 s, de una vez, dentro de las cargas de 15,4 y 16,9 s.
+- **El archivo secuencial carga rápido en orden**: 12 787 compras por segundo, porque cada
+  una va al final de la última página. Es la tabla más grande y entra en 40 s.
+- **`shop_clip` desperdicia la mitad de su heap**: una fila de 512 `float32` ocupa unos
+  2 KiB y en una página de 4 KiB (la del gestor por omisión) cabe una sola, así que 24 580
+  vectores (48 MiB) ocupan 96 MiB. Una página mayor (`page_size`, configurable) lo
+  resolvería; no se cambió porque afecta a todo el gestor.
+- **Lo que esta medida no dice**: es una sola ejecución, con otros procesos en el equipo, y
+  el gestor y la carga en la misma máquina, sin red de por medio. En Docker en macOS el gestor
+  corre en una máquina virtual y los tiempos serán otros.
+
 ## Licencias
 
 - Amazon Reviews 2023: publicado por el McAuley Lab (UCSD) para investigación; las fichas
   y las fotos son de Amazon.com.
 - Lugares de OpenStreetMap: ODbL, © colaboradores de OpenStreetMap.
+- CLIP ViT-B/32 (OpenAI) y su exportación a ONNX (Xenova): MIT.

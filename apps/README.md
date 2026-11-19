@@ -10,7 +10,7 @@ propio puerto y con su propia identidad visual.
 apps/
   client/          minigestor_client: cliente tipado del API del gestor; openapi/engine.json
   kit/             appkit: configuración, logs, trazas, salud, errores, migraciones y descargas
-  shop/            tienda con recomendaciones (opción B): por ahora, su dataset
+  shop/            tienda con recomendaciones (opción B): dataset, catálogo en el gestor y CLIP
   rag/             RAG sobre papers (opción A): por ahora, el corpus de arXiv y sus fragmentos
   faces/           rostros (opción D): detección con YuNet, alineación y embedding con SFace
   web-kit/         @minigestor/web-kit: lógica sin estilos que comparten las interfaces
@@ -25,7 +25,7 @@ apps/
 | Aplicación | Carpeta | Contenedores | HTTP / HTTPS | En el compose |
 |---|---|---|---|---|
 | Copyright en audio | `apps/copyright/` | `copyright-api`, `copyright-web` | 8101 / 8401 | pendiente: sin API todavía |
-| Tienda con recomendaciones | `apps/shop/` | `shop-api`, `shop-web` | 8102 / 8402 | pendiente: sin API todavía |
+| Tienda con recomendaciones | `apps/shop/` | `shop-api`, `shop-web` | 8102 / 8402 | sí; la interfaz es la plantilla hasta #83 |
 | Preguntas a papers (RAG) | `apps/rag/` | `papers-api`, `papers-web` | 8103 / 8403 | pendiente: sin API todavía |
 | Reconocimiento de rostros | `apps/faces/` | `faces-api`, `faces-web` | 8104 / 8404 | pendiente: sin API todavía |
 | Ejemplo del kit (perfil `example`) | `deploy/example/` | `example-api`, `example-web` | 8100 / 8400 | sí, para probar la topología |
@@ -178,5 +178,6 @@ uv run pytest apps -q           # solo los tests de los servicios
 Los datos de cada servicio se bajan con su propio comando a la carpeta de datasets, que
 nunca se versiona; el de la tienda está en [`shop/README.md`](shop/README.md).
 
-Los tests de [`faces/`](faces/README.md) que corren los modelos los buscan en
-`FACES_MODELS_DIR`; sin la variable se saltan, y la CI la define y los baja antes.
+Los tests de [`faces/`](faces/README.md) y de [`shop/`](shop/README.md) que corren modelos
+los buscan en `FACES_MODELS_DIR` y `SHOP_MODELS_DIR`; sin la variable se saltan, y la CI la
+define y los baja antes.

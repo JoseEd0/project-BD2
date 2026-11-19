@@ -21,6 +21,8 @@ gráficas de [`figures/`](figures/) y todas las tablas de este documento.
     --models data/models/faces --sides 500 1000 2000 4000 --sample 500 --threads 1
 .venv/bin/python -m benchmarks.segments_benchmark --tracks-directory data/datasets/fma_small/pistas
 .venv/bin/python -m benchmarks.ingest_benchmark --sizes 1000 10000 50000
+.venv/bin/python -m benchmarks.shop_seed_benchmark --data-dir data/datasets \
+    --models data/models/shop --engine-data-dir data/tienda-gestor
 .venv/bin/python -m benchmarks.plot              # redibuja todas las gráficas
 ```
 
@@ -101,6 +103,8 @@ docker compose --profile bench down       # apaga PostgreSQL
 | `--build-repetitions` | construcciones de cada índice (texto y multimedia) |
 | `--postgres-maintenance-work-mem` | memoria con la que pgvector construye sus índices |
 | `--features-dir` | guarda las características y las reutiliza en la siguiente ejecución |
+| `--data-dir`, `--models`, `--engine-data-dir`, `--embeddings-dir` | carpeta de datasets, de CLIP, del gestor y de la caché de embeddings (carga de la tienda) |
+| `--clip-batch-size`, `--preprocess-workers` | fotos por pasada de CLIP e hilos que las preparan |
 | `--output` | dónde dejar el JSON |
 
 | Experimento | Qué compara | Gráficas |
@@ -113,6 +117,8 @@ docker compose --profile bench down       # apaga PostgreSQL
 | [6. Columnas `VECTOR(n)`](#6-columnas-vectorn--hnsw-e-ivf-por-sql) | HNSW vs IVF vs búsqueda exacta por SQL sobre 100 000 vectores de 384 dimensiones | [SQL](figures/vectores-sql.png), [recall](figures/vectores-recall.png), [curvas](figures/vectores-curvas.png) |
 | [7. Reconocimiento facial](#7-reconocimiento-facial--latencia-del-pipeline-y-cobertura-en-lfw) | decodificar, detectar (YuNet) y embeber (SFace) según el tamaño de la foto; cobertura del detector en LFW | [latencia](figures/rostros-latencia.png) |
 | [8. Tramos de audio](#8-tramos-de-audio-y-consulta-por-segmentos) | consulta por segmentos con una decodificación vs un `SIMILAR_TO` por ventana; índice de tramos vs pistas enteras | [consulta](figures/segmentos-consulta.png), [índice](figures/segmentos-indice.png) |
+| [9. Carga masiva](#9-carga-masiva--ndjson-contra-insert-con-parámetros-por-http) | NDJSON vs `INSERT` con parámetros por HTTP; cuándo construir un índice | [ingesta](figures/ingesta.png) |
+| [10. Carga de la tienda](#10-carga-de-la-tienda--el-catálogo-entero-con-sift-y-clip) | tiempo de cada tabla e índice, SIFT vs CLIP, y espacio del catálogo de Amazon en el gestor | [carga](figures/tienda-carga.png) |
 
 **Cómo leer las gráficas.** Cada una es una fila de paneles, uno por operación, con el
 número de filas en horizontal y una línea por técnica. Los dos ejes son logarítmicos: los
@@ -1527,6 +1533,76 @@ Sin datasets que descargar ni PostgreSQL. `--batch-rows` cambia el tamaño de lo
 cargas por lotes, `--single-row-limit` hasta dónde se mide el INSERT de una fila,
 `--repetitions` cuántas veces se repite cada carga (se reporta la mediana), `--threads` los
 hilos de FAISS y `--dimension` y `--seed`, los datos.
+
+## 10. Carga de la tienda — el catálogo entero con SIFT y CLIP
+
+`shop_seed_benchmark.py` mide la carga de la tienda de la Parte 5, opción B (#80): el mismo
+trabajo que se despliega, `python -m shop.seed`, contra un gestor de verdad en otro proceso
+(uvicorn, como en Docker) y sobre el dataset entero de Amazon Reviews 2023, instrumentos
+musicales: 24 587 productos con 24 308 fotos distintas, 57 439 usuarios, 511 836 compras,
+209 tiendas de Lima y 209 000 filas de inventario. Cada tabla entra por carga masiva NDJSON;
+la visual va por dos caminos para comparar después (#82): **SIFT** de la Parte 4 (`CREATE
+INDEX ... USING HNSW` sobre la ruta de la foto: extraer, vocabulario, TF-IDF y HNSW dentro
+del gestor) y **CLIP** ViT-B/32 en ONNX (embeddings calculados por la tienda y cargados en
+una columna `VECTOR(512)` con HNSW). Cada índice que la carga construye al final se mide
+además aparte, borrándolo y volviéndolo a crear sobre la tabla llena.
+
+Apple M4 Pro (12 núcleos), macOS, Python 3.12, onnxruntime en la CPU, caché de embeddings
+vacía; carga media de 8,7 al empezar (otros procesos en el equipo). Una sola ejecución.
+
+![Tienda: cargar el catálogo en el gestor](figures/tienda-carga.png)
+
+| Paso | Filas | Tiempo |
+|---|---:|---:|
+| `shop_productos` (invertido en inglés al final) | 24 587 | 15,4 s |
+| `shop_usuarios` | 57 439 | 11,6 s |
+| `shop_compras` (archivo secuencial) | 511 836 | 40,0 s |
+| `shop_inventario` (hash fila a fila) | 209 000 | 5,4 s |
+| `shop_tiendas` (R-Tree al final) | 209 | 0,03 s |
+| SIFT: `CREATE INDEX` | 24 580 fotos | 71,5 s |
+| CLIP: embeddings | 24 308 fotos | 137,8 s |
+| `shop_clip` (HNSW al final) | 24 580 | 16,9 s |
+| **total** | | **299,0 s** |
+| segunda ejecución (no repite nada) | | 0,27 s |
+
+| Índice, construido aparte | `CREATE INDEX` | Espacio |
+|---|---:|---:|
+| SIFT + HNSW (vocabulario de 256) | 71,5 s | 60,2 MiB |
+| HNSW de CLIP (512 dimensiones) | 0,81 s | 51,6 MiB |
+| invertido en inglés | 3,00 s | 16,4 MiB |
+| hash extendible del inventario | 2,44 s | 5,3 MiB |
+| R-Tree de las tiendas | 0,004 s | 0,02 MiB |
+
+El gestor queda en **354,8 MiB**: `shop_clip` 148,4, `shop_productos` 146,0 (56,6 de textos
+fuera de la fila), `shop_compras` 41,7, inventario 10,9, usuarios 7,9 y tiendas 0,05.
+
+### Conclusiones
+
+- **Calcular CLIP es casi la mitad de la carga** (138 de 299 s, 176 fotos/s); la caché por
+  SHA-256 de la foto lo vuelve un pago único. **SIFT tarda la mitad** (71,5 s, casi todo
+  extraer en 12 procesos) pero su índice ocupa más: 60 MiB contra 52 del HNSW de CLIP.
+- **Construir al final paga**: 3,0 s el invertido y 0,8 s el HNSW, una vez, dentro de cargas
+  de 15 y 17 s; el R-Tree de 209 puntos no se nota.
+- **El secuencial carga 12 787 filas/s** porque las compras llegan en el orden de la clave
+  (su posición cronológica) y cada una va al final de la última página.
+- **Una fila con `VECTOR(512)` (2 KiB) llena media página de 4 KiB**: `shop_clip` ocupa
+  96 MiB de heap para 48 MiB de vectores. Una página mayor lo evitaría, a cambio de cambiar
+  la de todo el gestor.
+
+Detalle, decisiones y tablas completas en [`apps/shop/README.md`](../apps/shop/README.md#medido-cargar-todo-el-dataset).
+
+### Reproducirlo
+
+```bash
+uv run python -m shop.dataset prepare --data-dir data/datasets
+uv run python -m shop.clip models --salida data/models/shop
+.venv/bin/python -m benchmarks.shop_seed_benchmark --data-dir data/datasets \
+    --models data/models/shop --engine-data-dir data/tienda-gestor
+.venv/bin/python -m benchmarks.plot
+```
+
+`--engine-data-dir` tiene que estar vacío (sin él, uno temporal); `--embeddings-dir` reusa una
+caché (sin él, una vacía, y se miden todas las fotos).
 
 ## Gráficas
 

@@ -52,7 +52,7 @@ FIGURES: tuple[BreakdownFigure, ...] = (
                                COPURCHASE_STRATEGY),
                     StackedBar("materializada", MATERIALIZED, COPURCHASE_STRATEGY),
                 ),
-                (Segment("mediana", SECONDS_FIELD, BLUE),),
+                (Segment("p50", SECONDS_FIELD, BLUE),),
             ),
             BreakdownPanel(
                 "Cada señal, caché fría",

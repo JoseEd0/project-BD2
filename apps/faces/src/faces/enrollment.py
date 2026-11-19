@@ -63,6 +63,8 @@ class PosePlan:
         guidance = self.guidance(covered)
         if pose is None:
             return Rejection.of(RejectionReason.POSE_UNCLEAR, guidance)
+        if pose not in self.poses:
+            return Rejection.of(RejectionReason.POSE_NOT_IN_PLAN, guidance)
         if pose not in self.remaining(covered):
             return Rejection.of(RejectionReason.POSE_ALREADY_TAKEN, guidance)
         return None

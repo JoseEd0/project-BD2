@@ -62,6 +62,13 @@ def test_an_unclear_pose_is_rejected_with_the_next_step():
     assert rejection.message.endswith(POSE_GUIDANCE[Pose.RIGHT])
 
 
+def test_a_pose_outside_the_plan_is_rejected_with_the_next_step():
+    rejection = PosePlan((Pose.FRONT,)).placement_rejection(Pose.LEFT, [])
+    assert rejection is not None
+    assert rejection.reason is RejectionReason.POSE_NOT_IN_PLAN
+    assert rejection.message.endswith(POSE_GUIDANCE[Pose.FRONT])
+
+
 def test_a_missing_pose_is_placed():
     assert PLAN.placement_rejection(Pose.LEFT, [Pose.FRONT]) is None
     assert PLAN.accepted_message([Pose.FRONT, Pose.LEFT]) == (

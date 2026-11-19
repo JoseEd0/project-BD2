@@ -3,7 +3,7 @@ import type { HtmlTagDescriptor } from "vite";
 import { describe, expect, it } from "vitest";
 
 import { themeBootScript } from "../src/theme/themePreference.ts";
-import { inlineScriptHash, themeBoot, themeBootScriptHash } from "../src/vite/index.ts";
+import { inlineScriptHash, inlineScriptHashes, themeBoot, themeBootScriptHash } from "../src/vite/index.ts";
 
 function injectedTags(): HtmlTagDescriptor[] {
   const hook = themeBoot().transformIndexHtml;
@@ -27,5 +27,24 @@ describe("themeBoot", () => {
   it("hashes the UTF-8 bytes, as browsers do", () => {
     // El ejemplo de la especificación de CSP: `alert('Hello, world.');`.
     expect(inlineScriptHash("alert('Hello, world.');")).toBe("'sha256-qznLcsROx4GACP2dm0UCKCzCG+HiZ1guq6ZZDob/Tng='");
+  });
+});
+
+describe("inlineScriptHashes", () => {
+  const built = [
+    "<!doctype html><html><head>",
+    `<script>${themeBootScript()}</script>`,
+    '<script type="module" crossorigin src="/assets/index-abc.js"></script>',
+    "<script id=\"otro\">\n  console.log(1);\n</script>",
+    `<script>${themeBootScript()}</script>`,
+    "</head><body></body></html>",
+  ].join("\n");
+
+  it("hashes every inline script of a built page, once each, in order", () => {
+    expect(inlineScriptHashes(built)).toEqual([themeBootScriptHash(), inlineScriptHash("\n  console.log(1);\n")]);
+  });
+
+  it("leaves out scripts loaded from a file", () => {
+    expect(inlineScriptHashes('<script type="module" src="/a.js"></script>')).toEqual([]);
   });
 });

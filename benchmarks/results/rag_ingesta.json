@@ -1,0 +1,1111 @@
+{
+  "name": "rag_ingesta",
+  "parameters": {
+    "fragmentos_del_corpus": 98585,
+    "muestra_de_embeddings": 1000,
+    "hilos": [
+      1,
+      2,
+      4,
+      8,
+      12
+    ],
+    "repeticiones": 2,
+    "lote": 32,
+    "variante_de_la_siembra": "int8",
+    "hilos_de_la_siembra": 8,
+    "tamanos_de_las_etapas": [
+      1000,
+      10000
+    ],
+    "busquedas_por_pregunta": 5,
+    "servidor": "uvicorn en otro proceso; claves write y admin; cliente minigestor_client",
+    "versiones": {
+      "onnxruntime": "1.32.0",
+      "tokenizers": "0.23.3",
+      "numpy": "2.5.5"
+    },
+    "maquina": {
+      "procesador": "Apple M4 Pro",
+      "nucleos": 12,
+      "sistema": "macOS-27.0.1-arm64-arm-64bit",
+      "python": "3.12.11",
+      "carga_media_1_min": 14.32
+    },
+    "acuerdo_int8_fp32": {
+      "coseno_medio": 0.9937,
+      "coseno_minimo": 0.977,
+      "coseno_p5": 0.9876,
+      "vecinos_comunes_de_10": 0.73,
+      "vecinos_comunes_por_pregunta": [
+        0.8,
+        0.9,
+        0.8,
+        0.8,
+        0.8,
+        0.8,
+        0.7,
+        0.6,
+        0.8,
+        0.3
+      ]
+    },
+    "siembra": {
+      "model_id": "multilingual-e5-small@614241f622f5-int8",
+      "embedding": {
+        "model_id": "multilingual-e5-small@614241f622f5-int8",
+        "computed": 98585,
+        "cached": 0,
+        "truncated": 12330,
+        "seconds": 2565.64559666696,
+        "chunks_per_second": 38.425026483810605
+      },
+      "papers": {
+        "table": "rag_papers",
+        "rows_before": 0,
+        "rows_loaded": 1495,
+        "seconds": 0.2536144169862382,
+        "engine_elapsed_ms": 251.2658750056289,
+        "deferred_indexes": []
+      },
+      "chunks": {
+        "table": "rag_chunks",
+        "rows_before": 0,
+        "rows_loaded": 98585,
+        "seconds": 64.96788716700394,
+        "engine_elapsed_ms": 64818.83816595655,
+        "deferred_indexes": [
+          "rag_chunks_content",
+          "rag_chunks_embedding"
+        ]
+      },
+      "seconds": 2633.5024751250166
+    },
+    "segunda_siembra": {
+      "model_id": "multilingual-e5-small@614241f622f5-int8",
+      "embedding": null,
+      "papers": {
+        "table": "rag_papers",
+        "rows_before": 1495,
+        "rows_loaded": 0,
+        "seconds": 0.0,
+        "engine_elapsed_ms": 0.0,
+        "deferred_indexes": []
+      },
+      "chunks": {
+        "table": "rag_chunks",
+        "rows_before": 98585,
+        "rows_loaded": 0,
+        "seconds": 0.0,
+        "engine_elapsed_ms": 0.0,
+        "deferred_indexes": []
+      },
+      "seconds": 1.6093668750254437
+    },
+    "disco_kib": {
+      "rag_chunks": {
+        "tabla (heap y textos)": 362420.0,
+        "pk_rag_chunks": 11764.0,
+        "rag_chunks_content": 98368.0,
+        "rag_chunks_embedding": 162640.3
+      },
+      "rag_papers": {
+        "tabla (heap y textos)": 3836.0,
+        "pk_rag_papers": 168.0
+      }
+    },
+    "preguntas": [
+      {
+        "idioma": "en",
+        "pregunta": "How do learned index structures replace B-trees?",
+        "modo": "bm25",
+        "mediana_ms": 15.3,
+        "fragmentos": [
+          {
+            "chunk_id": "2606.19034#17",
+            "titulo": "Evaluating Learned Spatial Indexes",
+            "pagina": 4,
+            "puntaje": 18.9432
+          },
+          {
+            "chunk_id": "2505.01180#10",
+            "titulo": "BS-tree: A gapped data-parallel B-tree",
+            "pagina": 2,
+            "puntaje": 18.7395
+          },
+          {
+            "chunk_id": "2511.21307#10",
+            "titulo": "HIRE: A Hybrid Learned Index for Robust and Efficient Performance under Mixed Workloads",
+            "pagina": 4,
+            "puntaje": 18.2446
+          }
+        ]
+      },
+      {
+        "idioma": "en",
+        "pregunta": "How do learned index structures replace B-trees?",
+        "modo": "vector",
+        "mediana_ms": 11.2,
+        "fragmentos": [
+          {
+            "chunk_id": "2605.03640#13",
+            "titulo": "In-memory Multidimensional Indexing Using the skd-tree",
+            "pagina": 3,
+            "puntaje": 0.893
+          },
+          {
+            "chunk_id": "2603.00509#65",
+            "titulo": "COLE$^+$: Towards Practical Column-based Learned Storage for Blockchain Systems",
+            "pagina": 12,
+            "puntaje": 0.8892
+          },
+          {
+            "chunk_id": "2508.03471#1",
+            "titulo": "Learned Adaptive Indexing with Updatable Learned Index",
+            "pagina": 1,
+            "puntaje": 0.8882
+          }
+        ]
+      },
+      {
+        "idioma": "en",
+        "pregunta": "How do learned index structures replace B-trees?",
+        "modo": "hybrid",
+        "mediana_ms": 26.3,
+        "fragmentos": [
+          {
+            "chunk_id": "2505.01180#10",
+            "titulo": "BS-tree: A gapped data-parallel B-tree",
+            "pagina": 2,
+            "puntaje": 0.0306
+          },
+          {
+            "chunk_id": "2505.01180#1",
+            "titulo": "BS-tree: A gapped data-parallel B-tree",
+            "pagina": 1,
+            "puntaje": 0.0303
+          },
+          {
+            "chunk_id": "2505.01180#2",
+            "titulo": "BS-tree: A gapped data-parallel B-tree",
+            "pagina": 1,
+            "puntaje": 0.0303
+          }
+        ]
+      },
+      {
+        "idioma": "en",
+        "pregunta": "approximate nearest neighbor search with HNSW graphs in vector databases",
+        "modo": "bm25",
+        "mediana_ms": 11.7,
+        "fragmentos": [
+          {
+            "chunk_id": "2610.21174#13",
+            "titulo": "Amora: Communication-Efficient Private Approximate Nearest Neighbors Search",
+            "pagina": 3,
+            "puntaje": 34.0781
+          },
+          {
+            "chunk_id": "2607.23507#26",
+            "titulo": "Choosing a Text Embedding Model: A Practical Benchmarking and Decision Framework",
+            "pagina": 7,
+            "puntaje": 32.4117
+          },
+          {
+            "chunk_id": "2608.08751#7",
+            "titulo": "InSituANN: Revisiting IVF for PCIe-Efficient Billion-Scale Vector Search",
+            "pagina": 2,
+            "puntaje": 31.8636
+          }
+        ]
+      },
+      {
+        "idioma": "en",
+        "pregunta": "approximate nearest neighbor search with HNSW graphs in vector databases",
+        "modo": "vector",
+        "mediana_ms": 11.2,
+        "fragmentos": [
+          {
+            "chunk_id": "2610.37176#8",
+            "titulo": "Lossless Compression of Proximity Graph Indexes for Efficient Approximate Nearest Neighbors Search",
+            "pagina": 2,
+            "puntaje": 0.9211
+          },
+          {
+            "chunk_id": "2603.01525#16",
+            "titulo": "VectorMaton: Efficient Vector Search with Pattern Constraints via an Enhanced Suffix Automaton",
+            "pagina": 3,
+            "puntaje": 0.9156
+          },
+          {
+            "chunk_id": "2611.12539#17",
+            "titulo": "Dynamic Graph Indexing for Label-Filtered Approximate Nearest Neighbor Search",
+            "pagina": 5,
+            "puntaje": 0.9114
+          }
+        ]
+      },
+      {
+        "idioma": "en",
+        "pregunta": "approximate nearest neighbor search with HNSW graphs in vector databases",
+        "modo": "hybrid",
+        "mediana_ms": 21.4,
+        "fragmentos": [
+          {
+            "chunk_id": "2603.01525#16",
+            "titulo": "VectorMaton: Efficient Vector Search with Pattern Constraints via an Enhanced Suffix Automaton",
+            "pagina": 3,
+            "puntaje": 0.0306
+          },
+          {
+            "chunk_id": "2607.23507#26",
+            "titulo": "Choosing a Text Embedding Model: A Practical Benchmarking and Decision Framework",
+            "pagina": 7,
+            "puntaje": 0.0291
+          },
+          {
+            "chunk_id": "2610.34109#2",
+            "titulo": "Geo-Filtered Approximate Nearest-Neighbor Search on a Single Proximity Graph",
+            "pagina": 1,
+            "puntaje": 0.0289
+          }
+        ]
+      },
+      {
+        "idioma": "en",
+        "pregunta": "text-to-SQL with large language models",
+        "modo": "bm25",
+        "mediana_ms": 12.4,
+        "fragmentos": [
+          {
+            "chunk_id": "2512.21345#2",
+            "titulo": "Query Carefully: Detecting the Unanswerables in Text-to-SQL Tasks",
+            "pagina": 2,
+            "puntaje": 16.6146
+          },
+          {
+            "chunk_id": "2604.16511#2",
+            "titulo": "SQL Query Engine: A Self-Healing LLM Pipeline for Natural Language to PostgreSQL Translation",
+            "pagina": 1,
+            "puntaje": 16.1849
+          },
+          {
+            "chunk_id": "2602.12064#76",
+            "titulo": "DIVER: A Robust Text-to-SQL System with Dynamic Interactive Value Linking and Evidence Reasoning",
+            "pagina": 15,
+            "puntaje": 15.9898
+          }
+        ]
+      },
+      {
+        "idioma": "en",
+        "pregunta": "text-to-SQL with large language models",
+        "modo": "vector",
+        "mediana_ms": 10.6,
+        "fragmentos": [
+          {
+            "chunk_id": "2602.21480#1",
+            "titulo": "Both Ends Count! Just How Good are LLM Agents at \"Text-to-Big SQL\"?",
+            "pagina": 1,
+            "puntaje": 0.907
+          },
+          {
+            "chunk_id": "2510.17586#2",
+            "titulo": "DeepEye-SQL: A Software-Engineering-Inspired Text-to-SQL Framework",
+            "pagina": 1,
+            "puntaje": 0.9024
+          },
+          {
+            "chunk_id": "2604.16493#88",
+            "titulo": "NL2SQLBench: A Modular Benchmarking Framework for LLM-Enabled NL2SQL Solutions",
+            "pagina": 16,
+            "puntaje": 0.8985
+          }
+        ]
+      },
+      {
+        "idioma": "en",
+        "pregunta": "text-to-SQL with large language models",
+        "modo": "hybrid",
+        "mediana_ms": 18.7,
+        "fragmentos": [
+          {
+            "chunk_id": "2602.21480#1",
+            "titulo": "Both Ends Count! Just How Good are LLM Agents at \"Text-to-Big SQL\"?",
+            "pagina": 1,
+            "puntaje": 0.0318
+          },
+          {
+            "chunk_id": "2604.16511#2",
+            "titulo": "SQL Query Engine: A Self-Healing LLM Pipeline for Natural Language to PostgreSQL Translation",
+            "pagina": 1,
+            "puntaje": 0.0306
+          },
+          {
+            "chunk_id": "2510.17586#62",
+            "titulo": "DeepEye-SQL: A Software-Engineering-Inspired Text-to-SQL Framework",
+            "pagina": 23,
+            "puntaje": 0.0296
+          }
+        ]
+      },
+      {
+        "idioma": "en",
+        "pregunta": "cardinality estimation for query optimization with machine learning",
+        "modo": "bm25",
+        "mediana_ms": 17.9,
+        "fragmentos": [
+          {
+            "chunk_id": "2610.41669#9",
+            "titulo": "Supervised and LLM-Augmented Cardinality Estimation for Similarity Queries on Knowledge Graphs",
+            "pagina": 3,
+            "puntaje": 22.7386
+          },
+          {
+            "chunk_id": "2606.16247#19",
+            "titulo": "Improved Join Order Optimization for Database Queries using Hybrid Quantum-Classical Approaches for QUBO Problems",
+            "pagina": 4,
+            "puntaje": 22.675
+          },
+          {
+            "chunk_id": "2610.28270#85",
+            "titulo": "SWatcher+: A Holistic Approach to Deploying Learned Cardinality Estimators in a Dynamic Setting",
+            "pagina": 14,
+            "puntaje": 21.6841
+          }
+        ]
+      },
+      {
+        "idioma": "en",
+        "pregunta": "cardinality estimation for query optimization with machine learning",
+        "modo": "vector",
+        "mediana_ms": 11.1,
+        "fragmentos": [
+          {
+            "chunk_id": "2610.41669#3",
+            "titulo": "Supervised and LLM-Augmented Cardinality Estimation for Similarity Queries on Knowledge Graphs",
+            "pagina": 1,
+            "puntaje": 0.9159
+          },
+          {
+            "chunk_id": "2606.09361#1",
+            "titulo": "Bespoke-Card: Why Tune When You Can Generate? Synthesizing Workload-Specific Cardinality Estimators",
+            "pagina": 1,
+            "puntaje": 0.9087
+          },
+          {
+            "chunk_id": "2606.23081#12",
+            "titulo": "SemCEB: A Cardinality Estimation Benchmark for Semantic Operators",
+            "pagina": 3,
+            "puntaje": 0.9037
+          }
+        ]
+      },
+      {
+        "idioma": "en",
+        "pregunta": "cardinality estimation for query optimization with machine learning",
+        "modo": "hybrid",
+        "mediana_ms": 22.0,
+        "fragmentos": [
+          {
+            "chunk_id": "2606.23081#12",
+            "titulo": "SemCEB: A Cardinality Estimation Benchmark for Semantic Operators",
+            "pagina": 3,
+            "puntaje": 0.0315
+          },
+          {
+            "chunk_id": "2606.16247#49",
+            "titulo": "Improved Join Order Optimization for Database Queries using Hybrid Quantum-Classical Approaches for QUBO Problems",
+            "pagina": 9,
+            "puntaje": 0.031
+          },
+          {
+            "chunk_id": "2610.41669#9",
+            "titulo": "Supervised and LLM-Augmented Cardinality Estimation for Similarity Queries on Knowledge Graphs",
+            "pagina": 3,
+            "puntaje": 0.0307
+          }
+        ]
+      },
+      {
+        "idioma": "en",
+        "pregunta": "evaluating hallucinations in retrieval-augmented generation",
+        "modo": "bm25",
+        "mediana_ms": 14.8,
+        "fragmentos": [
+          {
+            "chunk_id": "2611.03747#20",
+            "titulo": "Enhancing Stock Market Information Retrieval with Retrieval-Augmented Generation",
+            "pagina": 13,
+            "puntaje": 16.9373
+          },
+          {
+            "chunk_id": "2601.14348#10",
+            "titulo": "Legal Retrieval for Public Defenders",
+            "pagina": 4,
+            "puntaje": 16.0758
+          },
+          {
+            "chunk_id": "2611.08498#6",
+            "titulo": "Improving Contextual Retrieval for Long Documents using Semantic Chunking and Hybrid Retrieval Strategies",
+            "pagina": 2,
+            "puntaje": 15.8321
+          }
+        ]
+      },
+      {
+        "idioma": "en",
+        "pregunta": "evaluating hallucinations in retrieval-augmented generation",
+        "modo": "vector",
+        "mediana_ms": 11.1,
+        "fragmentos": [
+          {
+            "chunk_id": "2609.28108#1",
+            "titulo": "Dual-Hypergraph Indexing: Bridging Knowledge Islands for Multi-Hop Reasoning in Retrieval-Augmented Generation",
+            "pagina": 1,
+            "puntaje": 0.8928
+          },
+          {
+            "chunk_id": "2610.35056#0",
+            "titulo": "Hallucination-Aware Multi-Agent RAG via Internal Attention Rewards",
+            "pagina": 1,
+            "puntaje": 0.8878
+          },
+          {
+            "chunk_id": "2609.10046#6",
+            "titulo": "Guaranteeing Faithful Evidence Extraction in Speculative Retrieval-Augmented Generation",
+            "pagina": 2,
+            "puntaje": 0.8867
+          }
+        ]
+      },
+      {
+        "idioma": "en",
+        "pregunta": "evaluating hallucinations in retrieval-augmented generation",
+        "modo": "hybrid",
+        "mediana_ms": 21.4,
+        "fragmentos": [
+          {
+            "chunk_id": "2609.10046#6",
+            "titulo": "Guaranteeing Faithful Evidence Extraction in Speculative Retrieval-Augmented Generation",
+            "pagina": 2,
+            "puntaje": 0.0304
+          },
+          {
+            "chunk_id": "2609.28108#1",
+            "titulo": "Dual-Hypergraph Indexing: Bridging Knowledge Islands for Multi-Hop Reasoning in Retrieval-Augmented Generation",
+            "pagina": 1,
+            "puntaje": 0.0303
+          },
+          {
+            "chunk_id": "2609.16453#60",
+            "titulo": "Predicting Partial Answer Quality and Utility in Agentic Retrieval-Augmented Generation",
+            "pagina": 11,
+            "puntaje": 0.029
+          }
+        ]
+      },
+      {
+        "idioma": "es",
+        "pregunta": "¿Cómo estiman la cardinalidad de una consulta los optimizadores con aprendizaje?",
+        "modo": "bm25",
+        "mediana_ms": 4.9,
+        "fragmentos": [
+          {
+            "chunk_id": "curso:informe#2",
+            "titulo": "Minigestor de base de datos multimodal",
+            "pagina": 1,
+            "puntaje": 66.0207
+          },
+          {
+            "chunk_id": "curso:informe#16",
+            "titulo": "Minigestor de base de datos multimodal",
+            "pagina": 5,
+            "puntaje": 63.905
+          },
+          {
+            "chunk_id": "curso:informe#3",
+            "titulo": "Minigestor de base de datos multimodal",
+            "pagina": 1,
+            "puntaje": 62.4016
+          }
+        ]
+      },
+      {
+        "idioma": "es",
+        "pregunta": "¿Cómo estiman la cardinalidad de una consulta los optimizadores con aprendizaje?",
+        "modo": "vector",
+        "mediana_ms": 11.5,
+        "fragmentos": [
+          {
+            "chunk_id": "2604.08021#44",
+            "titulo": "SynQL: A Controllable and Scalable Rule-Based Framework for SQL Workload Synthesis for Performance Benchmarking",
+            "pagina": 23,
+            "puntaje": 0.8619
+          },
+          {
+            "chunk_id": "2610.28270#11",
+            "titulo": "SWatcher+: A Holistic Approach to Deploying Learned Cardinality Estimators in a Dynamic Setting",
+            "pagina": 2,
+            "puntaje": 0.8608
+          },
+          {
+            "chunk_id": "2606.09361#9",
+            "titulo": "Bespoke-Card: Why Tune When You Can Generate? Synthesizing Workload-Specific Cardinality Estimators",
+            "pagina": 2,
+            "puntaje": 0.8527
+          }
+        ]
+      },
+      {
+        "idioma": "es",
+        "pregunta": "¿Cómo estiman la cardinalidad de una consulta los optimizadores con aprendizaje?",
+        "modo": "hybrid",
+        "mediana_ms": 13.9,
+        "fragmentos": [
+          {
+            "chunk_id": "2604.08021#44",
+            "titulo": "SynQL: A Controllable and Scalable Rule-Based Framework for SQL Workload Synthesis for Performance Benchmarking",
+            "pagina": 23,
+            "puntaje": 0.0164
+          },
+          {
+            "chunk_id": "curso:informe#2",
+            "titulo": "Minigestor de base de datos multimodal",
+            "pagina": 1,
+            "puntaje": 0.0164
+          },
+          {
+            "chunk_id": "2610.28270#11",
+            "titulo": "SWatcher+: A Holistic Approach to Deploying Learned Cardinality Estimators in a Dynamic Setting",
+            "pagina": 2,
+            "puntaje": 0.0161
+          }
+        ]
+      },
+      {
+        "idioma": "es",
+        "pregunta": "búsqueda aproximada de vecinos más cercanos en bases de datos vectoriales",
+        "modo": "bm25",
+        "mediana_ms": 11.3,
+        "fragmentos": [
+          {
+            "chunk_id": "curso:proyecto-integrador-bd2#3",
+            "titulo": "Proyecto Integrador — Minigestor de Base de Datos Multimodal",
+            "pagina": 10,
+            "puntaje": 65.2567
+          },
+          {
+            "chunk_id": "curso:informe#16",
+            "titulo": "Minigestor de base de datos multimodal",
+            "pagina": 5,
+            "puntaje": 53.4038
+          },
+          {
+            "chunk_id": "curso:informe#34",
+            "titulo": "Minigestor de base de datos multimodal",
+            "pagina": 12,
+            "puntaje": 49.976
+          }
+        ]
+      },
+      {
+        "idioma": "es",
+        "pregunta": "búsqueda aproximada de vecinos más cercanos en bases de datos vectoriales",
+        "modo": "vector",
+        "mediana_ms": 12.7,
+        "fragmentos": [
+          {
+            "chunk_id": "curso:informe#16",
+            "titulo": "Minigestor de base de datos multimodal",
+            "pagina": 5,
+            "puntaje": 0.8817
+          },
+          {
+            "chunk_id": "curso:proyecto-integrador-bd2#3",
+            "titulo": "Proyecto Integrador — Minigestor de Base de Datos Multimodal",
+            "pagina": 10,
+            "puntaje": 0.8774
+          },
+          {
+            "chunk_id": "curso:proyecto-integrador-bd2#4",
+            "titulo": "Proyecto Integrador — Minigestor de Base de Datos Multimodal",
+            "pagina": 14,
+            "puntaje": 0.8751
+          }
+        ]
+      },
+      {
+        "idioma": "es",
+        "pregunta": "búsqueda aproximada de vecinos más cercanos en bases de datos vectoriales",
+        "modo": "hybrid",
+        "mediana_ms": 18.9,
+        "fragmentos": [
+          {
+            "chunk_id": "curso:informe#16",
+            "titulo": "Minigestor de base de datos multimodal",
+            "pagina": 5,
+            "puntaje": 0.0325
+          },
+          {
+            "chunk_id": "curso:proyecto-integrador-bd2#3",
+            "titulo": "Proyecto Integrador — Minigestor de Base de Datos Multimodal",
+            "pagina": 10,
+            "puntaje": 0.0325
+          },
+          {
+            "chunk_id": "curso:informe#34",
+            "titulo": "Minigestor de base de datos multimodal",
+            "pagina": 12,
+            "puntaje": 0.0308
+          }
+        ]
+      },
+      {
+        "idioma": "es",
+        "pregunta": "¿Cómo se evalúan los sistemas de recomendación secuencial?",
+        "modo": "bm25",
+        "mediana_ms": 4.9,
+        "fragmentos": [
+          {
+            "chunk_id": "curso:proyecto-integrador-bd2#9",
+            "titulo": "Proyecto Integrador — Minigestor de Base de Datos Multimodal",
+            "pagina": 29,
+            "puntaje": 56.528
+          },
+          {
+            "chunk_id": "curso:proyecto-integrador-bd2#0",
+            "titulo": "Proyecto Integrador — Minigestor de Base de Datos Multimodal",
+            "pagina": 1,
+            "puntaje": 51.3631
+          },
+          {
+            "chunk_id": "curso:proyecto-integrador-bd2#2",
+            "titulo": "Proyecto Integrador — Minigestor de Base de Datos Multimodal",
+            "pagina": 8,
+            "puntaje": 48.7717
+          }
+        ]
+      },
+      {
+        "idioma": "es",
+        "pregunta": "¿Cómo se evalúan los sistemas de recomendación secuencial?",
+        "modo": "vector",
+        "mediana_ms": 11.1,
+        "fragmentos": [
+          {
+            "chunk_id": "2609.31696#228",
+            "titulo": "Data Processing for Offline Evaluation in Recommender Systems: a Survey",
+            "pagina": 138,
+            "puntaje": 0.8419
+          },
+          {
+            "chunk_id": "2608.25755#42",
+            "titulo": "Hamiltonian Spectral-Temporal Dissipative Dynamics for Sequential Recommendation",
+            "pagina": 10,
+            "puntaje": 0.8414
+          },
+          {
+            "chunk_id": "2605.07125#10",
+            "titulo": "An Embarrassingly Simple Graph Heuristic Reveals Shortcut-Solvable Benchmarks for Sequential Recommendation",
+            "pagina": 3,
+            "puntaje": 0.8406
+          }
+        ]
+      },
+      {
+        "idioma": "es",
+        "pregunta": "¿Cómo se evalúan los sistemas de recomendación secuencial?",
+        "modo": "hybrid",
+        "mediana_ms": 13.0,
+        "fragmentos": [
+          {
+            "chunk_id": "2609.31696#228",
+            "titulo": "Data Processing for Offline Evaluation in Recommender Systems: a Survey",
+            "pagina": 138,
+            "puntaje": 0.0164
+          },
+          {
+            "chunk_id": "curso:proyecto-integrador-bd2#9",
+            "titulo": "Proyecto Integrador — Minigestor de Base de Datos Multimodal",
+            "pagina": 29,
+            "puntaje": 0.0164
+          },
+          {
+            "chunk_id": "2608.25755#42",
+            "titulo": "Hamiltonian Spectral-Temporal Dissipative Dynamics for Sequential Recommendation",
+            "pagina": 10,
+            "puntaje": 0.0161
+          }
+        ]
+      },
+      {
+        "idioma": "es",
+        "pregunta": "generar consultas SQL a partir de lenguaje natural con modelos de lenguaje",
+        "modo": "bm25",
+        "mediana_ms": 7.5,
+        "fragmentos": [
+          {
+            "chunk_id": "curso:informe#3",
+            "titulo": "Minigestor de base de datos multimodal",
+            "pagina": 1,
+            "puntaje": 41.9816
+          },
+          {
+            "chunk_id": "curso:informe#4",
+            "titulo": "Minigestor de base de datos multimodal",
+            "pagina": 2,
+            "puntaje": 41.8501
+          },
+          {
+            "chunk_id": "curso:informe#36",
+            "titulo": "Minigestor de base de datos multimodal",
+            "pagina": 12,
+            "puntaje": 36.1104
+          }
+        ]
+      },
+      {
+        "idioma": "es",
+        "pregunta": "generar consultas SQL a partir de lenguaje natural con modelos de lenguaje",
+        "modo": "vector",
+        "mediana_ms": 11.4,
+        "fragmentos": [
+          {
+            "chunk_id": "2609.21133#17",
+            "titulo": "The Stochastic Shift: A New Evaluation Paradigm for Text-to-SQL with AI Operators",
+            "pagina": 4,
+            "puntaje": 0.8645
+          },
+          {
+            "chunk_id": "2610.22968#17",
+            "titulo": "NL2SQL with Iterative Self-Refinement",
+            "pagina": 9,
+            "puntaje": 0.8634
+          },
+          {
+            "chunk_id": "2604.23477#71",
+            "titulo": "SEMA-SQL: Beyond Traditional Relational Querying with Large Language Models",
+            "pagina": 13,
+            "puntaje": 0.8622
+          }
+        ]
+      },
+      {
+        "idioma": "es",
+        "pregunta": "generar consultas SQL a partir de lenguaje natural con modelos de lenguaje",
+        "modo": "hybrid",
+        "mediana_ms": 15.1,
+        "fragmentos": [
+          {
+            "chunk_id": "2609.21133#17",
+            "titulo": "The Stochastic Shift: A New Evaluation Paradigm for Text-to-SQL with AI Operators",
+            "pagina": 4,
+            "puntaje": 0.0164
+          },
+          {
+            "chunk_id": "curso:informe#3",
+            "titulo": "Minigestor de base de datos multimodal",
+            "pagina": 1,
+            "puntaje": 0.0164
+          },
+          {
+            "chunk_id": "2610.22968#17",
+            "titulo": "NL2SQL with Iterative Self-Refinement",
+            "pagina": 9,
+            "puntaje": 0.0161
+          }
+        ]
+      },
+      {
+        "idioma": "es",
+        "pregunta": "¿Qué pide el proyecto integrador del curso de Base de Datos 2 sobre el R-Tree?",
+        "modo": "bm25",
+        "mediana_ms": 10.5,
+        "fragmentos": [
+          {
+            "chunk_id": "curso:informe#0",
+            "titulo": "Minigestor de base de datos multimodal",
+            "pagina": 1,
+            "puntaje": 86.9838
+          },
+          {
+            "chunk_id": "curso:proyecto-integrador-bd2#0",
+            "titulo": "Proyecto Integrador — Minigestor de Base de Datos Multimodal",
+            "pagina": 1,
+            "puntaje": 84.4152
+          },
+          {
+            "chunk_id": "curso:informe#14",
+            "titulo": "Minigestor de base de datos multimodal",
+            "pagina": 4,
+            "puntaje": 71.3319
+          }
+        ]
+      },
+      {
+        "idioma": "es",
+        "pregunta": "¿Qué pide el proyecto integrador del curso de Base de Datos 2 sobre el R-Tree?",
+        "modo": "vector",
+        "mediana_ms": 11.4,
+        "fragmentos": [
+          {
+            "chunk_id": "curso:informe#0",
+            "titulo": "Minigestor de base de datos multimodal",
+            "pagina": 1,
+            "puntaje": 0.868
+          },
+          {
+            "chunk_id": "curso:proyecto-integrador-bd2#7",
+            "titulo": "Proyecto Integrador — Minigestor de Base de Datos Multimodal",
+            "pagina": 24,
+            "puntaje": 0.8571
+          },
+          {
+            "chunk_id": "curso:informe#4",
+            "titulo": "Minigestor de base de datos multimodal",
+            "pagina": 2,
+            "puntaje": 0.8546
+          }
+        ]
+      },
+      {
+        "idioma": "es",
+        "pregunta": "¿Qué pide el proyecto integrador del curso de Base de Datos 2 sobre el R-Tree?",
+        "modo": "hybrid",
+        "mediana_ms": 29.8,
+        "fragmentos": [
+          {
+            "chunk_id": "curso:informe#0",
+            "titulo": "Minigestor de base de datos multimodal",
+            "pagina": 1,
+            "puntaje": 0.0328
+          },
+          {
+            "chunk_id": "curso:informe#4",
+            "titulo": "Minigestor de base de datos multimodal",
+            "pagina": 2,
+            "puntaje": 0.0315
+          },
+          {
+            "chunk_id": "curso:proyecto-integrador-bd2#7",
+            "titulo": "Proyecto Integrador — Minigestor de Base de Datos Multimodal",
+            "pagina": 24,
+            "puntaje": 0.0313
+          }
+        ]
+      }
+    ],
+    "etapas": [
+      {
+        "fragmentos": 1000,
+        "carga_sin_indices_s": 0.37,
+        "indice_invertido_s": 0.32,
+        "hnsw_s": 0.07,
+        "carga_con_indices_diferidos_s": 0.72
+      },
+      {
+        "fragmentos": 10000,
+        "carga_sin_indices_s": 4.19,
+        "indice_invertido_s": 2.08,
+        "hnsw_s": 0.32,
+        "carga_con_indices_diferidos_s": 6.44
+      },
+      {
+        "fragmentos": 98585,
+        "carga_sin_indices_s": 44.33,
+        "indice_invertido_s": 17.4,
+        "hnsw_s": 5.4,
+        "carga_con_indices_diferidos_s": 67.1
+      }
+    ],
+    "carga_media_al_terminar": 5.27,
+    "duracion_s": 3615.0
+  },
+  "measurements": [
+    {
+      "technique": "fp32",
+      "operation": "embeddings de fragmentos",
+      "dataset_size": 1,
+      "milliseconds": 60715.53820851841,
+      "extra": {
+        "fragmentos_por_segundo": 16.47,
+        "fragmentos": 1000
+      }
+    },
+    {
+      "technique": "fp32",
+      "operation": "embeddings de fragmentos",
+      "dataset_size": 2,
+      "milliseconds": 38992.97414597822,
+      "extra": {
+        "fragmentos_por_segundo": 25.65,
+        "fragmentos": 1000
+      }
+    },
+    {
+      "technique": "fp32",
+      "operation": "embeddings de fragmentos",
+      "dataset_size": 4,
+      "milliseconds": 32073.829208500683,
+      "extra": {
+        "fragmentos_por_segundo": 31.18,
+        "fragmentos": 1000
+      }
+    },
+    {
+      "technique": "fp32",
+      "operation": "embeddings de fragmentos",
+      "dataset_size": 8,
+      "milliseconds": 25235.232145991176,
+      "extra": {
+        "fragmentos_por_segundo": 39.63,
+        "fragmentos": 1000
+      }
+    },
+    {
+      "technique": "fp32",
+      "operation": "embeddings de fragmentos",
+      "dataset_size": 12,
+      "milliseconds": 37349.1081460088,
+      "extra": {
+        "fragmentos_por_segundo": 26.77,
+        "fragmentos": 1000
+      }
+    },
+    {
+      "technique": "int8",
+      "operation": "embeddings de fragmentos",
+      "dataset_size": 1,
+      "milliseconds": 78230.69445849978,
+      "extra": {
+        "fragmentos_por_segundo": 12.78,
+        "fragmentos": 1000
+      }
+    },
+    {
+      "technique": "int8",
+      "operation": "embeddings de fragmentos",
+      "dataset_size": 2,
+      "milliseconds": 41274.47408300941,
+      "extra": {
+        "fragmentos_por_segundo": 24.23,
+        "fragmentos": 1000
+      }
+    },
+    {
+      "technique": "int8",
+      "operation": "embeddings de fragmentos",
+      "dataset_size": 4,
+      "milliseconds": 26344.266645493917,
+      "extra": {
+        "fragmentos_por_segundo": 37.96,
+        "fragmentos": 1000
+      }
+    },
+    {
+      "technique": "int8",
+      "operation": "embeddings de fragmentos",
+      "dataset_size": 8,
+      "milliseconds": 22082.527479011333,
+      "extra": {
+        "fragmentos_por_segundo": 45.28,
+        "fragmentos": 1000
+      }
+    },
+    {
+      "technique": "int8",
+      "operation": "embeddings de fragmentos",
+      "dataset_size": 12,
+      "milliseconds": 36563.274292013375,
+      "extra": {
+        "fragmentos_por_segundo": 27.35,
+        "fragmentos": 1000
+      }
+    },
+    {
+      "technique": "carga NDJSON sin índices",
+      "operation": "etapas de la ingesta",
+      "dataset_size": 1000,
+      "milliseconds": 369.3206250318326,
+      "extra": {}
+    },
+    {
+      "technique": "CREATE INDEX invertido (SPIMI)",
+      "operation": "etapas de la ingesta",
+      "dataset_size": 1000,
+      "milliseconds": 315.9515829756856,
+      "extra": {}
+    },
+    {
+      "technique": "CREATE INDEX HNSW (FAISS)",
+      "operation": "etapas de la ingesta",
+      "dataset_size": 1000,
+      "milliseconds": 70.82037499640137,
+      "extra": {}
+    },
+    {
+      "technique": "carga con índices diferidos (la de la siembra)",
+      "operation": "etapas de la ingesta",
+      "dataset_size": 1000,
+      "milliseconds": 717.6865829969756,
+      "extra": {}
+    },
+    {
+      "technique": "carga NDJSON sin índices",
+      "operation": "etapas de la ingesta",
+      "dataset_size": 10000,
+      "milliseconds": 4192.6977499970235,
+      "extra": {}
+    },
+    {
+      "technique": "CREATE INDEX invertido (SPIMI)",
+      "operation": "etapas de la ingesta",
+      "dataset_size": 10000,
+      "milliseconds": 2077.881167002488,
+      "extra": {}
+    },
+    {
+      "technique": "CREATE INDEX HNSW (FAISS)",
+      "operation": "etapas de la ingesta",
+      "dataset_size": 10000,
+      "milliseconds": 317.757667042315,
+      "extra": {}
+    },
+    {
+      "technique": "carga con índices diferidos (la de la siembra)",
+      "operation": "etapas de la ingesta",
+      "dataset_size": 10000,
+      "milliseconds": 6439.357541967183,
+      "extra": {}
+    },
+    {
+      "technique": "carga NDJSON sin índices",
+      "operation": "etapas de la ingesta",
+      "dataset_size": 98585,
+      "milliseconds": 44326.10966602806,
+      "extra": {}
+    },
+    {
+      "technique": "CREATE INDEX invertido (SPIMI)",
+      "operation": "etapas de la ingesta",
+      "dataset_size": 98585,
+      "milliseconds": 17396.02016704157,
+      "extra": {}
+    },
+    {
+      "technique": "CREATE INDEX HNSW (FAISS)",
+      "operation": "etapas de la ingesta",
+      "dataset_size": 98585,
+      "milliseconds": 5402.975459001027,
+      "extra": {}
+    },
+    {
+      "technique": "carga con índices diferidos (la de la siembra)",
+      "operation": "etapas de la ingesta",
+      "dataset_size": 98585,
+      "milliseconds": 67103.595166991,
+      "extra": {}
+    }
+  ]
+}

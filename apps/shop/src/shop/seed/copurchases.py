@@ -1,9 +1,10 @@
 """Materializa `shop_compras_conjuntas` con el `GROUP BY` del gestor.
 
 Calcular las compras conjuntas de un producto en cada petición es un autojoin de las
-compras: 165 s sobre `shop_compras` (el planificador no lleva el filtro por debajo del
-`JOIN`, así que reúne 7,6 millones de filas) y unos segundos sobre `shop_historial` (el lado
-izquierdo entra por su hash, el derecho se recorre entero). Ninguna cabe en una petición. El
+compras: minutos sobre `shop_compras` (el planificador no lleva el filtro por debajo del
+`JOIN`, así que reúne 7,6 millones de filas) y segundos sobre `shop_historial` (el lado
+izquierdo entra por su B+, el derecho se recorre entero; cifras en el README). Ninguna cabe
+en una petición. El
 gestor no tiene `INSERT ... SELECT` ni `CREATE TABLE ... AS`, y una respuesta trae como mucho
 `max_result_rows` filas, así que los pares se calculan por lotes de productos: cada lote es
 una consulta `GROUP BY` del gestor cuyo resultado va directo a la carga masiva de la tabla.

@@ -27,18 +27,25 @@ class FusedRank:
 
 
 def reciprocal_rank_fusion(
-    rankings: Sequence[Sequence[str]], k: int = RRF_K
+    rankings: Sequence[Sequence[str]],
+    k: int = RRF_K,
+    weights: Sequence[float] | None = None,
 ) -> list[FusedRank]:
-    """Fusiona listas de claves ordenadas de mejor a peor.
+    """Fusiona listas de claves ordenadas de mejor a peor. Con `weights`, cada lista suma
+    `peso / (k + rango)` (RRF ponderado); sin ellos, todas pesan 1.
 
     Un empate de puntaje lo decide el mejor rango que tenga cada documento en alguna lista
     y, si sigue, la clave: el resultado es determinista.
 
     Raises:
-        ValueError: si `k` es negativo o una lista repite una clave.
+        ValueError: si `k` es negativo, una lista repite una clave, o los pesos no son uno
+            por lista y todos 0 o más.
     """
     if k < 0:
         raise ValueError(f"k de RRF tiene que ser 0 o más, no {k}")
+    weights = [1.0] * len(rankings) if weights is None else list(weights)
+    if len(weights) != len(rankings) or any(weight < 0 for weight in weights):
+        raise ValueError("hace falta un peso de 0 o más por cada lista")
     ranks: dict[str, list[int | None]] = {}
     for position, ranking in enumerate(rankings):
         if len(set(ranking)) != len(ranking):
@@ -46,7 +53,15 @@ def reciprocal_rank_fusion(
         for rank, key in enumerate(ranking, start=1):
             ranks.setdefault(key, [None] * len(rankings))[position] = rank
     fused = [
-        FusedRank(key, sum(1 / (k + rank) for rank in found if rank is not None), tuple(found))
+        FusedRank(
+            key,
+            sum(
+                weight / (k + rank)
+                for weight, rank in zip(weights, found, strict=True)
+                if rank is not None
+            ),
+            tuple(found),
+        )
         for key, found in ranks.items()
     ]
     return sorted(fused, key=lambda item: (-item.score, _best_rank(item), item.key))

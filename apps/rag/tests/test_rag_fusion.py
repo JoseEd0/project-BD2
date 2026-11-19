@@ -53,3 +53,20 @@ def test_a_repeated_key_or_negative_k_is_refused():
         reciprocal_rank_fusion([["a", "a"]])
     with pytest.raises(ValueError, match="k de RRF"):
         reciprocal_rank_fusion([["a"]], k=-1)
+
+
+def test_weights_scale_each_list():
+    fused = reciprocal_rank_fusion([["a"], ["b"]], weights=[0.5, 1.0])
+    assert [item.key for item in fused] == ["b", "a"]
+    assert fused[1].score == pytest.approx(0.5 / (RRF_K + 1))
+
+
+def test_a_zero_weight_list_only_breaks_ties():
+    fused = reciprocal_rank_fusion([["a", "b"], ["b", "a"]], weights=[0.0, 1.0])
+    assert [item.key for item in fused] == ["b", "a"]
+
+
+@pytest.mark.parametrize("weights", [[1.0], [1.0, -0.1]])
+def test_weights_must_be_one_non_negative_per_list(weights: list[float]):
+    with pytest.raises(ValueError, match="peso"):
+        reciprocal_rank_fusion([["a"], ["b"]], weights=weights)

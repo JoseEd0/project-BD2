@@ -18,6 +18,9 @@ escrituras. No hay red entre los dos, así que es el piso de lo que tardará con
 2. Al llegar a cada tamaño de `--checkpoints` se miden `--queries` reconocimientos de fotos
    que no se registraron, de personas registradas y de personas con una sola foto en LFW.
 
+Cada toma con un solo rostro deja sus medidas de calidad (las que devuelve el API): sus
+percentiles en LFW son la referencia de los umbrales de `faces.quality`.
+
 Los umbrales de duplicado se apagan (1,0) para que ninguna persona de LFW quede fuera por
 parecerse a otra: lo que el servicio habría rechazado se cuenta aparte, con cada umbral.
 """
@@ -59,6 +62,8 @@ IDENTIFY = "reconocer"
 OPEN_SET = "conjunto abierto"
 FALSE_DUPLICATES = "duplicados falsos"
 REJECTIONS = "rechazos de calidad"
+MEASUREMENTS = "medidas de las tomas"
+QUALITY_PERCENTILES = (0.5, 1, 5, 50, 95, 99, 99.5)
 ACCEPTED = "toma aceptada"
 REJECTED = "toma rechazada"
 ENROLLED = "persona registrada"
@@ -110,6 +115,7 @@ class Gallery:
     held_out: dict[str, Path] = field(default_factory=dict)
     impostor_scores: list[tuple[int, float]] = field(default_factory=list)
     rejections: Counter[str] = field(default_factory=Counter)
+    quality: dict[str, list[float]] = field(default_factory=lambda: defaultdict(list))
 
 
 def people_with_photos(images: Sequence[LfwImage]) -> dict[str, list[Path]]:
@@ -189,6 +195,8 @@ class Run:
             )
             result = response.json()
             self.shots[ACCEPTED if result["accepted"] else REJECTED].add(response, elapsed)
+            for measure, value in (result["quality"] or {}).items():
+                self.gallery.quality[measure].append(value)
             if result["accepted"]:
                 finished, elapsed = timed_post(self.client, f"/enrollments/{enrollment}/finish")
                 self.finishes.add(finished, elapsed)
@@ -241,6 +249,18 @@ class Run:
             rechazadas=sum(self.gallery.rejections.values()),
             **dict(self.gallery.rejections),
         )
+        for measure, values in self.gallery.quality.items():
+            percentiles = np.percentile(values, QUALITY_PERCENTILES)
+            self.report.add(
+                measure,
+                MEASUREMENTS,
+                len(values),
+                0.0,
+                **{
+                    f"p{percentile:g}": round(float(value), DIGITS)
+                    for percentile, value in zip(QUALITY_PERCENTILES, percentiles, strict=True)
+                },
+            )
         for checkpoint in self.arguments.checkpoints:
             scores = [s for size, s in self.gallery.impostor_scores if size < checkpoint]
             for threshold in self.arguments.thresholds:

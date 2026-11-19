@@ -1,7 +1,9 @@
 """Recuperación de fragmentos: BM25 del índice invertido, vecinos del HNSW y su fusión.
 
 - `bm25`: `MATCH(content, ...) USING BM25` sobre el índice invertido en inglés. Encuentra
-  las palabras exactas (siglas, nombres de sistemas) y no entiende otro idioma.
+  las palabras exactas (siglas, nombres de sistemas) y no entiende otro idioma: a una
+  pregunta en español se le quitan antes sus palabras vacías (`rag.language`), y le quedan
+  los nombres y términos que comparte con los papers en inglés.
 - `vector`: el embedding de la pregunta (`query: ...`) contra los de los fragmentos con
   `SIMILAR_TO` en el HNSW por coseno. Encuentra paráfrasis y responde a una pregunta en
   español con fragmentos en inglés.
@@ -26,6 +28,7 @@ from minigestor_client import AsyncClient, Record
 
 from .embeddings import Embedder, Embeddings
 from .fusion import RRF_K, reciprocal_rank_fusion
+from .language import detect_language, without_stopwords
 from .schema import AUTHOR_SEPARATOR, CHUNKS_TABLE, PAPERS_TABLE
 
 DEFAULT_RESULTS = 10
@@ -147,13 +150,11 @@ class Retriever:
 
     async def _bm25(self, query: str, limit: int) -> list[Record]:
         with timed(BM25_STAGE):
-            return await self._engine.fetch_all(BM25_SQL, [plain_text_query(query), limit])
+            return await self._engine.fetch_all(BM25_SQL, [lexical_query(query), limit])
 
     async def _vector(self, query: str, limit: int) -> list[Record]:
         with timed(EMBEDDING_STAGE):
-            vector: Embeddings = await anyio.to_thread.run_sync(
-                self._embedder.embed_query, query
-            )
+            vector: Embeddings = await anyio.to_thread.run_sync(self._embedder.embed_query, query)
         with timed(VECTOR_STAGE):
             return await self._engine.fetch_all(VECTOR_SQL, [vector, limit])
 
@@ -187,6 +188,13 @@ class Retriever:
         with timed(PAPERS_STAGE):
             rows = await self._engine.fetch_all(sql, ordered)
         return {row["paper_id"]: paper_of(row) for row in rows}
+
+
+def lexical_query(question: str) -> str:
+    """Lo que busca BM25 para `question`: sin las palabras vacías de su idioma si no es el
+    del índice (el analizador inglés no quita «de», «la», «qué», y con ellas una pregunta en
+    español solo encuentra los documentos del curso) y como texto libre para `MATCH`."""
+    return plain_text_query(without_stopwords(question, detect_language(question)))
 
 
 def plain_text_query(question: str) -> str:

@@ -43,8 +43,8 @@ desde el mismo punto, alternando con una tecla.
 
 ## Capabilities and Constraints
 
-- El umbral de copia (0,45) es provisional; la respuesta trae `threshold`, `score`,
-  `coverage`, `mean_similarity` y `above_threshold` por coincidencia. Una coincidencia bajo
+- El umbral de copia es 0,43, calibrado con la curva ROC de #77; la respuesta trae
+  `threshold`, `score`, `coverage`, `mean_similarity` y `above_threshold` por coincidencia. Una coincidencia bajo
   el umbral se muestra como débil, no como copia.
 - El audio subido no sale del navegador más que hacia el API de la app; la forma de onda se
   calcula en el navegador.
@@ -70,7 +70,7 @@ desde el mismo punto, alternando con una tecla.
 
 1. La evidencia se escucha: toda coincidencia se puede oír contra su original en un gesto.
 2. Decir dónde, no solo si: tramo, desfase y puntaje siempre visibles.
-3. Honestidad del umbral: lo que no pasa de 0,45 se muestra como débil, nunca como copia.
+3. Honestidad del umbral: lo que no pasa del umbral se muestra como débil, nunca como copia.
 4. Cada estado tiene una salida: rechazo con su motivo y qué hacer, servicio caído con
    reintento.
 

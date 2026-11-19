@@ -28,6 +28,7 @@ from anthropic.lib.streaming import (
     ParsedBetaMessageStreamEvent,
     ParsedBetaTextEvent,
 )
+from anthropic.types import CacheCreation, Usage
 from anthropic.types.beta import (
     BetaCacheCreation,
     BetaFallbackBlock,
@@ -203,6 +204,18 @@ def _usage_of(usage: BetaUsage) -> TokenUsage:
     )
 
 
+def usage_of(usage: Usage) -> TokenUsage:
+    """Los tokens de un mensaje de la API de mensajes sin betas (el juez y la Batch API de
+    la evaluación)."""
+    return _token_usage(
+        usage.input_tokens,
+        usage.output_tokens,
+        usage.cache_creation_input_tokens or 0,
+        usage.cache_read_input_tokens or 0,
+        usage.cache_creation,
+    )
+
+
 def _iteration_usage(
     iteration: BetaMessageIterationUsage | BetaFallbackMessageIterationUsage,
 ) -> TokenUsage:
@@ -220,7 +233,7 @@ def _token_usage(
     output_tokens: int,
     cache_creation_tokens: int,
     cache_read_tokens: int,
-    breakdown: BetaCacheCreation | None,
+    breakdown: BetaCacheCreation | CacheCreation | None,
 ) -> TokenUsage:
     # Sin el desglose por vida de la caché, toda escritura es de 5 minutos: la única que
     # pide este servicio.

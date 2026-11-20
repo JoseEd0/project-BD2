@@ -1570,23 +1570,26 @@ details {
 }
 
 .map-store {
-  position: relative;
-  display: grid;
-  place-items: center;
   filter: drop-shadow(0 2px 3px rgb(0 0 0 / 0.3));
 }
 
-.map-store svg {
+/* Leaflet pone `z-index: 200` a todo `svg` del mapa: el número tiene que quedar encima. */
+.map .map-store svg {
   position: absolute;
+  z-index: 0;
   inset: 0;
   fill: var(--photo-ground);
   stroke: var(--accent);
   stroke-width: 2.5;
 }
 
+/* Leaflet da `display: block` a los iconos: el número y el punto se colocan solos. */
 .map-store span {
-  position: relative;
-  margin-top: -12px;
+  position: absolute;
+  z-index: 1;
+  inset: 5px 0 auto;
+  line-height: 18px;
+  text-align: center;
   color: var(--accent);
   font-size: 0.8125rem;
   font-weight: 800;
@@ -1608,14 +1611,12 @@ details {
   color: var(--photo-ground);
 }
 
-.map-you {
-  display: grid;
-  place-items: center;
-}
-
 .map-you span {
+  position: absolute;
+  inset: 3px;
   width: 16px;
   height: 16px;
+  box-sizing: border-box;
   border: 3px solid var(--photo-ground);
   border-radius: 50%;
   background: var(--map-point);

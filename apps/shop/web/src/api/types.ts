@@ -13,6 +13,7 @@ export type StoreWithStock = Schemas["StoreWithStock"];
 export type Department = Schemas["Department"];
 export type Customer = Schemas["Customer"];
 export type PurchaseRecorded = Schemas["PurchaseRecorded"];
+export type TextSearchResult = Schemas["TextSearchResult"];
 
 /** Lo que dice la cabecera `X-Cache` del API: `hit`, `miss` o `bypass` (sin Redis). */
 export type CacheStatus = "hit" | "miss" | "bypass";

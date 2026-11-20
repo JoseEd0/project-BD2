@@ -28,11 +28,22 @@ const BY_KIND: Readonly<Record<string, Wording>> = {
   UnreadablePhotoError: { title: "No pudimos leer esa foto", detail: "Sube un JPEG, PNG o WebP." },
   UnknownProductError: { title: "Ese producto no está en el catálogo", detail: "Vuelve al catálogo y búscalo de nuevo." },
   UnknownUserError: { title: "Ese cliente no existe", detail: "Elige otro cliente en la barra de arriba." },
+  EngineBusyError: {
+    title: "La tienda está ocupada",
+    detail: "El catálogo se está actualizando en este momento. Lo intentamos de nuevo en unos segundos.",
+  },
+  StatementTimeoutError: {
+    title: "La búsqueda tardó demasiado",
+    detail: "El catálogo está muy ocupado. Vuelve a intentarlo en unos segundos.",
+  },
   EngineUnavailableError: {
     title: "La tienda no responde",
     detail: "El gestor de la tienda no está disponible ahora. Vuelve a intentarlo en unos segundos.",
   },
 };
+
+/** Lo que el gestor dice cuando está ocupado: pasa solo, así que se reintenta. */
+const TRANSIENT_KINDS = new Set(["EngineBusyError", "StatementTimeoutError", "EngineUnavailableError"]);
 
 const UNAVAILABLE: Wording = {
   title: "La tienda no responde",
@@ -55,7 +66,7 @@ export class ApiProblem extends Error {
   }
 
   get retryable(): boolean {
-    return this.kind === "unavailable" || this.kind === "failed";
+    return this.kind === "unavailable" || this.kind === "failed" || (this.apiKind !== null && TRANSIENT_KINDS.has(this.apiKind));
   }
 }
 

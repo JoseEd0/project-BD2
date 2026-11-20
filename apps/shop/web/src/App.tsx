@@ -8,11 +8,14 @@ import { LocationProvider } from "./location/LocationContext";
 import { PhotoProvider } from "./photo/PhotoContext";
 import { routes } from "./routes";
 
-/** Un fallo con motivo (un 400, un 404) no se arregla repitiendo; uno de red, quizá una vez. */
+/** Un fallo con motivo (un 400, un 404) no se arregla repitiendo; el gestor ocupado o la red, sí. */
+const TRANSIENT_RETRIES = 3;
+const RETRY_BASE_MILLISECONDS = 800;
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      retry: (failures, error) => failures < 1 && (error as { retryable?: boolean }).retryable === true,
+      retry: (failures, error) => failures < TRANSIENT_RETRIES && (error as { retryable?: boolean }).retryable === true,
+      retryDelay: (attempt) => RETRY_BASE_MILLISECONDS * 2 ** attempt,
       refetchOnWindowFocus: false,
     },
   },

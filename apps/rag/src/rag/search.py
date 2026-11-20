@@ -40,9 +40,10 @@ import numpy as np
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 from appkit import timed
-from minigestor_client import AsyncClient, Record
+from minigestor_client import Record
 
 from .embeddings import Embedder, Embeddings
+from .engine_reader import EngineReader
 from .fusion import RRF_K, reciprocal_rank_fusion
 from .language import detect_language, without_stopwords
 from .schema import AUTHOR_SEPARATOR, CHUNKS_TABLE, PAPERS_TABLE, SHORT_TEXT_LENGTH
@@ -207,7 +208,7 @@ class Retriever:
     `rrf_k` es la constante de la fusión híbrida. Se crea uno por petición: `executed` junta
     el SQL de cada consulta que corrió."""
 
-    def __init__(self, engine: AsyncClient, embedder: Embedder, rrf_k: int = RRF_K) -> None:
+    def __init__(self, engine: EngineReader, embedder: Embedder, rrf_k: int = RRF_K) -> None:
         self._engine = engine
         self._embedder = embedder
         self._rrf_k = rrf_k
@@ -274,9 +275,7 @@ class Retriever:
             return []
         return await self._fetch(BM25_STAGE, bm25_within_sql(len(allowed)), [text, limit, *allowed])
 
-    async def _vector(
-        self, query: str, limit: int, scope: SearchFilters | None
-    ) -> list[Record]:
+    async def _vector(self, query: str, limit: int, scope: SearchFilters | None) -> list[Record]:
         with timed(EMBEDDING_STAGE):
             vector: Embeddings = await anyio.to_thread.run_sync(self._embedder.embed_query, query)
         if scope is None:
@@ -289,9 +288,7 @@ class Retriever:
 
     async def _fetch(self, stage: str, sql: str, parameters: Sequence[object]) -> list[Record]:
         self._executed.append(
-            ExecutedQuery(
-                stage=stage, sql=sql, parameters=[_shown(value) for value in parameters]
-            )
+            ExecutedQuery(stage=stage, sql=sql, parameters=[_shown(value) for value in parameters])
         )
         with timed(stage):
             return await self._engine.fetch_all(sql, list(parameters))

@@ -5,8 +5,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict
 
-from minigestor_client import AsyncClient
-
+from .engine_reader import EngineReader
 from .schema import PAPERS_TABLE
 
 YEARS_SQL = (
@@ -40,7 +39,7 @@ class Facets(BaseModel):
     categories: list[CategoryFacet]
 
 
-async def facets_of(engine: AsyncClient) -> Facets:
+async def facets_of(engine: EngineReader) -> Facets:
     """Los años y las categorías de `rag_papers` con su número de papers."""
     years = await engine.fetch_all(YEARS_SQL)
     categories = await engine.fetch_all(CATEGORIES_SQL)

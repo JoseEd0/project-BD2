@@ -21,8 +21,8 @@ from urllib.parse import quote
 from pydantic import BaseModel, ConfigDict
 
 from appkit import ResourceNotFoundError, ServiceError, timed
-from minigestor_client import AsyncClient
 
+from .engine_reader import EngineReader
 from .pipeline import CHUNK_ID_SEPARATOR
 from .schema import CHUNKS_TABLE, PAPERS_TABLE
 from .search import PAPER_COLUMNS, Paper, paper_of
@@ -77,7 +77,7 @@ class StoredPaper(BaseModel):
     pages: int
 
 
-async def stored_paper(engine: AsyncClient, paper_id: str) -> StoredPaper:
+async def stored_paper(engine: EngineReader, paper_id: str) -> StoredPaper:
     """El documento `paper_id` con su número de páginas.
 
     Raises:
@@ -90,7 +90,7 @@ async def stored_paper(engine: AsyncClient, paper_id: str) -> StoredPaper:
     return StoredPaper(paper=paper_of(row), pages=row["pages"])
 
 
-async def page_of(engine: AsyncClient, paper_id: str, page: int) -> PageResponse:
+async def page_of(engine: EngineReader, paper_id: str, page: int) -> PageResponse:
     """La página `page` (desde 1) del documento `paper_id`.
 
     Raises:

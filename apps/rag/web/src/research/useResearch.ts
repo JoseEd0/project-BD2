@@ -3,7 +3,10 @@ import { useCallback, useEffect, useReducer, useRef } from "react";
 import type { ResearchFilters } from "../api/types";
 import { unexpectedFailure } from "./failures";
 import { AnswerRequestError, streamAnswer } from "./streamAnswer";
-import { turnsReducer, type Turn } from "./turns";
+import { conversationHistory, turnsReducer, type Turn } from "./turns";
+
+/** Los turnos que se reenvían: los mismos que usa el servicio por omisión. */
+const HISTORY_TURNS = 6;
 
 export interface Research {
   readonly turns: readonly Turn[];
@@ -16,10 +19,15 @@ function isAbort(error: unknown): boolean {
   return error instanceof DOMException && error.name === "AbortError";
 }
 
-/** Las preguntas de esta pestaña y la que está en curso; una a la vez. */
+/** Las preguntas de esta pestaña y la que está en curso; una a la vez. Cada pregunta lleva
+ * los turnos anteriores respondidos, para que el modelo siga la conversación. */
 export function useResearch(): Research {
   const [turns, dispatch] = useReducer(turnsReducer, []);
   const running = useRef<{ id: string; controller: AbortController } | null>(null);
+  const latestTurns = useRef<readonly Turn[]>(turns);
+  useEffect(() => {
+    latestTurns.current = turns;
+  }, [turns]);
 
   const stop = useCallback(() => {
     const current = running.current;
@@ -34,13 +42,13 @@ export function useResearch(): Research {
   const ask = useCallback(
     (question: string, filters: ResearchFilters) => {
       stop();
+      const history = conversationHistory(latestTurns.current, HISTORY_TURNS);
       const id = crypto.randomUUID();
       const controller = new AbortController();
       running.current = { id, controller };
       dispatch({ type: "asked", id, question, filters, at: performance.now() });
       streamAnswer(
-        question,
-        filters,
+        { question, filters, history },
         {
           onOpen: (serverTiming) => dispatch({ type: "opened", id, serverTiming }),
           onEvent: (event) => dispatch({ type: "event", id, event, at: performance.now() }),

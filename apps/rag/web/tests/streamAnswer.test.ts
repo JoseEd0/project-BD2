@@ -8,7 +8,7 @@ import { answerStream, chunkedBody, routeFetch, sseFrame, sseResponse, splitByte
 async function collect(chunkSize = 7) {
   const events: AnswerEvent[] = [];
   const onOpen = vi.fn();
-  await streamAnswer("¿Qué es un índice aprendido?", NO_FILTERS, { onOpen, onEvent: (event) => events.push(event) }, new AbortController().signal);
+  await streamAnswer({ question: "¿Qué es un índice aprendido?", filters: NO_FILTERS, history: [] }, { onOpen, onEvent: (event) => events.push(event) }, new AbortController().signal);
   return { events, onOpen, chunkSize };
 }
 
@@ -41,7 +41,7 @@ describe("streamAnswer", () => {
     const request = requests[0];
     expect(request?.method).toBe("POST");
     expect(new URL(request?.url ?? "").pathname).toBe("/api/answers");
-    expect(await request?.json()).toEqual({ question: "¿Qué es un índice aprendido?" });
+    expect(await request?.json()).toEqual({ question: "¿Qué es un índice aprendido?", history: [] });
   });
 
   it("decodes a character whose bytes arrive in different chunks", async () => {
@@ -93,6 +93,6 @@ describe("streamAnswer", () => {
       controller.abort();
       return Promise.reject(request.signal.reason ?? new DOMException("cancelada", "AbortError"));
     });
-    await expect(streamAnswer("q", NO_FILTERS, { onOpen: vi.fn(), onEvent: vi.fn() }, controller.signal)).rejects.not.toBeInstanceOf(AnswerRequestError);
+    await expect(streamAnswer({ question: "q", filters: NO_FILTERS, history: [] }, { onOpen: vi.fn(), onEvent: vi.fn() }, controller.signal)).rejects.not.toBeInstanceOf(AnswerRequestError);
   });
 });

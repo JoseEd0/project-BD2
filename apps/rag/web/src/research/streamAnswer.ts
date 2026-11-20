@@ -4,12 +4,20 @@ import { apiUrl } from "../api/client";
 import { toRequestFilters, type ResearchFilters } from "../api/types";
 import { decodeAnswerEvent, type AnswerEvent } from "./answerEvents";
 import { failureOfResponse, networkFailure, type Failure } from "./failures";
+import type { Exchange } from "./turns";
 import { SseParser, type ServerSentEvent } from "./sse";
 
 export interface AnswerStreamHandlers {
   /** Llega una vez, con las cabeceras, antes del primer evento. */
   readonly onOpen: (serverTiming: string | null) => void;
   readonly onEvent: (event: AnswerEvent) => void;
+}
+
+export interface AnswerQuestion {
+  readonly question: string;
+  readonly filters: ResearchFilters;
+  /** Los turnos anteriores, del más viejo al más nuevo. */
+  readonly history: readonly Exchange[];
 }
 
 export class AnswerRequestError extends Error {
@@ -36,8 +44,7 @@ async function errorBody(response: Response): Promise<unknown> {
  * falla; `DOMException` `AbortError` si se cancela.
  */
 export async function streamAnswer(
-  question: string,
-  filters: ResearchFilters,
+  { question, filters, history }: AnswerQuestion,
   handlers: AnswerStreamHandlers,
   signal: AbortSignal,
 ): Promise<void> {
@@ -50,7 +57,7 @@ export async function streamAnswer(
         accept: "text/event-stream",
         [REQUEST_ID_HEADER]: crypto.randomUUID(),
       },
-      body: JSON.stringify({ question, filters: toRequestFilters(filters) }),
+      body: JSON.stringify({ question, filters: toRequestFilters(filters), history }),
       signal,
     });
   } catch (error) {

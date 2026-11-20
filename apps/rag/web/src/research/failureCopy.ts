@@ -39,6 +39,11 @@ export const FAILURE_COPY: Readonly<Record<FailureKind, FailureCopy>> = {
     body: "El gestor que guarda los papers y sus índices no está disponible. Vuelve a intentarlo en unos segundos.",
     offerRetrieval: false,
   },
+  "engine-busy": {
+    title: "La base de datos está ocupada un momento",
+    body: "Otra aplicación del gestor compartido está construyendo sus índices. Tu pregunta no se perdió: pulsa Reintentar en unos segundos.",
+    offerRetrieval: false,
+  },
   "invalid-question": {
     title: "La pregunta no se pudo enviar",
     body: "Escribe entre 1 y 1 000 caracteres y revisa los filtros.",
@@ -56,7 +61,7 @@ export const FAILURE_COPY: Readonly<Record<FailureKind, FailureCopy>> = {
   },
   unexpected: {
     title: "Algo falló en el servicio",
-    body: "El error quedó en el registro del servidor con el identificador de abajo.",
+    body: "Vuelve a intentarlo. Si se repite, el error quedó en el registro del servidor con el identificador de abajo.",
     offerRetrieval: false,
   },
 };

@@ -1,11 +1,15 @@
-/** Lo que filtra una búsqueda: el departamento y el rango de precio en dólares. */
+/** Lo que filtra una búsqueda: el departamento, el rango de precio en dólares y la valoración mínima. */
 export interface CatalogFilters {
   readonly department: string | null;
   readonly minPrice: number | null;
   readonly maxPrice: number | null;
+  readonly minRating: number | null;
 }
 
-export const NO_FILTERS: CatalogFilters = { department: null, minPrice: null, maxPrice: null };
+export const NO_FILTERS: CatalogFilters = { department: null, minPrice: null, maxPrice: null, minRating: null };
+
+/** Las valoraciones de un clic, como en cualquier tienda: «4 estrellas o más». */
+export const RATING_STEPS: readonly number[] = [4, 3, 2];
 
 export interface PriceRange {
   readonly label: string;
@@ -28,6 +32,7 @@ export const PARAM = {
   department: "departamento",
   minPrice: "min",
   maxPrice: "max",
+  minRating: "estrellas",
 } as const;
 
 function price(value: string | null): number | null {
@@ -44,6 +49,7 @@ export function filtersFromParams(params: URLSearchParams): CatalogFilters {
     department: department === null || department === "" ? null : department,
     minPrice: price(params.get(PARAM.minPrice)),
     maxPrice: price(params.get(PARAM.maxPrice)),
+    minRating: price(params.get(PARAM.minRating)),
   };
 }
 
@@ -54,6 +60,7 @@ export function withFilters(params: URLSearchParams, filters: CatalogFilters): U
     [PARAM.department, filters.department],
     [PARAM.minPrice, filters.minPrice],
     [PARAM.maxPrice, filters.maxPrice],
+    [PARAM.minRating, filters.minRating],
   ];
   for (const [name, value] of entries) {
     if (value === null) {
@@ -67,7 +74,7 @@ export function withFilters(params: URLSearchParams, filters: CatalogFilters): U
 
 export function activeFilterCount(filters: CatalogFilters): number {
   const price = filters.minPrice !== null || filters.maxPrice !== null ? 1 : 0;
-  return (filters.department === null ? 0 : 1) + price;
+  return (filters.department === null ? 0 : 1) + price + (filters.minRating === null ? 0 : 1);
 }
 
 export function isPriceRange(filters: CatalogFilters, range: PriceRange): boolean {
@@ -80,10 +87,16 @@ export function priceRangeIsUpsideDown(filters: CatalogFilters): boolean {
 }
 
 /** El filtro como parámetros de consulta del API. */
-export function filterQuery(filters: CatalogFilters): { departamento?: string; precio_min?: number; precio_max?: number } {
+export function filterQuery(filters: CatalogFilters): {
+  departamento?: string;
+  precio_min?: number;
+  precio_max?: number;
+  valoracion_min?: number;
+} {
   return {
     ...(filters.department === null ? {} : { departamento: filters.department }),
     ...(filters.minPrice === null ? {} : { precio_min: filters.minPrice }),
     ...(filters.maxPrice === null ? {} : { precio_max: filters.maxPrice }),
+    ...(filters.minRating === null ? {} : { valoracion_min: filters.minRating }),
   };
 }

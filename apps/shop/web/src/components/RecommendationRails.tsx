@@ -1,6 +1,6 @@
 import type { Measured, Recommendations } from "../api/types";
 import { formatCount, formatMilliseconds } from "../format";
-import { signalRails, stampsOf, weightPercent } from "../recommend/rails";
+import { signalRails, stampsOf, weightPercent, type SignalRail } from "../recommend/rails";
 import { SIGNAL_WORDING, type Scope } from "../recommend/signals";
 import { ProductTile } from "./ProductTile";
 import { Rail } from "./Rail";
@@ -20,6 +20,14 @@ const FUSED_EMPTY: Record<Scope, string> = {
   producto: "Ninguna señal propuso productos para este. Prueba con otro producto del catálogo.",
   usuario: "Este cliente no tiene compras con que recomendarle. Compra algo y vuelve aquí.",
 };
+
+/** Una señal que corrió y trajo candidatos pero pesa 0 en la fusión no deja productos en su fila. */
+const ZERO_WEIGHT_EMPTY = "Esta señal encontró candidatos, pero pesa 0\u00a0% en la fusión (los pesos se ajustaron en validación), así que no aporta productos.";
+
+function railEmptyText(rail: SignalRail, scope: Scope): string {
+  const ranWithCandidates = rail.query !== null && rail.query.candidatos > 0;
+  return ranWithCandidates && weightPercent(rail.weight) === 0 ? ZERO_WEIGHT_EMPTY : SIGNAL_WORDING[rail.signal].whenEmpty[scope];
+}
 
 /** La fila fundida y una fila por señal, cada recomendación con sus sellos y su frase. */
 export function RecommendationRails({ result, scope, fusedTitle, newIds = new Set() }: RecommendationRailsProps) {
@@ -70,7 +78,7 @@ export function RecommendationRails({ result, scope, fusedTitle, newIds = new Se
               : `${SIGNAL_WORDING[rail.signal].source} · ${formatCount(rail.query.candidatos)} candidatos en ${formatMilliseconds(rail.query.milisegundos)} · peso ${weightPercent(rail.weight)}\u00a0%`
           }
           aside={rail.query === null ? undefined : <SqlDisclosure query={rail.query} />}
-          emptyText={SIGNAL_WORDING[rail.signal].whenEmpty[scope]}
+          emptyText={railEmptyText(rail, scope)}
           count={rail.items.length}
         >
           {rail.items.map((item) => (

@@ -15,6 +15,7 @@ describe("api problems", () => {
 
   it("explains what the proxy answered when the service did not", () => {
     expect(problemFromResponse(429, "<html>")).toMatchObject({ kind: "Http429", message: expect.stringContaining("espera") });
+    expect(problemFromResponse(413, "<html>").message).toContain("más liviana");
     expect(problemFromResponse(502, null)).toMatchObject({ kind: "Http502", message: expect.stringContaining("no responde") });
     expect(problemFromResponse(418, {}).message).toContain("Inténtalo");
   });

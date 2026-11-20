@@ -6,7 +6,7 @@ import { createMemoryRouter, RouterProvider } from "react-router";
 import { describe, expect, it } from "vitest";
 
 import { FaceOverlay, faceCaption } from "../src/components/FaceOverlay";
-import { recognitionSummary } from "../src/pages/RecognizePage";
+import { recognitionSummary, timingsSummary } from "../src/pages/RecognizePage";
 import type { StreamFace } from "../src/realtime/protocol";
 import { routes } from "../src/routes";
 import { loadPeople, rememberPerson } from "../src/storage/people";
@@ -162,6 +162,14 @@ describe("recognition overlay", () => {
   it("summarizes who is in front of the camera", () => {
     expect(recognitionSummary([])).toBe("Apunta la cámara a una cara.");
     expect(recognitionSummary([face("known", "Ana", 0.7), face("unknown", null, 0.1), face("unknown", null, 0.1)])).toBe("Ana · 2 desconocidos");
+  });
+
+  it("says when the names came from the tracks and nothing was searched", () => {
+    const timings = { wait: 0, decode: 2, detect: 4, track: 1, embed: 15, search: 3, total: 25 };
+    expect(timingsSummary(timings, [face("known", "Ana", 0.7)])).toBe("Servidor 25 ms · detectar 4 ms · buscar 18 ms");
+    const cached = { ...face("known", "Ana", 0.7), cached: true };
+    expect(timingsSummary({ ...timings, embed: 0, search: 0 }, [cached])).toBe("Servidor 25 ms · detectar 4 ms · nombre del rastro, sin buscar");
+    expect(timingsSummary(timings, [cached, face("unknown", null, 0.2)])).toContain("buscar 18 ms");
   });
 
   it("draws a box and a label per face, mirrored with the front camera", () => {

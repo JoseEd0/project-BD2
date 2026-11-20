@@ -153,7 +153,7 @@ docker compose --profile bench down       # apaga PostgreSQL
 | [16. Recomendaciones de la tienda](#16-recomendaciones-de-la-tienda--cuatro-señales-y-caché) | compras conjuntas al vuelo vs materializadas; latencia p50/p95 de cada señal y de la recomendación con caché fría y caliente | [recomendaciones](figures/tienda-recomendaciones.png) |
 | [17. Evaluación de la detección de copyright](#17-evaluación-de-la-detección-de-copyright--remixes-con-la-verdad-conocida) | precisión, recall, F1, curva ROC e IoU de la detección sobre 400 remixes generados con la verdad conocida, sin distorsión y con ruido, MP3, pasa bajos, volumen, tempo y tono; umbral elegido, recall por largo del fragmento y el puntaje por la evidencia de la racha frente al de cobertura | [ROC](figures/copyright-evaluacion-roc.png), [detección](figures/copyright-evaluacion-deteccion.png), [IoU](figures/copyright-evaluacion-iou.png), [largo](figures/copyright-evaluacion-largo.png) |
 | [18. Rostros en LFW](#18-rostros-en-lfw--verificación-identificación-latencia-y-caché) | verificación con el protocolo de LFW (exactitud por pliegues, TAR a FAR fijo, ROC) y umbrales calibrados; identificación en el gestor, HNSW vs búsqueda exacta; p99 de cada etapa; aciertos de la caché de rastros según la velocidad del rostro | [verificación](figures/rostros-evaluacion-verificacion.png), [identificación](figures/rostros-evaluacion-identificacion.png), [latencia](figures/rostros-evaluacion-latencia.png), [caché](figures/rostros-cache.png) |
-| [19. Evaluación del RAG](#19-evaluación-del-rag--recuperación-de-preguntas-en-español-y-respuestas-con-claude) | Recall@5, Recall@10 y MRR de BM25, vectorial e híbrido con 45 preguntas en español de fragmentos conocidos, por categoría y criterio de acierto; respuestas simuladas para probar el camino (la calidad con Claude, pendiente de la clave) | [recuperación](figures/rag-evaluacion-recuperacion.png), [criterio](figures/rag-evaluacion-relevancia.png) |
+| [19. Evaluación del RAG](#19-evaluación-del-rag--recuperación-de-preguntas-en-español-y-respuestas-con-claude) | Recall@5, Recall@10 y MRR de BM25, vectorial e híbrido con 45 preguntas en español de fragmentos conocidos, por categoría y criterio de acierto; respuestas de Claude Sonnet 5.5 juzgadas por Haiku 5.5: fidelidad, citas, «no está en los documentos», latencia y costo | [recuperación](figures/rag-evaluacion-recuperacion.png), [criterio](figures/rag-evaluacion-relevancia.png) |
 | [21. Prueba de carga](#21-prueba-de-carga--réplicas-de-cada-api-frente-a-un-solo-gestor) | peticiones por segundo, p50/p95/p99 y CPU de cada ruta con 1, 2 y 4 réplicas de su API frente a un solo gestor, con k6 por el nginx de cada app | [carga](figures/carga-replicas.png) |
 
 **Cómo leer las gráficas.** Cada una es una fila de paneles, uno por operación, con el
@@ -2490,10 +2490,9 @@ ejecuciones que se hicieron. La caché tarda unos siete minutos.
 ## 19. Evaluación del RAG — recuperación de preguntas en español y respuestas con Claude
 
 `rag_evaluation_benchmark.py` evalúa el RAG sobre papers (#87) con un conjunto de preguntas
-en español cuya respuesta correcta es un fragmento conocido del corpus. **La recuperación
-está medida**; la calidad de las respuestas (fidelidad, citas, «no está en los documentos»)
-necesita la clave de la API de Anthropic, que todavía no hay, y **queda pendiente**: el
-código, los tests y los comandos están listos (ver abajo).
+en español cuya respuesta correcta es un fragmento conocido del corpus. Mide la
+recuperación y, con la clave de la API de Anthropic, la calidad de las respuestas de Claude
+Sonnet 5.5: fidelidad juzgada por Claude Haiku 5.5, citas y «no está en los documentos».
 
 **El conjunto** ([`rag/preguntas.jsonl`](rag/preguntas.jsonl)): 63 preguntas, todas
 `origin: author`, escritas a mano por el autor del proyecto.
@@ -2571,29 +2570,61 @@ sembrado con `RAG_EMBEDDING_MODEL=fp32` con el mismo comando.
 
 ### Las respuestas
 
-Con `--answers simulated` el experimento hace las 63 preguntas por el mismo camino que
-`POST /answers`, con el modelo simulado: sirve para **probar el camino y medir lo que no
-depende del modelo**, no la calidad. Cada pregunta recibe 12 fragmentos (`RAG_ANSWER_CHUNKS`
-tras #136); **28 de las 45** con respuesta llevan su fragmento correcto entre ellos, un techo
-para citarlo (con los 8 de antes eran 20). Mediana de la recuperación con la selección del
-prompt, 21,2 ms (máximo 32,5); el evento `sources` sale a los 21,3 ms de preguntar. El prompt
-estimado es de 7 920 tokens de media.
+Las 63 preguntas pasan por el mismo camino que `POST /answers`: 12 fragmentos por pregunta
+(`RAG_ANSWER_CHUNKS`), Claude Sonnet 5.5 con esfuerzo `low` y respuesta por SSE, y después
+Claude Haiku 5.5 como juez, que separa cada respuesta en afirmaciones y marca las que no
+salen de los fragmentos enviados. **28 de las 45** preguntas con respuesta llevan su
+fragmento correcto entre los 12, el techo para citarlo.
 
-**Pendiente de la clave**, con su costo estimado (tokens de los prompts reales de esta
-corrida por los precios de `rag.pricing`; lo esperado supone 600 tokens de salida por
-respuesta y 800 por veredicto; la cota, toda la entrada al precio más caro y la salida
-entera):
+| Medida | Resultado |
+|---|---:|
+| respuestas fieles (todas sus afirmaciones apoyadas), preguntas con respuesta | **40 / 45** (89 %) |
+| … de ellas, con el fragmento correcto enviado | 27 / 28 |
+| fragmento correcto citado, cuando se envió | **28 / 28** |
+| preguntas sin respuesta en el corpus que dicen «no está en los documentos» | **18 / 18** |
+| citas a un fragmento que no se envió | 1 (en 63 respuestas) |
+| errores o respuestas cortadas | 0 |
+| primer texto, mediana (p95) | 1,08 s (4,78 s) |
+| respuesta completa, mediana (p95) | 3,85 s (7,36 s) |
+| tokens de entrada y de salida por respuesta, media | 8 773 y 357 |
+| gasto total (respuestas y juez) | 1,43 USD, 0,021 USD por pregunta |
 
-| Paso | Modelo | Esperado (USD) | Cota (USD) |
-|---|---|---:|---:|
-| 80 preguntas por la Batch API (a mitad de precio) | Claude Sonnet 5.5 | 0,15 | 0,55 |
-| responder las 63 preguntas de hoy | Claude Sonnet 5.5, esfuerzo `low` | 1,38 | 3,29 |
-| juzgar esas respuestas | Claude Haiku 5.5 | 0,07 | 0,23 |
-| **con las ~133 preguntas del conjunto completo** | | **≈ 3,2** | ≈ 8,0 |
+Apple M4 Pro, la API de Anthropic por internet y **la máquina cargada** (carga media 19,8 al
+empezar y 8,4 al terminar: la carga de datos del despliegue corría a la vez), así que las
+latencias son de un caso malo; casi todo es el modelo, la recuperación tarda 60 ms de
+mediana. Una sola ejecución.
 
-`--budget-usd` es un tope duro de lo gastado (respuestas y juez juntos), con el mismo tope
-diario del servicio: reserva la cota de cada llamada antes de hacerla y la cambia por el
-costo real al terminar.
+Lo que el juez no aprobó:
+
+- **Cinco de las 45 con respuesta.** En cuatro el fragmento correcto no estaba entre los
+  12 enviados: dos (a06, a11) responden con lo que hay y agregan un detalle que no está en
+  esos fragmentos (cuándo se infiere el tipo de dato; dos factores de velocidad del
+  SPaC-tree), y dos (a23, a31) dicen, del todo o en parte, que los documentos no lo
+  explican, lo que es cierto para lo enviado pero el juez cuenta como no responder. En la
+  quinta (a28) el fragmento correcto se envió y se citó, y una de sus 7 afirmaciones («la
+  puntuación de entailment es la más baja») no sale de él.
+- **Cinco de las 18 sin respuesta** (u04, u05, u08, u11, u16): las cinco dicen que no está
+  en los documentos, pero agregan una frase sobre el corpus («trata de bases de datos y
+  recuperación de información», «Lima solo aparece en los datos del minigestor») que no
+  sale de los fragmentos. El modelo se abstiene bien siempre; lo que falla es describir el
+  corpus de memoria.
+- **La cita inválida** (a26) apunta a un fragmento vecino del mismo paper que no se envió.
+
+Conclusiones:
+
+- **Cuando la recuperación trae el fragmento, la respuesta lo usa y lo cita**: 28 de 28
+  citados y 27 de 28 fieles. El límite del RAG es la recuperación (28 de 45 llegan al
+  prompt), no la generación.
+- **Nunca inventa una respuesta** a las 18 preguntas que el corpus no responde; para que
+  el juez las apruebe todas, el prompt debería pedirle que no describa el corpus.
+- **Un par de centavos por pregunta** con Sonnet 5.5 en esfuerzo `low` y el prefijo del
+  prompt en caché; no hace falta un modelo más grande para responder con citas sobre 12
+  fragmentos.
+
+**No se hizo**: las ~80 preguntas de la Batch API (necesitan la revisión a mano de abajo) y
+la validación del juez contra 20 respuestas revisadas a mano (`rag_judge_agreement`), así
+que la fidelidad es la del juez sin un acuerdo medido. La recuperación de esta corrida dio
+el mismo Recall que la tabla de arriba; su JSON se dejó el de la corrida sin contención.
 
 ```bash
 cp -R data/engine-rag /tmp/engine-rag-copia && rm -f /tmp/engine-rag-copia/.motor.lock
@@ -2610,7 +2641,7 @@ uv run --no-sync python -m benchmarks.rag_questions accept --data-dir data/datas
 # 2. recuperación, respuestas y juez
 RAG_ANTHROPIC_API_KEY=… uv run --no-sync python -m benchmarks.rag_evaluation_benchmark \
     --engine-dir /tmp/engine-rag-copia --models data/models/rag \
-    --answers anthropic --judge --budget-usd 5
+    --answers anthropic --judge --budget-usd 3
 # 3. validar el juez contra 20 respuestas revisadas a mano
 uv run --no-sync python -m benchmarks.rag_judge_agreement sample --size 20
 uv run --no-sync python -m benchmarks.rag_judge_agreement score

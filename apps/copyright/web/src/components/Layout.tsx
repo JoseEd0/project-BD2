@@ -2,12 +2,14 @@ import { Suspense } from "react";
 import { Outlet } from "react-router";
 
 import { useServiceHealth } from "../api/useServiceHealth";
+import { useSinglePlayback } from "../player/usePlayer";
 import { ServiceBadge } from "./ServiceBadge";
 import { ThemeChoice } from "./ThemeChoice";
 import { Wordmark } from "./Wordmark";
 
 export function Layout() {
   const { data: health } = useServiceHealth();
+  useSinglePlayback();
   return (
     <div className="shell">
       <a className="skip-link" href="#contenido">

@@ -1,0 +1,64 @@
+name: E2E
+
+# Los recorridos de Playwright contra el compose completo (e2e/run.sh). Solo en los PR que
+# tocan algo que llega al compose, y siempre en main.
+on:
+  pull_request:
+    paths:
+      - "apps/**"
+      - "src/**"
+      - "frontend/**"
+      - "deploy/**"
+      - "demos/**"
+      - "tools/**"
+      - "e2e/**"
+      - "compose.yaml"
+      - "Dockerfile"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/e2e.yml"
+  push:
+    branches: [main]
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # La misma versión que las imágenes de las interfaces y que ci.yml.
+  NODE_VERSION: "22.23.4"
+
+jobs:
+  e2e:
+    name: Recorridos e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.10.11"
+          python-version: "3.12"
+          enable-cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
+      - name: Datos diminutos, claves, construir, levantar y sembrar
+        run: e2e/run.sh up
+      - name: Playwright
+        run: e2e/run.sh test
+      - name: Registro de los servicios
+        if: failure()
+        run: e2e/run.sh logs
+      - name: Capturas y trazas
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-traces
+          path: e2e/test-results
+          retention-days: 7
+      - name: Apagar
+        if: always()
+        run: e2e/run.sh down

@@ -31,14 +31,20 @@ export function ConsentStep({ notice, onAccept }: ConsentStepProps) {
       back={{ to: "/", label: "Volver al inicio" }}
       actions={
         data !== undefined && (
-          <button
-            type="button"
-            className="button button-primary button-block"
-            disabled={!accepted}
-            onClick={() => onAccept(data.version)}
-          >
-            Aceptar y continuar
-          </button>
+          <>
+            <label className="checkbox checkbox-compact" htmlFor={checkboxId}>
+              <input id={checkboxId} type="checkbox" checked={accepted} onChange={(event) => setAccepted(event.target.checked)} />
+              Leí el texto y acepto que se guarde lo que describe.
+            </label>
+            <button
+              type="button"
+              className="button button-primary button-block"
+              disabled={!accepted}
+              onClick={() => onAccept(data.version)}
+            >
+              Aceptar y continuar
+            </button>
+          </>
         )
       }
     >
@@ -63,40 +69,34 @@ export function ConsentStep({ notice, onAccept }: ConsentStepProps) {
         </div>
       )}
       {data !== undefined && (
-        <>
-          <article className="panel consent" aria-labelledby="consent-title">
-            <h2 id="consent-title">{data.title}</h2>
-            <section>
-              <h2>Para qué</h2>
-              <p>{data.purpose}</p>
-            </section>
-            <section>
-              <h2>Qué se guarda</h2>
-              <ul>
-                {data.stored_data.map((item) => (
-                  <li key={item}>{item}</li>
-                ))}
-              </ul>
-            </section>
-            <section>
-              <h2>Qué no se guarda</h2>
-              <p>{data.not_stored}</p>
-            </section>
-            <section>
-              <h2>Cuánto tiempo</h2>
-              <p>{data.retention}</p>
-            </section>
-            <section>
-              <h2>Tus derechos</h2>
-              <p>{data.rights}</p>
-            </section>
-            <p className="version-tag">Versión {data.version}</p>
-          </article>
-          <label className="checkbox" htmlFor={checkboxId}>
-            <input id={checkboxId} type="checkbox" checked={accepted} onChange={(event) => setAccepted(event.target.checked)} />
-            Leí el texto y acepto que se guarde lo que describe.
-          </label>
-        </>
+        <article className="panel consent" aria-labelledby="consent-title">
+          <h2 id="consent-title">{data.title}</h2>
+          <section>
+            <h2>Para qué</h2>
+            <p>{data.purpose}</p>
+          </section>
+          <section>
+            <h2>Qué se guarda</h2>
+            <ul>
+              {data.stored_data.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          </section>
+          <section>
+            <h2>Qué no se guarda</h2>
+            <p>{data.not_stored}</p>
+          </section>
+          <section>
+            <h2>Cuánto tiempo</h2>
+            <p>{data.retention}</p>
+          </section>
+          <section>
+            <h2>Tus derechos</h2>
+            <p>{data.rights}</p>
+          </section>
+          <p className="version-tag">Versión {data.version}</p>
+        </article>
       )}
     </TextScreen>
   );

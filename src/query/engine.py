@@ -211,6 +211,13 @@ class Engine:
             UnknownTableError: si no está en el catálogo.
         """
         key = name.lower()
+        # Una tabla ya abierta se devuelve sin el guardia: un CREATE INDEX largo sobre otra
+        # tabla no debe frenar las lecturas de esta. Es seguro porque el DDL que la cierra
+        # y la reemplaza (`_reopen`, `_remove_table`) corre con el bloqueo exclusivo de la
+        # sesión sobre ella, así que ninguna sentencia la está usando mientras cambia.
+        opened = self._tables.get(key)
+        if opened is not None:
+            return opened
         with self._holding_guard():
             if key not in self._tables:
                 self._tables[key] = Table(self._catalog.table(name), self.config)

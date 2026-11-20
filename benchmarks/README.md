@@ -42,6 +42,9 @@ gráficas de [`figures/`](figures/) y todas las tablas de este documento.
 .venv/bin/python -m benchmarks.shop_evaluation_benchmark --data-dir data/datasets \
     --engine-data-dir <copia de un gestor con shop.seed> --signals <archivo de candidatos> \
     --users 5000 --starting-weights 0.4 0.25 0.25 0.1
+.venv/bin/python -m benchmarks.load_benchmark --shop-engine-data data/tienda-gestor \
+    --papers-engine-data data/engine-rag --copyright-engine-data data/copyright-engine \
+    --datasets-dir data/datasets --replicas 1 2 4 --vus 32 --duration 30 --warmup 10
 .venv/bin/python -m benchmarks.plot              # redibuja todas las gráficas
 ```
 
@@ -126,6 +129,8 @@ docker compose --profile bench down       # apaga PostgreSQL
 | `--clip-batch-size`, `--preprocess-workers` | fotos por pasada de CLIP e hilos que las preparan |
 | `--fars`, `--gallery-size`, `--target-fpir`, `--embeddings-cache` | FAR a los que se busca el TAR, galería y tasa de desconocidos aceptados con que se calibra el umbral de reconocer, y dónde guardar los embeddings de LFW (rostros en LFW) |
 | `--speeds`, `--fps` | velocidades del rostro y cuadros por segundo de la caché de rastros |
+| `--replicas`, `--vus`, `--duration`, `--warmup`, `--k6-image` | réplicas de cada API, usuarios de k6, segundos medidos y sin contar, e imagen de k6 (prueba de carga) |
+| `--shop-engine-data`, `--papers-engine-data`, `--copyright-engine-data`, `--faces-engine-data`, `--apps` | carpetas del gestor ya cargadas que se copian para cada app, y qué apps se miden (prueba de carga) |
 | `--output` | dónde dejar el JSON |
 
 | Experimento | Qué compara | Gráficas |
@@ -149,6 +154,7 @@ docker compose --profile bench down       # apaga PostgreSQL
 | [17. Evaluación de la detección de copyright](#17-evaluación-de-la-detección-de-copyright--remixes-con-la-verdad-conocida) | precisión, recall, F1, curva ROC e IoU de la detección sobre 400 remixes generados con la verdad conocida, sin distorsión y con ruido, MP3, pasa bajos, volumen, tempo y tono; umbral elegido, recall por largo del fragmento y el puntaje por la evidencia de la racha frente al de cobertura | [ROC](figures/copyright-evaluacion-roc.png), [detección](figures/copyright-evaluacion-deteccion.png), [IoU](figures/copyright-evaluacion-iou.png), [largo](figures/copyright-evaluacion-largo.png) |
 | [18. Rostros en LFW](#18-rostros-en-lfw--verificación-identificación-latencia-y-caché) | verificación con el protocolo de LFW (exactitud por pliegues, TAR a FAR fijo, ROC) y umbrales calibrados; identificación en el gestor, HNSW vs búsqueda exacta; p99 de cada etapa; aciertos de la caché de rastros según la velocidad del rostro | [verificación](figures/rostros-evaluacion-verificacion.png), [identificación](figures/rostros-evaluacion-identificacion.png), [latencia](figures/rostros-evaluacion-latencia.png), [caché](figures/rostros-cache.png) |
 | [19. Evaluación del RAG](#19-evaluación-del-rag--recuperación-de-preguntas-en-español-y-respuestas-con-claude) | Recall@5, Recall@10 y MRR de BM25, vectorial e híbrido con 45 preguntas en español de fragmentos conocidos, por categoría y criterio de acierto; respuestas simuladas para probar el camino (la calidad con Claude, pendiente de la clave) | [recuperación](figures/rag-evaluacion-recuperacion.png), [criterio](figures/rag-evaluacion-relevancia.png) |
+| [21. Prueba de carga](#21-prueba-de-carga--réplicas-de-cada-api-frente-a-un-solo-gestor) | peticiones por segundo, p50/p95/p99 y CPU de cada ruta con 1, 2 y 4 réplicas de su API frente a un solo gestor, con k6 por el nginx de cada app | [carga](figures/carga-replicas.png) |
 
 **Cómo leer las gráficas.** Cada una es una fila de paneles, uno por operación, con el
 número de filas en horizontal y una línea por técnica. Los dos ejes son logarítmicos: los
@@ -2827,6 +2833,121 @@ uv run --no-sync python -m benchmarks.plot
 `--starting-weights` fija los pesos con que se compara la fusión ajustada (los de #81); sin él
 se usan los de la configuración, que desde esta medida son los ajustados. `--grid-steps`,
 `--k`, `--resamples` y `--confidence` cambian la rejilla, el corte y el bootstrap.
+
+## 21. Prueba de carga — réplicas de cada API frente a un solo gestor
+
+`load_benchmark.py` mide cuánto aguanta cada aplicación de la Parte 5 con 1, 2 y 4 réplicas
+de su API (#95). Levanta el compose raíz con [`load.compose.yaml`](load.compose.yaml) en su
+propio proyecto (`carga`, con las webs en puertos libres de localhost), una app a la vez, y
+el gestor sobre un volumen propio con **la copia de los datos que esa app ya cargó** (el
+catálogo entero de la tienda de la sección 10, los 98 585 fragmentos del RAG de la sección
+13 y el catálogo de copyright de la sección 12); rostros arranca vacío y registra a una
+persona con dos fotos de prueba. No hay datos diminutos: cada consulta recorre los índices
+reales.
+
+La carga la genera **k6** ([`load/requests.js`](load/requests.js)) con la imagen oficial
+(`grafana/k6:1.2.3`), desde un contenedor en la red de la app y **a través de su nginx**,
+como un navegador (el límite de peticiones por IP se levanta: todas llegan desde k6). Son 32
+usuarios que piden sin pausa (modelo cerrado) durante 30 s, después de 10 s que no se
+cuentan. La CPU de cada contenedor sale de su cgroup (segundos de CPU al terminar menos al
+empezar, entre los segundos de reloj): **1 es un núcleo entero**.
+
+| Ruta | Qué hace | Datos |
+|---|---|---|
+| tienda: recomendación, caché fría | `GET /productos/{id}/recomendaciones` con ubicación en Lima: las señales del gestor (CLIP + HNSW, BM25 y R-Tree; las compras conjuntas responden vacías, porque esta copia no tiene la materialización de la sección 16) | 400 productos; cada petición con una clave de caché nueva (Redis vaciado antes) |
+| tienda: recomendación, caché caliente | la misma ruta, servida desde Redis | 50 productos ya calculados |
+| papers: `/search` híbrida | embedding e5 en la API, BM25 y HNSW en el gestor, fusión RRF, k = 10 | las 63 preguntas de `rag/preguntas.jsonl` |
+| copyright: `/songs/{id}` | la canción por su clave primaria y sus tramos por rango | 500 canciones al azar |
+| copyright: detección de 10 s | `POST /detections`: el gestor decodifica, saca los MFCC de cada ventana y busca en el HNSW de 83 290 tramos | 10 s en WAV de la pista 125288 (detectada: sí) |
+| rostros: `/identify` | YuNet y SFace en la API, HNSW en el gestor | una selfie de 40 KiB de la persona registrada |
+
+Apple M4 Pro (12 núcleos), macOS, Docker Desktop 28.4.0 con 12 CPU y 7,7 GiB para su máquina
+virtual, commit `035faf8`. **El equipo no estaba libre**: había otros procesos, y la carga
+media del anfitrión fue de 3,5 a 20,9 (la de la máquina de Docker, de 2,2 a 25,0) según la
+medida; cada una está en el JSON. Una sola ejecución.
+
+![Prueba de carga: réplicas de cada API frente a un solo gestor](figures/carga-replicas.png)
+
+| Ruta | Réplicas | Respuestas 2xx por s | p50 | p95 | p99 | CPU del gestor | CPU de las API | Fallidas |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| tienda: recomendación, caché fría | 1 | 12,3 | 2 551 ms | 3 207 ms | 3 507 ms | 0,90 | 0,29 | 0,0 % |
+| tienda: recomendación, caché fría | 2 | 12,4 | 2 486 ms | 3 444 ms | 4 010 ms | 0,97 | 0,15 | 0,0 % |
+| tienda: recomendación, caché fría | 4 | 12,3 | 2 509 ms | 3 497 ms | 3 991 ms | 0,96 | 0,17 | 0,0 % |
+| tienda: recomendación, caché caliente | 1 | 439 | 12,9 ms | 35,4 ms | 60,0 ms | 0,02 | 0,33 | 78,3 % |
+| tienda: recomendación, caché caliente | 2 | 2 799 | 11,3 ms | 20,4 ms | 23,1 ms | 0,01 | 2,04 | 0,0 % |
+| tienda: recomendación, caché caliente | 4 | 4 689 | 5,75 ms | 15,6 ms | 19,9 ms | 0,01 | 3,82 | 0,0 % |
+| papers: /search híbrida | 1 | 52,7 | 613 ms | 740 ms | 804 ms | 1,02 | 1,30 | 0,0 % |
+| papers: /search híbrida | 2 | 53,4 | 600 ms | 828 ms | 881 ms | 1,01 | 1,12 | 0,0 % |
+| papers: /search híbrida | 4 | 53,8 | 590 ms | 725 ms | 783 ms | 1,01 | 1,13 | 0,0 % |
+| copyright: /songs/{id} | 1 | 340 | 82,0 ms | 193 ms | 261 ms | 1,01 | 0,97 | 0,0 % |
+| copyright: /songs/{id} | 2 | 353 | 85,2 ms | 129 ms | 144 ms | 1,00 | 0,72 | 0,0 % |
+| copyright: /songs/{id} | 4 | 318 | 99,9 ms | 134 ms | 152 ms | 1,03 | 0,71 | 0,0 % |
+| copyright: detección de 10 s | 1 | 32,7 | 961 ms | 1 312 ms | 1 475 ms | 10,80 | 0,54 | 0,0 % |
+| copyright: detección de 10 s | 2 | 34,5 | 896 ms | 1 373 ms | 1 599 ms | 10,86 | 0,43 | 0,0 % |
+| copyright: detección de 10 s | 4 | 37,7 | 817 ms | 1 254 ms | 1 638 ms | 10,86 | 0,46 | 0,0 % |
+| rostros: /identify | 1 | 105 | 299 ms | 346 ms | 372 ms | 0,46 | 8,58 | 0,0 % |
+| rostros: /identify | 2 | 112 | 284 ms | 509 ms | 563 ms | 0,56 | 9,80 | 0,0 % |
+| rostros: /identify | 4 | 100 | 265 ms | 738 ms | 941 ms | 0,56 | 10,22 | 0,0 % |
+
+Conclusiones:
+
+- **El gestor es el límite de todo lo que llega a él, y lo es en un núcleo.** La tienda con
+  caché fría (12,3, 12,4 y 12,3 req/s), la búsqueda de papers (52,7, 53,4 y 53,8) y la
+  canción por id (340, 353 y 318) no suben con las réplicas, y el gestor está en 0,96, 1,01
+  y 1,03 núcleos: es un solo proceso de Python, y sus sentencias (planificar, recorrer
+  páginas, armar filas) se ejecutan de a una con el GIL, aunque la máquina tenga 12 CPU. Las
+  API casi no trabajan (0,17 núcleos entre las cuatro de la tienda).
+- **La latencia es la cola delante del gestor.** Con 32 usuarios y 12,3 req/s, cada petición
+  espera unos 32 / 12,3 ≈ 2,6 s, y la mediana medida es 2,6 s (ley de Little). En papers, el
+  `Server-Timing` lo muestra por etapa: el embedding en la API tarda 4,63 ms y el BM25 y el
+  HNSW en el gestor 456 y 382 ms de mediana con 4 réplicas, casi todo espera. Más réplicas
+  solo mandan más peticiones a la misma cola: el p95 de la tienda fría pasa de 3,2 a 3,5 s.
+- **La detección de copyright ocupa toda la máquina desde el gestor.** Decodificar y sacar
+  los MFCC es código nativo (librosa y numpy) que usa varios hilos, así que el gestor llega
+  a 10,8 núcleos de 12 con una réplica: no queda CPU que darle a otra, y el caudal apenas se
+  mueve (32,7, 34,5 y 37,7 req/s). La API no hace casi nada (0,54 núcleos).
+- **Escalar la API sirve cuando el trabajo está en la API.** La tienda con caché caliente no
+  toca el gestor (0,01 núcleos) y pasa de 2 799 a 4 689 req/s de 2 a 4 réplicas, con el p95
+  de 20,4 a 15,6 ms; frente a la caché fría con 4 réplicas son 381 veces más peticiones:
+  **la caché es lo que escala la tienda, no las réplicas**.
+- **Con una sola réplica, el nginx se queda sin puertos.** El nginx de cada app abre una
+  conexión nueva hacia la API en cada petición (`proxy_pass` con una variable, para resolver
+  las réplicas por DNS, no reutiliza conexiones), y cada una queda unos 60 s en TIME_WAIT
+  ocupando un puerto local. A más de 2 000 req/s hacia **una sola dirección** se acaban los
+  28 232 puertos del contenedor (32768–60999): 78 % de las respuestas de la tienda caliente
+  con una réplica fueron 502 (en una reproducción aparte, el log del nginx dice `connect() …
+  failed (99: Address not available)` en cada una), con 28 267 conexiones en TIME_WAIT al
+  terminar; solo 439 req/s salieron bien. Con 2 y 4 réplicas los puertos se reparten entre
+  más direcciones y no falla ninguna. Ninguna otra ruta llega a ese ritmo. El arreglo es un
+  `upstream` con `keepalive` en el nginx, y queda pendiente.
+- **Rostros está limitado por la CPU de la máquina, no por el gestor.** Una réplica ya ocupa
+  8,6 núcleos (OpenCV y onnxruntime usan varios hilos por foto) y el gestor 0,46: con 2 y 4
+  réplicas el caudal casi no cambia (105, 112 y 100 req/s) y el p95 sube de 346 a 738 ms,
+  porque las réplicas se quitan CPU entre ellas. Para escalar hace falta más CPU (otra
+  máquina), no más réplicas en esta.
+- **Lo que no se midió:** `GET /catalog` de copyright no entra en la prueba: sus `COUNT(*)`
+  recorren las dos tablas enteras en cada petición, y en una prueba corta de 4 usuarios no
+  pasó de una respuesta cada pocos segundos; es una ruta para mostrar el catálogo una vez,
+  no para cargarla. Las respuestas del RAG (`/answers`) llaman al modelo de lenguaje y
+  tampoco entran.
+
+### Reproducirlo
+
+```bash
+uv run --no-sync python -m benchmarks.load_benchmark \
+    --shop-engine-data data/tienda-gestor --papers-engine-data data/engine-rag \
+    --copyright-engine-data data/copyright-engine --datasets-dir data/datasets \
+    --replicas 1 2 4 --vus 32 --duration 30 --warmup 10
+uv sync --all-packages --extra plots && uv run --no-sync python -m benchmarks.plot
+```
+
+Construye las imágenes (`carga-*`, para no tocar las del despliegue), arma claves propias en
+un archivo temporal (no en `.env`), copia cada carpeta del gestor a un volumen que borra al
+terminar y apaga el proyecto. Las carpetas del gestor son las que dejan las cargas de las
+secciones 10, 12 y 13; `--apps` mide solo algunas apps y `--faces-engine-data` da a rostros
+una galería ya cargada. Para mirar la prueba mientras corre, el perfil `observability`
+([`deploy/observability/`](../deploy/observability/README.md)) muestra en Grafana las
+peticiones, la latencia por ruta y la CPU de cada réplica y del gestor.
 
 ## Gráficas
 

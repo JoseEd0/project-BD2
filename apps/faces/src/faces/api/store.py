@@ -9,6 +9,7 @@ cualquier réplica del API atiende cualquier petición. Cada consulta va con par
 | `face_embeddings` | toma aceptada de una persona | `persona` (hash) y `embedding` (HNSW coseno) |
 | `face_sesiones` | registro a medias | clave primaria |
 | `face_tomas` | toma aceptada de un registro a medias | `sesion` (hash) |
+| `face_famosos` | persona pública de LFW (`faces.famous`) | `embedding` (HNSW coseno) |
 """
 
 from __future__ import annotations
@@ -21,6 +22,7 @@ from typing import Any
 import numpy as np
 
 from faces.enrollment import DISPLAY_NAME_MAX_LENGTH, Neighbour
+from faces.famous import FAMOUS_SCHEMA
 from faces.pose import HeadPose, Pose
 from faces.quality import ShotMeasurements
 from faces.recognition import EMBEDDING_DIMENSION, Embedding
@@ -59,6 +61,7 @@ SCHEMA = (
     f"CREATE TABLE IF NOT EXISTS face_tomas (id VARCHAR({SHOT_ID_LENGTH}) PRIMARY KEY, "
     f"sesion VARCHAR({ID_LENGTH}) NOT NULL, {SHOT_COLUMNS})",
     "CREATE INDEX IF NOT EXISTS face_tomas_sesion ON face_tomas USING HASH (sesion)",
+    *FAMOUS_SCHEMA,
 )
 SHOT_VALUES = 13
 INSERT_ENROLLMENT = "INSERT INTO face_sesiones VALUES ($1, $2, $3, $4, $5, $6, $7)"

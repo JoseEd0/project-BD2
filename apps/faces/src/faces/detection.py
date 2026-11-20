@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -154,3 +155,21 @@ def only_face(faces: Sequence[DetectedFace]) -> DetectedFace:
     if len(faces) > 1:
         raise MultipleFacesError(f"la imagen tiene {len(faces)} rostros y debe tener uno")
     return faces[0]
+
+
+def center_face(faces: Sequence[DetectedFace], width: int, height: int) -> DetectedFace:
+    """El rostro cuyo centro queda más cerca del centro de una foto de `width` x `height`:
+    en una foto de prensa recortada alrededor de alguien, como las de LFW, esa persona.
+
+    Raises:
+        ValueError: si no hay rostros.
+    """
+    if not faces:
+        raise ValueError("no hay rostros entre los que elegir")
+    return min(
+        faces,
+        key=lambda face: math.hypot(
+            face.box.x + face.box.width / 2 - width / 2,
+            face.box.y + face.box.height / 2 - height / 2,
+        ),
+    )

@@ -24,7 +24,7 @@ import numpy.typing as npt
 
 from benchmarks.faces_benchmark import timed
 from faces import FacePipeline, PipelineConfig, locate_models
-from faces.detection import DetectedFace
+from faces.detection import center_face
 from faces.lfw import ImageReference, LfwImage
 from faces.recognition import EMBEDDING_DIMENSION
 
@@ -78,23 +78,6 @@ class LfwEmbeddings:
             faces=self.faces,
             milliseconds=self.milliseconds,
         )
-
-
-def center_face(faces: Sequence[DetectedFace], width: int, height: int) -> DetectedFace:
-    """El rostro cuyo centro queda más cerca del centro de la foto.
-
-    Raises:
-        ValueError: si no hay rostros.
-    """
-    if not faces:
-        raise ValueError("no hay rostros entre los que elegir")
-    return min(
-        faces,
-        key=lambda face: math.hypot(
-            face.box.x + face.box.width / 2 - width / 2,
-            face.box.y + face.box.height / 2 - height / 2,
-        ),
-    )
 
 
 def analyze_photo(pipeline: FacePipeline, data: bytes) -> PhotoResult:

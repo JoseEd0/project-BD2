@@ -115,7 +115,6 @@ export function BlockedStep({ reason, message, onRestart }: { readonly reason: B
       <p className="notice notice-warning" role="alert">
         {message}
       </p>
-      {reason === "duplicate" && <p className="lead">Para registrarte otra vez, primero borra tu registro anterior con su código.</p>}
       {reason === "lookalike" && <p className="lead">Las tomas se descartaron. Si crees que es un error, prueba con mejor luz.</p>}
       {reason === "attempts" && <p className="lead">Busca un lugar con luz pareja de frente, sin contraluz, y vuelve a empezar.</p>}
     </TextScreen>

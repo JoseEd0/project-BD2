@@ -9,7 +9,10 @@ generan a partir de esos archivos y \texttt{benchmarks/README.md} tiene los coma
 repetir cada uno. Todas las técnicas reciben los mismos datos y las mismas consultas, con
 1\,000, 10\,000 y 100\,000 elementos, en un Apple M4 Pro (12 núcleos) con macOS y
 Python~3.12. En las gráficas los ejes suelen ser logarítmicos y el número al final de cada
-línea es el valor con el tamaño mayor; en las tablas, el mejor valor está en negrita.
+línea es el valor con el tamaño mayor; en las tablas, el mejor valor está en negrita. Antes
+de medir, la corrección se comprueba con \totalpruebas{} pruebas automáticas, que cubren el
+\coberturapruebas{}\,\% de las líneas y ramas del motor: cada índice tiene un validador de
+sus invariantes y se compara contra un modelo o contra la misma consulta sin índice.
 
 \FloatBarrier
 \subsection{Experimento 1: Heap file vs archivo secuencial}
@@ -488,9 +491,8 @@ Euclidiana & Empata con el coseno en audio. & Los vectores de norma alta y el ce
 \FloatBarrier
 \subsection{Experimento 6: las aplicaciones de la Parte 5}
 
-Las cuatro aplicaciones se midieron de punta a punta, contra un gestor en otro proceso o en
-el compose de Docker, sobre sus datasets completos. El equipo estaba compartido con otros
-trabajos, así que los tiempos son cotas superiores (cada JSON guarda la carga media).
+Las aplicaciones se midieron de punta a punta sobre sus datasets completos, con el equipo
+compartido: los tiempos son cotas superiores (cada JSON guarda la carga media).
 
 \paragraph{Copyright en audio.} El catálogo de 7\,994 canciones (83\,290 tramos) se carga e
 indexa en 298.7~s y una segunda ejecución tarda 0.75~s. En disco ocupa 233.6~MiB, el 3\,\%
@@ -553,11 +555,26 @@ la última página. Con todo cargado, el gestor ocupa 354.8~MiB. Las compras
 conjuntas no se pueden calcular por petición: el autojoin tarda 67.3~s sobre el archivo
 secuencial y 2.9~s sobre un historial con B+. Materializadas en la carga (793.6~s una vez,
 369\,087 pares) son una búsqueda por el B+ de 4.5~ms, y una recomendación completa tarda
-68.9~ms de mediana con la caché fría y 1.9~ms con Redis (tabla~\ref{tab:tienda-recomendar}).
-Al medir aparecieron dos problemas del gestor: con cientos de filas por clave, el hash
-extendible duplicaba el directorio sin fin (por eso los pares usan un B+), y un \texttt{IN}
-con cientos de textos se comparaba opción por opción; buscarlo en un conjunto bajó la
-materialización de 2\,231 a 793.6~s.
+68.9~ms de mediana (p95 de 142.8~ms) con la caché fría y 1.9~ms con Redis. Medirlo
+mostró que el hash extendible duplica el directorio sin fin con cientos de filas por clave,
+por eso los pares usan un B+.
+
+La calidad se midió con \emph{leave-last-out} sobre 5\,000 usuarios elegidos con semilla: la
+última compra de cada uno es la prueba, la penúltima la validación, y las compras conjuntas
+se materializan solo con el resto. Los intervalos son bootstrap del 95\,\% sobre los usuarios
+(tabla~\ref{tab:tienda-calidad}). Las compras conjuntas solas aciertan la compra en el top~10
+para el 4.36\,\% de los usuarios, 1.7 veces lo más vendido (2.58\,\%) y cien veces el azar
+(0.04\,\%); ninguna otra señal sola pasa del 1.54\,\%. Los pesos de partida
+(0.4~$\cdot$~0.25~$\cdot$~0.25~$\cdot$~0.1) quedaban por debajo de las compras solas, porque
+la imagen y el texto desplazaban pares buenos. Los pesos elegidos en la validación,
+0.8~$\cdot$~0~$\cdot$~0.1~$\cdot$~0.1, llegan en la prueba a un Hit@10 de 4.58\,\% [3.98;
+5.12] y un NDCG@10 de 0.0249, 1.00 punto [+0.66; +1.34] más que los de partida, a cambio de
+recomendar el 16.9\,\% del catálogo en vez del 33.2\,\%. La imagen casi no predice la
+siguiente compra: CLIP sola da
+0.22\,\% y SIFT 0.30\,\%, y su diferencia, +0.08 puntos [$-$0.12; +0.28], no es distinta de 0.
+El arranque en frío está en los productos: cuando el producto comprado tiene de 0 a 4 compras
+de entrenamiento, las compras conjuntas y lo más vendido no aciertan nunca y solo el texto
+acierta (1.22\,\%), mientras que la fusión lo diluye (0.17\,\%).
 
 \paragraph{RAG.} La ingesta del corpus entero tardó 43.9~minutos, y el 97\,\% fue calcular
 los embeddings en CPU (38.4 fragmentos por segundo con int8 y 8 hilos); la carga en el
@@ -578,18 +595,23 @@ documentos\guillemotright{}) todavía no se midió porque requiere la clave del 
 \centering
 \begin{minipage}[t]{0.42\textwidth}
 \centering
-\caption{Recomendaciones de la tienda: mediana y p95 por petición (100 productos).}\label{tab:tienda-recomendar}
-\small
-\begin{tabular}{@{}lrr@{}}
+\caption{Recomendador de la tienda en la prueba (5\,000 usuarios): Hit@10, NDCG@10 y fracción
+del catálogo que recomienda. Pesos de compras, fotos, texto y cercanía: 0.4, 0.25, 0.25 y
+0.1 los de partida; 0.8, 0, 0.1 y 0.1 los ajustados.}\label{tab:tienda-calidad}
+\small\setlength{\tabcolsep}{3pt}
+\begin{tabular}{@{}lrrr@{}}
 \toprule
-\textbf{Parte de la petición} & \textbf{p50} & \textbf{p95} \\
+\textbf{Lista} & \textbf{Hit@10} & \textbf{NDCG} & \textbf{Catálogo} \\
 \midrule
-compras conjuntas (B+) & 4.5 ms & 7.7 ms \\
-fotos (CLIP y HNSW) & 19.5 ms & 28.2 ms \\
-texto (BM25) & 23.6 ms & 41.5 ms \\
-cercanía (hash y R-Tree) & 31.2 ms & 84.3 ms \\
-completa, caché fría & 68.9 ms & 142.8 ms \\
-completa, con Redis & \textbf{1.9 ms} & \textbf{3.4 ms} \\
+compras conjuntas & 4.36 \% & 0.0239 & 13.2 \% \\
+texto (BM25) & 1.08 \% & 0.0059 & 48.0 \% \\
+cercanía & 1.54 \% & 0.0067 & 6.2 \% \\
+fotos (CLIP) & 0.22 \% & 0.0011 & 27.9 \% \\
+fotos (SIFT) & 0.30 \% & 0.0017 & 56.2 \% \\
+fusión de partida & 3.58 \% & 0.0207 & 33.2 \% \\
+fusión ajustada & \textbf{4.58 \%} & \textbf{0.0249} & 16.9 \% \\
+lo más vendido & 2.58 \% & 0.0137 & 0.07 \% \\
+al azar & 0.04 \% & 0.0003 & 86.8 \% \\
 \bottomrule
 \end{tabular}
 \end{minipage}\hfill
@@ -616,10 +638,8 @@ híbrida (RRF) & \textbf{0.467} & \textbf{0.578} & 0.286 & \textbf{0.844} & 23.9
 \textbf{Medida} & \textbf{Resultado} \\
 \midrule
 embeddings fp32 / int8, 8 hilos & 39.6 / 45.3 frag./s \\
-siembra: embeddings (int8) & 2\,565.6 s \\
 siembra: carga con índices al final & 65.0 s \\
 siembra: total / segunda ejecución & 43.9 min / 1.6 s \\
-carga NDJSON / invertido / HNSW & 44.3 / 17.4 / 5.4 s \\
 disco: tabla / invertido / HNSW & 354 / 96 / 159 MiB \\
 \bottomrule
 \end{tabular}
@@ -670,8 +690,8 @@ con y sin la caché de rastros.}
 \textbf{Técnica} & \textbf{Ventajas} & \textbf{Desventajas} & \textbf{Cuándo usarla} \\
 \midrule
 Tramos con votación por desfase & Sin distorsión, AUC de 0.79 y recall de 0.71; ubica la copia con IoU de 0.90; 170~ms por minuto de audio. & Copias de menos de 7.5~s (recall 0.08); $-3$~dB, ruido, tono, tempo o pasa bajos lo rompen. & Copias de 10~s o más sin cambios de nivel, como un sample reutilizado. \\
-CLIP frente a SIFT & Índice en 0.81~s y 51.6~MiB; busca fotos a partir de un texto. & Calcular los embeddings es la mitad de la carga (137.8~s). & Búsqueda visual por contenido o por texto. \\
-Compras conjuntas materializadas & 4.5~ms por consulta contra 2.9~s al vuelo. & 793.6~s en la carga; la tabla envejece hasta recalcularla. & Señales que salen de un \texttt{GROUP BY} sobre toda la historia. \\
+CLIP frente a SIFT & Índice en 0.81~s y 51.6~MiB. & Ninguna predice la compra (0.22 y 0.30\,\%). & Buscar fotos por texto, no recomendar. \\
+Compras conjuntas materializadas & La mejor señal: Hit@10 de 4.36\,\%; 4.5~ms por consulta contra 2.9~s al vuelo. & 793.6~s en la carga; no acierta productos con menos de 5 compras. & Recomendar a partir de compras, con el texto para los productos nuevos. \\
 Búsqueda híbrida (RRF) & Recall@10 de 0.578, sobre la vectorial (0.533) y BM25 (0.422). & Calcular los embeddings es el 97\,\% de la ingesta; BM25 necesita la consulta en el idioma del índice. & Preguntas en otro idioma que el corpus, con nombres propios. \\
 Caché de rastros en Redis & Un tercio menos de mediana (23.8 a 16.4~ms); cualquier réplica sigue la sesión. & Se pierde si el rostro salta más de 47~px entre cuadros. & Video en vivo con rostros que se mueven poco. \\
 \bottomrule

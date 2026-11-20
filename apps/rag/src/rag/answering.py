@@ -1,22 +1,25 @@
 """Responder una pregunta con los fragmentos del corpus: recuperar, armar el prompt, pedir la
 respuesta en streaming y comprobar sus citas.
 
-`Answerer.prepare` hace lo que puede fallar antes de responder —la búsqueda híbrida en el
-gestor y la reserva del gasto del día— y lanza sus errores como cualquier ruta (JSON con su
+`Answerer.prepare` hace lo que puede fallar antes de responder —la reescritura de la consulta
+(`rag.rewriting`, que vuelve a la pregunta si falla), la búsqueda híbrida en el gestor y la
+reserva del gasto del día— y lanza sus errores como cualquier ruta (JSON con su
 estado). `Answerer.events` es el cuerpo SSE; una vez empezado, un fallo del modelo llega como
 evento `error` y el stream se cierra limpio. Los eventos, en orden:
 
-- `sources`, primero: la pregunta, el modelo y los fragmentos numerados (`n`, paper, páginas
-  y texto);
+- `sources`, primero: la pregunta, lo que se buscó (`search_query`), el modelo y los
+  fragmentos numerados (`n`, paper, páginas y texto);
 - `delta`, por cada trozo de texto: `{"text": "…"}`;
 - `fallback`, si la API pasó la respuesta a otro modelo: `{"from_model", "to_model"}`;
 - `done`, al terminar: la respuesta, `stop_reason`, si está completa, las citas válidas e
-  inválidas, los tokens de cada intento y el costo (`DoneData`);
+  inválidas, los tokens de cada llamada al modelo (la reescritura incluida) y el costo
+  (`DoneData`);
 - `error`, si el modelo falla: `{"error", "kind", "request_id"}`, como los errores del kit.
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from collections.abc import AsyncGenerator, Sequence
@@ -49,6 +52,7 @@ from .prompt import (
     build_prompt,
     select_sources,
 )
+from .rewriting import QueryRewriter, estimated_rewrite_tokens
 from .search import Paper, Retriever, SearchFilters, SearchMode
 from .sse import sse_frame
 
@@ -70,6 +74,9 @@ DEFAULT_HISTORY_CHARACTERS = 2000
 # «¿Y cuál es más rápido?» o «explícalo más simple» no nombran su tema; una pregunta de ocho
 # palabras o más ya suele nombrarlo.
 DEFAULT_FOLLOW_UP_WORDS = 8
+# Haiku 5.5 escribe una consulta de 30 palabras en menos de un segundo; pasado el plazo se
+# busca con la pregunta tal cual: la reescritura nunca demora la respuesta más que esto.
+DEFAULT_REWRITE_TIMEOUT_SECONDS = 2.0
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +96,7 @@ class AnswerSettings:
     history_turns: int = DEFAULT_HISTORY_TURNS
     history_characters: int = DEFAULT_HISTORY_CHARACTERS
     follow_up_words: int = DEFAULT_FOLLOW_UP_WORDS
+    rewrite_timeout_seconds: float = DEFAULT_REWRITE_TIMEOUT_SECONDS
 
     @property
     def passage_tokens(self) -> int:
@@ -108,7 +116,10 @@ class SourceData(BaseModel):
 
 
 class SourcesData(BaseModel):
+    """`search_query`: lo que se buscó en el corpus (la consulta reescrita, o la pregunta)."""
+
     question: str
+    search_query: str
     model: str
     sources: list[SourceData]
 
@@ -166,12 +177,15 @@ class ErrorData(BaseModel):
 @dataclass(frozen=True, slots=True)
 class PreparedAnswer:
     """Una pregunta lista para el modelo: sus fragmentos, su prompt y su reserva de gasto
-    (`None` si no hay fragmentos ni es una charla, y el modelo no se llama)."""
+    (`None` si no hay fragmentos ni es una charla, y el modelo no se llama); lo que se buscó
+    y, si se reescribió la consulta, lo que costó."""
 
     question: str
     sources: tuple[Source, ...]
     prompt: Prompt
     reservation: Reservation | None
+    search_query: str = ""
+    rewrite_attempts: tuple[Attempt, ...] = ()
 
 
 class Answerer:
@@ -182,10 +196,12 @@ class Answerer:
         model: AnswerModel,
         budget: DailyBudget,
         settings: AnswerSettings,
+        rewriter: QueryRewriter | None = None,
     ) -> None:
         self._model = model
         self._budget = budget
         self._settings = settings
+        self._rewriter = rewriter
 
     async def prepare(
         self,
@@ -197,7 +213,8 @@ class Answerer:
     ) -> PreparedAnswer:
         """Recupera los fragmentos de `question` (solo de los papers que cumplen `filters`),
         arma el prompt después de los turnos de `history` y reserva su gasto. Un saludo o una
-        pregunta sobre la app no se busca: va al modelo sin documentos.
+        pregunta sobre la app no se busca: va al modelo sin documentos. Con un `rewriter`, se
+        busca la consulta que escribe; si falla o pasa su plazo, la pregunta de siempre.
 
         Raises:
             BudgetExhaustedError: si el gasto del día no admite una respuesta más.
@@ -207,20 +224,59 @@ class Answerer:
         earlier = bounded_history(history, settings.history_turns, settings.history_characters)
         if is_small_talk(question):
             prompt = build_conversational_prompt(question, earlier)
-            return PreparedAnswer(question, (), prompt, self._reserve(prompt))
+            return PreparedAnswer(question, (), prompt, self._reserve(prompt), question)
+        fallback = retrieval_query(question, earlier, settings.follow_up_words)
+        query, rewrite_attempts = await self._search_query(question, earlier, fallback)
         retriever = Retriever(engine, embedder, rrf_k=settings.rrf_k)
-        query = retrieval_query(question, earlier, settings.follow_up_words)
         hits = await retriever.search(query, SearchMode.HYBRID, settings.chunks, filters)
         sources = tuple(select_sources(hits, settings.context_tokens, settings.passage_tokens))
         prompt = build_prompt(question, sources, earlier)
         reservation = self._reserve(prompt) if sources else None
-        return PreparedAnswer(question, sources, prompt, reservation)
+        return PreparedAnswer(question, sources, prompt, reservation, query, rewrite_attempts)
+
+    async def _search_query(
+        self, question: str, earlier: Sequence[Exchange], fallback: str
+    ) -> tuple[str, tuple[Attempt, ...]]:
+        """La consulta reescrita y su intento, o `fallback` sin intentos si no hay quien
+        reescriba, si falla o si no termina en el plazo. Una reescritura cortada se queda con
+        su reserva: lo que alcanzó a gastar no se conoce.
+
+        Raises:
+            BudgetExhaustedError: si el tope del día no admite ni la reescritura.
+        """
+        rewriter = self._rewriter
+        if rewriter is None:
+            return fallback, ()
+        bound = worst_case_cost(
+            rewriter.name, estimated_rewrite_tokens(question, earlier), rewriter.max_tokens
+        )
+        reservation = self._budget.reserve(bound)
+        started = time.perf_counter()
+        try:
+            rewrite = await asyncio.wait_for(
+                rewriter.rewrite(question, earlier), self._settings.rewrite_timeout_seconds
+            )
+        except TimeoutError:
+            logger.warning("la reescritura pasó su plazo; se busca la pregunta tal cual")
+            reservation.settle(None)
+            return fallback, ()
+        except LlmError as error:
+            logger.warning("la reescritura falló (%s); se busca la pregunta tal cual", error.kind)
+            reservation.settle(None)
+            return fallback, ()
+        reservation.settle(attempt_cost(rewrite.attempt))
+        logger.info(
+            "consulta reescrita en %.0f ms: %r",
+            (time.perf_counter() - started) * MILLISECONDS_PER_SECOND,
+            rewrite.query,
+        )
+        return rewrite.query, (rewrite.attempt,)
 
     async def events(self, prepared: PreparedAnswer) -> AsyncGenerator[bytes, None]:
         """El cuerpo SSE de la respuesta a `prepared`."""
         yield sse_frame(SOURCES_EVENT, _sources_data(prepared, self._model.name))
         if prepared.reservation is None:
-            yield sse_frame(DONE_EVENT, _without_sources())
+            yield sse_frame(DONE_EVENT, _without_sources(prepared))
             return
         started = time.perf_counter()
         reservation = prepared.reservation
@@ -273,6 +329,7 @@ class Answerer:
 def _sources_data(prepared: PreparedAnswer, model: str) -> SourcesData:
     return SourcesData(
         question=prepared.question,
+        search_query=prepared.search_query or prepared.question,
         model=model,
         sources=[
             SourceData(
@@ -288,7 +345,8 @@ def _sources_data(prepared: PreparedAnswer, model: str) -> SourcesData:
     )
 
 
-def _without_sources() -> DoneData:
+def _without_sources(prepared: PreparedAnswer) -> DoneData:
+    attempts = prepared.rewrite_attempts
     return DoneData(
         model="",
         stop_reason=StopReason.END_TURN,
@@ -298,14 +356,15 @@ def _without_sources() -> DoneData:
         citations=[],
         invalid_citations=[],
         answered_from_documents=False,
-        usage=_usage_data(TokenUsage()),
-        attempts=[],
-        cost_usd=0.0,
+        usage=_usage_data(total_usage(attempts)),
+        attempts=[_attempt_data(attempt) for attempt in attempts],
+        cost_usd=total_cost(attempts),
     )
 
 
 def _done_data(answer: str, completion: Completion, prepared: PreparedAnswer) -> DoneData:
     report = check_citations(answer, prepared.sources)
+    attempts = prepared.rewrite_attempts + completion.attempts
     return DoneData(
         model=completion.model,
         stop_reason=completion.stop_reason,
@@ -316,9 +375,9 @@ def _done_data(answer: str, completion: Completion, prepared: PreparedAnswer) ->
         invalid_citations=report.invalid,
         answered_from_documents=bool(report.citations),
         conversational=prepared.prompt.conversational,
-        usage=_usage_data(total_usage(completion.attempts)),
-        attempts=[_attempt_data(attempt) for attempt in completion.attempts],
-        cost_usd=total_cost(completion.attempts),
+        usage=_usage_data(total_usage(attempts)),
+        attempts=[_attempt_data(attempt) for attempt in attempts],
+        cost_usd=total_cost(attempts),
     )
 
 

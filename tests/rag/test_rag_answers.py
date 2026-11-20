@@ -6,7 +6,7 @@ de gasto, los errores, la desconexión del cliente y las páginas citadas."""
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Iterator, Sequence
 from contextlib import nullcontext
 from pathlib import Path
 from typing import Any
@@ -22,9 +22,12 @@ from tests.rag.rag_corpus import BM25_CHUNK, BTREE_CHUNK, COURSE_PAPER, HashEmbe
 
 from rag.api import MAX_QUERY_CHARACTERS, create_app
 from rag.config import LlmProvider, RagSettings
+from rag.conversation import Exchange
 from rag.llm import AnswerModel, LlmUnavailableError, ModelEvent, TextDelta
 from rag.pipeline import CorpusPaths
+from rag.pricing import HAIKU_5_5, Attempt, TokenUsage
 from rag.prompt import SYSTEM_INSTRUCTIONS, Prompt
+from rag.rewriting import Rewrite
 from rag.schema import CHUNKS_TABLE
 from rag.seed import seed
 from rag.simulated import NOT_IN_DOCUMENTS, SMALL_TALK_ANSWER, SimulatedModel
@@ -352,3 +355,98 @@ def test_a_follow_up_carries_the_earlier_turns_and_searches_with_the_previous_qu
     prompt = recording.prompts[-1]
     assert [exchange.question for exchange in prompt.history] == [BTREE_QUESTION]
     assert prompt.history[0].answer == "Leaves are linked."
+
+
+class StubRewriter:
+    """Un `QueryRewriter` de guion: devuelve `query`, lanza `failure` o tarda `delay`."""
+
+    name = HAIKU_5_5
+    max_tokens = 150
+
+    def __init__(
+        self, query: str = "", failure: Exception | None = None, delay: float = 0.0
+    ) -> None:
+        self.query = query
+        self.failure = failure
+        self.delay = delay
+        self.calls: list[tuple[str, list[str]]] = []
+
+    async def rewrite(self, question: str, history: Sequence[Exchange]) -> Rewrite:
+        self.calls.append((question, [exchange.question for exchange in history]))
+        await anyio.sleep(self.delay)
+        if self.failure is not None:
+            raise self.failure
+        return Rewrite(
+            self.query, Attempt(HAIKU_5_5, TokenUsage(input_tokens=400, output_tokens=12))
+        )
+
+
+def with_rewriter(
+    settings: RagSettings, embedder: HashEmbedder, model: AnswerModel, rewriter: StubRewriter
+) -> TestClient:
+    app = create_app(
+        settings,
+        embedder_factory=lambda _: embedder,
+        answer_model_factory=lambda _: nullcontext(model),
+        rewriter_factory=lambda _: nullcontext(rewriter),
+    )
+    return TestClient(app)
+
+
+SPANISH_BTREE_QUESTION = "¿Cómo responde una consulta de rango?"
+
+
+def test_the_rewritten_query_is_searched_and_the_answer_keeps_the_question(
+    seeded_settings: RagSettings, hash_embedder: HashEmbedder, recording: RecordingModel
+):
+    rewriter = StubRewriter(BTREE_QUESTION)
+    with with_rewriter(seeded_settings, hash_embedder, recording, rewriter) as client:
+        events = ask(client, SPANISH_BTREE_QUESTION)
+    sources = data_of(events, "sources")
+    assert sources["search_query"] == BTREE_QUESTION
+    assert BTREE_CHUNK in [source["chunk_id"] for source in sources["sources"]]
+    assert recording.prompts[-1].question == f"<question>{SPANISH_BTREE_QUESTION}</question>"
+    done = data_of(events, "done")
+    assert done["attempts"][0]["model"] == HAIKU_5_5
+    assert done["cost_usd"] == pytest.approx(done["attempts"][0]["cost_usd"])
+
+
+def test_a_follow_up_is_rewritten_with_the_earlier_turns(
+    seeded_settings: RagSettings, hash_embedder: HashEmbedder, recording: RecordingModel
+):
+    rewriter = StubRewriter(BTREE_QUESTION)
+    history = [{"question": BTREE_QUESTION, "answer": "Leaves are linked [1]."}]
+    with with_rewriter(seeded_settings, hash_embedder, recording, rewriter) as client:
+        response = client.post("/answers", json={"question": "¿y por qué?", "history": history})
+    assert rewriter.calls == [("¿y por qué?", [BTREE_QUESTION])]
+    assert data_of(parse_sse(response.text), "sources")["search_query"] == BTREE_QUESTION
+
+
+@pytest.mark.parametrize(
+    ("failure", "delay"), [(LlmUnavailableError("caído"), 0.0), (None, 5.0)], ids=["error", "plazo"]
+)
+def test_a_failed_or_slow_rewrite_falls_back_to_the_question(
+    seeded_settings: RagSettings,
+    hash_embedder: HashEmbedder,
+    recording: RecordingModel,
+    failure: Exception | None,
+    delay: float,
+):
+    rewriter = StubRewriter("nunca se usa", failure=failure, delay=delay)
+    hurried = seeded_settings.model_copy(update={"rewrite_timeout_seconds": 0.05})
+    with with_rewriter(hurried, hash_embedder, recording, rewriter) as client:
+        events = ask(client, BTREE_QUESTION)
+    sources = data_of(events, "sources")
+    assert sources["search_query"] == BTREE_QUESTION
+    assert BTREE_CHUNK in [source["chunk_id"] for source in sources["sources"]]
+    assert all(attempt["model"] != HAIKU_5_5 for attempt in data_of(events, "done")["attempts"])
+
+
+def test_small_talk_is_not_rewritten(
+    seeded_settings: RagSettings, hash_embedder: HashEmbedder, recording: RecordingModel
+):
+    rewriter = StubRewriter(BTREE_QUESTION)
+    with with_rewriter(seeded_settings, hash_embedder, recording, rewriter) as client:
+        events = ask(client, "hola")
+    assert rewriter.calls == []
+    assert data_of(events, "sources")["search_query"] == "hola"

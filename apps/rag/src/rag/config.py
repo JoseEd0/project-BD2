@@ -26,6 +26,10 @@ Además de lo común a todo servicio (`RAG_ENGINE_URL`, `RAG_ENGINE_KEY`,
 | `RAG_ANSWER_HISTORY_TURNS` | turnos anteriores que se reenvían al modelo | `6` |
 | `RAG_ANSWER_HISTORY_CHARACTERS` | tope de cada respuesta anterior reenviada | `2000` |
 | `RAG_ANSWER_FOLLOW_UP_WORDS` | por debajo, se busca junto con la pregunta anterior | `8` |
+| `RAG_QUERY_REWRITING` | reescribir la consulta con un modelo chico antes de buscar | `true` |
+| `RAG_REWRITE_MODEL` | el modelo que reescribe la consulta | `claude-haiku-5-5` |
+| `RAG_REWRITE_MAX_TOKENS` | tope de salida de la reescritura | `150` |
+| `RAG_REWRITE_TIMEOUT_SECONDS` | plazo de la reescritura; pasado, se busca la pregunta | `2` |
 | `RAG_ENGINE_BUSY_RETRIES` | reintentos de una lectura con el catálogo ocupado | `3` |
 | `RAG_ENGINE_BUSY_BACKOFF_SECONDS` | primera espera entre reintentos (se duplica) | `0.5` |
 """
@@ -48,6 +52,7 @@ from .answering import (
     DEFAULT_FOLLOW_UP_WORDS,
     DEFAULT_HISTORY_CHARACTERS,
     DEFAULT_HISTORY_TURNS,
+    DEFAULT_REWRITE_TIMEOUT_SECONDS,
     AnswerSettings,
 )
 from .claude import ClaudeModel, ClaudeOptions, Effort
@@ -57,7 +62,8 @@ from .engine_reader import BusyRetry
 from .fusion import RRF_K
 from .llm import AnswerModel
 from .models import DEFAULT_MODEL_VARIANT, ModelVariant, locate_model
-from .pricing import PRICES, SONNET_5_5
+from .pricing import HAIKU_5_5, PRICES, SONNET_5_5
+from .rewriting import ClaudeRewriter, QueryRewriter
 from .search import MAX_RESULTS
 from .settings import CORPUS_DIRECTORY
 from .simulated import SimulatedModel
@@ -80,6 +86,11 @@ DEFAULT_ANSWER_EFFORT: Effort = "low"
 DEFAULT_DAILY_BUDGET_USD = 5.0
 DEFAULT_ANTHROPIC_TIMEOUT_SECONDS = 60.0
 DEFAULT_ANTHROPIC_MAX_RETRIES = 2
+# Una consulta de hasta 30 palabras son unos 60 tokens; sin razonamiento, 150 sobran.
+DEFAULT_REWRITE_MAX_TOKENS = 150
+# El plazo de la reescritura ya lo pone `rewrite_timeout_seconds`: un reintento del SDK no
+# cabría en él.
+REWRITE_MAX_RETRIES = 0
 # El gestor ya espera su plazo de bloqueo (5 s) antes de decir que está ocupado: tres
 # reintentos cubren un CREATE INDEX de unos 20 s sin dejar a quien pregunta un minuto mirando.
 DEFAULT_ENGINE_BUSY_RETRIES = 3
@@ -121,6 +132,10 @@ class RagSettings(ServiceSettings):
         default=DEFAULT_HISTORY_CHARACTERS, ge=1, le=MAX_EXCHANGE_ANSWER_CHARACTERS
     )
     answer_follow_up_words: int = Field(default=DEFAULT_FOLLOW_UP_WORDS, ge=0)
+    query_rewriting: bool = True
+    rewrite_model: str = HAIKU_5_5
+    rewrite_max_tokens: int = Field(default=DEFAULT_REWRITE_MAX_TOKENS, ge=1)
+    rewrite_timeout_seconds: float = Field(default=DEFAULT_REWRITE_TIMEOUT_SECONDS, gt=0)
     engine_busy_retries: int = Field(default=DEFAULT_ENGINE_BUSY_RETRIES, ge=0)
     engine_busy_backoff_seconds: float = Field(default=DEFAULT_ENGINE_BUSY_BACKOFF_SECONDS, ge=0)
 
@@ -130,7 +145,7 @@ class RagSettings(ServiceSettings):
         """El compose pasa la variable vacía cuando `.env` no la define: es no tenerla."""
         return None if isinstance(value, str) and not value.strip() else value
 
-    @field_validator("answer_model")
+    @field_validator("answer_model", "rewrite_model")
     @classmethod
     def priced_model(cls, model: str) -> str:
         """Sin precio no hay costo por respuesta ni tope diario: el servicio no arranca."""
@@ -152,6 +167,7 @@ class RagSettings(ServiceSettings):
             history_turns=self.answer_history_turns,
             history_characters=self.answer_history_characters,
             follow_up_words=self.answer_follow_up_words,
+            rewrite_timeout_seconds=self.rewrite_timeout_seconds,
         )
 
     def busy_retry(self) -> BusyRetry:
@@ -203,3 +219,22 @@ def _claude_options(settings: RagSettings) -> ClaudeOptions:
         effort=settings.answer_effort,
         server_fallback=settings.answer_server_fallback,
     )
+
+
+@asynccontextmanager
+async def open_query_rewriter(settings: RagSettings) -> AsyncIterator[QueryRewriter | None]:
+    """El modelo que reescribe la consulta mientras dura el bloque, o `None` (se busca la
+    pregunta tal cual) si está apagado, si el proveedor es el simulado o si no hay clave."""
+    if (
+        not settings.query_rewriting
+        or settings.llm_provider is LlmProvider.SIMULATED
+        or settings.anthropic_api_key is None
+    ):
+        yield None
+        return
+    async with anthropic.AsyncAnthropic(
+        api_key=settings.anthropic_api_key.get_secret_value(),
+        timeout=settings.rewrite_timeout_seconds,
+        max_retries=REWRITE_MAX_RETRIES,
+    ) as client:
+        yield ClaudeRewriter(client, settings.rewrite_model, settings.rewrite_max_tokens)

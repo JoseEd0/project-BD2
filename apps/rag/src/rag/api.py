@@ -32,13 +32,14 @@ from appkit import Engine, ServiceError, configure_logging, create_service_app, 
 
 from .answering import Answerer
 from .budget import DailyBudget
-from .config import RagSettings, load_embedder, open_answer_model
+from .config import RagSettings, load_embedder, open_answer_model, open_query_rewriter
 from .conversation import MAX_HISTORY_EXCHANGES, Exchange
 from .embeddings import Embedder
 from .engine_reader import BusyRetryingReader, EngineReader
 from .facets import Facets, facets_of
 from .llm import AnswerModel
 from .papers import PageResponse, corpus_file, page_of, stored_paper
+from .rewriting import QueryRewriter
 from .schema import ID_LENGTH, SCHEMA
 from .search import (
     DEFAULT_RESULTS,
@@ -63,6 +64,7 @@ INLINE_DISPOSITION = "inline"
 
 EmbedderFactory = Callable[[RagSettings], Embedder]
 AnswerModelFactory = Callable[[RagSettings], AbstractAsyncContextManager[AnswerModel | None]]
+RewriterFactory = Callable[[RagSettings], AbstractAsyncContextManager[QueryRewriter | None]]
 Question = Annotated[
     str, StringConstraints(strip_whitespace=True, min_length=1, max_length=MAX_QUERY_CHARACTERS)
 ]
@@ -207,11 +209,12 @@ def create_app(
     *,
     embedder_factory: EmbedderFactory = load_embedder,
     answer_model_factory: AnswerModelFactory = open_answer_model,
+    rewriter_factory: RewriterFactory = open_query_rewriter,
     engine_transport: httpx.AsyncBaseTransport | None = None,
 ) -> FastAPI:
     """La aplicación del servicio. Sin `settings`, la lee del entorno y configura los logs
-    (así la llama uvicorn con `--factory`); los tests le dan su configuración, sus modelos y
-    su transporte hacia el gestor.
+    (así la llama uvicorn con `--factory`); los tests le dan su configuración, sus modelos (el
+    que responde y el que reescribe la consulta) y su transporte hacia el gestor.
 
     Raises:
         appkit.SettingsError: si la configuración del entorno está incompleta.
@@ -225,12 +228,18 @@ def create_app(
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.settings = configured
         app.state.embedder = embedder_factory(configured)
-        async with answer_model_factory(configured) as model:
+        async with (
+            answer_model_factory(configured) as model,
+            rewriter_factory(configured) as rewriter,
+        ):
             app.state.answerer = (
                 None
                 if model is None
                 else Answerer(
-                    model, DailyBudget(configured.daily_budget_usd), configured.answering()
+                    model,
+                    DailyBudget(configured.daily_budget_usd),
+                    configured.answering(),
+                    rewriter,
                 )
             )
             yield

@@ -181,6 +181,7 @@ src/                 raíz de importación: un paquete por módulo del motor
 frontend/            interfaz: React + TypeScript + Vite; Leaflet en el panel de mapa
   Dockerfile         la interfaz compilada, servida por nginx con /api reenviado al motor
 tests/               espejo de la estructura de src/, más benchmarks/ y demos/
+e2e/                 Playwright contra el compose completo: un recorrido por aplicación (run.sh)
 benchmarks/          experimentos reproducibles
   esci/              corpus de texto ESCI en español: descarga y subconjuntos con juicios
   multimedia/        imágenes (ABO) y voz (Speech Commands): descarga y subconjuntos anidados
@@ -615,6 +616,34 @@ Los tests siguen la estructura de `src/`, así que se pueden ejecutar por módul
 .venv/bin/python -m pytest tests/index/rtree -q
 .venv/bin/python -m pytest tests/query -q
 ```
+
+**Recorridos de punta a punta.** [`e2e/`](e2e) es una suite de Playwright que recorre el
+flujo principal de cada aplicación en su propia URL contra el compose completo —el gestor,
+las API, las web y Redis de verdad, sin respuestas simuladas— con datos diminutos: el
+dataset de cinco productos de la tienda, las cuatro pistas de `songcheck.sample`, el corpus
+de siete fragmentos del RAG con sus PDF, el LLM simulado (`RAG_LLM_PROVIDER=simulated`) y la
+cámara simulada de Chromium alimentada con un retrato de la NASA en Y4M. Hace falta Docker,
+`uv` y Node 22.18 o posterior; un solo comando prepara, construye, siembra, prueba y apaga:
+
+```bash
+e2e/run.sh              # todo; e2e/run.sh up | test | logs | down, por partes
+```
+
+| App | Qué recorre |
+|---|---|
+| consola (`:8080`) | el atajo «Índice hash» devuelve sus filas de `clientes` |
+| copyright (`:8101`) | sube un tramo de la pista 2 desde 2,5 s: «Posible uso no autorizado», su original y el desfase −0:02,5; reproduce el tramo y pasa de A a B |
+| tienda (`:8102`) | busca, abre el producto y lo compra como un cliente: la compra queda registrada, sus recomendaciones se recalculan en el gestor (caché: fallo) sin lo comprado, y aparece en «Lo que compraste» |
+| papers (`:8103`) | pregunta, recibe la respuesta por SSE con su cita, toca `[n]` y el PDF se abre en la página citada con el pasaje marcado |
+| rostros (`:8104`) | consentimiento, registro con la cámara, reconocimiento con la caja y el nombre, y «Mis datos» › borrar (el API ya no la encuentra) |
+
+Corre en su propio proyecto de compose (`minigestor-e2e`), con sus claves y datos en
+`e2e/.state/` y en los puertos 28080 y 28101–28104, así que no choca con un compose ya
+levantado; al terminar borra sus volúmenes. Lo único que cambia del despliegue
+([`e2e/compose.yaml`](e2e/compose.yaml)) es el plan de poses de rostros: una foto quieta no
+gira la cabeza, así que el registro pide solo la de frente. En GitHub Actions lo corre
+[`e2e.yml`](.github/workflows/e2e.yml) en cada cambio de `main` y en los PR que tocan algo
+que llega al compose, y guarda capturas y trazas cuando falla.
 
 ### 3.8 Reproducir los experimentos
 

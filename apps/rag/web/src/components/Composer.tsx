@@ -1,6 +1,6 @@
 import { useId, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 
-import type { ResearchFilters } from "../api/types";
+import { hasFilters, type ResearchFilters } from "../api/types";
 import { FilterBar } from "./FilterBar";
 import { Icon } from "./Icon";
 
@@ -17,7 +17,11 @@ interface ComposerProps {
   readonly onStop: () => void;
 }
 
-/** La pregunta y sus filtros. Enter pregunta; Mayúsculas+Enter, una línea nueva. */
+/**
+ * La pregunta. Enter pregunta; Mayúsculas+Enter, una línea nueva. Los filtros por año y
+ * categoría quedan plegados en «Opciones»: casi nadie los necesita, y el año o el tema se
+ * pueden decir en la pregunta.
+ */
 export function Composer({ busy, filters, onFiltersChange, onAsk, onStop }: ComposerProps) {
   const [question, setQuestion] = useState("");
   const field = useRef<HTMLTextAreaElement>(null);
@@ -41,7 +45,6 @@ export function Composer({ busy, filters, onFiltersChange, onAsk, onStop }: Comp
 
   return (
     <form className="composer" onSubmit={submit} aria-label="Nueva pregunta">
-      <FilterBar filters={filters} onChange={onFiltersChange} />
       <div className="composer__field">
         <label htmlFor="pregunta" className="visually-hidden">
           Pregunta
@@ -52,28 +55,32 @@ export function Composer({ busy, filters, onFiltersChange, onAsk, onStop }: Comp
           rows={2}
           value={question}
           maxLength={MAX_QUESTION_CHARACTERS}
-          placeholder="Pregunta sobre bases de datos o recuperación de información…"
+          placeholder="Pregunta o repregunta sobre los papers…"
           aria-describedby={hintId}
           onChange={(event) => setQuestion(event.target.value)}
           onKeyDown={onKeyDown}
         />
         {busy ? (
-          <button type="button" className="button button--primary composer__send" onClick={onStop}>
+          <button type="button" className="button button--primary composer__send" aria-label="Detener" title="Detener" onClick={onStop}>
             <Icon name="stop" />
-            Detener
           </button>
         ) : (
-          <button type="submit" className="button button--primary composer__send" disabled={trimmed === ""}>
+          <button type="submit" className="button button--primary composer__send" aria-label="Preguntar" title="Preguntar" disabled={trimmed === ""}>
             <Icon name="send" />
-            Preguntar
           </button>
         )}
       </div>
-      <p id={hintId} className="composer__hint">
-        {question.length >= COUNTER_FROM
-          ? `${MAX_QUESTION_CHARACTERS - question.length} caracteres disponibles`
-          : "Enter para preguntar · Mayús + Enter para otra línea"}
-      </p>
+      <div className="composer__foot">
+        <details className="composer__options" open={hasFilters(filters) || undefined}>
+          <summary>{hasFilters(filters) ? "Opciones (filtros activos)" : "Opciones"}</summary>
+          <FilterBar filters={filters} onChange={onFiltersChange} />
+        </details>
+        <p id={hintId} className="composer__hint">
+          {question.length >= COUNTER_FROM
+            ? `${MAX_QUESTION_CHARACTERS - question.length} caracteres disponibles`
+            : "Enter para preguntar, Mayús + Enter para otra línea"}
+        </p>
+      </div>
     </form>
   );
 }

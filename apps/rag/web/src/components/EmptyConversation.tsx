@@ -1,17 +1,18 @@
 /** Preguntas reales sobre el corpus: muestran qué se puede preguntar y en qué idiomas. */
 const EXAMPLES: readonly string[] = [
   "¿Cómo reemplazan los índices aprendidos a los árboles B?",
-  "approximate nearest neighbor search with HNSW graphs in vector databases",
-  "¿Cómo se evalúan los sistemas de recomendación secuencial?",
+  "¿Qué ventajas tiene HNSW frente a IVF en búsqueda vectorial?",
+  "¿Cómo combina BM25 la frecuencia del término con el largo del documento?",
+  "How are sequential recommender systems evaluated?",
 ];
 
 export function EmptyConversation({ onAsk, disabled }: { readonly onAsk: (question: string) => void; readonly disabled: boolean }) {
   return (
     <section className="empty" aria-labelledby="empty-title">
-      <h1 id="empty-title">Pregunta a los papers y comprueba cada cita en su página.</h1>
+      <h1 id="empty-title">¿Qué quieres saber de bases de datos o recuperación de información?</h1>
       <p>
-        Las respuestas salen de papers de arXiv sobre bases de datos y recuperación de información y del material del curso. Cada número entre
-        corchetes abre el PDF en la página de donde sale la afirmación, con el pasaje marcado.
+        Respondo con papers de arXiv sobre el área y con el material del curso. Cada número entre corchetes abre el PDF en la página de donde sale la
+        afirmación. Puedes repreguntar: recuerdo lo que hablamos.
       </p>
       <ul className="empty__examples" aria-label="Preguntas de ejemplo">
         {EXAMPLES.map((example) => (

@@ -27,7 +27,7 @@ describe("the app shell", () => {
     renderAt("/");
     expect(await screen.findByText("1493 documentos")).toBeTruthy();
     expect(await screen.findByText("En línea")).toBeTruthy();
-    expect(await screen.findByRole("heading", { level: 1, name: /Pregunta a los papers/ })).toBeTruthy();
+    expect(await screen.findByRole("heading", { level: 1, name: /Qué quieres saber/ })).toBeTruthy();
     expect(screen.getAllByRole("button", { name: /\?|vector databases/ }).length).toBeGreaterThanOrEqual(3);
   });
 

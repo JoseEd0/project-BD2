@@ -62,7 +62,9 @@
   --radius: 4px;
   --hairline: 1px solid var(--rule);
   --strip-height: 3.25rem;
-  --measure: 42rem;
+  --measure: 40rem;
+  --radius-soft: 10px;
+  --radius-field: 18px;
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --duration: 180ms;
 }
@@ -470,7 +472,7 @@ textarea {
 
 .turns {
   display: grid;
-  gap: var(--space-7);
+  gap: var(--space-6);
   max-inline-size: var(--measure);
   margin-inline: auto;
 }
@@ -480,15 +482,15 @@ textarea {
 .empty {
   display: grid;
   gap: var(--space-4);
-  max-inline-size: 36rem;
-  margin: 10vh auto 0;
+  max-inline-size: var(--measure);
+  margin: 12vh auto 0;
 }
 
 .empty h1 {
   font-family: var(--font-read);
-  font-size: var(--text-xl);
-  font-weight: 560;
-  line-height: 1.2;
+  font-size: clamp(1.5rem, 1.1rem + 1.4vw, 2.125rem);
+  font-weight: 520;
+  line-height: 1.15;
   letter-spacing: -0.01em;
   text-wrap: balance;
 }
@@ -502,19 +504,23 @@ textarea {
 
 .empty__examples {
   display: grid;
-  gap: var(--space-2);
-  margin-block-start: var(--space-3);
+  margin-block-start: var(--space-4);
   padding: 0;
   list-style: none;
+  border-block-start: var(--hairline);
+}
+
+.empty__examples li {
+  border-block-end: var(--hairline);
 }
 
 .example {
   inline-size: 100%;
-  padding: var(--space-3) var(--space-4);
-  border: var(--hairline);
-  border-radius: var(--radius);
-  background: var(--surface-raised);
-  color: var(--ink);
+  padding: var(--space-3) var(--space-2);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink-2);
   font-family: var(--font-read);
   font-size: var(--text-md);
   text-align: start;
@@ -524,9 +530,10 @@ textarea {
     background-color var(--duration) var(--ease-out);
 }
 
-.example:hover:not(:disabled) {
-  border-color: var(--diazo-line);
+.example:hover:not(:disabled),
+.example:focus-visible {
   background: var(--diazo-soft);
+  color: var(--diazo);
 }
 
 /* Una pregunta y su respuesta */
@@ -536,18 +543,29 @@ textarea {
   gap: var(--space-4);
 }
 
+.turn + .turn {
+  padding-block-start: var(--space-6);
+  border-block-start: var(--hairline);
+}
+
+/* La pregunta va a la derecha, en la voz de quien pregunta; la respuesta ocupa la medida. */
 .turn__question {
   display: grid;
+  justify-items: end;
   gap: var(--space-1);
-  padding-block-end: var(--space-3);
-  border-block-end: var(--hairline);
+  margin-inline-start: 18%;
 }
 
 .turn__question h2 {
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-soft) var(--radius-soft) 2px var(--radius-soft);
+  background: var(--diazo-soft);
+  color: var(--ink);
   font-size: var(--text-md);
-  font-weight: 640;
-  line-height: 1.35;
+  font-weight: 520;
+  line-height: 1.45;
   text-wrap: pretty;
+  overflow-wrap: anywhere;
 }
 
 .turn__filters {
@@ -577,7 +595,62 @@ textarea {
 .answer ol {
   display: grid;
   gap: var(--space-2);
-  padding-inline-start: 1.25em;
+  padding-inline-start: 1.35em;
+}
+
+.answer li::marker {
+  color: var(--diazo);
+  font-family: var(--font-ui);
+  font-weight: 650;
+}
+
+.answer strong {
+  font-weight: 680;
+  color: var(--ink);
+}
+
+.answer code {
+  padding: 0.08em 0.32em;
+  border-radius: 4px;
+  background: var(--surface-sunk);
+  font-family: var(--font-mono);
+  font-size: 0.84em;
+  overflow-wrap: anywhere;
+}
+
+.answer pre {
+  overflow-x: auto;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-soft);
+  background: var(--surface-sunk);
+  font-size: var(--text-sm);
+  line-height: 1.55;
+}
+
+.answer pre code {
+  padding: 0;
+  background: none;
+  font-size: inherit;
+  overflow-wrap: normal;
+}
+
+.answer blockquote {
+  padding-inline-start: var(--space-4);
+  border-inline-start: 3px solid var(--diazo-line);
+  color: var(--ink-2);
+  font-style: italic;
+}
+
+.answer__heading {
+  font-family: var(--font-ui);
+  font-size: var(--text-md);
+  font-weight: 680;
+  line-height: 1.3;
+}
+
+.turn__note {
+  color: var(--ink-3);
+  font-size: var(--text-sm);
 }
 
 .caret {
@@ -662,15 +735,16 @@ button.key::after {
   display: grid;
   gap: var(--space-2);
   padding: var(--space-3) var(--space-4);
-  border: var(--hairline);
-  border-radius: var(--radius);
+  border: 0;
+  border-inline-start: 3px solid var(--rule-strong);
+  border-radius: 2px var(--radius-soft) var(--radius-soft) 2px;
   background: var(--surface-raised);
   color: var(--ink-2);
   font-size: var(--text-base);
 }
 
 .notice--warn {
-  border-color: var(--warn-rule);
+  border-inline-start-color: var(--warn-rule);
   background: var(--warn-ground);
 }
 
@@ -679,7 +753,7 @@ button.key::after {
 }
 
 .notice--danger {
-  border-color: var(--danger-rule);
+  border-inline-start-color: var(--danger-rule);
   background: var(--danger-ground);
 }
 
@@ -750,9 +824,8 @@ button.key::after {
 /* Fragmentos enviados al modelo */
 
 .sources {
-  border: var(--hairline);
-  border-radius: var(--radius);
-  background: var(--surface-raised);
+  border: 0;
+  background: transparent;
 }
 
 .sources summary {
@@ -760,11 +833,15 @@ button.key::after {
   align-items: center;
   gap: var(--space-2);
   min-block-size: 2.5rem;
-  padding: var(--space-2) var(--space-3);
-  color: var(--ink-2);
+  padding: var(--space-2) 0;
+  color: var(--ink-3);
   font-size: var(--text-sm);
   font-weight: 600;
   cursor: pointer;
+}
+
+.sources summary:hover {
+  color: var(--diazo);
 }
 
 .count {
@@ -782,13 +859,10 @@ button.key::after {
 }
 
 .sources ol {
+  display: grid;
+  gap: 2px;
   padding: 0;
   list-style: none;
-  border-block-start: var(--hairline);
-}
-
-.sources li + li {
-  border-block-start: var(--hairline);
 }
 
 .source {
@@ -798,6 +872,7 @@ button.key::after {
   inline-size: 100%;
   padding: var(--space-2) var(--space-3);
   border: 0;
+  border-radius: var(--radius-soft);
   background: transparent;
   text-align: start;
   cursor: pointer;
@@ -864,9 +939,8 @@ button.key::after {
 .composer {
   display: grid;
   gap: var(--space-2);
-  padding: var(--space-3) var(--space-5);
-  border-block-start: var(--hairline);
-  background: var(--surface);
+  padding: var(--space-2) var(--space-5) var(--space-4);
+  background: linear-gradient(to bottom, transparent, var(--surface) var(--space-4));
 }
 
 .composer > * {
@@ -880,10 +954,11 @@ button.key::after {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: end;
   gap: var(--space-2);
-  padding: var(--space-2);
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
   border: 1px solid var(--rule-strong);
-  border-radius: calc(var(--radius) + 2px);
+  border-radius: var(--radius-field);
   background: var(--surface-raised);
+  box-shadow: var(--shadow);
   transition:
     border-color var(--duration) var(--ease-out),
     box-shadow var(--duration) var(--ease-out);
@@ -916,7 +991,39 @@ button.key::after {
 }
 
 .composer__send {
+  inline-size: 2.5rem;
   min-block-size: 2.5rem;
+  justify-content: center;
+  padding: 0;
+  border-radius: 50%;
+}
+
+.composer__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: start;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+  padding-inline: var(--space-3);
+}
+
+.composer__options {
+  flex: 1 1 auto;
+  color: var(--ink-3);
+  font-size: var(--text-xs);
+}
+
+.composer__options summary {
+  inline-size: fit-content;
+  cursor: pointer;
+}
+
+.composer__options summary:hover {
+  color: var(--diazo);
+}
+
+.composer__options[open] summary {
+  margin-block-end: var(--space-2);
 }
 
 .composer__hint {
@@ -1721,13 +1828,10 @@ button.key::after {
     display: none;
   }
 
-  .composer__send {
-    inline-size: 2.5rem;
-    justify-content: center;
-    padding: 0;
-    font-size: 0;
-    gap: 0;
+  .turn__question {
+    margin-inline-start: 8%;
   }
+
 
   .empty {
     margin-block-start: var(--space-4);

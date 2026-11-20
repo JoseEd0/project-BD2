@@ -6,8 +6,8 @@ test("search, open a product, buy it and see the recommendations change", async 
   const shop = await fakeShop(context);
   await page.goto("/");
   await page.getByLabel("Cliente").selectOption(CUSTOMER);
-  await page.getByRole("combobox").fill("electric guitar");
-  await page.getByRole("combobox").press("Enter");
+  await page.getByRole("combobox", { name: /Palabras a buscar/ }).fill("electric guitar");
+  await page.getByRole("combobox", { name: /Palabras a buscar/ }).press("Enter");
   await page.getByRole("link", { name: /Electric Guitar with Maple Neck/ }).click();
 
   await expect(page.getByRole("heading", { level: 1, name: "Electric Guitar with Maple Neck" })).toBeVisible();

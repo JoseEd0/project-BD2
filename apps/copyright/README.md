@@ -24,8 +24,27 @@ El paquete se llama `songcheck` y no `copyright`, que es un nombre interno de Py
 | [`loudness.py`](src/songcheck/loudness.py) | el nivel de cada ventana, para que el silencio no vote |
 | [`detection.py`](src/songcheck/detection.py) | la votación por desfase y el puntaje, sin HTTP |
 | [`detection_api.py`](src/songcheck/detection_api.py) | `POST /detections` |
+| [`demo_clips.py`](src/songcheck/demo_clips.py) | los audios de prueba armados con canciones del catálogo |
+| [`demo_clips_api.py`](src/songcheck/demo_clips_api.py) | `GET /demo-clips` y `GET /demo-clips/{clip}/audio` |
 | [`sample.py`](src/songcheck/sample.py) | un catálogo de juguete con melodías generadas, para probar un despliegue |
 | [`settings.py`](src/songcheck/settings.py) | la configuración, con el prefijo `COPYRIGHT_` |
+
+## Audios de prueba
+
+Buscar parecidas a una canción entera de FMA casi nunca encuentra otra: las pistas no
+comparten material. Para que una demostración muestre coincidencias, `GET /demo-clips` lista
+cuatro clips armados con canciones del catálogo (`COPYRIGHT_DEMO_SONG_IDS`, por omisión 2,
+140 y 10) y `GET /demo-clips/{clip}/audio` los sirve en WAV, armados la primera vez y
+guardados en memoria. Medidos contra el catálogo completo cargado:
+
+| Clip | Qué es | Lo que encuentra |
+|---|---|---|
+| `mezcla` | 10 s de la 2 y 10 s de la 140 | 2 (43 %) en 0:00–0:10 y 140 (42 %) en 0:07,5–0:20 |
+| `extracto` | 15 s de la 10 desde el segundo 10 | 10 (71 %), desfase −0:10 |
+| `con-ruido` | 15 s de la 10 con ruido blanco 30 dB por debajo | 10 (68 %) |
+| `sintetico` | una melodía generada que no está en el catálogo | nada sobre el umbral (la mejor, 13 %) |
+
+Con ruido a 20 dB la copia ya no se encuentra: el MFCC no resiste ese ruido (ver la evaluación).
 
 ## El catálogo en disco
 

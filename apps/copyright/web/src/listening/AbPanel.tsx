@@ -86,8 +86,8 @@ export function AbPanel({ span, uploadUrl, player }: AbPanelProps) {
           No se pudo reproducir: {player.failure}
         </p>
       )}
-      <audio ref={player.uploadRef} src={uploadUrl} preload="auto" />
-      <audio ref={player.originalRef} src={songAudioUrl(match.song.id)} preload="metadata" />
+      <audio ref={player.uploadRef} src={uploadUrl} preload="auto" data-group="ab" />
+      <audio ref={player.originalRef} src={songAudioUrl(match.song.id)} preload="metadata" data-group="ab" />
     </section>
   );
 }

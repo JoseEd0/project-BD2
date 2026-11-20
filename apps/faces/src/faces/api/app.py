@@ -25,6 +25,7 @@ from faces.api.analysis import AnalysisPool
 from faces.api.enrollments import EnrollmentRules, EnrollmentService
 from faces.api.gallery import Gallery
 from faces.api.identification import IdentificationService
+from faces.api.lookalikes import LookalikeService
 from faces.api.people import PeopleService, purge_periodically
 from faces.api.realtime.connection import ConnectionSlots, StreamLimits, StreamServices
 from faces.api.realtime.recognizer import FrameLimits, FrameRecognizer
@@ -34,9 +35,11 @@ from faces.api.routes import FacesServices, router
 from faces.api.settings import FacesSettings
 from faces.api.store import SCHEMA, FaceStore
 from faces.consent import consent_text
+from faces.famous import lfw_images_directory
 from faces.models import locate_models
 from faces.pipeline import FacePipeline
 from faces.quality import QualityConfig
+from minigestor_client import AsyncClient
 
 NAME = "faces"
 VERSION = "0.1.0"
@@ -69,7 +72,9 @@ def create_app(
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         async with cache.connected():
             store = FaceStore(app.state.engine)
-            app.state.faces = _services(settings, store, cache, quality_config, clock)
+            app.state.faces = _services(
+                settings, store, app.state.engine, cache, quality_config, clock
+            )
             purge = asyncio.create_task(
                 purge_periodically(app.state.faces.people, settings.purge_interval_seconds)
             )
@@ -103,6 +108,7 @@ def _redis_of(settings: FacesSettings) -> RedisFactory | None:
 def _services(
     settings: FacesSettings,
     store: FaceStore,
+    engine: AsyncClient,
     cache: OptionalRedis,
     quality: QualityConfig,
     clock: Clock,
@@ -127,6 +133,13 @@ def _services(
         enrollments=EnrollmentService(rules, store, gallery, pool, clock),
         identification=IdentificationService(
             gallery, pool, quality, settings.max_query_faces, clock
+        ),
+        lookalikes=LookalikeService(
+            engine,
+            pool,
+            quality,
+            settings.lookalike_count,
+            None if settings.data_dir is None else lfw_images_directory(settings.data_dir),
         ),
         people=PeopleService(store, clock),
         stream=_stream_services(settings, pool, gallery, cache, quality, clock),

@@ -156,3 +156,17 @@ class IdentifiedFace(BaseModel):
 class Identification(BaseModel):
     faces: list[IdentifiedFace] = Field(description="Del rostro más grande al más chico.")
     message: str
+
+
+class FamousLookalike(BaseModel):
+    id: int = Field(description="La persona en `face_famosos`; su foto, en `photo_path`.")
+    name: str
+    similarity: float = Field(description="El coseno entre tu rostro y el de la persona.")
+    percent: int = Field(description="El coseno en porcentaje, de 0 a 100.")
+    photos: int = Field(description="Fotos de LFW que se promediaron para esta persona.")
+    photo_path: str = Field(description="La ruta del API que sirve su foto de LFW.")
+
+
+class Lookalikes(BaseModel):
+    people: list[FamousLookalike] = Field(description="De la más parecida a la menos.")
+    message: str

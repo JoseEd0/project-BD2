@@ -7,16 +7,19 @@ from http import HTTPStatus
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Header, Response, UploadFile
+from fastapi.responses import FileResponse
 from starlette.requests import HTTPConnection
 
 from faces.api.enrollments import EnrollmentService
 from faces.api.errors import UNREADABLE_IMAGE, UnreadableImageError, UploadTooLargeError
 from faces.api.identification import IdentificationService
+from faces.api.lookalikes import PHOTO_ROUTE, LookalikeService
 from faces.api.models import (
     Consent,
     Enrolled,
     Enrollment,
     Identification,
+    Lookalikes,
     Person,
     ShotResult,
     StartEnrollment,
@@ -26,6 +29,9 @@ from faces.api.realtime.connection import StreamServices
 from faces.consent import ConsentText
 
 MEBIBYTE = 1 << 20
+LFW_PHOTO_MEDIA_TYPE = "image/jpeg"
+# Las fotos de LFW no cambian: el navegador las guarda un día.
+LFW_PHOTO_CACHE = "public, max-age=86400"
 # El código de una persona es la llave para ver y borrar su registro: viaja en una cabecera y
 # no en la ruta, que queda en los logs de acceso del servicio y del nginx.
 PERSON_ID_HEADER = "X-Person-Id"
@@ -38,6 +44,7 @@ class FacesServices:
     consent: ConsentText
     enrollments: EnrollmentService
     identification: IdentificationService
+    lookalikes: LookalikeService
     people: PeopleService
     stream: StreamServices
     max_upload_bytes: int
@@ -96,6 +103,23 @@ async def finish_enrollment(enrollment_id: str, services: Services) -> Enrolled:
 async def identify(image: Photo, services: Services) -> Identification:
     photo = await read_photo(image, services.max_upload_bytes)
     return await services.identification.identify(photo)
+
+
+@router.post("/lookalikes")
+async def lookalikes(image: Photo, services: Services) -> Lookalikes:
+    """Las personas públicas de LFW que más se parecen al rostro más grande de la foto. Solo
+    se compara con LFW, nunca con las personas registradas, y la foto no se guarda."""
+    photo = await read_photo(image, services.max_upload_bytes)
+    return await services.lookalikes.find(photo)
+
+
+@router.get(PHOTO_ROUTE, response_class=FileResponse)
+async def lookalike_photo(famous_id: int, services: Services) -> FileResponse:
+    """La foto de LFW de una persona de `POST /lookalikes`."""
+    path = await services.lookalikes.photo(famous_id)
+    return FileResponse(
+        path, media_type=LFW_PHOTO_MEDIA_TYPE, headers={"Cache-Control": LFW_PHOTO_CACHE}
+    )
 
 
 @router.get("/person")

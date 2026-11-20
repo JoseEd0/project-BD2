@@ -79,3 +79,10 @@ UNREADABLE_IMAGE = (
 )
 TOO_MANY_PIXELS = "La foto tiene demasiada resolución. Envía una foto más pequeña."
 PERSON_NOT_FOUND = "No hay un registro con ese código, o ya venció."
+
+
+class FamousPhotoNotFoundError(ResourceNotFoundError):
+    pass
+
+
+FAMOUS_PHOTO_NOT_FOUND = "No hay una foto de LFW con ese número."

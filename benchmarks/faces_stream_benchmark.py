@@ -149,7 +149,7 @@ def enroll(api_url: str) -> None:
         for portrait in (SINGLE_PORTRAIT, OTHER_PORTRAIT):
             shot = api.post(
                 f"/enrollments/{enrollment}/shots",
-                files={"image": ("toma.jpg", _jpeg(selfie(portrait)), "image/jpeg")},
+                files={"image": ("toma.jpg", jpeg_of(selfie(portrait)), "image/jpeg")},
             )
             if shot.status_code == httpx.codes.CONFLICT and shot.json()["kind"] == ALREADY_ENROLLED:
                 return
@@ -238,7 +238,7 @@ def _target(text: str) -> tuple[str, str]:
     return label, url
 
 
-def _jpeg(image: Image.Image) -> bytes:
+def jpeg_of(image: Image.Image) -> bytes:
     buffer = io.BytesIO()
     image.save(buffer, format="JPEG", quality=JPEG_QUALITY)
     return buffer.getvalue()

@@ -22,10 +22,15 @@ function shop(answers: Record<string, () => Response>): void {
 describe("the catalog", () => {
   it("searches by words and says how it ranked", async () => {
     shop({
-      "/api/busqueda/texto": () =>
-        jsonResponse([{ producto: product("B000STRING", { titulo: "Acoustic Guitar Strings" }), puntaje: 5.17 }], {
-          headers: { "Server-Timing": "gestor;dur=6, total;dur=7" },
-        }),
+      "/api/busqueda/productos": () =>
+        jsonResponse(
+          {
+            consulta: "guitar strings",
+            corregida: null,
+            resultados: [{ producto: product("B000STRING", { titulo: "Acoustic Guitar Strings" }), puntaje: 5.17 }],
+          },
+          { headers: { "Server-Timing": "gestor;dur=6, total;dur=7" } },
+        ),
     });
     renderAt("/?q=guitar+strings", routes);
     expect(await screen.findByRole("heading", { level: 1, name: "«guitar strings»" })).toBeTruthy();
@@ -35,8 +40,25 @@ describe("the catalog", () => {
     expect(within(results).getByText(/1 producto por las palabras de la ficha/)).toBeTruthy();
   });
 
+  it("says which corrected words it searched and offers the exact ones", async () => {
+    shop({
+      "/api/busqueda/productos": () =>
+        jsonResponse({
+          consulta: "guitr",
+          corregida: "guitar",
+          resultados: [{ producto: product("B000GUITAR", { titulo: "Electric Guitar" }), puntaje: 3.1 }],
+        }),
+    });
+    const user = userEvent.setup();
+    const router = renderAt("/?q=guitr", routes);
+    expect(await screen.findByText("Electric Guitar")).toBeTruthy();
+    expect(screen.getByText(/Mostrando resultados de/)).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Buscar «guitr» tal cual" }));
+    expect(router.state.location.search).toBe("?q=guitr&exacta=1");
+  });
+
   it("says what to try when nothing matches", async () => {
-    shop({ "/api/busqueda/texto": () => jsonResponse([]) });
+    shop({ "/api/busqueda/productos": () => jsonResponse({ consulta: "cuerdas", corregida: null, resultados: [] }) });
     renderAt("/?q=cuerdas&departamento=Guitars", routes);
     expect(await screen.findByText("Nada para «cuerdas»")).toBeTruthy();
     expect(screen.getByText(/Las fichas están en inglés/)).toBeTruthy();
@@ -45,7 +67,7 @@ describe("the catalog", () => {
 
   it("explains a malformed query with the api's kind", async () => {
     shop({
-      "/api/busqueda/texto": () => jsonResponse({ error: "falta un operando", kind: "BooleanQueryError" }, { status: 400 }),
+      "/api/busqueda/productos": () => jsonResponse({ error: "falta un operando", kind: "BooleanQueryError" }, { status: 400 }),
     });
     renderAt("/?q=%28guitar+AND", routes);
     expect(await screen.findByText("La búsqueda tiene un operador suelto")).toBeTruthy();
@@ -53,7 +75,7 @@ describe("the catalog", () => {
   });
 
   it("starts with translated suggestions that search in english", async () => {
-    shop({ "/api/busqueda/texto": () => jsonResponse([]) });
+    shop({ "/api/busqueda/productos": () => jsonResponse({ consulta: "", corregida: null, resultados: [] }) });
     const user = userEvent.setup();
     const router = renderAt("/", routes);
     await user.click(await screen.findByRole("button", { name: /Baquetas/ }));

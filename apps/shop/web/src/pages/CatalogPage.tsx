@@ -15,6 +15,7 @@ import { usePhoto } from "../photo/PhotoContext";
 import { PHOTO_REJECTIONS } from "../photo/prepare";
 
 const PHOTO_MODE = "foto";
+const EXACT_PARAM = "exacta";
 const SCORE = new Intl.NumberFormat("es-PE", { maximumFractionDigits: 2 });
 
 const HOW: Record<TextSearchMode | typeof PHOTO_MODE, string> = {
@@ -105,7 +106,8 @@ export default function CatalogPage() {
   const textMode = toSearchMode(params.get(PARAM.mode));
   const mode = isPhoto ? PHOTO_MODE : textMode;
   const upsideDown = priceRangeIsUpsideDown(filters);
-  const text = useTextSearch(textMode, isPhoto || upsideDown ? "" : query, filters);
+  const exact = params.get(EXACT_PARAM) === "1";
+  const text = useTextSearch(textMode, isPhoto || upsideDown ? "" : query, filters, exact);
   const { photo, rejection, preparing, clear } = usePhoto();
   const photoSearch = usePhotoSearch();
   const { mutate: searchPhoto } = photoSearch;
@@ -122,6 +124,12 @@ export default function CatalogPage() {
     const next = new URLSearchParams(params);
     next.set(PARAM.query, suggestion);
     next.set(PARAM.mode, "palabras");
+    setParams(next);
+  };
+
+  const searchExactly = () => {
+    const next = new URLSearchParams(params);
+    next.set(EXACT_PARAM, "1");
     setParams(next);
   };
 
@@ -155,8 +163,16 @@ export default function CatalogPage() {
                 <p className="results-how">
                   {result === undefined
                     ? `Buscando ${HOW[mode]}…`
-                    : `${result.data.length === 1 ? "1 producto" : `${result.data.length} productos`} ${HOW[mode]}.`}
+                    : `${result.data.products.length === 1 ? "1 producto" : `${result.data.products.length} productos`} ${HOW[mode]}.`}
                 </p>
+                {result?.data.correctedQuery != null && (
+                  <p className="correction" role="status">
+                    Mostrando resultados de <strong lang="en">{result.data.correctedQuery}</strong>.{" "}
+                    <button type="button" className="button button-link" onClick={searchExactly}>
+                      Buscar «{query}» tal cual
+                    </button>
+                  </p>
+                )}
               </div>
               {isPhoto && (
                 <button type="button" className="button button-link" onClick={clear}>
@@ -177,10 +193,10 @@ export default function CatalogPage() {
                   <li key={index} className="tile-skeleton" />
                 ))}
               </ul>
-            ) : result.data.length === 0 ? (
+            ) : result.data.products.length === 0 ? (
               <NothingFound query={query} mode={mode} filters={filters} onClearFilters={() => changeFilters(NO_FILTERS)} />
             ) : (
-              <Results items={result.data} mode={mode} />
+              <Results items={result.data.products} mode={mode} />
             )}
           </section>
         )}

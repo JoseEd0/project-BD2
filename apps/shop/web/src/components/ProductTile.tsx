@@ -1,9 +1,10 @@
 import { Link } from "react-router";
 
 import type { ProductSummary } from "../api/types";
+import { formatPrice } from "../format";
 import type { Signal } from "../recommend/signals";
-import { HangTag } from "./HangTag";
 import { ProductPhoto } from "./ProductPhoto";
+import { Stars } from "./Stars";
 import { NewStamp, Stamp } from "./Stamp";
 
 export interface TileReason {
@@ -19,14 +20,34 @@ interface ProductTileProps {
   readonly score?: string | undefined;
 }
 
-/** Un producto en una lista: su foto y su etiqueta colgada, todo un enlace a la ficha. */
+function Price({ price }: { readonly price: number | null }) {
+  const formatted = formatPrice(price);
+  if (formatted === null) {
+    return <span className="card-price card-price-missing">Precio no disponible</span>;
+  }
+  const [whole, cents] = formatted.replace("US$ ", "").split(",");
+  return (
+    <span className="card-price" aria-label={formatted}>
+      <span className="card-price-currency">US$</span>
+      <span className="card-price-whole">{whole}</span>
+      {cents !== undefined && <span className="card-price-cents">{cents}</span>}
+    </span>
+  );
+}
+
+/** Un producto en una lista: foto, marca, título en dos líneas, valoración y precio; todo un enlace a la ficha. */
 export function ProductTile({ product, reason, isNew = false, score }: ProductTileProps) {
   return (
-    <Link to={`/producto/${encodeURIComponent(product.id)}`} className={isNew ? "tile tile-new" : "tile"}>
+    <Link to={`/producto/${encodeURIComponent(product.id)}`} className={isNew ? "tile card tile-new" : "tile card"}>
       <ProductPhoto productId={product.id} hasPhoto={product.imagen !== null} />
-      <span className="tile-string" aria-hidden="true" />
-      <HangTag product={product}>
-        {score !== undefined && <span className="tag-score">{score}</span>}
+      <span className="card-body">
+        {product.marca && <span className="card-brand">{product.marca}</span>}
+        <span className="card-title" lang="en">
+          {product.titulo ?? "Producto sin título"}
+        </span>
+        <Stars rating={product.valoracion} count={product.valoraciones} />
+        <Price price={product.precio} />
+        {product.departamento && <span className="card-department">{product.departamento}</span>}
         {(reason !== undefined || isNew) && (
           <span className="tag-reason">
             <span className="stamps">
@@ -36,7 +57,8 @@ export function ProductTile({ product, reason, isNew = false, score }: ProductTi
             {reason !== undefined && <span className="tag-reason-text">{reason.text}</span>}
           </span>
         )}
-      </HangTag>
+        {score !== undefined && <span className="card-score">{score}</span>}
+      </span>
     </Link>
   );
 }

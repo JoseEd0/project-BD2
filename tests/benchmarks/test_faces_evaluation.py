@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 from benchmarks.common import Report
-from benchmarks.faces_evaluation.embeddings import LfwEmbeddings, center_face
+from benchmarks.faces_evaluation.embeddings import LfwEmbeddings
 from benchmarks.faces_evaluation.metrics import (
     accuracy_at,
     best_threshold,
@@ -33,7 +33,7 @@ from benchmarks.faces_evaluation_benchmark import (
     protocol_scores,
 )
 
-from faces.detection import BoundingBox, DetectedFace, FaceLandmarks, Point
+from faces.detection import BoundingBox, DetectedFace, FaceLandmarks, Point, center_face
 from faces.lfw import Fold, ImageReference, Pair
 
 SEPARABLE_SCORES = np.array([0.1, 0.2, 0.3, 0.6, 0.7, 0.8])

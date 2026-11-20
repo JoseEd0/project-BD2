@@ -194,6 +194,7 @@
     "/catalog": {
       "get": {
         "summary": "Catalog Summary",
+        "description": "El tamaño del catálogo; guardado en memoria, poco tiempo mientras se carga.",
         "operationId": "catalog_summary_catalog_get",
         "responses": {
           "200": {

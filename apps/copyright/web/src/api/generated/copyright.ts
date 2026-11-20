@@ -71,7 +71,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Catalog Summary */
+        /**
+         * Catalog Summary
+         * @description El tamaño del catálogo; guardado en memoria, poco tiempo mientras se carga.
+         */
         get: operations["catalog_summary_catalog_get"];
         put?: never;
         post?: never;

@@ -48,6 +48,10 @@ DEFAULT_SILENCE_THRESHOLD_DBFS = -60.0
 # Canciones de `fma_small` cuyo audio se encuentra a sí mismo con puntaje 1 en el catálogo
 # cargado: las de los audios de prueba (`demo_clips`), las dos de la mezcla y la del extracto.
 DEFAULT_DEMO_SONG_IDS = (2, 140, 10)
+# El catálogo no cambia tras la carga: una hora en memoria cuando ya está indexado; mientras
+# se carga, unos segundos, para que la interfaz vea el avance.
+DEFAULT_CATALOG_CACHE_READY_SECONDS = 3600.0
+DEFAULT_CATALOG_CACHE_LOADING_SECONDS = 10.0
 
 
 class CopyrightSettings(ServiceSettings):
@@ -63,6 +67,8 @@ class CopyrightSettings(ServiceSettings):
         max_matches: coincidencias que se devuelven, las de mayor puntaje.
         silence_threshold_dbfs: nivel por debajo del cual una ventana no vota.
         demo_song_ids: las canciones de los audios de prueba (ver `demo_clips.DemoSongs`).
+        catalog_cache_ready_seconds, catalog_cache_loading_seconds: cuánto se guardan en
+            memoria el resumen y las páginas del catálogo, ya indexado o todavía cargándose.
     """
 
     model_config = SettingsConfigDict(env_prefix=ENV_PREFIX, frozen=True, extra="ignore")
@@ -75,6 +81,10 @@ class CopyrightSettings(ServiceSettings):
     max_matches: int = Field(default=DEFAULT_MAX_MATCHES, ge=1)
     silence_threshold_dbfs: float = DEFAULT_SILENCE_THRESHOLD_DBFS
     demo_song_ids: tuple[int, int, int] = DEFAULT_DEMO_SONG_IDS
+    catalog_cache_ready_seconds: float = Field(default=DEFAULT_CATALOG_CACHE_READY_SECONDS, ge=0)
+    catalog_cache_loading_seconds: float = Field(
+        default=DEFAULT_CATALOG_CACHE_LOADING_SECONDS, ge=0
+    )
 
 
 class SeedSettings(CopyrightSettings):

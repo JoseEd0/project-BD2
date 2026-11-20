@@ -11,10 +11,11 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from contextlib import AsyncExitStack
+from dataclasses import dataclass
 from typing import Annotated
 
 import httpx
-from fastapi import APIRouter, FastAPI, Header, Query
+from fastapi import APIRouter, FastAPI, Header, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from starlette.background import BackgroundTask
@@ -27,13 +28,14 @@ from appkit import (
     load_settings,
     timed,
 )
-from minigestor_client import Record
+from minigestor_client import AsyncClient, Record
 from minigestor_client.queries import Params
 from songcheck.demo_clips import DemoSongs
 from songcheck.demo_clips_api import ClipCache
 from songcheck.demo_clips_api import router as demo_clips_router
 from songcheck.detection_api import DetectionSettings
 from songcheck.detection_api import router as detection_router
+from songcheck.read_cache import CachePolicy, ReadCache
 from songcheck.schema import SCHEMA, SEGMENT_INDEX_NAME, SEGMENTS_TABLE, SONGS_TABLE
 from songcheck.seed import SEGMENT_ID_STRIDE
 from songcheck.settings import CopyrightSettings
@@ -100,11 +102,29 @@ class CatalogSummary(BaseModel):
     genres: list[GenreCount]
 
 
+@dataclass(frozen=True, slots=True)
+class CatalogCaches:
+    """El resumen del catálogo y sus páginas sin búsqueda, guardados en memoria (`read_cache`)."""
+
+    summary: ReadCache[CatalogSummary]
+    pages: ReadCache[SongPage]
+
+    @classmethod
+    def of(cls, settings: CopyrightSettings) -> CatalogCaches:
+        policy = CachePolicy(
+            settings.catalog_cache_ready_seconds, settings.catalog_cache_loading_seconds
+        )
+        return cls(ReadCache(policy), ReadCache(policy))
+
+
+SUMMARY_KEY = "catalog"
+
 router = APIRouter()
 
 
 @router.get("/songs")
 async def list_songs(
+    request: Request,
     engine: Engine,
     query: str | None = Query(default=None, min_length=1, description="título o artista"),
     genre: str | None = None,
@@ -114,9 +134,19 @@ async def list_songs(
     """Canciones del catálogo: las que mejor responden a `query` (BM25 sobre título y
     artista) o, sin ella, en orden de id; `genre` filtra por género exacto."""
     sql, params = songs_query(query, genre, limit, offset)
-    with timed(ENGINE_STAGE):
-        rows = await engine.fetch_all(sql, params)
-    return SongPage(songs=[song_of(row) for row in rows])
+
+    async def load() -> SongPage:
+        with timed(ENGINE_STAGE):
+            rows = await engine.fetch_all(sql, params)
+        return SongPage(songs=[song_of(row) for row in rows])
+
+    if query is not None:
+        return await load()
+    caches = caches_of(request)
+    complete = catalog_complete(
+        await caches.summary.get(SUMMARY_KEY, lambda: read_summary(engine), catalog_complete)
+    )
+    return await caches.pages.get((genre, limit, offset), load, lambda _: complete)
 
 
 @router.get("/songs/{song_id}")
@@ -171,7 +201,25 @@ async def _forwarded(
 
 
 @router.get("/catalog")
-async def catalog_summary(engine: Engine) -> CatalogSummary:
+async def catalog_summary(request: Request, engine: Engine) -> CatalogSummary:
+    """El tamaño del catálogo; guardado en memoria, poco tiempo mientras se carga."""
+    return await caches_of(request).summary.get(
+        SUMMARY_KEY, lambda: read_summary(engine), catalog_complete
+    )
+
+
+def catalog_complete(summary: CatalogSummary) -> bool:
+    """Si el catálogo ya terminó de cargarse: tiene canciones y el HNSW de sus tramos."""
+    return summary.songs > 0 and summary.segments_indexed
+
+
+def caches_of(request: Request) -> CatalogCaches:
+    caches = request.app.state.catalog_caches
+    assert isinstance(caches, CatalogCaches)
+    return caches
+
+
+async def read_summary(engine: AsyncClient) -> CatalogSummary:
     with timed(ENGINE_STAGE):
         songs = await engine.scalar(COUNT_ROWS.format(table=SONGS_TABLE))
         segments = await engine.scalar(COUNT_ROWS.format(table=SEGMENTS_TABLE))
@@ -237,6 +285,7 @@ def build_app(
         engine_transport=engine_transport,
     )
     app.state.detection = DetectionSettings.of(settings)
+    app.state.catalog_caches = CatalogCaches.of(settings)
     app.include_router(router)
     app.include_router(detection_router)
     app.state.demo_clips = ClipCache(DemoSongs(*settings.demo_song_ids))

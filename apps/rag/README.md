@@ -439,7 +439,8 @@ curl -N localhost:8003/answers -H 'content-type: application/json' \
     -d '{"question": "¿Cómo reemplazan los índices aprendidos a los árboles B?"}'
 ```
 
-`question` es texto de 1 a 1 000 caracteres y `filters`, opcional, el de `/search`. La ruta
+`question` es texto de 1 a 1 000 caracteres; `filters`, opcional, el de `/search`, y
+`history`, opcional, los turnos anteriores (abajo). La ruta
 hace, en orden:
 
 1. **Recupera** con la búsqueda híbrida de `POST /search` (BM25 y vecinos del HNSW en
@@ -463,6 +464,35 @@ hace, en orden:
 La búsqueda y la reserva van antes de la primera línea del stream: sus errores (gestor caído,
 tope agotado, pregunta inválida) son respuestas JSON con su estado, como en cualquier ruta del
 kit, y `Server-Timing` lleva las etapas de la búsqueda.
+
+## La conversación
+
+El servicio no guarda conversaciones: la interfaz manda en `history` los turnos anteriores ya
+respondidos (`{question, answer}`, hasta 20) y `rag.conversation` los acota a los últimos
+`RAG_ANSWER_HISTORY_TURNS` (6), cada respuesta cortada en `RAG_ANSWER_HISTORY_CHARACTERS`
+(2 000) y sin sus `[n]`, que numeraban otros documentos. Van al modelo como pares de mensajes
+usuario-asistente antes del mensaje actual; seis turnos son a lo sumo unos 4 000 tokens más
+por pregunta (~0,01 USD sin caché). Una pregunta de seguimiento de menos de
+`RAG_ANSWER_FOLLOW_UP_WORDS` palabras (8), como «¿y cuál es más rápido?», se busca junto con
+la pregunta anterior, que es la que nombra el tema; la respuesta se escribe solo con los
+documentos del turno actual.
+
+Un saludo, un agradecimiento o una pregunta sobre la app («hola», «¿qué puedes hacer?», solos
+o juntos) se reconoce sin llamar a nadie (`is_small_talk`, frases fijas en español e inglés):
+no se busca en el corpus, el modelo recibe la pregunta sin `<documents>` y las instrucciones
+le piden contestar en dos o tres oraciones qué hace la app y sugerir tres preguntas. El
+cierre lleva `conversational: true` y la interfaz no muestra el aviso de «sin citas». Cuesta
+lo mismo que el prefijo cacheado más unas decenas de tokens, y no gasta la búsqueda.
+
+## El gestor ocupado
+
+El gestor es compartido. Mientras otra app construye un índice, el catálogo queda retenido y
+cualquier consulta espera el plazo de bloqueo del gestor (5 s) y falla con
+`EngineBusyError`. `rag.engine_reader` reintenta esas lecturas —y solo esas—
+`RAG_ENGINE_BUSY_RETRIES` veces (3) con una espera que empieza en
+`RAG_ENGINE_BUSY_BACKOFF_SECONDS` (0,5 s) y se duplica; si sigue ocupado, la ruta responde
+`503 EngineBusyError` con un mensaje que dice qué pasa y que se reintente en unos segundos,
+en vez del `400` genérico de un error del gestor.
 
 ## El modelo: Claude Sonnet 5.5 con esfuerzo bajo
 

@@ -97,12 +97,25 @@ describe("asking a question", () => {
     const { requests } = api(() => sseResponse(answerStream(ANSWER)));
     const user = userEvent.setup();
     renderAt("/");
+    await user.click(screen.getByText("Opciones"));
     await user.click(await screen.findByRole("checkbox", { name: /cs\.IR/ }));
     await user.selectOptions(screen.getByLabelText("Desde"), "2026");
     await user.type(screen.getByRole("textbox", { name: "Pregunta" }), `${QUESTION}{Enter}`);
     await screen.findByText(/Respuesta|reemplazan los nodos/);
     const posted = requests.find((request) => new URL(request.url).pathname === "/api/answers");
-    expect(await posted?.json()).toEqual({ question: QUESTION, filters: { year_from: 2026, year_to: null, categories: ["cs.IR"] } });
+    expect(await posted?.json()).toEqual({ question: QUESTION, filters: { year_from: 2026, year_to: null, categories: ["cs.IR"] }, history: [] });
+  });
+
+  it("sends the answered turns with a follow-up question", async () => {
+    const { requests } = api(() => sseResponse(answerStream(ANSWER)));
+    const user = await ask();
+    await screen.findByText(/claude-sonnet-5-5 · primer texto/);
+    await user.type(screen.getByRole("textbox", { name: "Pregunta" }), "¿y por qué?{Enter}");
+    await waitFor(() => expect(requests.filter((request) => new URL(request.url).pathname === "/api/answers")).toHaveLength(2));
+    const followUp = requests.filter((request) => new URL(request.url).pathname === "/api/answers")[1];
+    const body = (await followUp?.json()) as { question: string; history: { question: string }[] };
+    expect(body.question).toBe("¿y por qué?");
+    expect(body.history.map((exchange) => exchange.question)).toEqual([QUESTION]);
   });
 
   it("opens the cited page of the PDF beside the answer", async () => {
@@ -165,7 +178,7 @@ describe("asking a question", () => {
   it("says when the documents do not answer", async () => {
     api(() => sseResponse(answerStream("Los documentos no responden esto.", { answered_from_documents: false })));
     await ask();
-    expect(await screen.findByText("Los documentos no responden esta pregunta")).toBeTruthy();
+    expect(await screen.findByText(/Sin citas: ninguno de los/)).toBeTruthy();
   });
 
   it("says no chunk matched when retrieval finds nothing", async () => {

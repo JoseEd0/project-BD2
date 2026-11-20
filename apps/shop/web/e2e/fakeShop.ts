@@ -83,8 +83,9 @@ export async function fakeShop(context: BrowserContext): Promise<FakeShop> {
     if (path === "/departamentos") {
       return json(route, [{ departamento: "Guitars", productos: 1066 }]);
     }
-    if (path === "/busqueda/texto") {
-      return json(route, [{ producto: PRODUCTS[GUITAR], puntaje: 5.2 }], { "Server-Timing": "gestor;dur=6, total;dur=7" });
+    if (path === "/busqueda/productos") {
+      const found = { consulta: "electric guitar", corregida: null, resultados: [{ producto: PRODUCTS[GUITAR], puntaje: 5.2 }] };
+      return json(route, found, { "Server-Timing": "gestor;dur=6, total;dur=7" });
     }
     if (path.endsWith("/foto")) {
       return route.fulfill({ body: PIXEL, contentType: "image/png" });

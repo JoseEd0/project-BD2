@@ -28,15 +28,11 @@ test.describe("with the service up", () => {
     await expect(page.getByText("Original: Melodía 3")).toBeVisible();
     await expect(page.getByText("0:05–0:17,5 de 0:30")).toBeVisible();
 
-    const original = page.waitForRequest(/\/api\/songs\/3\/audio$/);
-    await page.getByRole("button", { name: "Reproducir el tramo" }).click();
-    await original;
-    await expect(page.getByRole("button", { name: "Pausar" })).toBeVisible();
-    await page.keyboard.press("x");
-    await expect(page.getByRole("radio", { name: /B original/ })).toBeChecked();
-    await page.keyboard.press("a");
-    await expect(page.getByRole("radio", { name: /A tu audio/ })).toBeChecked();
+    await spans.nth(1).click();
+    await expect(spans.nth(1)).toHaveAttribute("data-playing", "true");
     await expect.poll(() => page.locator('audio[data-group="ab"]').first().evaluate((audio: HTMLAudioElement) => audio.currentTime)).toBeGreaterThan(15);
+    await page.getByRole("button", { name: /^Escuchar el original Melodía 3/ }).first().click();
+    await expect(page.getByRole("button", { name: /^Pausar el original Melodía 3/ }).first()).toBeVisible();
 
     await page.getByText("Cuánto tardó").click();
     await expect(page.getByRole("rowheader", { name: "Buscar en el gestor" })).toBeVisible();
@@ -76,6 +72,16 @@ test.describe("with the service up", () => {
     await expect(page.getByRole("heading", { name: "Posible uso no autorizado: 1 fragmento de 1 canción" })).toBeVisible();
     await page.getByRole("button", { name: "Adelantar 5 s" }).click();
     await expect(page.getByRole("slider", { name: "Posición en el audio elegido" })).toHaveValue("5");
+  });
+
+  test("weak matches stay hidden until asked for", async ({ page, context }) => {
+    const weak = { ...REMIX_DETECTION.matches[1]!, song: { id: 9, title: "Melodía 9", artist: "Muestra" }, score: 0, above_threshold: false };
+    await mockApi(context, respondWith(200, { ...REMIX_DETECTION, matches: [...REMIX_DETECTION.matches, weak] }));
+    await upload(page);
+    const spans = page.getByRole("group", { name: /Tramos que coinciden/ }).getByRole("button");
+    await expect(spans).toHaveCount(2);
+    await page.getByRole("button", { name: "Mostrar coincidencias débiles (1)" }).click();
+    await expect(spans).toHaveCount(3);
   });
 
   test("a catalog still indexing says so instead of an engine error", async ({ page, context }) => {

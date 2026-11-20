@@ -42,8 +42,12 @@ reproductor salta al tramo sin bajar la pista entera. Al elegir un tramo, A se p
 inicio en la subida y B en su inicio en el original. **Los dos suenan a la vez y solo uno se
 oye** (el otro va en silencio): alternar no corta ni salta, como una caja A/B de estudio.
 Cada cuadro, si el lado que suena sale del tramo, los dos vuelven a su inicio (bucle), y si
-el lado mudo se separó más de 0,12 s, se realinea. Teclas: A y B eligen, X alterna, Espacio
-reproduce o pausa; los trazos se recorren con las flechas.
+el lado mudo se separó más de 0,12 s, se realinea. No hay panel aparte: **un clic en la letra
+de un tramo** (en la forma de onda, en la barra del reproductor o en la tabla) lo elige y hace
+sonar tu audio en ese tramo; un clic en el tramo del original (pentagrama B o columna «En el
+original») hace sonar el original; otro clic pausa. Los trazos se recorren con las flechas.
+Por omisión solo se ven las coincidencias que pasan el umbral (o las tres mejores con alguna
+evidencia); las débiles, tras «Mostrar coincidencias débiles».
 
 ## Comandos
 

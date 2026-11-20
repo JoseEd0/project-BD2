@@ -8,7 +8,8 @@ interface SwipeProps {
   readonly span: SpanLayout;
   readonly lanes: number;
   readonly selected: boolean;
-  readonly onSelect: (index: number) => void;
+  readonly playing: boolean;
+  readonly onPlay: (index: number) => void;
   readonly onStep: (from: number, direction: 1 | -1) => void;
 }
 
@@ -23,7 +24,7 @@ export function swipeLabel(span: SpanLayout): string {
 }
 
 /** Un trazo de resaltador sobre la forma de onda: un botón que elige la coincidencia. */
-export function Swipe({ span, lanes, selected, onSelect, onStep }: SwipeProps) {
+export function Swipe({ span, lanes, selected, playing, onPlay, onStep }: SwipeProps) {
   const onKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
     const direction = STEP_KEYS[event.key];
     if (direction !== undefined) {
@@ -38,6 +39,7 @@ export function Swipe({ span, lanes, selected, onSelect, onStep }: SwipeProps) {
       data-ink={span.ink}
       data-weak={span.weak}
       aria-pressed={selected}
+      data-playing={playing}
       aria-label={swipeLabel(span)}
       data-swipe-index={span.index}
       style={{
@@ -48,10 +50,12 @@ export function Swipe({ span, lanes, selected, onSelect, onStep }: SwipeProps) {
         ["--delay" as string]: `${span.index * SWIPE_STAGGER_MS}ms`,
         ["--strength" as string]: String(span.match.score),
       }}
-      onClick={() => onSelect(span.index)}
+      onClick={() => onPlay(span.index)}
       onKeyDown={onKeyDown}
     >
-      <span className="swipe__letter">{span.letter}</span>
+      <span className="swipe__letter">
+        {playing ? "❚❚" : "▶"} {span.letter}
+      </span>
       <span className="swipe__score measure">{formatPercent(span.match.score)}</span>
     </button>
   );

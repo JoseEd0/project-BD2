@@ -22,7 +22,7 @@ es *dónde* y se escucha.
 Dos columnas: a la izquierda **el catálogo** (buscar por título o artista, escuchar cada
 canción y «Buscar parecidas»), a la derecha **la mesa**: el reproductor del audio elegido
 (reproducir, ±5 s, posición) con los tramos coincidentes marcados sobre su barra, el
-veredicto, la partitura marcada y la escucha A/B. Un solo audio suena a la vez. Mientras el
+veredicto, la partitura marcada y la tabla de coincidencias, cuyas letras suenan al clic. Un solo audio suena a la vez. Mientras el
 catálogo carga o está ocupado se dice así, nunca con el error del gestor.
 
 ## Color
@@ -105,9 +105,9 @@ papel se separa por filete (`--rule`), no por elevación. Objetivos táctiles de
   un botón: se elige con clic, Tab o las flechas.
 - **Coincidencias**: una tabla con letra, canción y artista, tramo de la subida, tramo del
   original, desfase y puntaje; la fila elegida coincide con el trazo elegido.
-- **Escucha A/B**: los dos audios suenan a la vez desde el mismo punto del tramo y se
-  alterna cuál se oye; botones grandes `A · tu audio` y `B · original`, reproducir/pausar, y
-  las teclas A, B, X (alternar) y Espacio.
+- **Escucha con un clic**: la letra de un tramo es el botón que lo hace sonar (tu audio) y el
+  tramo del original, el del original; la que suena lleva un anillo índigo y el símbolo de
+  pausa. Las débiles se esconden tras «Mostrar coincidencias débiles (n)».
 - **Tiempos por etapa**: una barra apilada fina y su tabla, en un desplegable callado.
 
 ## Lo que no se hace

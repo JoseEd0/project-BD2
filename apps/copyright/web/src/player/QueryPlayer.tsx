@@ -7,13 +7,15 @@ interface QueryPlayerProps {
   readonly url: string;
   readonly title: string;
   readonly spans: readonly SpanLayout[];
+  readonly playingIndex: number | null;
+  readonly onPlaySpan: (index: number) => void;
 }
 
 /**
  * El audio elegido, entero, con sus controles y los tramos que coinciden marcados sobre la
- * barra: un clic en un tramo salta a su inicio.
+ * barra: un clic en un tramo lo hace sonar.
  */
-export function QueryPlayer({ url, title, spans }: QueryPlayerProps) {
+export function QueryPlayer({ url, title, spans, playingIndex, onPlaySpan }: QueryPlayerProps) {
   const player = usePlayer(url);
   const duration = player.duration ?? 0;
   return (
@@ -30,19 +32,21 @@ export function QueryPlayer({ url, title, spans }: QueryPlayerProps) {
         </button>
       </div>
       <div className="deck__track">
-        <div className="deck__bands" aria-hidden="true">
+        <div className="deck__bands">
           {spans.map((span) => (
             <button
               key={span.index}
               type="button"
-              tabIndex={-1}
               className="deck__band"
+              data-playing={playingIndex === span.index}
+              aria-pressed={playingIndex === span.index}
+              aria-label={`${playingIndex === span.index ? "Pausar" : "Escuchar"} el tramo ${span.letter}: ${span.match.song.title}`}
               data-ink={span.ink}
               data-weak={span.weak}
               style={{ left: `${span.startShare * 100}%`, width: `${span.widthShare * 100}%` }}
-              onClick={() => player.seekTo(span.match.upload.start_seconds)}
+              onClick={() => onPlaySpan(span.index)}
             >
-              {span.letter}
+              {playingIndex === span.index ? "❚❚" : "▶"} {span.letter}
             </button>
           ))}
         </div>

@@ -1,8 +1,13 @@
-/** Preguntas reales sobre el corpus: muestran qué se puede preguntar y en qué idiomas. */
+/**
+ * Preguntas reales sobre el corpus: muestran qué se puede preguntar y en qué idiomas. Las de
+ * los papers nombran sus términos en inglés («learned indexes», «B-tree»): con «índices
+ * aprendidos» o «árboles B», BM25 y los embeddings solo encuentran el material del curso, el
+ * único en español.
+ */
 const EXAMPLES: readonly string[] = [
-  "¿Cómo reemplazan los índices aprendidos a los árboles B?",
+  "¿Qué ventajas tienen los learned indexes frente a un B-tree?",
   "¿Qué ventajas tiene HNSW frente a IVF en búsqueda vectorial?",
-  "¿Cómo combina BM25 la frecuencia del término con el largo del documento?",
+  "¿Qué resultados obtuvo el informe al comparar el R-Tree con GiST?",
   "How are sequential recommender systems evaluated?",
 ];
 

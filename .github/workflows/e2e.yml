@@ -45,6 +45,10 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: e2e/package-lock.json
+      - name: Tipos de la suite
+        run: |
+          npm --prefix e2e ci --no-audit --no-fund
+          npm --prefix e2e run typecheck
       - name: Datos diminutos, claves, construir, levantar y sembrar
         run: e2e/run.sh up
       - name: Playwright

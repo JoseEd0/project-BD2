@@ -6,6 +6,7 @@ Expone lo justo para que el frontend funcione:
 |---|---|---|
 | `GET` | `/health` | vivo: el proceso responde (sin clave) |
 | `GET` | `/ready` | listo: el catálogo responde y no se está apagando (sin clave) |
+| `GET` | `/metrics` | métricas de Prometheus: peticiones, latencia y CPU (sin clave) |
 | `GET` | `/tables` | panel de archivos: tablas, columnas e índices |
 | `GET` | `/tables/{name}/structure` | forma física de la tabla y de sus índices |
 | `GET` | `/tables/{name}/points` | panel de mapa: puntos de una columna POINT |
@@ -48,7 +49,8 @@ from api.errors import (
     validation_failed,
 )
 from api.limits import BodySizeLimit, body_limit_for
-from api.logs import HEALTH_PATH, READY_PATH, configure_logging, log_request
+from api.logs import HEALTH_PATH, METRICS_PATH, READY_PATH, configure_logging, log_request
+from api.metrics import metrics_response, observe_request, route_of
 from api.routes import media, query, rows, sessions, tables, uploads
 from api.service import Service, ServiceStoppingError
 from api.settings import settings_from_environment
@@ -121,6 +123,10 @@ def create_app(
             return JSONResponse({"status": "ready"})
         return JSONResponse({"status": "unavailable"}, status_code=SERVICE_UNAVAILABLE)
 
+    @app.get(METRICS_PATH, include_in_schema=False)
+    def metrics() -> Response:
+        return metrics_response()
+
     routers = (
         tables.router,
         rows.router,
@@ -162,10 +168,14 @@ def _add_middleware(app: FastAPI, config: EngineConfig, cors_origins: Sequence[s
         trace = RequestTrace(request_id_from(request.headers.get(REQUEST_ID_HEADER)))
         with tracing(trace):
             response = await call_next(request)
-            trace.record(Stage.TOTAL, (time.perf_counter() - started) * MILLISECONDS_PER_SECOND)
+            elapsed_seconds = time.perf_counter() - started
+            trace.record(Stage.TOTAL, elapsed_seconds * MILLISECONDS_PER_SECOND)
             response.headers[REQUEST_ID_HEADER] = trace.request_id
             response.headers[SERVER_TIMING_HEADER] = trace.server_timing()
             log_request(request.method, request.url.path, response.status_code, trace)
+            observe_request(
+                request.method, route_of(request.scope), response.status_code, elapsed_seconds
+            )
         return response
 
     app.add_middleware(

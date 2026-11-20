@@ -17,6 +17,8 @@ dependencies = [
     "opencv-python-headless>=4.10",
     "librosa>=0.10",
     "soundfile>=0.12",
+    # `GET /metrics` del gestor (`api.metrics`), que lee el perfil `observability`.
+    "prometheus-client>=0.21",
 ]
 
 [project.optional-dependencies]

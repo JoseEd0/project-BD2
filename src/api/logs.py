@@ -22,7 +22,8 @@ UVICORN_LOGGERS = ("uvicorn", "uvicorn.error")
 UVICORN_ACCESS_LOGGER = "uvicorn.access"
 HEALTH_PATH = "/health"
 READY_PATH = "/ready"
-PROBE_PATHS = frozenset({HEALTH_PATH, READY_PATH})
+METRICS_PATH = "/metrics"
+PROBE_PATHS = frozenset({HEALTH_PATH, READY_PATH, METRICS_PATH})
 FIRST_ERROR_STATUS = 400
 
 

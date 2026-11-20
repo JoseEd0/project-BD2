@@ -7,6 +7,11 @@ access_log /dev/stdout app;
 # `$csp_script_hashes`: los hashes de los guiones en línea del build, medidos al construir.
 include /etc/nginx/app/csp.conf;
 
+# Las métricas de la API las lee Prometheus por la red de la app, no el navegador.
+location = /api/metrics {
+    return 404;
+}
+
 location /api/ {
     limit_req zone=api_per_ip burst=${API_RATE_BURST} nodelay;
     client_max_body_size ${API_MAX_BODY_SIZE};

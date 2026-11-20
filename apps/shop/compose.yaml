@@ -28,7 +28,7 @@ services:
     volumes:
       - ${MINIGESTOR_DATASETS_DIR:-../../data/datasets}:/app/data/datasets:ro
     # Con las dos torres de CLIP cargadas, el API ocupa unos 640 MiB (medido).
-    mem_limit: ${SHOP_API_MEMORY:-1g}
+    mem_limit: ${SHOP_API_MEMORY:-2g}
     networks: [data, shop, cache]
     depends_on:
       engine:

@@ -798,6 +798,9 @@ ul {
   position: fixed;
   inset: 0;
   display: grid;
+  /* Sin `minmax(0, 1fr)`, la columna crece hasta el título sin cortar de la barra y la
+     pantalla queda más ancha que el celular. */
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto 1fr auto;
   background: var(--curtain);
   color: var(--curtain-ink);

@@ -681,6 +681,23 @@ galería del gestor.}\label{tab:rostros}
 en el servidor y p50 y p95 en el servidor y en el cliente, por el nginx o directo al API,
 con y sin la caché de rastros.}
 
+\paragraph{Carga.} Con k6, 32 usuarios sin pausa contra el nginx de cada app durante 30~s
+y 1, 2 y 4 réplicas de su API (figura~\ref{fig:carga}), el gestor es el límite de todo lo
+que llega a él: es un solo proceso de Python que ejecuta las sentencias de a una, así que
+se queda en un núcleo y el caudal no sube con las réplicas (la recomendación sin caché da
+12.4, 11.1 y 12.7 req/s y la búsqueda de papers 54.2, 50.4 y 49.1 req/s). La latencia es la
+cola: 32 usuarios entre 12.4 req/s dan 2.6~s de espera, y la mediana medida es 2.5~s. La
+detección de copyright ocupa 10.8 de los 12 núcleos desde el gestor, porque los MFCC se
+calculan con varios hilos, y rostros ocupa 7.7 núcleos con una sola réplica; en los dos
+casos otra réplica en la misma máquina no tiene CPU que usar. Las réplicas solo suman
+cuando el trabajo está en la API: con la caché de Redis caliente, la tienda pasa de
+1\,837 a 3\,467 y 5\,595 req/s. La primera medida encontró que con una réplica el nginx
+se quedaba sin puertos locales (78\,\% de respuestas 502), porque abría una conexión
+nueva por petición; con \texttt{keepalive} hacia la API no falló ninguna.
+
+\grafica[0.88\textwidth]{carga-replicas.png}{fig:carga}{Prueba de carga con 1, 2 y 4
+réplicas de cada API: respuestas correctas por segundo, p95 y CPU del gestor.}
+
 \begin{table}[H]
 \centering
 \caption{Resumen de la Parte 5: técnicas medidas en las aplicaciones.}\label{tab:resumen-apps}
@@ -694,6 +711,7 @@ CLIP frente a SIFT & Índice en 0.81~s y 51.6~MiB. & Ninguna predice la compra (
 Compras conjuntas materializadas & La mejor señal: Hit@10 de 4.36\,\%; 4.5~ms por consulta contra 2.9~s al vuelo. & 793.6~s en la carga; no acierta productos con menos de 5 compras. & Recomendar a partir de compras, con el texto para los productos nuevos. \\
 Búsqueda híbrida (RRF) & Recall@10 de 0.578, sobre la vectorial (0.533) y BM25 (0.422). & Calcular los embeddings es el 97\,\% de la ingesta; BM25 necesita la consulta en el idioma del índice. & Preguntas en otro idioma que el corpus, con nombres propios. \\
 Caché de rastros en Redis & Un tercio menos de mediana (23.8 a 16.4~ms); cualquier réplica sigue la sesión. & Se pierde si el rostro salta más de 47~px entre cuadros. & Video en vivo con rostros que se mueven poco. \\
+Réplicas de la API & La tienda con caché pasa de 1\,837 a 5\,595~req/s con 4 réplicas. & No mueven al gestor, un proceso que se queda en un núcleo (12.4~req/s sin caché). & Trabajo en la API, como la caché o los embeddings, con CPU libre. \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -704,4 +722,6 @@ Caché de rastros en Redis & Un tercio menos de mediana (23.8 a 16.4~ms); cualqu
 Ninguna estructura es la mejor en todo, y varios resultados no eran los esperados antes de
 medir: el hash no fue más rápido que el B+ agrupado por igualdad, GIN fue más lento que el
 motor con consultas largas y en multimedia el costo está en extraer y cuantizar, no en el
-índice. En las aplicaciones domina decodificar audio o calcular embeddings, no el gestor.
+índice. En las aplicaciones domina decodificar audio o calcular embeddings, no el gestor, aunque
+con muchos usuarios a la vez el gestor es el cuello de botella porque ejecuta una sentencia
+a la vez.

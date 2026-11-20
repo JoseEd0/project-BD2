@@ -58,6 +58,9 @@ class FacesSettings(ServiceSettings):
             `TrackingConfig`).
         track_session_ttl_seconds: cuánto viven en Redis los rastros de una sesión sin
             cuadros: lo que tiene el celular para reconectarse y retomarlos.
+        data_dir: la carpeta de datasets, con LFW en `lfw/lfw/`; de ahí salen las fotos de
+            «¿A qué famoso te pareces?». Sin ella, la búsqueda funciona pero sin fotos.
+        lookalike_count: personas de LFW que devuelve `POST /lookalikes`.
     """
 
     model_config = SettingsConfigDict(env_prefix=ENV_PREFIX, frozen=True, extra="ignore")
@@ -91,6 +94,8 @@ class FacesSettings(ServiceSettings):
     track_verify_seconds: float = Field(default=DEFAULT_TRACKING.verify_seconds, ge=0)
     track_lost_seconds: float = Field(default=DEFAULT_TRACKING.lost_seconds, ge=0)
     track_session_ttl_seconds: int = Field(default=60, ge=1)
+    data_dir: Path | None = None
+    lookalike_count: int = Field(default=5, ge=1)
 
     @model_validator(mode="after")
     def lookalike_below_duplicate(self) -> FacesSettings:
@@ -122,3 +127,15 @@ class FacesSettings(ServiceSettings):
 
     def pipeline(self) -> PipelineConfig:
         return PipelineConfig(max_image_pixels=self.max_image_pixels)
+
+
+class FacesSeedSettings(FacesSettings):
+    """Lo que necesita `python -m faces.seed`, además de lo del servicio.
+
+    Attributes:
+        data_dir: obligatoria aquí: de donde se leen las fotos de LFW.
+        seed_workers: procesos que calculan los embeddings de las fotos de LFW.
+    """
+
+    data_dir: Path
+    seed_workers: int = Field(default=2, ge=1)

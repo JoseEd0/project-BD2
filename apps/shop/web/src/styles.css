@@ -1006,17 +1006,6 @@ details {
   font-size: var(--text-xs);
 }
 
-/* La pita que une la etiqueta con la foto. */
-.tile-string {
-  position: relative;
-  z-index: 1;
-  width: 1.5px;
-  height: 18px;
-  margin-inline-start: 25px;
-  margin-block: -6px -10px;
-  background: var(--ink-faint);
-}
-
 .tag {
   position: relative;
   display: grid;
@@ -1028,10 +1017,6 @@ details {
   box-shadow: var(--tag-shadow);
   clip-path: polygon(14px 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 0 100%, 0 14px);
   border-radius: 0 0 var(--radius-md) var(--radius-md);
-}
-
-.tile .tag {
-  flex: 1;
 }
 
 .tag-eyelet {

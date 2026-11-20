@@ -11,7 +11,8 @@ tira**. La navegación y los controles son los de cualquier app de cámara del c
 Una persona de pie en un aula o un pasillo, con el celular en una mano, bajo tubos
 fluorescentes o a contraluz de una ventana. La pantalla de cámara es oscura por naturaleza
 (el video manda y todo lo demás se apaga a su alrededor); las pantallas de texto
-(consentimiento, mis datos) siguen el tema del sistema, claro u oscuro.
+(consentimiento, mis datos) siguen el tema del sistema, claro u oscuro, o el que se elija
+con los tres íconos (automático, claro, oscuro) de la barra de cada una.
 
 ## Color
 
@@ -106,6 +107,13 @@ salta sin animarse.
 - **Botón principal**: píldora `--flash` con texto `--curtain` sobre la cortina; petróleo
   con texto blanco sobre `--ground` claro. **Secundario**: contorno de 2 px. **Peligro**:
   contorno `--danger` aislado con espacio de sus vecinos; el borrado pide confirmar en línea.
+- **Inicio**: la acción principal («Registrarme») es un bloque petróleo con la luz `--lamp`
+  como flecha; las demás van en **una sola lista** con divisores, cada fila con su ícono, su
+  nombre y para qué sirve en una línea. Nada de tarjetas iguales apiladas.
+- **Tema**: tres íconos (automático, claro, oscuro) en una píldora `--curtain-raised` en la
+  barra de cada pantalla de texto; el elegido, en `--flash`.
+- **Aceptar algo** (el consentimiento): la casilla y el botón van juntos en la barra fija
+  de abajo, sobre fondo sólido, para que el botón nunca quede sin su condición a la vista.
 - **Estado**: una píldora con punto (verde conectado, ámbar «red lenta», gris «en pausa»,
   rojo «sin conexión») y la latencia en cifras tabulares.
 - **Avisos de problema** (sin cámara, sin permiso, sin HTTPS, servicio caído): una pantalla

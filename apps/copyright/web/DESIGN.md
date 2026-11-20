@@ -17,24 +17,32 @@ instante. Es el único elemento memorable; todo lo demás es callado.
 Se rechaza a propósito la tarjeta de resultado con una insignia de confianza: la evidencia
 es *dónde* y se escucha.
 
+## Pantalla
+
+Dos columnas: a la izquierda **el catálogo** (buscar por título o artista, escuchar cada
+canción y «Buscar parecidas»), a la derecha **la mesa**: el reproductor del audio elegido
+(reproducir, ±5 s, posición) con los tramos coincidentes marcados sobre su barra, el
+veredicto, la partitura marcada y la escucha A/B. Un solo audio suena a la vez. Mientras el
+catálogo carga o está ocupado se dice así, nunca con el error del gestor.
+
 ## Color
 
 Estrategia: **comprometida en el marco, contenida en el trabajo**. La banda de cabecera es
-azul de edición (el de las tapas de las ediciones de partituras), el fondo es papel de
-grabado frío y la tinta casi negra azulada. Los colores de resaltador son **las series de
+índigo de edición y es también el color de toda acción (reproducir, buscar parecidas), el
+fondo es papel lila muy claro y la tinta casi negra violácea. Los colores de resaltador son **las series de
 datos y nada más**: una canción original, un color; no se usan como acento ni decoración.
 
 | Token | Claro | Oscuro | Para qué |
 |---|---|---|---|
-| `--paper` | `#F4F6FA` | `#0D1424` | fondo |
-| `--paper-raised` | `#FFFFFF` | `#141E35` | paneles, pentagrama |
-| `--ink` | `#111827` | `#E8EDF6` | texto, forma de onda reproducida |
-| `--ink-soft` | `#3B4659` | `#B4BED1` | texto secundario, forma de onda |
-| `--ink-faint` | `#566175` | `#8F9BB3` | rótulos, ejes (≥ 4,5:1 sobre `--paper`) |
-| `--rule` | `#D3D9E4` | `#26324E` | líneas del pentagrama, separadores |
-| `--edition` | `#1B3874` | `#15254A` | banda de cabecera |
-| `--on-edition` | `#F3F6FC` | `#E8EDF6` | texto sobre la banda |
-| `--focus` | `#2563EB` | `#93B8FF` | anillo de foco |
+| `--paper` | `#F5F4F8` | `#16131F` | fondo |
+| `--paper-raised` | `#FFFFFF` | `#201C2D` | paneles, pentagrama |
+| `--ink` | `#1B1726` | `#EEEBF6` | texto, forma de onda reproducida |
+| `--ink-soft` | `#433D55` | `#C2BCD4` | texto secundario, forma de onda |
+| `--ink-faint` | `#5D5770` | `#9B94B0` | rótulos, ejes (≥ 4,5:1 sobre `--paper`) |
+| `--rule` | `#DCD8E6` | `#322C45` | líneas del pentagrama, separadores |
+| `--edition` | `#3A2A8C` | `#2A2160` | banda de cabecera |
+| `--on-edition` | `#F6F4FF` | `#F1EEFF` | texto sobre la banda |
+| `--focus` | `#5B3FD9` | `#B7A6FF` | anillo de foco |
 | `--alert` | `#A3261B` | `#FF9A8F` | rechazo, servicio caído |
 | `--clear` | `#17683D` | `#7FD9A4` | sin coincidencias |
 

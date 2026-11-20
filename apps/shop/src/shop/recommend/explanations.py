@@ -26,7 +26,13 @@ class MissingEvidenceError(ValueError):
 
 def explanation(fused: FusedProduct, scope: Scope) -> str:
     """Una frase por señal que aportó, de la que más aportó a la que menos."""
-    return REASON_SEPARATOR.join(reason(part, scope) for part in fused.contributions)
+    return REASON_SEPARATOR.join(reason(part, scope) for part in contributed(fused))
+
+
+def contributed(fused: FusedProduct) -> tuple[Contribution, ...]:
+    """Los aportes que sumaron algo al puntaje. Una señal con peso 0 también propone
+    candidatos, pero decir «se ve parecido» de un producto que la imagen no movió engañaría."""
+    return tuple(part for part in fused.contributions if part.weighted > 0)
 
 
 def reason(contribution: Contribution, scope: Scope) -> str:

@@ -10,10 +10,12 @@ from __future__ import annotations
 import re
 from collections import Counter
 from collections.abc import Sequence
+from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, ConfigDict
 
-from .prompt import Source
+if TYPE_CHECKING:
+    from .prompt import Source
 
 CITATION = re.compile(r"\[(\d+(?:\s*,\s*\d+)*)\]")
 NUMBER_SEPARATOR = re.compile(r"\s*,\s*")

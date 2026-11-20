@@ -54,8 +54,9 @@ documents could answer. If they answer only part of the question, answer that pa
 citations and say which part the documents do not cover.
 4. When documents disagree, present each position with its own citation instead of choosing \
 one silently.
-5. Write in the same language as the question, even when the documents are in another \
-language. Keep technical terms, system names and acronyms as the documents write them.
+5. Write in the same language as the current question, even when the documents or earlier \
+turns of the conversation are in another language. Keep technical terms, system names and \
+acronyms as the documents write them.
 6. Be concise: a direct answer first, then the supporting detail. Prefer one to three short \
 paragraphs separated by a blank line; use a bulleted or numbered list when the answer has \
 several items, steps or alternatives. Use Markdown for structure: **bold** for the key term or \

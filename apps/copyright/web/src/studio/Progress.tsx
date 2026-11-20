@@ -3,6 +3,14 @@ import type { Phase } from "./useStudio";
 
 /** Subiendo, con su porcentaje; analizando, sin uno, porque el servicio no informa avance. */
 export function Progress({ phase }: { readonly phase: Phase }) {
+  if (phase.kind === "fetching") {
+    return (
+      <div className="progress" role="status">
+        <span className="progress__label">Trayendo «{phase.song.title}» del catálogo…</span>
+        <progress className="progress__bar" aria-label="Descarga de la canción" />
+      </div>
+    );
+  }
   if (phase.kind === "uploading") {
     const known = phase.progress !== null;
     return (

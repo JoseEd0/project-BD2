@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { Problem } from "../analysis/problem";
+import { CatalogProblem, songFile } from "../api/catalog";
 import { DetectionProblem, uploadForDetection, type DetectionResult } from "../api/detections";
+import type { Song } from "../api/types";
 import { decodeWaveform, type Waveform } from "../audio/decodeWaveform";
 
 export type Phase =
   | { readonly kind: "idle"; readonly notice: string | null }
+  | { readonly kind: "fetching"; readonly song: Song }
   | { readonly kind: "uploading"; readonly progress: number | null }
   | { readonly kind: "analyzing" }
   | { readonly kind: "done"; readonly result: DetectionResult }
@@ -18,11 +21,14 @@ export type WaveformState =
 
 export interface Studio {
   readonly file: File | null;
+  /** La canción del catálogo que se analiza, o `null` si el audio es una subida. */
+  readonly source: Song | null;
   /** El archivo como `blob:` para escucharlo (lado A). */
   readonly audioUrl: string | null;
   readonly phase: Phase;
   readonly waveform: WaveformState;
   readonly analyse: (file: File) => void;
+  readonly analyseSong: (song: Song) => void;
   readonly cancel: () => void;
   readonly retry: () => void;
   readonly reset: () => void;
@@ -73,6 +79,7 @@ function useWaveform(file: File | null): WaveformState {
  */
 export function useStudio(): Studio {
   const [file, setFile] = useState<File | null>(null);
+  const [source, setSource] = useState<Song | null>(null);
   const [phase, setPhase] = useState<Phase>(IDLE);
   const upload = useRef<AbortController | null>(null);
   const audioUrl = useObjectUrl(file);
@@ -104,8 +111,37 @@ export function useStudio(): Studio {
 
   const analyse = useCallback(
     (chosen: File) => {
+      setSource(null);
       setFile(chosen);
       start(chosen);
+    },
+    [start],
+  );
+
+  const analyseSong = useCallback(
+    (song: Song) => {
+      upload.current?.abort();
+      const controller = new AbortController();
+      upload.current = controller;
+      setSource(song);
+      setFile(null);
+      setPhase({ kind: "fetching", song });
+      songFile(song, controller.signal).then(
+        (chosen) => {
+          setFile(chosen);
+          start(chosen);
+        },
+        (error: unknown) => {
+          if (isAbort(error)) {
+            return;
+          }
+          if (error instanceof CatalogProblem) {
+            setPhase({ kind: "problem", problem: error.problem });
+            return;
+          }
+          throw error;
+        },
+      );
     },
     [start],
   );
@@ -115,22 +151,28 @@ export function useStudio(): Studio {
     upload.current = null;
     setPhase({ kind: "idle", notice: file === null ? null : `Cancelaste el análisis de «${file.name}».` });
     setFile(null);
+    setSource(null);
   }, [file]);
 
   const retry = useCallback(() => {
     if (file !== null) {
       start(file);
+      return;
     }
-  }, [file, start]);
+    if (source !== null) {
+      analyseSong(source);
+    }
+  }, [analyseSong, file, source, start]);
 
   const reset = useCallback(() => {
     upload.current?.abort();
     upload.current = null;
     setFile(null);
+    setSource(null);
     setPhase(IDLE);
   }, []);
 
   useEffect(() => () => upload.current?.abort(), []);
 
-  return { file, audioUrl, phase, waveform, analyse, cancel, retry, reset };
+  return { file, source, audioUrl, phase, waveform, analyse, analyseSong, cancel, retry, reset };
 }

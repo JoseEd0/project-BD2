@@ -8,6 +8,8 @@ interface OriginalStaffProps {
   readonly span: SpanLayout;
   readonly uploadDuration: number;
   readonly playhead: number | null;
+  readonly playing: boolean;
+  readonly onPlay: () => void;
 }
 
 /** La llave entre los dos pentagramas: une el pasaje de la subida con el del original. */
@@ -26,7 +28,7 @@ function Bracket({ upload, original }: { readonly upload: readonly [number, numb
  * El original de la coincidencia elegida, a su propia escala: su duración sale del catálogo
  * (`GET /songs/{id}`); mientras llega, el final del tramo.
  */
-export function OriginalStaff({ span, uploadDuration, playhead }: OriginalStaffProps) {
+export function OriginalStaff({ span, uploadDuration, playhead, playing, onPlay }: OriginalStaffProps) {
   const { match } = span;
   const song = useSong(match.song.id);
   const duration = Math.max(song.data?.duration_seconds ?? match.original.end_seconds, match.original.end_seconds);
@@ -50,17 +52,21 @@ export function OriginalStaff({ span, uploadDuration, playhead }: OriginalStaffP
         </p>
         <div className="staff__body staff__body--original">
           <div className="original-track" aria-hidden="true" />
-          <div
+          <button
+            type="button"
             className="original-span"
             data-ink={span.ink}
             data-weak={span.weak}
+            data-playing={playing}
+            aria-pressed={playing}
+            aria-label={playing ? `Pausar el original ${match.song.title}` : `Escuchar el original ${match.song.title} en ${formatSpan(match.original.start_seconds, match.original.end_seconds)}`}
             style={{ left: percent(originalShare[0]), width: percent(originalShare[1] - originalShare[0]) }}
-            aria-hidden="true"
+            onClick={onPlay}
           >
             <span className="song-chip" data-ink={span.ink}>
-              {span.letter}
+              {playing ? "❚❚" : "▶"} {span.letter}
             </span>
-          </div>
+          </button>
           {playhead !== null && <div className="playhead" style={{ left: percent(playhead / duration) }} aria-hidden="true" />}
         </div>
         <Ruler durationSeconds={duration} />

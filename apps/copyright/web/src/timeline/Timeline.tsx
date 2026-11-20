@@ -2,6 +2,7 @@ import { useCallback, useRef } from "react";
 
 import { barlineTimes } from "../analysis/ruler";
 import type { SpanLayout, TimelineLayout } from "../analysis/spans";
+import type { Side } from "../listening/sync";
 import { OriginalStaff } from "./OriginalStaff";
 import { percent } from "./position";
 import { Ruler } from "./Ruler";
@@ -19,6 +20,9 @@ interface TimelineProps {
   readonly layout: TimelineLayout | null;
   readonly selected: SpanLayout | null;
   readonly onSelect: (index: number) => void;
+  /** Elige la coincidencia y la hace sonar: `A` tu audio, `B` el original. */
+  readonly onPlay: (index: number, side: Side) => void;
+  readonly playing: { readonly index: number; readonly side: Side } | null;
   readonly analyzing: boolean;
   readonly uploadPlayhead: number | null;
   readonly originalPlayhead: number | null;
@@ -30,7 +34,7 @@ interface TimelineProps {
  * pentagrama del original debajo, unido por una llave al mismo pasaje.
  */
 export function Timeline(props: TimelineProps) {
-  const { durationSeconds, hopSeconds, peaks, layout, selected, onSelect, analyzing, uploadPlayhead, originalPlayhead } = props;
+  const { durationSeconds, hopSeconds, peaks, layout, selected, onSelect, onPlay, playing, analyzing, uploadPlayhead, originalPlayhead } = props;
   const swipes = useRef<HTMLDivElement>(null);
   const step = useCallback(
     (from: number, direction: 1 | -1) => {
@@ -63,7 +67,8 @@ export function Timeline(props: TimelineProps) {
                   span={span}
                   lanes={layout.lanes}
                   selected={selected?.index === span.index}
-                  onSelect={onSelect}
+                  playing={playing?.index === span.index && playing.side === "A"}
+                  onPlay={(index) => onPlay(index, "A")}
                   onStep={step}
                 />
               ))}
@@ -73,7 +78,15 @@ export function Timeline(props: TimelineProps) {
         </div>
         <Ruler durationSeconds={durationSeconds} />
       </div>
-      {selected !== null && <OriginalStaff span={selected} uploadDuration={durationSeconds} playhead={originalPlayhead} />}
+      {selected !== null && (
+        <OriginalStaff
+          span={selected}
+          uploadDuration={durationSeconds}
+          playhead={originalPlayhead}
+          playing={playing?.index === selected.index && playing.side === "B"}
+          onPlay={() => onPlay(selected.index, "B")}
+        />
+      )}
     </section>
   );
 }

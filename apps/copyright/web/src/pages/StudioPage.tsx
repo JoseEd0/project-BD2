@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { withoutSong } from "../analysis/catalog";
+import { notableMatches, withoutSong } from "../analysis/catalog";
 import { layoutSpans } from "../analysis/spans";
 import { CatalogPanel } from "../catalog/CatalogPanel";
+import { songAudioUrl } from "../api/client";
 import { useServiceHealth } from "../api/useServiceHealth";
 import { Icon } from "../components/Icon";
 import { UNAVAILABLE_REASONS } from "../components/ServiceBadge";
 import { APP } from "../identity";
-import { AbPanel } from "../listening/AbPanel";
-import { useAbPlayer } from "../listening/useAbPlayer";
+import { useMatchPlayback } from "../listening/useMatchPlayback";
 import { QueryPlayer } from "../player/QueryPlayer";
 import { DropZone } from "../studio/DropZone";
 import { FileBar } from "../studio/FileBar";
@@ -46,7 +46,7 @@ export default function StudioPage() {
   const studio = useStudio();
   const { phase, waveform, file, source } = studio;
   const health = useServiceHealth();
-  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+  const [showWeak, setShowWeak] = useState(false);
 
   const detection = useMemo(() => {
     if (phase.kind !== "done") {
@@ -56,15 +56,11 @@ export default function StudioPage() {
   }, [phase, source]);
   const duration = knownDuration(phase, waveform);
   const layout = useMemo(
-    () => (detection === null || duration === null ? null : layoutSpans(detection.matches, duration)),
-    [detection, duration],
+    () => (detection === null || duration === null ? null : layoutSpans(showWeak ? detection.matches : notableMatches(detection.matches), duration)),
+    [detection, duration, showWeak],
   );
-  const selected = selectedIndex === null ? null : (layout?.spans[selectedIndex] ?? null);
-  const player = useAbPlayer(selected?.match ?? null);
-
-  useEffect(() => {
-    setSelectedIndex(layout !== null && layout.spans.length > 0 ? 0 : null);
-  }, [layout]);
+  const hiddenWeak = detection === null || layout === null ? 0 : detection.matches.length - layout.spans.length;
+  const { selected, select, player, playing, play } = useMatchPlayback(layout);
 
   useEffect(() => {
     if (detection !== null) {
@@ -110,7 +106,15 @@ export default function StudioPage() {
           {source === null ? `Análisis de «${file.name}»` : `Parecidas a «${source.title}» de ${source.artist}`}
         </h1>
         <FileBar file={file} durationSeconds={duration} busy={busy} onFile={studio.analyse} onCancel={studio.cancel} />
-        {studio.audioUrl !== null && <QueryPlayer url={studio.audioUrl} title={file.name} spans={layout?.spans ?? []} />}
+        {studio.audioUrl !== null && (
+          <QueryPlayer
+            url={studio.audioUrl}
+            title={file.name}
+            spans={layout?.spans ?? []}
+            playingIndex={playing?.side === "A" ? playing.index : null}
+            onPlaySpan={(index) => play(index, "A")}
+          />
+        )}
         <Progress phase={phase} />
         {phase.kind === "problem" && <ProblemPanel problem={phase.problem} onRetry={studio.retry} onChooseAnother={studio.reset} />}
         {detection !== null && <VerdictLine detection={detection} />}
@@ -123,7 +127,9 @@ export default function StudioPage() {
             peaks={waveform.status === "ready" ? waveform.waveform.peaks : null}
             layout={layout}
             selected={selected}
-            onSelect={setSelectedIndex}
+            onSelect={select}
+            onPlay={play}
+            playing={playing}
             analyzing={busy}
             uploadPlayhead={selected === null ? null : player.uploadTime}
             originalPlayhead={selected === null ? null : player.originalTime}
@@ -132,9 +138,24 @@ export default function StudioPage() {
         {waveform.status === "unavailable" && <p className="quiet-note">Este navegador no pudo dibujar la forma de onda de este archivo; el análisis no cambia.</p>}
         {detection !== null && layout !== null && layout.spans.length > 0 && (
           <div className="findings">
-            <MatchTable spans={layout.spans} selected={selectedIndex} threshold={detection.threshold} onSelect={setSelectedIndex} />
-            {selected !== null && studio.audioUrl !== null && <AbPanel span={selected} uploadUrl={studio.audioUrl} player={player} />}
+            <MatchTable spans={layout.spans} selected={selected?.index ?? null} threshold={detection.threshold} playing={playing} onPlay={play} />
           </div>
+        )}
+        {detection !== null && (hiddenWeak > 0 || showWeak) && (
+          <button type="button" className="button button--quiet weak-toggle" aria-pressed={showWeak} onClick={() => setShowWeak(!showWeak)}>
+            {showWeak ? "Ocultar coincidencias débiles" : `Mostrar coincidencias débiles (${hiddenWeak})`}
+          </button>
+        )}
+        {player.failure !== null && (
+          <p className="listen__failure" role="alert">
+            No se pudo reproducir: {player.failure}
+          </p>
+        )}
+        {selected !== null && studio.audioUrl !== null && (
+          <>
+            <audio ref={player.uploadRef} src={studio.audioUrl} preload="auto" data-group="ab" />
+            <audio ref={player.originalRef} src={songAudioUrl(selected.match.song.id)} preload="metadata" data-group="ab" />
+          </>
         )}
         {phase.kind === "done" && <StageTimings serverTiming={phase.result.serverTiming} engineTimings={phase.result.detection.engine_timings} />}
       </div>

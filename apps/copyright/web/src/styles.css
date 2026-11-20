@@ -918,7 +918,7 @@ kbd {
 
 .findings {
   display: grid;
-  grid-template-columns: minmax(0, 1.55fr) minmax(19rem, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-6);
   align-items: start;
 }
@@ -1007,67 +1007,6 @@ kbd {
 
 .matches tr[data-weak="true"] .strength {
   color: var(--ink-faint);
-}
-
-.listen {
-  position: sticky;
-  top: var(--space-4);
-  display: grid;
-  gap: var(--space-4);
-  padding: var(--space-6);
-  background: var(--paper-raised);
-  border: 1px solid var(--rule);
-  border-radius: var(--radius-panel);
-}
-
-.listen__deck {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-3);
-}
-
-.listen__play {
-  display: grid;
-  place-items: center;
-  width: 3.5rem;
-  height: 3.5rem;
-  border: 0;
-  border-radius: 50%;
-  background: var(--ink);
-  color: var(--paper-raised);
-  cursor: pointer;
-  transition: transform var(--quick) var(--ease);
-}
-
-.listen__play:active {
-  transform: scale(0.96);
-}
-
-.segmented--ab {
-  flex: 1 1 14rem;
-  flex-direction: column;
-}
-
-.segmented--ab .segmented__option > span {
-  width: 100%;
-  min-height: var(--target);
-}
-
-.segmented--ab .segmented__option > span .measure {
-  margin-left: auto;
-  font-size: var(--text-xs);
-}
-
-.segmented--ab .segmented__option[data-ink] input:checked + span {
-  background: var(--swipe-ink);
-  color: var(--chip-ink);
-}
-
-.listen__keys {
-  font-size: var(--text-xs);
-  color: var(--ink-faint);
-  line-height: 1.8;
 }
 
 .listen__failure {
@@ -1173,10 +1112,6 @@ kbd {
   .findings {
     grid-template-columns: minmax(0, 1fr);
   }
-
-  .listen {
-    position: static;
-  }
 }
 
 @media (max-width: 40rem) {
@@ -1214,10 +1149,6 @@ kbd {
 
   .swipe__score {
     display: none;
-  }
-
-  .listen {
-    padding: var(--space-4);
   }
 
   .matches thead {
@@ -1570,4 +1501,59 @@ kbd {
   .deck {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+/* Una letra es un botón que suena: la que suena lleva un anillo y el símbolo de pausa. */
+
+.original-span {
+  border: 0;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+}
+
+[data-playing="true"].swipe,
+[data-playing="true"].deck__band,
+[data-playing="true"].original-span {
+  outline: 3px solid var(--edition);
+  outline-offset: 2px;
+  z-index: 2;
+}
+
+:root[data-theme="dark"] [data-playing="true"].swipe,
+:root[data-theme="dark"] [data-playing="true"].deck__band,
+:root[data-theme="dark"] [data-playing="true"].original-span {
+  outline-color: var(--focus);
+}
+
+.matches__pick[data-playing="true"] .song-chip {
+  outline: 2px solid var(--edition);
+  outline-offset: 2px;
+}
+
+.matches__original {
+  min-height: 36px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-chip);
+  background: var(--paper-raised);
+  color: var(--ink);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.matches__original:hover,
+.matches__original[data-playing="true"] {
+  border-color: var(--edition);
+  color: var(--edition);
+}
+
+:root[data-theme="dark"] .matches__original:hover,
+:root[data-theme="dark"] .matches__original[data-playing="true"] {
+  border-color: var(--focus);
+  color: var(--focus);
+}
+
+.weak-toggle {
+  align-self: flex-start;
 }

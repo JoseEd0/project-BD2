@@ -14,9 +14,8 @@ export interface AbPlayer {
   readonly uploadTime: number;
   readonly originalTime: number;
   readonly failure: string | null;
-  readonly choose: (side: Side) => void;
-  readonly toggle: () => void;
-  readonly playPause: () => void;
+  /** Hace sonar `side` desde el mismo punto del tramo; si ya suena ese lado, pausa. */
+  readonly playSide: (side: Side) => void;
 }
 
 function seek(audio: HTMLAudioElement, time: number): void {
@@ -76,7 +75,7 @@ export function useAbPlayer(match: DetectedMatch | null): AbPlayer {
     }
   }, []);
 
-  const choose = useCallback(
+  const switchTo = useCallback(
     (next: Side) => {
       const leader = audioOf(side);
       const follower = audioOf(next);
@@ -89,29 +88,35 @@ export function useAbPlayer(match: DetectedMatch | null): AbPlayer {
     [applyMute, audioOf, match, side],
   );
 
-  const toggle = useCallback(() => choose(otherSide(side)), [choose, side]);
-
-  const playPause = useCallback(() => {
-    const upload = uploadRef.current;
-    const original = originalRef.current;
-    if (match === null || upload === null || original === null) {
-      return;
-    }
-    if (playing) {
-      pause();
-      return;
-    }
-    if (outsideSpan(match, "A", upload.currentTime)) {
-      rewind();
-    }
-    applyMute(side);
-    setFailure(null);
-    setPlaying(true);
-    Promise.all([upload.play(), original.play()]).catch((error: unknown) => {
-      pause();
-      setFailure(error instanceof Error ? error.message : String(error));
-    });
-  }, [applyMute, match, pause, playing, rewind, side]);
+  const playSide = useCallback(
+    (next: Side) => {
+      const upload = uploadRef.current;
+      const original = originalRef.current;
+      if (match === null || upload === null || original === null) {
+        return;
+      }
+      if (playing && next === side) {
+        pause();
+        return;
+      }
+      if (playing) {
+        switchTo(next);
+        return;
+      }
+      if (outsideSpan(match, "A", upload.currentTime)) {
+        rewind();
+      }
+      applyMute(next);
+      setSide(next);
+      setFailure(null);
+      setPlaying(true);
+      Promise.all([upload.play(), original.play()]).catch((error: unknown) => {
+        pause();
+        setFailure(error instanceof Error ? error.message : String(error));
+      });
+    },
+    [applyMute, match, pause, playing, rewind, side, switchTo],
+  );
 
   useEffect(() => {
     if (!playing || match === null) {
@@ -133,5 +138,5 @@ export function useAbPlayer(match: DetectedMatch | null): AbPlayer {
     return () => cancelAnimationFrame(frame);
   }, [audioOf, match, playing, rewind, side]);
 
-  return { uploadRef, originalRef, side, playing, uploadTime: times.upload, originalTime: times.original, failure, choose, toggle, playPause };
+  return { uploadRef, originalRef, side, playing, uploadTime: times.upload, originalTime: times.original, failure, playSide };
 }

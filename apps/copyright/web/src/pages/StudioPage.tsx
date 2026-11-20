@@ -112,7 +112,7 @@ export default function StudioPage() {
           {source === null ? `Análisis de «${file.name}»` : `Parecidas a «${source.title}» de ${source.artist}`}
         </h1>
         <FileBar file={file} durationSeconds={duration} busy={busy} onFile={studio.analyse} onCancel={studio.cancel} />
-        {studio.audioUrl !== null && (
+        {studio.audioUrl !== null && phase.kind !== "problem" && (
           <QueryPlayer
             url={studio.audioUrl}
             title={file.name}
@@ -124,7 +124,7 @@ export default function StudioPage() {
         <Progress phase={phase} />
         {phase.kind === "problem" && <ProblemPanel problem={phase.problem} onRetry={studio.retry} onChooseAnother={studio.reset} />}
         {detection !== null && <VerdictLine detection={detection} />}
-        {duration === null ? (
+        {phase.kind === "problem" ? null : duration === null ? (
           <div className="score score--pending" aria-hidden="true" />
         ) : (
           <Timeline
@@ -141,7 +141,7 @@ export default function StudioPage() {
             originalPlayhead={selected === null ? null : player.originalTime}
           />
         )}
-        {waveform.status === "unavailable" && <p className="quiet-note">Este navegador no pudo dibujar la forma de onda de este archivo; el análisis no cambia.</p>}
+        {waveform.status === "unavailable" && phase.kind !== "problem" && <p className="quiet-note">Este navegador no pudo dibujar la forma de onda de este archivo; el análisis no cambia.</p>}
         {detection !== null && layout !== null && layout.spans.length > 0 && (
           <div className="findings">
             <MatchTable spans={layout.spans} selected={selected?.index ?? null} threshold={detection.threshold} playing={playing} onPlay={play} />

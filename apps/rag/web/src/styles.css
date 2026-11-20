@@ -465,6 +465,7 @@ textarea {
 }
 
 .conversation__scroll {
+  container-type: size;
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: var(--space-6) var(--space-5) var(--space-5);
@@ -546,6 +547,13 @@ textarea {
 .turn + .turn {
   padding-block-start: var(--space-6);
   border-block-start: var(--hairline);
+}
+
+/* El último turno ocupa al menos el alto visible: así la pregunta nueva puede subir al borde
+   superior antes de que exista su respuesta, y la respuesta crece a la vista. */
+.turns > .turn:last-child {
+  min-block-size: 100cqb;
+  align-content: start;
 }
 
 /* La pregunta va a la derecha, en la voz de quien pregunta; la respuesta ocupa la medida. */

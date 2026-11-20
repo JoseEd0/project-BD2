@@ -11,7 +11,7 @@ export interface ApiProblem {
 export const NETWORK_ERROR = "NetworkError";
 
 const MESSAGES_BY_STATUS: Record<number, string> = {
-  413: "La foto pesa demasiado. Inténtalo otra vez.",
+  413: "La foto pesa demasiado. Elige una más liviana o tómala con la cámara.",
   429: "Vas muy rápido: espera un momento y vuelve a intentarlo.",
   502: "El servicio de rostros no responde ahora. Inténtalo en unos segundos.",
   503: "El servicio de rostros está ocupado. Inténtalo en unos segundos.",

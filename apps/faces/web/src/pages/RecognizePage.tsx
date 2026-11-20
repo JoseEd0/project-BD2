@@ -9,7 +9,7 @@ import { Icon } from "../components/Icon";
 import { StatusPill } from "../components/StatusPill";
 import { StreamBanner } from "../components/StreamBanner";
 import { RECOGNITION_SCHEDULER } from "../config";
-import type { StreamFace } from "../realtime/protocol";
+import type { StageTimings, StreamFace } from "../realtime/protocol";
 import type { FrameAnswer } from "../realtime/stream";
 import { useRecognitionStream } from "../realtime/useRecognitionStream";
 
@@ -30,6 +30,13 @@ export function recognitionSummary(faces: readonly StreamFace[]): string {
     far > 0 ? (far === 1 ? "1 muy lejos" : `${far} muy lejos`) : null,
   ];
   return parts.filter((part) => part !== null).join(" · ");
+}
+
+/** Los tiempos del servidor; si todas las caras salieron de su rastro, no hubo búsqueda que medir. */
+export function timingsSummary(timings: StageTimings, faces: readonly StreamFace[]): string {
+  const served = `Servidor ${MILLISECONDS.format(timings.total)} ms · detectar ${MILLISECONDS.format(timings.detect)} ms`;
+  const fromTracks = faces.length > 0 && faces.every((face) => face.cached);
+  return fromTracks ? `${served} · nombre del rastro, sin buscar` : `${served} · buscar ${MILLISECONDS.format(timings.embed + timings.search)} ms`;
 }
 
 function useStale(answer: FrameAnswer | null): boolean {
@@ -96,7 +103,7 @@ export default function RecognizePage() {
           <p className="instruction-detail tabular">
             {timings === undefined
               ? "Las cajas verdes son personas registradas; las naranjas, desconocidas."
-              : `Servidor ${MILLISECONDS.format(timings.total)} ms · detectar ${MILLISECONDS.format(timings.detect)} ms · buscar ${MILLISECONDS.format(timings.embed + timings.search)} ms`}
+              : timingsSummary(timings, faces)}
           </p>
           <div className="camera-controls">
             {camera.canFlip ? (

@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { Problem } from "../analysis/problem";
-import { CatalogProblem, songFile } from "../api/catalog";
+import { CatalogProblem, demoClipFile, songFile } from "../api/catalog";
 import { DetectionProblem, uploadForDetection, type DetectionResult } from "../api/detections";
-import type { Song } from "../api/types";
+import type { DemoClip, Song } from "../api/types";
 import { decodeWaveform, type Waveform } from "../audio/decodeWaveform";
 
 export type Phase =
   | { readonly kind: "idle"; readonly notice: string | null }
-  | { readonly kind: "fetching"; readonly song: Song }
+  | { readonly kind: "fetching"; readonly title: string }
   | { readonly kind: "uploading"; readonly progress: number | null }
   | { readonly kind: "analyzing" }
   | { readonly kind: "done"; readonly result: DetectionResult }
@@ -29,6 +29,7 @@ export interface Studio {
   readonly waveform: WaveformState;
   readonly analyse: (file: File) => void;
   readonly analyseSong: (song: Song) => void;
+  readonly analyseClip: (clip: DemoClip) => void;
   readonly cancel: () => void;
   readonly retry: () => void;
   readonly reset: () => void;
@@ -118,15 +119,15 @@ export function useStudio(): Studio {
     [start],
   );
 
-  const analyseSong = useCallback(
-    (song: Song) => {
+  const analyseRemote = useCallback(
+    (title: string, load: (signal: AbortSignal) => Promise<File>, song: Song | null) => {
       upload.current?.abort();
       const controller = new AbortController();
       upload.current = controller;
       setSource(song);
       setFile(null);
-      setPhase({ kind: "fetching", song });
-      songFile(song, controller.signal).then(
+      setPhase({ kind: "fetching", title });
+      load(controller.signal).then(
         (chosen) => {
           setFile(chosen);
           start(chosen);
@@ -144,6 +145,16 @@ export function useStudio(): Studio {
       );
     },
     [start],
+  );
+
+  const analyseSong = useCallback(
+    (song: Song) => analyseRemote(song.title, (signal) => songFile(song, signal), song),
+    [analyseRemote],
+  );
+
+  const analyseClip = useCallback(
+    (clip: DemoClip) => analyseRemote(clip.title, (signal) => demoClipFile(clip, signal), null),
+    [analyseRemote],
   );
 
   const cancel = useCallback(() => {
@@ -174,5 +185,5 @@ export function useStudio(): Studio {
 
   useEffect(() => () => upload.current?.abort(), []);
 
-  return { file, source, audioUrl, phase, waveform, analyse, analyseSong, cancel, retry, reset };
+  return { file, source, audioUrl, phase, waveform, analyse, analyseSong, analyseClip, cancel, retry, reset };
 }

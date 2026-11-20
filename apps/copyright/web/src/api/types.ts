@@ -6,3 +6,4 @@ export type EngineTimings = components["schemas"]["EngineTimings"];
 export type SongDetail = components["schemas"]["SongDetail"];
 export type Song = components["schemas"]["Song"];
 export type CatalogSummary = components["schemas"]["CatalogSummary"];
+export type DemoClip = components["schemas"]["DemoClip"];

@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { notableMatches, withoutSong } from "../analysis/catalog";
 import { layoutSpans } from "../analysis/spans";
 import { CatalogPanel } from "../catalog/CatalogPanel";
+import { DemoClipsPanel } from "../catalog/DemoClipsPanel";
 import { songAudioUrl } from "../api/client";
 import { useServiceHealth } from "../api/useServiceHealth";
 import { Icon } from "../components/Icon";
@@ -71,7 +72,12 @@ export default function StudioPage() {
   const unavailable = health.data?.state === "unavailable" ? health.data : null;
   const busy = phase.kind === "uploading" || phase.kind === "analyzing";
 
-  const catalog = <CatalogPanel chosenId={source?.id ?? null} onFindSimilar={studio.analyseSong} />;
+  const catalog = (
+    <div className="side">
+      <DemoClipsPanel onAnalyse={studio.analyseClip} />
+      <CatalogPanel chosenId={source?.id ?? null} onFindSimilar={studio.analyseSong} />
+    </div>
+  );
 
   if (file === null) {
     return (

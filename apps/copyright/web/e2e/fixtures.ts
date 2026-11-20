@@ -120,6 +120,11 @@ export function respondWith(status: number, body: unknown, headers: Record<strin
   return (route) => route.fulfill({ status, json: body, headers });
 }
 
+export const DEMO_CLIPS = [
+  { id: "mezcla", title: "Mezcla de dos canciones", description: "15 s de «Melodía 2» y 12,5 s de «Melodía 3».", expected_songs: [2, 3] },
+  { id: "sintetico", title: "Melodía sintética", description: "Notas que no están en el catálogo.", expected_songs: [] },
+];
+
 export const READY_CATALOG = {
   songs: songs.size,
   segments: songs.size * 11,
@@ -133,6 +138,10 @@ export const READY_CATALOG = {
 export async function mockApi(context: BrowserContext, detections: Responder, catalog: object = READY_CATALOG): Promise<void> {
   await context.route("**/api/health", (route) => route.fulfill({ json: { status: "ok", version: "0.1.0" } }));
   await context.route("**/api/catalog", (route) => route.fulfill({ json: catalog }));
+  await context.route("**/api/demo-clips", (route) => route.fulfill({ json: DEMO_CLIPS }));
+  await context.route("**/api/demo-clips/*/audio", (route) =>
+    route.fulfill({ status: 200, body: remixFile().buffer, headers: { "Content-Type": "audio/wav" } }),
+  );
   await context.route(/\/api\/songs(\?.*)?$/, (route) =>
     route.fulfill({ json: { songs: [...songs.values()].map(({ segments: _segments, ...song }) => song) } }),
   );

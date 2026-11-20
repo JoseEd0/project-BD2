@@ -6,8 +6,8 @@ export function Progress({ phase }: { readonly phase: Phase }) {
   if (phase.kind === "fetching") {
     return (
       <div className="progress" role="status">
-        <span className="progress__label">Trayendo «{phase.song.title}» del catálogo…</span>
-        <progress className="progress__bar" aria-label="Descarga de la canción" />
+        <span className="progress__label">Preparando «{phase.title}»…</span>
+        <progress className="progress__bar" aria-label="Preparación del audio" />
       </div>
     );
   }

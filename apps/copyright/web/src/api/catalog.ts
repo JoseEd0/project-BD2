@@ -2,7 +2,8 @@ import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 
 import { problemOf, type Problem } from "../analysis/problem";
 import { copyrightClient, songAudioUrl } from "./client";
-import type { CatalogSummary, Song } from "./types";
+import { API_BASE_URL } from "../config";
+import type { CatalogSummary, DemoClip, Song } from "./types";
 
 const CATALOG_PAGE_SIZE = 40;
 const CATALOG_REFRESH_MS = 15_000;
@@ -53,12 +54,40 @@ export function useSongs(search: string): UseQueryResult<readonly Song[]> {
   });
 }
 
-/** El audio de una canción del catálogo como archivo, para analizarlo igual que una subida. */
-export async function songFile(song: Song, signal?: AbortSignal): Promise<File> {
-  const response = await fetch(songAudioUrl(song.id), signal === undefined ? {} : { signal });
+async function remoteFile(url: string, name: string, fallbackType: string, signal: AbortSignal): Promise<File> {
+  const response = await fetch(url, { signal });
   if (!response.ok) {
     throw new CatalogProblem(problemOf(response.status, null));
   }
   const blob = await response.blob();
-  return new File([blob], `${song.title} — ${song.artist}.mp3`, { type: blob.type || "audio/mpeg" });
+  return new File([blob], name, { type: blob.type || fallbackType });
+}
+
+/** El audio de una canción del catálogo como archivo, para analizarlo igual que una subida. */
+export function songFile(song: Song, signal: AbortSignal): Promise<File> {
+  return remoteFile(songAudioUrl(song.id), `${song.title} — ${song.artist}.mp3`, "audio/mpeg", signal);
+}
+
+export function demoClipAudioUrl(clip: DemoClip): string {
+  return `${API_BASE_URL}/demo-clips/${encodeURIComponent(clip.id)}/audio`;
+}
+
+/** Un audio de prueba como archivo, para analizarlo igual que una subida. */
+export function demoClipFile(clip: DemoClip, signal: AbortSignal): Promise<File> {
+  return remoteFile(demoClipAudioUrl(clip), `${clip.title}.wav`, "audio/wav", signal);
+}
+
+/** Los audios de prueba: clips con música del catálogo y uno sin ella. */
+export function useDemoClips(): UseQueryResult<readonly DemoClip[]> {
+  return useQuery({
+    queryKey: ["copyright", "demo-clips"],
+    staleTime: Infinity,
+    queryFn: async ({ signal }) => {
+      const { data, error, response } = await copyrightClient.GET("/demo-clips", { signal });
+      if (data === undefined) {
+        throw rejected(response, error);
+      }
+      return data;
+    },
+  });
 }

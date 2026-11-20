@@ -2,8 +2,5 @@
 
 El proyecto tiene \totalpruebas{} pruebas automáticas, que cubren el
 \coberturapruebas{}\,\% de las líneas y ramas del motor, y el código pasa \texttt{ruff} y
-\texttt{mypy} en modo estricto; la integración continua las corre en Python~3.11 y~3.12 y
-levanta el compose completo. Además de los casos de cada estructura (vacía, un elemento,
-división y fusión, desbordamiento), cada índice tiene un validador de sus invariantes y se
-compara contra un modelo con miles de operaciones al azar o con la misma consulta sin
-índice. Los servicios de la Parte~5 se prueban contra el API real del gestor.
+\texttt{mypy} en modo estricto. Cada índice tiene un validador de sus invariantes y se
+compara contra un modelo con operaciones al azar o con la misma consulta sin índice.

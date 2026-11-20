@@ -497,52 +497,52 @@ indexa en 298.7~s y una segunda ejecución tarda 0.75~s. En disco ocupa 233.6~Mi
 de los 7.43~GiB de audio, porque el gestor guarda rutas y no audio. Dentro del
 \texttt{CREATE INDEX} (190.45~s), cuantizar es el 69\,\% y armar el HNSW solo 3.78~s. Para la
 detección se borraron del catálogo 40 canciones, que pasan a ser música no catalogada, y se
-armaron subidas pegando pistas y casos de control (tablas~\ref{tab:copyright-latencia}
-y~\ref{tab:copyright-casos}). Consultar todas las ventanas en un lote es 2.2 veces más
-rápido que un \texttt{SIMILAR\_TO} por ventana con una canción de 180~s (180.2 contra
-392.4~ms) y da los mismos vecinos.
+armaron subidas pegando pistas: con 30, 60 y 180~s de audio (11, 23 y 71 ventanas) la
+detección tarda 79.8, 157.4 y 489.8~ms de mediana (p95 de 87.2, 165.4 y 531.9~ms). Consultar todas las
+ventanas en un lote es 2.2 veces más rápido que un \texttt{SIMILAR\_TO} por ventana (180.2
+contra 392.4~ms con 180~s) y da los mismos vecinos. De los 489.8~ms, la búsqueda HNSW de las
+71 ventanas tarda 1.46~ms y la votación 1.64~ms; el resto es decodificar y calcular los MFCC.
+
+Para evaluar la detección se generaron remixes con la verdad conocida: 200 con 1 a 3
+fragmentos de 5 a 20~s de canciones del catálogo (383 fragmentos), pegados con fundidos de
+1~s, y 200 iguales con canciones que se borraron del catálogo, cada uno sin distorsión y con
+12 distorsiones por separado (5\,200 subidas). El umbral se eligió con la J de Youden sobre la
+curva ROC sin distorsión y quedó en 0.21 (tabla~\ref{tab:copyright-eval}). La primera versión
+del puntaje (similitud media por cobertura) daba un área bajo la curva de 0.62, recall 0.55
+con 29\,\% de falsos positivos y F1 de 0.48, y perdía los remixes de varios fragmentos (recall
+0.36 con tres); la evidencia de la racha, medida con otra semilla, da 0.79, 0.71, 23\,\% y 0.61,
+y un recall de 0.73, 0.75 y 0.67 con uno, dos y tres fragmentos. Lo que pierde son las copias
+de 5 a 7.5~s (recall 0.08); desde 10~s encuentra el 90\,\% o más. El MP3 a 64~kbit/s casi no
+le afecta, pero bajar el volumen 3~dB, el ruido a 20~dB de SNR, un cambio de tono o de tempo y
+un pasa bajos lo dejan con un recall de 0.12 o menos. Es el límite del descriptor: el MFCC
+incluye la energía (c0) y el vocabulario cuantiza valores absolutos, así que una ganancia
+lleva las ventanas a otras palabras. Cuando encuentra la copia la ubica bien: la mediana de la
+IoU entre el tramo informado y el verdadero es 0.90 en la subida y 0.86 en el original.
 
 \begin{table}[!htb]
 \centering
-\begin{minipage}[t]{0.42\textwidth}
-\centering
-\caption{Latencia de \texttt{POST /detections}, 10 subidas por duración. Tiempos en ms.}\label{tab:copyright-latencia}
-\small\setlength{\tabcolsep}{4pt}
-\begin{tabular}{@{}rrrrr@{}}
-\toprule
-\textbf{Subida} & \textbf{Ventanas} & \textbf{p50} & \textbf{p95} & \textbf{Por ventana} \\
-\midrule
-30 s & 11 & 79.8 & 87.2 & 7.26 \\
-60 s & 23 & 157.4 & 165.4 & 6.85 \\
-180 s & 71 & 489.8 & 531.9 & 6.90 \\
-\bottomrule
-\end{tabular}
-\end{minipage}\hfill
-\begin{minipage}[t]{0.55\textwidth}
-\centering
-\caption{Casos de control, 20 de cada uno: puntaje mínimo, mediano y máximo (entre 0 y 1) y
-casos que pasan el umbral de 0.45.}\label{tab:copyright-casos}
+\caption{Detección en los remixes con el umbral de 0.21: área bajo la curva ROC, precisión,
+recall y F1 (entre 0 y 1) y mediana de la IoU entre el tramo informado y el verdadero, en la
+subida y en el original.}\label{tab:copyright-eval}
 \small
-\begin{tabular}{@{}L{3.8cm}rr@{}}
+\begin{tabular}{@{}lrrrrrr@{}}
 \toprule
-\textbf{Caso} & \textbf{Puntaje} & \textbf{Pasan} \\
+\textbf{Versión de la subida} & \textbf{AUC} & \textbf{Precisión} & \textbf{Recall} & \textbf{F1} & \textbf{IoU subida} & \textbf{IoU original} \\
 \midrule
-pista del catálogo entera & 0.986 / 0.997 / 1.000 & 20 \\
-tramo de 15~s fuera de la rejilla & 0.381 / 0.494 / 0.661 & 18 \\
-tramo de 7.5~s & 0.196 / 0.266 / 0.390 & 0 \\
-pista no catalogada & 0.164 / 0.272 / 0.728 & 3 \\
+sin distorsión & \textbf{0.79} & \textbf{0.54} & \textbf{0.71} & \textbf{0.61} & 0.90 & 0.86 \\
+MP3 a 64 kbit/s & 0.78 & \textbf{0.54} & 0.67 & 0.60 & 0.91 & 0.86 \\
+volumen $-1$ dB & 0.68 & 0.47 & 0.50 & 0.48 & 0.90 & 0.85 \\
+volumen $-3$ dB & 0.25 & 0.09 & 0.06 & 0.07 & 0.79 & 0.31 \\
+volumen $-12$ dB & 0.09 & 0.00 & 0.00 & 0.00 & --- & --- \\
+ruido a 30 dB de SNR & 0.55 & 0.47 & 0.36 & 0.41 & 0.91 & 0.86 \\
+ruido a 20 dB de SNR & 0.30 & 0.20 & 0.12 & 0.15 & 0.88 & 0.85 \\
+ruido a 10 dB de SNR & 0.14 & 0.04 & 0.03 & 0.03 & 0.86 & 0.67 \\
+pasa bajos a 4 kHz & 0.07 & 0.01 & 0.03 & 0.02 & 0.90 & 0.87 \\
+tempo $+5$ \% / $-5$ \% & 0.23 / 0.22 & 0.09 / 0.07 & 0.06 / 0.05 & 0.07 / 0.06 & 0.76 / 0.73 & 0.30 / 0.44 \\
+tono $+1$ / $-1$ semitono & 0.22 / 0.22 & 0.07 / 0.06 & 0.04 / 0.04 & 0.06 / 0.05 & 0.76 / 0.71 & 0.39 / 0.31 \\
 \bottomrule
 \end{tabular}
-\end{minipage}
 \end{table}
-
-Una canción de 3 minutos se revisa en medio segundo y el costo es lineal en las ventanas,
-unos 7~ms por ventana: la búsqueda HNSW de las 71 ventanas tarda 1.46~ms y la votación
-1.64~ms, y el resto es decodificar el audio y calcular los MFCC. Las copias enteras puntúan
-0.99 o más con su desfase exacto, y 18 de los 20 tramos de 15~s pasan el umbral, pero un
-tramo de 7.5~s no se distingue de una canción que no se copió (mediana 0.27). Tres pistas no
-catalogadas pasan el umbral con rachas de 6 a 8 ventanas seguidas con otra canción del FMA,
-una de ellas del mismo artista.
 
 \paragraph{Tienda.} La carga completa toma 299.0~s y una segunda ejecución 0.27~s.
 Calcular CLIP para 24\,308 fotos es casi la mitad (137.8~s, 176 fotos por segundo); el
@@ -572,33 +572,11 @@ pregunta se le quitan sus palabras vacías (con la pregunta entera era 11.1\,\%)
 las respuestas generadas (fidelidad, citas y respuestas \guillemotleft{}no está en los
 documentos\guillemotright{}) todavía no se midió porque requiere la clave del API del modelo.
 
-\begin{table}[!htb]
-\centering
-\begin{minipage}[t]{0.6\textwidth}
-\centering
-\caption{Ingesta del RAG (98\,585 fragmentos).}\label{tab:rag}
-\small
-\begin{tabular}{@{}L{5.4cm}r@{}}
-\toprule
-\textbf{Medida} & \textbf{Resultado} \\
-\midrule
-embeddings fp32 / int8, 8 hilos & 39.6 / 45.3 frag./s \\
-siembra: embeddings (int8) & 2\,565.6 s \\
-siembra: carga con índices al final & 65.0 s \\
-siembra: total / segunda ejecución & 43.9 min / 1.6 s \\
-carga NDJSON / invertido / HNSW & 44.3 / 17.4 / 5.4 s \\
-disco: tabla / invertido / HNSW & 354 / 96 / 159 MiB \\
-búsqueda BM25 (cliente) & 5--18 ms \\
-búsqueda vectorial (cliente) & 11--13 ms \\
-búsqueda híbrida (cliente) & 13--30 ms \\
-\bottomrule
-\end{tabular}
-\end{minipage}
-\end{table}
+
 
 \begin{table}[!htb]
 \centering
-\begin{minipage}[t]{0.48\textwidth}
+\begin{minipage}[t]{0.42\textwidth}
 \centering
 \caption{Recomendaciones de la tienda: mediana y p95 por petición (100 productos).}\label{tab:tienda-recomendar}
 \small
@@ -615,7 +593,7 @@ completa, con Redis & \textbf{1.9 ms} & \textbf{3.4 ms} \\
 \bottomrule
 \end{tabular}
 \end{minipage}\hfill
-\begin{minipage}[t]{0.49\textwidth}
+\begin{minipage}[t]{0.55\textwidth}
 \centering
 \caption{Recuperación del RAG con las 45 preguntas con respuesta: fracción con el fragmento
 correcto (o su paper) entre los $k$ primeros, MRR@10 y mediana por búsqueda.}\label{tab:rag-recuperacion}
@@ -629,6 +607,22 @@ vectorial & 0.422 & 0.533 & \textbf{0.325} & 0.800 & 18.2 \\
 híbrida (RRF) & \textbf{0.467} & \textbf{0.578} & 0.286 & \textbf{0.844} & 23.9 \\
 \bottomrule
 \end{tabular}
+
+\vspace{6pt}
+\caption{Ingesta del RAG (98\,585 fragmentos).}\label{tab:rag}
+\small
+\begin{tabular}{@{}L{5.6cm}r@{}}
+\toprule
+\textbf{Medida} & \textbf{Resultado} \\
+\midrule
+embeddings fp32 / int8, 8 hilos & 39.6 / 45.3 frag./s \\
+siembra: embeddings (int8) & 2\,565.6 s \\
+siembra: carga con índices al final & 65.0 s \\
+siembra: total / segunda ejecución & 43.9 min / 1.6 s \\
+carga NDJSON / invertido / HNSW & 44.3 / 17.4 / 5.4 s \\
+disco: tabla / invertido / HNSW & 354 / 96 / 159 MiB \\
+\bottomrule
+\end{tabular}
 \end{minipage}
 \end{table}
 
@@ -637,7 +631,7 @@ exactitud de 99.30\,\% $\pm$ 0.40\,\% en los 10 pliegues del protocolo, y con lo
 millones de pares de personas distintas se eligieron los umbrales del servicio
 (tabla~\ref{tab:rostros}). El umbral de verificación no sirve para reconocer: contra una
 galería de 1\,679 personas, a 0.363 el 66.5\,\% de las desconocidas sale como alguien,
-porque cada desconocido tiene una oportunidad por persona; por eso reconocer usa 0.47. En
+porque cada desconocido tiene una oportunidad por persona; por eso reconocer usa 0.47 (con 0.45 la FPIR era 3.4\,\%). En
 el gestor, el HNSW coincide con la búsqueda exacta en el primer vecino en el 99.83\,\% de
 7\,481 consultas (rank-1 de 98.60\,\% contra 98.72\,\%) y las dos tardan 0.2~ms por SQL. En
 vivo, por WebSocket y a través del nginx, un cuadro de 640 $\times$ 480 tarda 16.4~ms de
@@ -657,18 +651,17 @@ galería del gestor.}\label{tab:rostros}
 \textbf{Umbral} & \textbf{Uso} & \textbf{TAR} & \textbf{FAR} & \textbf{FPIR} & \textbf{FNIR} \\
 \midrule
 0.363 & toma de la misma persona que las anteriores (1:1) & 99.63\,\% & $9.1 \cdot 10^{-4}$ & 66.5\,\% & 1.5\,\% \\
-0.45 & reconocer, antes de calibrar & 99.12\,\% & $2.3 \cdot 10^{-5}$ & 3.4\,\% & 3.0\,\% \\
 \textbf{0.47} & reconocer contra la galería (1:N) & 98.80\,\% & $1.0 \cdot 10^{-5}$ & 1.6\,\% & 3.7\,\% \\
 0.50 & \guillemotleft{}ya estás registrado como X\guillemotright{} & 98.06\,\% & $4.6 \cdot 10^{-6}$ & 0.64\,\% & 5.4\,\% \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\grafica{rostros-tiempo-real.png}{fig:rostros}{Latencia de un cuadro por WebSocket: etapas
+\grafica[0.88\textwidth]{rostros-tiempo-real.png}{fig:rostros}{Latencia de un cuadro por WebSocket: etapas
 en el servidor y p50 y p95 en el servidor y en el cliente, por el nginx o directo al API,
 con y sin la caché de rastros.}
 
-\begin{table}[!htb]
+\begin{table}[H]
 \centering
 \caption{Resumen de la Parte 5: técnicas medidas en las aplicaciones.}\label{tab:resumen-apps}
 \small
@@ -676,8 +669,7 @@ con y sin la caché de rastros.}
 \toprule
 \textbf{Técnica} & \textbf{Ventajas} & \textbf{Desventajas} & \textbf{Cuándo usarla} \\
 \midrule
-Tramos con votación por desfase & Copias enteras con puntaje de 0.99 y su desfase exacto; 7~ms por ventana. & Un tramo de 7.5~s no se separa de la música no copiada. & Copias de 15~s o más dentro de una canción. \\
-Consulta de ventanas en lote & 2.2 veces más rápida que una consulta por ventana, con los mismos vecinos. & El audio se decodifica una vez en el servicio y otra en el gestor. & Cualquier consulta con muchos fragmentos del mismo archivo. \\
+Tramos con votación por desfase & Sin distorsión, AUC de 0.79 y recall de 0.71; ubica la copia con IoU de 0.90; 170~ms por minuto de audio. & Copias de menos de 7.5~s (recall 0.08); $-3$~dB, ruido, tono, tempo o pasa bajos lo rompen. & Copias de 10~s o más sin cambios de nivel, como un sample reutilizado. \\
 CLIP frente a SIFT & Índice en 0.81~s y 51.6~MiB; busca fotos a partir de un texto. & Calcular los embeddings es la mitad de la carga (137.8~s). & Búsqueda visual por contenido o por texto. \\
 Compras conjuntas materializadas & 4.5~ms por consulta contra 2.9~s al vuelo. & 793.6~s en la carga; la tabla envejece hasta recalcularla. & Señales que salen de un \texttt{GROUP BY} sobre toda la historia. \\
 Búsqueda híbrida (RRF) & Recall@10 de 0.578, sobre la vectorial (0.533) y BM25 (0.422). & Calcular los embeddings es el 97\,\% de la ingesta; BM25 necesita la consulta en el idioma del índice. & Preguntas en otro idioma que el corpus, con nombres propios. \\
@@ -691,7 +683,5 @@ Caché de rastros en Redis & Un tercio menos de mediana (23.8 a 16.4~ms); cualqu
 
 Ninguna estructura es la mejor en todo, y varios resultados no eran los esperados antes de
 medir: el hash no fue más rápido que el B+ agrupado por igualdad, GIN fue más lento que el
-motor con consultas largas porque no ordena con el índice, y en la búsqueda multimedia el
-costo está en extraer y cuantizar, no en el índice. En las aplicaciones lo que domina es
-decodificar audio, calcular embeddings o correr las redes de rostros; las búsquedas en el
-gestor tardan desde 0.2~ms hasta unas decenas de milisegundos.
+motor con consultas largas y en multimedia el costo está en extraer y cuantizar, no en el
+índice. En las aplicaciones domina decodificar audio o calcular embeddings, no el gestor.

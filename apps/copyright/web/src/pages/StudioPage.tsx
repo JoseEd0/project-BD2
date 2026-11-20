@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 
+import { withoutSong } from "../analysis/catalog";
 import { layoutSpans } from "../analysis/spans";
+import { CatalogPanel } from "../catalog/CatalogPanel";
 import { useServiceHealth } from "../api/useServiceHealth";
 import { Icon } from "../components/Icon";
 import { UNAVAILABLE_REASONS } from "../components/ServiceBadge";
 import { APP } from "../identity";
 import { AbPanel } from "../listening/AbPanel";
 import { useAbPlayer } from "../listening/useAbPlayer";
+import { QueryPlayer } from "../player/QueryPlayer";
 import { DropZone } from "../studio/DropZone";
 import { FileBar } from "../studio/FileBar";
 import { MatchTable } from "../studio/MatchTable";
@@ -41,11 +44,16 @@ function ServiceDown({ reason, onRetry, retrying }: { readonly reason: string; r
 
 export default function StudioPage() {
   const studio = useStudio();
-  const { phase, waveform, file } = studio;
+  const { phase, waveform, file, source } = studio;
   const health = useServiceHealth();
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
 
-  const detection = phase.kind === "done" ? phase.result.detection : null;
+  const detection = useMemo(() => {
+    if (phase.kind !== "done") {
+      return null;
+    }
+    return source === null ? phase.result.detection : withoutSong(phase.result.detection, source.id);
+  }, [phase, source]);
   const duration = knownDuration(phase, waveform);
   const layout = useMemo(
     () => (detection === null || duration === null ? null : layoutSpans(detection.matches, duration)),
@@ -67,50 +75,69 @@ export default function StudioPage() {
   const unavailable = health.data?.state === "unavailable" ? health.data : null;
   const busy = phase.kind === "uploading" || phase.kind === "analyzing";
 
+  const catalog = <CatalogPanel chosenId={source?.id ?? null} onFindSimilar={studio.analyseSong} />;
+
   if (file === null) {
     return (
-      <>
+      <div className="studio-grid">
         <title>{`${APP.name} · ${APP.tagline}`}</title>
-        <DropZone onFile={studio.analyse} disabled={unavailable !== null} notice={phase.kind === "idle" ? phase.notice : null}>
-          {unavailable !== null && (
-            <ServiceDown reason={UNAVAILABLE_REASONS[unavailable.reason]} onRetry={() => void health.refetch()} retrying={health.isFetching} />
+        {catalog}
+        <div className="bench">
+          {source !== null ? (
+            <>
+              <h1 className="bench__title">Parecidas a «{source.title}»</h1>
+              <Progress phase={phase} />
+              {phase.kind === "problem" && <ProblemPanel problem={phase.problem} onRetry={studio.retry} onChooseAnother={studio.reset} />}
+            </>
+          ) : (
+            <DropZone onFile={studio.analyse} disabled={unavailable !== null} notice={phase.kind === "idle" ? phase.notice : null}>
+              {unavailable !== null && (
+                <ServiceDown reason={UNAVAILABLE_REASONS[unavailable.reason]} onRetry={() => void health.refetch()} retrying={health.isFetching} />
+              )}
+            </DropZone>
           )}
-        </DropZone>
-      </>
+        </div>
+      </div>
     );
   }
 
   return (
-    <>
+    <div className="studio-grid">
       <title>{`${file.name} · ${APP.name}`}</title>
-      <h1 className="visually-hidden">Análisis de «{file.name}»</h1>
-      <FileBar file={file} durationSeconds={duration} busy={busy} onFile={studio.analyse} onCancel={studio.cancel} />
-      <Progress phase={phase} />
-      {phase.kind === "problem" && <ProblemPanel problem={phase.problem} onRetry={studio.retry} onChooseAnother={studio.reset} />}
-      {detection !== null && <VerdictLine detection={detection} />}
-      {duration === null ? (
-        <div className="score score--pending" aria-hidden="true" />
-      ) : (
-        <Timeline
-          durationSeconds={duration}
-          hopSeconds={detection?.hop_seconds ?? 0}
-          peaks={waveform.status === "ready" ? waveform.waveform.peaks : null}
-          layout={layout}
-          selected={selected}
-          onSelect={setSelectedIndex}
-          analyzing={busy}
-          uploadPlayhead={selected === null ? null : player.uploadTime}
-          originalPlayhead={selected === null ? null : player.originalTime}
-        />
-      )}
-      {waveform.status === "unavailable" && <p className="quiet-note">Este navegador no pudo dibujar la forma de onda de este archivo; el análisis no cambia.</p>}
-      {detection !== null && layout !== null && layout.spans.length > 0 && (
-        <div className="findings">
-          <MatchTable spans={layout.spans} selected={selectedIndex} threshold={detection.threshold} onSelect={setSelectedIndex} />
-          {selected !== null && studio.audioUrl !== null && <AbPanel span={selected} uploadUrl={studio.audioUrl} player={player} />}
-        </div>
-      )}
-      {phase.kind === "done" && <StageTimings serverTiming={phase.result.serverTiming} engineTimings={phase.result.detection.engine_timings} />}
-    </>
+      {catalog}
+      <div className="bench">
+        <h1 className={source === null ? "visually-hidden" : "bench__title"}>
+          {source === null ? `Análisis de «${file.name}»` : `Parecidas a «${source.title}» de ${source.artist}`}
+        </h1>
+        <FileBar file={file} durationSeconds={duration} busy={busy} onFile={studio.analyse} onCancel={studio.cancel} />
+        {studio.audioUrl !== null && <QueryPlayer url={studio.audioUrl} title={file.name} spans={layout?.spans ?? []} />}
+        <Progress phase={phase} />
+        {phase.kind === "problem" && <ProblemPanel problem={phase.problem} onRetry={studio.retry} onChooseAnother={studio.reset} />}
+        {detection !== null && <VerdictLine detection={detection} />}
+        {duration === null ? (
+          <div className="score score--pending" aria-hidden="true" />
+        ) : (
+          <Timeline
+            durationSeconds={duration}
+            hopSeconds={detection?.hop_seconds ?? 0}
+            peaks={waveform.status === "ready" ? waveform.waveform.peaks : null}
+            layout={layout}
+            selected={selected}
+            onSelect={setSelectedIndex}
+            analyzing={busy}
+            uploadPlayhead={selected === null ? null : player.uploadTime}
+            originalPlayhead={selected === null ? null : player.originalTime}
+          />
+        )}
+        {waveform.status === "unavailable" && <p className="quiet-note">Este navegador no pudo dibujar la forma de onda de este archivo; el análisis no cambia.</p>}
+        {detection !== null && layout !== null && layout.spans.length > 0 && (
+          <div className="findings">
+            <MatchTable spans={layout.spans} selected={selectedIndex} threshold={detection.threshold} onSelect={setSelectedIndex} />
+            {selected !== null && studio.audioUrl !== null && <AbPanel span={selected} uploadUrl={studio.audioUrl} player={player} />}
+          </div>
+        )}
+        {phase.kind === "done" && <StageTimings serverTiming={phase.result.serverTiming} engineTimings={phase.result.detection.engine_timings} />}
+      </div>
+    </div>
   );
 }

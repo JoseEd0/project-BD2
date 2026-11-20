@@ -149,8 +149,9 @@ extendible. Una recomendación combina cuatro señales, cada una una consulta de
 compras conjuntas, fotos parecidas (\texttt{SIMILAR\_TO} sobre CLIP), descripción parecida
 (BM25 con el título) y stock en tiendas cercanas (hash del inventario y R-Tree). Las compras
 conjuntas se materializan en la carga con un \texttt{GROUP BY} del gestor y se leen por un
-B+. Cada señal se normaliza con min-max y se pondera (0.4 compras, 0.25 fotos, 0.25 texto y
-0.1 cercanía); sin compras conjuntas, su peso pasa a fotos y texto. Cada recomendación dice
+B+. Cada señal se normaliza con min-max y se pondera con pesos ajustados en la validación
+(0.8 compras, 0 fotos, 0.1 texto y 0.1 cercanía); sin compras conjuntas, su peso pasa a
+fotos y texto. Cada recomendación dice
 por qué se eligió y la respuesta se guarda en Redis.
 
 \paragraph{RAG sobre papers.} Los PDF se convierten en texto página por página y se cortan

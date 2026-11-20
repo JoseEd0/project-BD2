@@ -436,7 +436,7 @@ recuperados en 28 (33 con vecinos); antes, con la híbrida vieja y 8, en 20.
 
 ```bash
 curl -N localhost:8003/answers -H 'content-type: application/json' \
-    -d '{"question": "¿Cómo reemplazan los índices aprendidos a los árboles B?"}'
+    -d '{"question": "¿Qué ventajas tienen los learned indexes frente a un B-tree?"}'
 ```
 
 `question` es texto de 1 a 1 000 caracteres; `filters`, opcional, el de `/search`, y

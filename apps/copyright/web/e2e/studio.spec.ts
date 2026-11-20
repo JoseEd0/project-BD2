@@ -74,6 +74,16 @@ test.describe("with the service up", () => {
     await expect(page.getByRole("slider", { name: "Posición en el audio elegido" })).toHaveValue("5");
   });
 
+  test("a demo clip is listened to and analysed with one click", async ({ page, context }) => {
+    await mockApi(context, respondWith(200, REMIX_DETECTION));
+    await page.goto("/");
+    const clips = page.getByRole("list", { name: "Audios de prueba" });
+    await clips.getByRole("button", { name: "Escuchar Mezcla de dos canciones" }).click();
+    await expect(clips.getByRole("button", { name: "Pausar Mezcla de dos canciones" })).toBeVisible();
+    await clips.getByRole("listitem").filter({ hasText: "Mezcla de dos canciones" }).getByRole("button", { name: "Analizar" }).click();
+    await expect(page.getByRole("heading", { name: "Posible uso no autorizado: 2 fragmentos de 2 canciones" })).toBeVisible();
+  });
+
   test("weak matches stay hidden until asked for", async ({ page, context }) => {
     const weak = { ...REMIX_DETECTION.matches[1]!, song: { id: 9, title: "Melodía 9", artist: "Muestra" }, score: 0, above_threshold: false };
     await mockApi(context, respondWith(200, { ...REMIX_DETECTION, matches: [...REMIX_DETECTION.matches, weak] }));

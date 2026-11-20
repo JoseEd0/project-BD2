@@ -40,6 +40,7 @@ Ninguna ruta ni puerto está escrito en el código.
 | [`auth.py`](auth.py) | claves por servicio, roles y el rol que pide cada sentencia |
 | [`tracing.py`](tracing.py) | `X-Request-ID` y las etapas de `Server-Timing` de la petición en curso |
 | [`logs.py`](logs.py) | logs en JSON, una línea por petición |
+| [`metrics.py`](metrics.py) | `GET /metrics` para Prometheus: peticiones y latencia por ruta, CPU del proceso |
 | [`limits.py`](limits.py) | tamaño máximo del cuerpo, anunciado o enviado por trozos |
 | [`ingest.py`](ingest.py) | carga masiva: líneas NDJSON en lotes, índices diferidos y el resumen |
 | [`routes/`](routes/) | un router por dominio: tablas, carga masiva, consultas, subidas y sesiones |
@@ -53,6 +54,7 @@ Ninguna ruta ni puerto está escrito en el código.
 |---|---|---|
 | `GET` | `/health` | vivo: el proceso responde (sin clave; es el healthcheck de Docker) |
 | `GET` | `/ready` | listo: el catálogo responde y no se está apagando; `503` si no (sin clave) |
+| `GET` | `/metrics` | métricas de Prometheus por plantilla de ruta y estado (sin clave; la consola no la reenvía) |
 | `GET` | `/tables` | panel de archivos: tablas, columnas, tipos, índices y número de filas |
 | `POST` | `/query` | ejecuta un script y devuelve filas, mensajes y plan |
 | `POST` | `/tables/upload` | crea una tabla a partir de un CSV subido |

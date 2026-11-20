@@ -137,8 +137,8 @@ class _TracedSend:
 
 class RequestTracingMiddleware:
     """Middleware ASGI: id y etapas de la petición, cabeceras de la respuesta, su línea de
-    log y sus métricas. Va por fuera de las rutas, así que también un `500` sale con su id: una excepción
-    que nadie atendió se responde aquí con la forma de error de siempre."""
+    log y sus métricas. Va por fuera de las rutas, así que también un `500` sale con su id:
+    una excepción que nadie atendió se responde aquí con la forma de error de siempre."""
 
     def __init__(self, app: ASGIApp, service: str) -> None:
         self._app = app

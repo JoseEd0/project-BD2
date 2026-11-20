@@ -103,6 +103,7 @@ PROC_LOADAVG = "/proc/loadavg"
 PERCENTILE_FIELDS = (("med", "p50_ms"), ("p(95)", "p95_ms"), ("p(99)", "p99_ms"))
 DIGITS = 2
 CACHE_RESULTS = ("hit", "miss")
+STATUS_CLASSES = ("2xx", "3xx", "4xx", "5xx", "sin_respuesta")
 EMPTY: dict[str, Any] = {"values": {"count": 0}}
 
 
@@ -471,6 +472,11 @@ def prime(api: httpx.Client, workspace: Path, scenario: Scenario) -> None:
         api.get(request["path"]).raise_for_status()
 
 
+def counted(metrics: dict[str, Any], name: str) -> int:
+    """La cuenta de un contador de k6, o 0 si no contó nada."""
+    return int(metrics.get(name, EMPTY)["values"]["count"])
+
+
 def measurement_of(
     summary: dict[str, Any], replicas: int, cpu: dict[str, float], loads: dict[str, float]
 ) -> dict[str, Any]:
@@ -487,11 +493,15 @@ def measurement_of(
         if trend is not None:
             extra[f"{stage}_p50_ms"] = round(trend["values"]["med"], DIGITS)
     cache = {
-        result: int(metrics.get(f"cache_results{{result:{result}}}", EMPTY)["values"]["count"])
-        for result in CACHE_RESULTS
+        result: counted(metrics, f"cache_results{{result:{result}}}") for result in CACHE_RESULTS
     }
     if any(cache.values()):
         extra.update((f"cache_{result}", count) for result, count in cache.items())
+    extra.update(
+        (f"respuestas_{status}", count)
+        for status in STATUS_CLASSES
+        if (count := counted(metrics, f"responses{{status:{status}}}")) > 0
+    )
     extra.update((f"cpu_{group}_nucleos", cores) for group, cores in cpu.items())
     extra.update(loads)
     return extra

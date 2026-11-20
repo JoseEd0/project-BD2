@@ -15,7 +15,7 @@ from appkit import metrics as service_metrics
 
 ROOT = Path(__file__).resolve().parents[2]
 OBSERVABILITY = ROOT / "deploy" / "observability"
-APP_COMPOSE_FILES = sorted(ROOT.glob("apps/*/compose.yaml")) + [ROOT / "deploy/example/compose.yaml"]
+APP_COMPOSE_FILES = [*sorted(ROOT.glob("apps/*/compose.yaml")), ROOT / "deploy/example/compose.yaml"]
 DASHBOARD = OBSERVABILITY / "grafana" / "dashboards" / "minigestor.json"
 SERVICE_PORT = 8000
 # Lo que no es una métrica en una expresión de PromQL: funciones, agregaciones y palabras.

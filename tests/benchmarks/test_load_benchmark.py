@@ -78,7 +78,7 @@ def test_the_detection_fragment_is_a_wav_of_the_asked_seconds(tmp_path: Path):
 def k6_summary(cache: dict[str, int] | None = None) -> dict:
     metrics = {
         "http_reqs": {"values": {"rate": 123.456, "count": 3704}},
-        "http_req_failed": {"values": {"rate": 0.0}},
+        "http_req_failed": {"values": {"rate": 0.25}},
         "http_req_duration": {"values": {"med": 10.123, "p(95)": 20.5, "p(99)": 31.0}},
     }
     for result, count in (cache or {}).items():
@@ -93,6 +93,7 @@ def test_a_measurement_keeps_throughput_percentiles_stages_and_cpu():
     extra = measurement_of(k6_summary(), 2, {"gestor": 0.97, "api": 1.5}, {"carga": 3.0})
     assert extra["replicas"] == 2
     assert (extra["rps"], extra["peticiones"]) == (123.46, 3704)
+    assert extra["rps_correctas"] == 92.59
     assert (extra["p50_ms"], extra["p95_ms"], extra["p99_ms"]) == (10.12, 20.5, 31.0)
     assert extra["gestor_p50_ms"] == 7.89
     assert "otra_p50_ms" not in extra

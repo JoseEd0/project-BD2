@@ -100,6 +100,9 @@ CGROUP_CPU_STAT = "/sys/fs/cgroup/cpu.stat"
 CPU_USAGE_FIELD = "usage_usec"
 MICROSECONDS_PER_SECOND = 1_000_000.0
 PROC_LOADAVG = "/proc/loadavg"
+PROC_SOCKSTAT = "/proc/net/sockstat"
+TCP_SOCKSTAT = "TCP:"
+TIME_WAIT_FIELD = "tw"
 PERCENTILE_FIELDS = (("med", "p50_ms"), ("p(95)", "p95_ms"), ("p(99)", "p99_ms"))
 DIGITS = 2
 CACHE_RESULTS = ("hit", "miss")
@@ -237,6 +240,16 @@ def cpu_seconds(container: str) -> float:
         if field == CPU_USAGE_FIELD:
             return int(value) / MICROSECONDS_PER_SECOND
     raise RuntimeError(f"{container} no dice {CPU_USAGE_FIELD} en {CGROUP_CPU_STAT}")
+
+
+def time_wait_sockets(container: str) -> int:
+    """Conexiones TCP del contenedor en TIME_WAIT: cada petición que nginx reenvía abre una
+    conexión nueva hacia la API, y cada una ocupa un puerto local unos 60 s al cerrarse."""
+    for line in docker_output("exec", container, "cat", PROC_SOCKSTAT).splitlines():
+        if line.startswith(TCP_SOCKSTAT):
+            fields = line.split()
+            return int(fields[fields.index(TIME_WAIT_FIELD) + 1])
+    raise RuntimeError(f"{container} no dice sus conexiones TCP en {PROC_SOCKSTAT}")
 
 
 def docker_load_average(container: str) -> float:
@@ -488,6 +501,9 @@ def measurement_of(
         "peticiones": int(metrics["http_reqs"]["values"]["count"]),
         "fallidas": round(metrics["http_req_failed"]["values"]["rate"], 4),
     }
+    extra["rps_correctas"] = round(
+        extra["rps"] * (1 - metrics["http_req_failed"]["values"]["rate"]), DIGITS
+    )
     extra.update((field, round(duration[key], DIGITS)) for key, field in PERCENTILE_FIELDS)
     for stage, trend in summary["stages"].items():
         if trend is not None:
@@ -541,7 +557,9 @@ def measure_scenario(
     loads.update(
         carga_anfitrion_despues=load_average(), carga_docker_despues=docker_load_average(engine[0])
     )
-    return measurement_of(summary, replicas, window.measured(), loads)
+    extra = measurement_of(summary, replicas, window.measured(), loads)
+    extra["nginx_time_wait"] = time_wait_sockets(deployment.containers(app.web)[0])
+    return extra
 
 
 def measure_app(

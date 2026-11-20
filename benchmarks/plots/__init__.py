@@ -14,6 +14,7 @@ from benchmarks.plots import (
     faces_stream,
     indexes,
     ingest,
+    load,
     multimedia,
     rag,
     rag_evaluation,
@@ -66,4 +67,5 @@ FIGURES: tuple[
     *shop_recommend.FIGURES,
     *rag_evaluation.FIGURES,
     *shop_evaluation.FIGURES,
+    *load.FIGURES,
 )

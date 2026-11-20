@@ -3,7 +3,7 @@ import { useLocation, useNavigate, useSearchParams } from "react-router";
 
 import { useSearchPreview } from "../api/shop";
 import { PARAM } from "../catalog/filters";
-import { PREVIEW_DEBOUNCE_MILLISECONDS, PREVIEW_MIN_CHARACTERS } from "../config";
+import { PREVIEW_DEBOUNCE_MILLISECONDS, PREVIEW_MIN_CHARACTERS, QUERY_MAX_CHARACTERS } from "../config";
 import { nextActiveIndex } from "../search/listNavigation";
 import { previewOptionId, SearchPreview } from "../search/SearchPreview";
 import { useDebounced } from "../search/useDebounced";
@@ -159,6 +159,7 @@ export function SearchBox() {
             type="search"
             name="q"
             value={query}
+            maxLength={QUERY_MAX_CHARACTERS}
             onChange={(event) => {
               setQuery(event.target.value);
               setOpen(true);

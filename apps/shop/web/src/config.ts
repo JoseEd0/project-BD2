@@ -16,6 +16,8 @@ export const DEFAULT_LOCATION = { lat: -12.0453, lon: -77.0311 } as const;
 export const NEARBY_RADIUS_METERS = 5000;
 
 export const SEARCH_RESULTS = 24;
+/** El largo máximo de una consulta, el mismo que valida el API (`QUERY_MAX_CHARACTERS`). */
+export const QUERY_MAX_CHARACTERS = 200;
 /** Lo que muestra la vista previa bajo el buscador y cuánto se espera a que dejes de escribir. */
 export const PREVIEW_RESULTS = 6;
 export const PREVIEW_DEBOUNCE_MILLISECONDS = 180;

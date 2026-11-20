@@ -49,31 +49,3 @@ export function citedNumbers(text: string, sourceCount: number): Set<number> {
   return cited;
 }
 
-/**
- * Los bloques de una respuesta: párrafos separados por una línea en blanco y listas de
- * líneas que empiezan con `- `, `* ` o `1. `. El modelo escribe texto plano con, a lo sumo,
- * esas listas; nada más del Markdown cambia cómo se lee.
- */
-export type AnswerBlock =
-  | { readonly kind: "paragraph"; readonly text: string }
-  | { readonly kind: "list"; readonly ordered: boolean; readonly items: readonly string[] };
-
-const BULLET = /^\s*[-*•]\s+/;
-const NUMBERED = /^\s*\d+[.)]\s+/;
-
-export function answerBlocks(text: string): AnswerBlock[] {
-  return text
-    .split(/\n\s*\n/)
-    .map((block) => block.trim())
-    .filter((block) => block !== "")
-    .map((block) => {
-      const lines = block.split("\n");
-      if (lines.every((line) => BULLET.test(line))) {
-        return { kind: "list", ordered: false, items: lines.map((line) => line.replace(BULLET, "")) };
-      }
-      if (lines.every((line) => NUMBERED.test(line))) {
-        return { kind: "list", ordered: true, items: lines.map((line) => line.replace(NUMBERED, "")) };
-      }
-      return { kind: "paragraph", text: lines.join(" ") };
-    });
-}

@@ -3,7 +3,8 @@ import { Fragment, type ReactNode } from "react";
 import { hasFilters, type ResearchFilters } from "../api/types";
 import { formatAuthors, formatCost, formatCount, formatDuration, formatPages } from "../format";
 import type { AnswerSource, DoneData } from "../research/answerEvents";
-import { answerBlocks, citedNumbers, isValidCitation, segmentAnswer } from "../research/citations";
+import { citedNumbers, isValidCitation } from "../research/citations";
+import { answerBlocks, inlineNodes, type AnswerBlock, type InlineNode } from "../research/markdown";
 import { FAILURE_COPY } from "../research/failureCopy";
 import type { Turn } from "../research/turns";
 import { Icon } from "./Icon";
@@ -72,52 +73,111 @@ function CitationKey({
   );
 }
 
-function InlineText({ text, ...rest }: { readonly text: string; readonly turn: Turn; readonly openChunk: string | null; readonly onCite: TurnHandlers["onCite"] }) {
+interface CitationContext {
+  readonly turn: Turn;
+  readonly openChunk: string | null;
+  readonly onCite: TurnHandlers["onCite"];
+}
+
+function Inline({ nodes, context }: { readonly nodes: readonly InlineNode[]; readonly context: CitationContext }) {
   return (
     <>
-      {segmentAnswer(text).map((segment, index) =>
-        segment.kind === "text" ? (
-          <Fragment key={index}>{segment.text}</Fragment>
-        ) : (
-          <span key={index} className="keys">
-            {segment.numbers.map((n, position) => (
-              <CitationKey key={`${n}-${position}`} n={n} {...rest} />
-            ))}
-          </span>
-        ),
-      )}
+      {nodes.map((node, index) => {
+        switch (node.kind) {
+          case "text":
+            return <Fragment key={index}>{node.text}</Fragment>;
+          case "code":
+            return <code key={index}>{node.text}</code>;
+          case "strong":
+            return (
+              <strong key={index}>
+                <Inline nodes={node.children} context={context} />
+              </strong>
+            );
+          case "em":
+            return (
+              <em key={index}>
+                <Inline nodes={node.children} context={context} />
+              </em>
+            );
+          case "citation":
+            return (
+              <span key={index} className="keys">
+                {node.numbers.map((n, position) => (
+                  <CitationKey key={`${n}-${position}`} n={n} {...context} />
+                ))}
+              </span>
+            );
+        }
+      })}
     </>
   );
 }
 
-function AnswerBody({ turn, openChunk, onCite }: { readonly turn: Turn; readonly openChunk: string | null; readonly onCite: TurnHandlers["onCite"] }) {
+function InlineText({ text, context }: { readonly text: string; readonly context: CitationContext }) {
+  return <Inline nodes={inlineNodes(text)} context={context} />;
+}
+
+function Block({ block, context, caret }: { readonly block: AnswerBlock; readonly context: CitationContext; readonly caret: ReactNode }) {
+  switch (block.kind) {
+    case "paragraph":
+      return (
+        <p>
+          <InlineText text={block.text} context={context} />
+          {caret}
+        </p>
+      );
+    case "heading":
+      return (
+        <p className="answer__heading">
+          <InlineText text={block.text} context={context} />
+          {caret}
+        </p>
+      );
+    case "quote":
+      return (
+        <blockquote>
+          <InlineText text={block.text} context={context} />
+          {caret}
+        </blockquote>
+      );
+    case "code":
+      return (
+        <pre>
+          <code>{block.text}</code>
+          {caret}
+        </pre>
+      );
+    case "list": {
+      const List = block.ordered ? "ol" : "ul";
+      return (
+        <List>
+          {block.items.map((item, position) => (
+            <li key={position}>
+              <InlineText text={item} context={context} />
+              {position === block.items.length - 1 && caret}
+            </li>
+          ))}
+        </List>
+      );
+    }
+  }
+}
+
+function AnswerBody({ turn, openChunk, onCite }: CitationContext) {
   const writing = turn.status === "streaming";
   const blocks = answerBlocks(turn.text);
+  const context: CitationContext = { turn, openChunk, onCite };
   return (
     <div className="answer" aria-busy={writing}>
-      {blocks.map((block, index) => {
-        const last = index === blocks.length - 1;
-        const caret = writing && last ? <span className="caret" aria-hidden="true" /> : null;
-        if (block.kind === "paragraph") {
-          return (
-            <p key={index}>
-              <InlineText text={block.text} turn={turn} openChunk={openChunk} onCite={onCite} />
-              {caret}
-            </p>
-          );
-        }
-        const List = block.ordered ? "ol" : "ul";
-        return (
-          <List key={index}>
-            {block.items.map((item, position) => (
-              <li key={position}>
-                <InlineText text={item} turn={turn} openChunk={openChunk} onCite={onCite} />
-              </li>
-            ))}
-            {caret}
-          </List>
-        );
-      })}
+      {blocks.map((block, index) => (
+        <Block
+          key={index}
+          block={block}
+          context={context}
+          caret={writing && index === blocks.length - 1 ? <span className="caret" aria-hidden="true" /> : null}
+        />
+      ))}
       {writing && blocks.length === 0 && <span className="caret" aria-hidden="true" />}
     </div>
   );
@@ -150,11 +210,11 @@ function DoneNotices({ done, turn }: { readonly done: DoneData; readonly turn: T
       </Notice>,
     );
   }
-  if (done.complete && !done.answered_from_documents && turn.sources.length > 0) {
+  if (done.complete && !done.answered_from_documents && done.conversational !== true && turn.sources.length > 0) {
     notices.push(
-      <Notice key="absent" tone="info" title="Los documentos no responden esta pregunta">
-        <p>El modelo leyó {formatCount(turn.sources.length)} fragmentos y ninguno sostiene una respuesta, así que no cita ninguno.</p>
-      </Notice>,
+      <p key="absent" className="turn__note">
+        Sin citas: ninguno de los {formatCount(turn.sources.length)} fragmentos que leyó el modelo sostiene una respuesta.
+      </p>,
     );
   }
   if (done.invalid_citations.length > 0) {
@@ -177,7 +237,7 @@ function NoSources({ turn }: { readonly turn: Turn }) {
     <Notice tone="info" title="Ningún fragmento del corpus coincide">
       <p>
         {filters === null
-          ? "Ni BM25 ni los embeddings encontraron pasajes para esta pregunta. Prueba con los términos del área, en inglés."
+          ? "Ni BM25 ni los embeddings encontraron pasajes para esta pregunta. Prueba con los términos técnicos del área, mejor en inglés: «learned index», «BM25», «HNSW»."
           : `Con los filtros ${filters} no queda ningún pasaje. Quita alguno y vuelve a preguntar.`}
       </p>
     </Notice>
@@ -287,7 +347,7 @@ function Retrieving({ filters }: { readonly filters: string | null }) {
 /** Una pregunta con su respuesta, sus citas, sus fragmentos y lo que costó. */
 export function TurnView({ turn, active, openChunk, onCite, onRetry, onInspect }: TurnViewProps) {
   const filters = describeFilters(turn.filters);
-  const noSources = turn.status === "answered" && turn.sources.length === 0;
+  const noSources = turn.status === "answered" && turn.sources.length === 0 && turn.done?.conversational !== true;
   return (
     <article className="turn" data-active={active || undefined} aria-labelledby={`pregunta-${turn.id}`}>
       <header className="turn__question">

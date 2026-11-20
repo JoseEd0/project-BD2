@@ -53,6 +53,8 @@ export interface DoneData {
   readonly citations: readonly Citation[];
   readonly invalid_citations: readonly number[];
   readonly answered_from_documents: boolean;
+  /** Un saludo o una pregunta sobre la app: se respondió sin buscar en el corpus. */
+  readonly conversational?: boolean;
   readonly usage: TokenUsage;
   readonly attempts: readonly AttemptData[];
   readonly cost_usd: number | null;

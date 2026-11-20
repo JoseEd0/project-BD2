@@ -32,6 +32,9 @@ services:
       RAG_ANSWER_EFFORT: ${RAG_ANSWER_EFFORT:-low}
       RAG_ANSWER_MAX_TOKENS: ${RAG_ANSWER_MAX_TOKENS:-2048}
       RAG_DAILY_BUDGET_USD: ${RAG_DAILY_BUDGET_USD:-5}
+      # La reescritura de la consulta con Haiku antes de buscar (#183).
+      RAG_QUERY_REWRITING: ${RAG_QUERY_REWRITING:-true}
+      RAG_REWRITE_TIMEOUT_SECONDS: ${RAG_REWRITE_TIMEOUT_SECONDS:-2}
     volumes:
       # Relativa a apps/rag/ o absoluta.
       - ${PAPERS_DATASETS_DIR:-../../data/datasets}:/data/datasets:ro

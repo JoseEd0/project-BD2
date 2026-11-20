@@ -415,25 +415,47 @@ def test_a_path_that_is_not_a_file_is_a_loading_error(
         engine.execute(f"CREATE TABLE x FROM FILE '{target}'")
 
 
+def _holding_catalog(engine: Engine) -> tuple[threading.Thread, threading.Event]:
+    """Un hilo que retiene el catálogo como un CREATE INDEX largo, hasta que se le avisa."""
+    holding, release = threading.Event(), threading.Event()
+
+    def hold() -> None:
+        with engine._holding_guard():
+            holding.set()
+            release.wait()
+
+    holder = threading.Thread(target=hold)
+    holder.start()
+    holding.wait()
+    return holder, release
+
+
 def test_a_busy_catalog_gives_up_after_the_lock_timeout(config: EngineConfig):
-    """Un CREATE largo retiene el catálogo; las demás sesiones esperan como mucho el plazo
-    de bloqueo y no sin límite."""
+    """Un CREATE largo retiene el catálogo; abrir una tabla espera como mucho el plazo de
+    bloqueo y no sin límite."""
     quick = replace(config, lock_timeout_seconds=0.05)
     with Engine(quick) as engine:
         engine.execute("CREATE TABLE t (id INT PRIMARY KEY)")
-        holding, release = threading.Event(), threading.Event()
-
-        def hold() -> None:
-            with engine._holding_guard():
-                holding.set()
-                release.wait()
-
-        holder = threading.Thread(target=hold)
-        holder.start()
-        holding.wait()
+    with Engine(quick) as engine:
+        holder, release = _holding_catalog(engine)
         try:
             with pytest.raises(EngineBusyError):
                 engine.table("t")
+        finally:
+            release.set()
+            holder.join()
+
+
+def test_an_open_table_is_read_while_the_catalog_is_busy(config: EngineConfig):
+    """Un CREATE INDEX largo sobre otra tabla no frena las consultas de una tabla ya
+    abierta: con cuatro apps sobre un solo gestor, la carga de una no tumba a las demás."""
+    quick = replace(config, lock_timeout_seconds=0.05)
+    with Engine(quick) as engine:
+        engine.execute("CREATE TABLE t (id INT PRIMARY KEY)")
+        engine.execute("INSERT INTO t VALUES (1), (2)")
+        holder, release = _holding_catalog(engine)
+        try:
+            assert keys(engine.execute("SELECT id FROM t ORDER BY id")) == [1, 2]
         finally:
             release.set()
             holder.join()

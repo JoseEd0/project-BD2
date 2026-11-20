@@ -36,19 +36,20 @@ FIGURES: tuple[XYFigure, ...] = (
         title="Prueba de carga: réplicas de cada API frente a un solo gestor",
         subtitle=(
             "k6 con 32 usuarios sin pausa durante 30 s por el nginx de cada app, en el mismo "
-            "equipo.\nUna línea plana en peticiones por segundo es un límite que no está en la "
-            "API: el gestor o la CPU del equipo."
+            "equipo. Más respuestas y menos latencia es mejor.\nUna línea plana en respuestas "
+            "por segundo es un límite que no está en la API: el gestor o la CPU del equipo."
         ),
         columns=3,
+        legend_columns=3,
         panels=(
             XYPanel(
-                "Respuestas correctas por segundo (más es mejor)",
+                "Respuestas por segundo",
                 REPLICAS,
                 Axis("respuestas 2xx por segundo (req/s)", "rps_correctas", logarithmic=True),
                 SERIES,
             ),
             XYPanel(
-                "Latencia p95 (menos es mejor)",
+                "Latencia p95",
                 REPLICAS,
                 Axis("latencia p95 (ms)", "p95_ms", logarithmic=True),
                 SERIES,

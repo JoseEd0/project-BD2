@@ -114,11 +114,17 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        /** AnswerRequest */
+        /**
+         * AnswerRequest
+         * @description `history`: los turnos anteriores de la conversación, del más viejo al más nuevo; el
+         *     servicio reenvía al modelo solo los últimos (`RAG_ANSWER_HISTORY_TURNS`).
+         */
         AnswerRequest: {
             /** Question */
             question: string;
             filters?: components["schemas"]["SearchFilters"] | null;
+            /** History */
+            history?: components["schemas"]["Exchange"][];
         };
         /** CategoryFacet */
         CategoryFacet: {
@@ -126,6 +132,16 @@ export interface components {
             category: string;
             /** Papers */
             papers: number;
+        };
+        /**
+         * Exchange
+         * @description Un turno anterior: la pregunta y la respuesta que recibió.
+         */
+        Exchange: {
+            /** Question */
+            question: string;
+            /** Answer */
+            answer: string;
         };
         /**
          * ExecutedQuery

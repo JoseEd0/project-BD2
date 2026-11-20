@@ -8,6 +8,9 @@
 - `GET /papers/{id}/pages/{n}` y `GET /papers/{id}/file`: la página citada y su archivo.
 - `GET /facets`: los años y las categorías del corpus, con cuántos papers tiene cada uno.
 
+Cada lectura del gestor se reintenta mientras su catálogo está ocupado por otra app
+(`rag.engine_reader`); si sigue ocupado, la ruta responde 503 `EngineBusyError`.
+
 Sin estado: el gestor guarda los fragmentos y sus índices, y cada réplica carga el modelo
 de embeddings al arrancar (`RAG_MODELS_DIR`). Además de las rutas de `appkit` (`/health`,
 `/ready`, migraciones al arrancar, `X-Request-ID` y `Server-Timing`).
@@ -30,7 +33,9 @@ from appkit import Engine, ServiceError, configure_logging, create_service_app, 
 from .answering import Answerer
 from .budget import DailyBudget
 from .config import RagSettings, load_embedder, open_answer_model
+from .conversation import MAX_HISTORY_EXCHANGES, Exchange
 from .embeddings import Embedder
+from .engine_reader import BusyRetryingReader, EngineReader
 from .facets import Facets, facets_of
 from .llm import AnswerModel
 from .papers import PageResponse, corpus_file, page_of, stored_paper
@@ -85,8 +90,12 @@ class SearchResponse(BaseModel):
 
 
 class AnswerRequest(BaseModel):
+    """`history`: los turnos anteriores de la conversación, del más viejo al más nuevo; el
+    servicio reenvía al modelo solo los últimos (`RAG_ANSWER_HISTORY_TURNS`)."""
+
     question: Question
     filters: SearchFilters | None = None
+    history: list[Exchange] = Field(default_factory=list, max_length=MAX_HISTORY_EXCHANGES)
 
 
 def embedder_of(request: Request) -> Embedder:
@@ -97,6 +106,13 @@ def embedder_of(request: Request) -> Embedder:
 def settings_of(request: Request) -> RagSettings:
     settings: RagSettings = request.app.state.settings
     return settings
+
+
+def reader_of(request: Request, engine: Engine) -> EngineReader:
+    return BusyRetryingReader(engine, settings_of(request).busy_retry())
+
+
+Reader = Annotated[EngineReader, Depends(reader_of)]
 
 
 def answerer_of(request: Request) -> Answerer:
@@ -114,7 +130,7 @@ router = APIRouter()
 @router.post("/search")
 async def search(
     body: SearchRequest,
-    engine: Engine,
+    engine: Reader,
     embedder: Annotated[Embedder, Depends(embedder_of)],
     settings: Annotated[RagSettings, Depends(settings_of)],
 ) -> SearchResponse:
@@ -129,7 +145,7 @@ async def search(
 
 
 @router.get("/facets")
-async def facets(engine: Engine) -> Facets:
+async def facets(engine: Reader) -> Facets:
     """Los años y las categorías primarias del corpus con cuántos papers tiene cada uno: los
     valores que admiten los filtros de `/search` y `/answers`."""
     return await facets_of(engine)
@@ -145,20 +161,20 @@ async def facets(engine: Engine) -> Facets:
 )
 async def answers(
     body: AnswerRequest,
-    engine: Engine,
+    engine: Reader,
     embedder: Annotated[Embedder, Depends(embedder_of)],
     answerer: Annotated[Answerer, Depends(answerer_of)],
 ) -> EventStreamResponse:
     """La respuesta a `question` en Server-Sent Events: `sources`, `delta`… y `done` (o
     `error`). Ver `rag.answering`. La búsqueda y el tope de gasto se resuelven antes de
     empezar: sus errores son respuestas JSON con su estado."""
-    prepared = await answerer.prepare(body.question, engine, embedder, body.filters)
+    prepared = await answerer.prepare(body.question, engine, embedder, body.filters, body.history)
     return EventStreamResponse(answerer.events(prepared))
 
 
 @router.get("/papers/{paper_id:path}/pages/{page}")
 async def paper_page(
-    paper_id: PaperId, page: Annotated[int, Path(ge=1)], engine: Engine
+    paper_id: PaperId, page: Annotated[int, Path(ge=1)], engine: Reader
 ) -> PageResponse:
     """La página `page` del documento: el paper, su total de páginas, los pasajes del corpus
     que caen en ella y la URL para abrir el archivo en esa página."""
@@ -172,7 +188,7 @@ async def paper_page(
 )
 async def paper_file(
     paper_id: PaperId,
-    engine: Engine,
+    engine: Reader,
     settings: Annotated[RagSettings, Depends(settings_of)],
 ) -> FileResponse:
     """El archivo del documento (PDF o Markdown) desde el corpus montado, con `Range`."""

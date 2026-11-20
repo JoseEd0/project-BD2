@@ -206,13 +206,22 @@
                 "type": "null"
               }
             ]
+          },
+          "history": {
+            "items": {
+              "$ref": "#/components/schemas/Exchange"
+            },
+            "type": "array",
+            "maxItems": 20,
+            "title": "History"
           }
         },
         "type": "object",
         "required": [
           "question"
         ],
-        "title": "AnswerRequest"
+        "title": "AnswerRequest",
+        "description": "`history`: los turnos anteriores de la conversación, del más viejo al más nuevo; el\nservicio reenvía al modelo solo los últimos (`RAG_ANSWER_HISTORY_TURNS`)."
       },
       "CategoryFacet": {
         "properties": {
@@ -231,6 +240,28 @@
           "papers"
         ],
         "title": "CategoryFacet"
+      },
+      "Exchange": {
+        "properties": {
+          "question": {
+            "type": "string",
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Question"
+          },
+          "answer": {
+            "type": "string",
+            "maxLength": 12000,
+            "title": "Answer"
+          }
+        },
+        "type": "object",
+        "required": [
+          "question",
+          "answer"
+        ],
+        "title": "Exchange",
+        "description": "Un turno anterior: la pregunta y la respuesta que recibió."
       },
       "ExecutedQuery": {
         "properties": {

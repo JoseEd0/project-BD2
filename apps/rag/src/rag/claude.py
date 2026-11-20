@@ -8,7 +8,7 @@ La petición:
 - pensamiento adaptativo con el esfuerzo configurado (`low` por omisión: respuestas cortas
   sobre pasajes dados, donde en ese nivel el modelo casi no razona antes de escribir). En
   Sonnet 5.5 el pensamiento no se puede apagar (`disabled` es un 400) y sus bloques llegan
-  vacíos (`display: "omitted"`): no se reenvían, la conversación es de un solo turno;
+  vacíos (`display: "omitted"`): no se reenvían; los turnos anteriores van como texto;
 - respaldo del servidor (`fallbacks: "default"`, beta `server-side-fallback-2026-07-01`): si
   un clasificador rechaza la pregunta en una categoría que la API sabe rescatar, la misma
   llamada sigue con Claude Sonnet 5 y el stream trae un bloque `fallback` en el punto del
@@ -35,6 +35,7 @@ from anthropic.types.beta import (
     BetaFallbackMessageIterationUsage,
     BetaMessage,
     BetaMessageIterationUsage,
+    BetaMessageParam,
     BetaRawContentBlockStartEvent,
     BetaTextBlockParam,
     BetaUsage,
@@ -53,7 +54,7 @@ from .llm import (
     TextDelta,
 )
 from .pricing import Attempt, TokenUsage
-from .prompt import Prompt
+from .prompt import Prompt, question_element
 
 Effort = Literal["low", "medium", "high", "xhigh", "max"]
 
@@ -108,20 +109,30 @@ class ClaudeModel:
         system: list[BetaTextBlockParam] = [
             {"type": "text", "text": prompt.system, "cache_control": {"type": "ephemeral"}}
         ]
-        user_blocks: list[BetaTextBlockParam] = [
-            {"type": "text", "text": prompt.documents},
-            {"type": "text", "text": prompt.question},
-        ]
         return self._client.beta.messages.stream(
             model=options.model,
             max_tokens=max_tokens,
             system=system,
-            messages=[{"role": "user", "content": user_blocks}],
+            messages=messages_of(prompt),
             thinking={"type": "adaptive"},
             output_config={"effort": options.effort},
             fallbacks=DEFAULT_FALLBACKS if options.server_fallback else anthropic.omit,
             betas=[SERVER_SIDE_FALLBACK_BETA] if options.server_fallback else anthropic.omit,
         )
+
+
+def messages_of(prompt: Prompt) -> list[BetaMessageParam]:
+    """Los turnos anteriores como pares usuario-asistente y, al final, el mensaje actual: sus
+    documentos (si los hay; la API rechaza un bloque de texto vacío) y la pregunta."""
+    messages: list[BetaMessageParam] = []
+    for exchange in prompt.history:
+        messages.append({"role": "user", "content": question_element(exchange.question)})
+        messages.append({"role": "assistant", "content": exchange.answer})
+    current: list[BetaTextBlockParam] = [
+        {"type": "text", "text": text} for text in (prompt.documents, prompt.question) if text
+    ]
+    messages.append({"role": "user", "content": current})
+    return messages
 
 
 def _model_event(event: ParsedBetaMessageStreamEvent[None]) -> ModelEvent | None:

@@ -24,11 +24,13 @@ from dataclasses import dataclass
 
 from pydantic import BaseModel, ConfigDict
 
-from minigestor_client import AsyncClient, current_request_id
+from minigestor_client import current_request_id
 
 from .budget import DailyBudget, Reservation
 from .citations import Citation, check_citations
+from .conversation import Exchange, bounded_history, is_small_talk, retrieval_query
 from .embeddings import Embedder
+from .engine_reader import EngineReader
 from .llm import (
     AnswerModel,
     Completion,
@@ -39,7 +41,14 @@ from .llm import (
     TextDelta,
 )
 from .pricing import Attempt, TokenUsage, attempt_cost, total_cost, total_usage, worst_case_cost
-from .prompt import PASSAGE_SHARE, Prompt, Source, build_prompt, select_sources
+from .prompt import (
+    PASSAGE_SHARE,
+    Prompt,
+    Source,
+    build_conversational_prompt,
+    build_prompt,
+    select_sources,
+)
 from .search import Paper, Retriever, SearchFilters, SearchMode
 from .sse import sse_frame
 
@@ -54,6 +63,13 @@ INCOMPLETE_STREAM_MESSAGE = "el modelo de lenguaje cortó la respuesta sin termi
 SERVICE_FAILURE_KIND = "ServiceError"
 SERVICE_FAILURE_MESSAGE = "error interno del servicio"
 MILLISECONDS_PER_SECOND = 1000.0
+# Seis turnos de unos 2 000 caracteres son unos 4 000 tokens más por pregunta (~0,01 USD sin
+# caché): bastan para seguir un hilo sin que una conversación larga encarezca cada pregunta.
+DEFAULT_HISTORY_TURNS = 6
+DEFAULT_HISTORY_CHARACTERS = 2000
+# «¿Y cuál es más rápido?» o «explícalo más simple» no nombran su tema; una pregunta de ocho
+# palabras o más ya suele nombrarlo.
+DEFAULT_FOLLOW_UP_WORDS = 8
 
 logger = logging.getLogger(__name__)
 
@@ -61,12 +77,18 @@ logger = logging.getLogger(__name__)
 @dataclass(frozen=True, slots=True)
 class AnswerSettings:
     """Cuántos fragmentos se recuperan, cuántos tokens de documentos caben en el prompt, el
-    tope de salida de cada respuesta y la constante de RRF de la búsqueda híbrida."""
+    tope de salida de cada respuesta, la constante de RRF de la búsqueda híbrida y cuánto de
+    la conversación se reenvía: los últimos `history_turns` turnos, cada respuesta cortada en
+    `history_characters`, y la pregunta anterior junto a una de menos de `follow_up_words`
+    palabras al buscar."""
 
     chunks: int
     context_tokens: int
     max_tokens: int
     rrf_k: int
+    history_turns: int = DEFAULT_HISTORY_TURNS
+    history_characters: int = DEFAULT_HISTORY_CHARACTERS
+    follow_up_words: int = DEFAULT_FOLLOW_UP_WORDS
 
     @property
     def passage_tokens(self) -> int:
@@ -116,7 +138,9 @@ class AttemptData(BaseModel):
 class DoneData(BaseModel):
     """El cierre de una respuesta. `complete` es falso si el modelo la cortó (`max_tokens`)
     o la rechazó (`refusal`): ese texto parcial no se muestra como respuesta.
-    `answered_from_documents` es falso si no citó ningún fragmento enviado. `cost_usd` es
+    `answered_from_documents` es falso si no citó ningún fragmento enviado; `conversational`,
+    verdadero si el mensaje era un saludo o una pregunta sobre la app y no se buscó nada en el
+    corpus. `cost_usd` es
     `None` si algún modelo que intervino no tiene precio en la tabla."""
 
     model: str
@@ -127,6 +151,7 @@ class DoneData(BaseModel):
     citations: list[Citation]
     invalid_citations: list[int]
     answered_from_documents: bool
+    conversational: bool = False
     usage: UsageData
     attempts: list[AttemptData]
     cost_usd: float | None
@@ -141,7 +166,7 @@ class ErrorData(BaseModel):
 @dataclass(frozen=True, slots=True)
 class PreparedAnswer:
     """Una pregunta lista para el modelo: sus fragmentos, su prompt y su reserva de gasto
-    (`None` si no hay fragmentos y el modelo no se llama)."""
+    (`None` si no hay fragmentos ni es una charla, y el modelo no se llama)."""
 
     question: str
     sources: tuple[Source, ...]
@@ -165,22 +190,29 @@ class Answerer:
     async def prepare(
         self,
         question: str,
-        engine: AsyncClient,
+        engine: EngineReader,
         embedder: Embedder,
         filters: SearchFilters | None = None,
+        history: Sequence[Exchange] = (),
     ) -> PreparedAnswer:
         """Recupera los fragmentos de `question` (solo de los papers que cumplen `filters`),
-        arma el prompt y reserva su gasto.
+        arma el prompt después de los turnos de `history` y reserva su gasto. Un saludo o una
+        pregunta sobre la app no se busca: va al modelo sin documentos.
 
         Raises:
             BudgetExhaustedError: si el gasto del día no admite una respuesta más.
             minigestor_client.MinigestorError: si el gestor falla al buscar.
         """
         settings = self._settings
+        earlier = bounded_history(history, settings.history_turns, settings.history_characters)
+        if is_small_talk(question):
+            prompt = build_conversational_prompt(question, earlier)
+            return PreparedAnswer(question, (), prompt, self._reserve(prompt))
         retriever = Retriever(engine, embedder, rrf_k=settings.rrf_k)
-        hits = await retriever.search(question, SearchMode.HYBRID, settings.chunks, filters)
+        query = retrieval_query(question, earlier, settings.follow_up_words)
+        hits = await retriever.search(query, SearchMode.HYBRID, settings.chunks, filters)
         sources = tuple(select_sources(hits, settings.context_tokens, settings.passage_tokens))
-        prompt = build_prompt(question, sources)
+        prompt = build_prompt(question, sources, earlier)
         reservation = self._reserve(prompt) if sources else None
         return PreparedAnswer(question, sources, prompt, reservation)
 
@@ -227,7 +259,7 @@ class Answerer:
             logger.exception("fallo no previsto generando una respuesta")
             yield sse_frame(ERROR_EVENT, _error_data(SERVICE_FAILURE_MESSAGE, SERVICE_FAILURE_KIND))
             return
-        done = _done_data("".join(parts), completion, prepared.sources)
+        done = _done_data("".join(parts), completion, prepared)
         reservation.settle(done.cost_usd)
         _log_answer(done, len(prepared.sources), started)
         yield sse_frame(DONE_EVENT, done)
@@ -272,8 +304,8 @@ def _without_sources() -> DoneData:
     )
 
 
-def _done_data(answer: str, completion: Completion, sources: Sequence[Source]) -> DoneData:
-    report = check_citations(answer, sources)
+def _done_data(answer: str, completion: Completion, prepared: PreparedAnswer) -> DoneData:
+    report = check_citations(answer, prepared.sources)
     return DoneData(
         model=completion.model,
         stop_reason=completion.stop_reason,
@@ -283,6 +315,7 @@ def _done_data(answer: str, completion: Completion, sources: Sequence[Source]) -
         citations=report.citations,
         invalid_citations=report.invalid,
         answered_from_documents=bool(report.citations),
+        conversational=prepared.prompt.conversational,
         usage=_usage_data(total_usage(completion.attempts)),
         attempts=[_attempt_data(attempt) for attempt in completion.attempts],
         cost_usd=total_cost(completion.attempts),

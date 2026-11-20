@@ -1,4 +1,4 @@
-import type { CatalogSummary, Detection } from "../api/types";
+import type { CatalogSummary, DetectedMatch, Detection } from "../api/types";
 
 export type CatalogState = "empty" | "indexing" | "ready";
 
@@ -17,4 +17,19 @@ export function catalogStateOf(summary: CatalogSummary): CatalogState {
 export function withoutSong(detection: Detection, songId: number): Detection {
   const matches = detection.matches.filter((match) => match.song.id !== songId);
   return { ...detection, matches, detected: matches.some((match) => match.above_threshold) };
+}
+
+/** Cuántas coincidencias débiles se muestran si ninguna pasa el umbral. */
+export const WEAK_MATCHES_SHOWN = 3;
+
+/**
+ * Las coincidencias que merecen verse de entrada: las que pasan el umbral o, si ninguna lo
+ * pasa, las mejores con alguna evidencia. Las demás quedan tras «Mostrar coincidencias débiles».
+ */
+export function notableMatches(matches: readonly DetectedMatch[]): readonly DetectedMatch[] {
+  const strong = matches.filter((match) => match.above_threshold);
+  if (strong.length > 0) {
+    return strong;
+  }
+  return matches.filter((match) => match.score > 0).slice(0, WEAK_MATCHES_SHOWN);
 }

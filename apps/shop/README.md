@@ -625,8 +625,10 @@ recalcula y una con otros parámetros la rehace.
 ### Fusión y explicación
 
 Cada señal se normaliza **por min-max** dentro de su lista y se multiplica por su peso
-(`SHOP_COPURCHASE_WEIGHT` 0,4, `SHOP_VISUAL_WEIGHT` 0,25, `SHOP_TEXT_WEIGHT` 0,25,
-`SHOP_NEARBY_WEIGHT` 0,1; #82 los ajusta en la validación). Se eligió min-max sobre una
+(`SHOP_COPURCHASE_WEIGHT` 0,8, `SHOP_VISUAL_WEIGHT` 0, `SHOP_TEXT_WEIGHT` 0,1,
+`SHOP_NEARBY_WEIGHT` 0,1: los que ganaron en la validación de [#82](#medido-calidad-82);
+los de partida eran 0,4 · 0,25 · 0,25 · 0,1). Una señal con peso 0 sigue proponiendo
+candidatos, pero no se nombra entre los motivos. Se eligió min-max sobre una
 fusión por rango (RRF) porque la distancia entre puntajes dice algo: un par de 120 clientes no
 está «un puesto» por delante de uno de 3. La cercanía entra como `1 - metros / radio`, sin
 normalizar, para que la tienda más cercana no valga lo mismo a 100 m que a 4 km. Sin compras

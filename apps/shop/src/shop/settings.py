@@ -39,10 +39,11 @@ DEFAULT_CANDIDATES_PER_SIGNAL = 50
 DEFAULT_NEARBY_RADIUS_METERS = 5000.0
 # Lo que define a un usuario para las señales visual y de texto: sus últimas compras.
 DEFAULT_USER_PROFILE_PRODUCTS = 10
-# Pesos de partida de la fusión; #82 los ajusta en la validación.
-DEFAULT_COPURCHASE_WEIGHT = 0.4
-DEFAULT_VISUAL_WEIGHT = 0.25
-DEFAULT_TEXT_WEIGHT = 0.25
+# Pesos de la fusión ajustados en la validación (#82, rejilla de pasos de 0,1, mayor NDCG@10):
+# en la prueba suben el Hit@10 de 3,58 % a 4,58 % sobre los de partida (0,4 · 0,25 · 0,25 · 0,1).
+DEFAULT_COPURCHASE_WEIGHT = 0.8
+DEFAULT_VISUAL_WEIGHT = 0.0
+DEFAULT_TEXT_WEIGHT = 0.1
 DEFAULT_NEARBY_WEIGHT = 0.1
 DEFAULT_PURCHASE_ATTEMPTS = 3
 DEFAULT_CACHE_TTL_SECONDS = 600

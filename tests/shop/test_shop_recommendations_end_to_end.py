@@ -30,6 +30,14 @@ DRUMS = "B0000DRUMS"
 NEAR_CENTRO = {"lat": -12.0470, "lon": -77.0430}
 CLOSED_PORT_REDIS = "redis://127.0.0.1:1/0"
 REDIS_TIMEOUT_SECONDS = 0.2
+# Estos tests prueban cada señal y su explicación, no los pesos ajustados (#82): con los de
+# partida de #81 las cuatro señales aportan en el catálogo diminuto.
+MECHANICS_WEIGHTS = {
+    "copurchase_weight": 0.4,
+    "visual_weight": 0.25,
+    "text_weight": 0.25,
+    "nearby_weight": 0.1,
+}
 
 
 class AnyTextEncoder:
@@ -43,6 +51,7 @@ def shop_client(engine_app: FastAPI, tmp_path: Path, redis: RedisFactory) -> Tes
         engine_key=ENGINE_KEY,  # type: ignore[arg-type]
         models_dir=tmp_path / "modelos",
         ready_cache_seconds=0,
+        **MECHANICS_WEIGHTS,
     )
     app = create_app(
         settings,

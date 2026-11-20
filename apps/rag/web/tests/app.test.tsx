@@ -63,6 +63,6 @@ describe("the app shell", () => {
     ];
     renderAt("/roto", broken);
     expect(await screen.findByRole("heading", { name: "Esta página falló al cargar" })).toBeTruthy();
-    expect(screen.getByRole("link", { name: `${APP.name}, inicio` })).toBeTruthy();
+    expect(screen.getByRole("link", { name: `${APP.name}, nueva conversación` })).toBeTruthy();
   });
 });

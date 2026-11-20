@@ -10,8 +10,8 @@ const STILL_RECOMMENDED = /Instrument Cable 10 ft/;
 test("search, open a product, buy it as a customer and see the recommendations recomputed", async ({ page }) => {
   await page.goto("/");
   await page.getByLabel("Cliente").selectOption(CUSTOMER);
-  await page.getByRole("searchbox").fill("drum sticks");
-  await page.getByRole("searchbox").press("Enter");
+  await page.getByRole("combobox", { name: /Palabras a buscar/ }).fill("drum sticks");
+  await page.getByRole("combobox", { name: /Palabras a buscar/ }).press("Enter");
   await page.getByRole("link", { name: new RegExp(PRODUCT) }).first().click();
   await expect(page.getByRole("heading", { level: 1, name: PRODUCT })).toBeVisible();
 

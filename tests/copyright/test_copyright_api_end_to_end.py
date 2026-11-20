@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import io
 from collections.abc import Iterator
 from dataclasses import replace
 from pathlib import Path
 
 import httpx
 import pytest
+import soundfile
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from tests.multimedia.media_support import chirp, write_audio
@@ -64,6 +66,7 @@ def service(
     asyncio.run(seed(engine_app, songs, str(tmp_path)))
     monkeypatch.setenv(f"{ENV_PREFIX}ENGINE_URL", ASGI_URL)
     monkeypatch.setenv(f"{ENV_PREFIX}ENGINE_KEY", "sin-claves-en-el-gestor-de-prueba")
+    monkeypatch.setenv(f"{ENV_PREFIX}DEMO_SONG_IDS", "[2, 5, 140]")
     settings = load_settings(CopyrightSettings)
     app = build_app(settings, httpx.ASGITransport(app=engine_app))
     with TestClient(app) as client:
@@ -130,3 +133,24 @@ def test_an_unknown_song_is_a_404_and_a_bad_page_a_422(service: TestClient):
 def test_the_service_reports_health_and_readiness(service: TestClient):
     assert service.get("/health").json()["status"] == "ok"
     assert service.get("/ready").json() == {"status": "ready"}
+
+
+def test_the_demo_clips_name_their_songs_and_serve_a_wav_each(service: TestClient):
+    clips = service.get("/demo-clips").json()
+    assert [clip["id"] for clip in clips] == ["mezcla", "extracto", "con-ruido", "sintetico"]
+    assert clips[0]["expected_songs"] == [2, 5]
+    assert "«Dancing in the Rain» de Ava Zandieh" in clips[0]["description"]
+    assert clips[3]["expected_songs"] == []
+    for clip in clips:
+        response = service.get(f"/demo-clips/{clip['id']}/audio")
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "audio/wav"
+        assert soundfile.info(io.BytesIO(response.content)).duration > 0
+    assert (
+        service.get("/demo-clips/mezcla/audio").content
+        == service.get("/demo-clips/mezcla/audio").content
+    )
+
+
+def test_an_unknown_demo_clip_is_a_422(service: TestClient):
+    assert service.get("/demo-clips/otro/audio").status_code == 422

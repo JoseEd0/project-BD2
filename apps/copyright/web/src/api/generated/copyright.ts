@@ -106,6 +106,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/demo-clips": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Demo Clips
+         * @description Los audios de prueba, con las canciones del catálogo que contiene cada uno.
+         */
+        get: operations["list_demo_clips_demo_clips_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/demo-clips/{clip}/audio": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Demo Clip Audio
+         * @description El WAV del clip, armado la primera vez; `404` si falta una canción del catálogo.
+         */
+        get: operations["demo_clip_audio_demo_clips__clip__audio_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -136,6 +176,24 @@ export interface components {
             /** Genres */
             genres: components["schemas"]["GenreCount"][];
         };
+        /**
+         * DemoClip
+         * @description Un audio de prueba: qué es y qué debería encontrar la detección.
+         */
+        DemoClip: {
+            id: components["schemas"]["DemoClipId"];
+            /** Title */
+            title: string;
+            /** Description */
+            description: string;
+            /** Expected Songs */
+            expected_songs: number[];
+        };
+        /**
+         * DemoClipId
+         * @enum {string}
+         */
+        DemoClipId: "mezcla" | "extracto" | "con-ruido" | "sintetico";
         /**
          * DetectedMatch
          * @description Una racha de ventanas de la subida alineada con una canción del catálogo.
@@ -451,6 +509,57 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Detection"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_demo_clips_demo_clips_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DemoClip"][];
+                };
+            };
+        };
+    };
+    demo_clip_audio_demo_clips__clip__audio_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                clip: components["schemas"]["DemoClipId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description El clip en WAV. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "audio/wav": unknown;
                 };
             };
             /** @description Validation Error */

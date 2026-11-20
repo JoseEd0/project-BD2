@@ -247,6 +247,64 @@
           }
         }
       }
+    },
+    "/demo-clips": {
+      "get": {
+        "summary": "List Demo Clips",
+        "description": "Los audios de prueba, con las canciones del catálogo que contiene cada uno.",
+        "operationId": "list_demo_clips_demo_clips_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DemoClip"
+                  },
+                  "type": "array",
+                  "title": "Response List Demo Clips Demo Clips Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/demo-clips/{clip}/audio": {
+      "get": {
+        "summary": "Demo Clip Audio",
+        "description": "El WAV del clip, armado la primera vez; `404` si falta una canción del catálogo.",
+        "operationId": "demo_clip_audio_demo_clips__clip__audio_get",
+        "parameters": [
+          {
+            "name": "clip",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/DemoClipId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "El clip en WAV.",
+            "content": {
+              "audio/wav": {}
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -307,6 +365,47 @@
         ],
         "title": "CatalogSummary",
         "description": "El tamaño del catálogo, las ventanas con que se cortó y si ya se puede buscar en él."
+      },
+      "DemoClip": {
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/DemoClipId"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "expected_songs": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Expected Songs"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "description",
+          "expected_songs"
+        ],
+        "title": "DemoClip",
+        "description": "Un audio de prueba: qué es y qué debería encontrar la detección."
+      },
+      "DemoClipId": {
+        "type": "string",
+        "enum": [
+          "mezcla",
+          "extracto",
+          "con-ruido",
+          "sintetico"
+        ],
+        "title": "DemoClipId"
       },
       "DetectedMatch": {
         "properties": {

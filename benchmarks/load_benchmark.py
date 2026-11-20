@@ -619,6 +619,17 @@ def compose_environment(arguments: argparse.Namespace) -> dict[str, str]:
     return environment
 
 
+def git_commit() -> str:
+    """El commit medido: las imágenes se construyen con el árbol de trabajo de ese commit."""
+    return subprocess.run(
+        ["git", "rev-parse", "--short", "HEAD"],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+
+
 def docker_machine() -> dict[str, Any]:
     cpus, memory, version = docker_output(
         "info", "--format", "{{.NCPU}} {{.MemTotal}} {{.ServerVersion}}"
@@ -641,6 +652,7 @@ def run_benchmark(arguments: argparse.Namespace) -> Report:
             "calentamiento_s": arguments.warmup,
             "k6": arguments.k6_image,
             "semilla": arguments.seed,
+            "commit": git_commit(),
             "equipo": machine_description(),
             **docker_machine(),
         },

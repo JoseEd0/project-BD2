@@ -1,4 +1,5 @@
-"""Los filtros del catálogo (departamento y precio) como condiciones del `WHERE` del gestor.
+"""Los filtros del catálogo (departamento, precio y valoración) como condiciones del
+`WHERE` del gestor.
 
 Cada valor viaja como parámetro (`$n`); el texto del filtro solo pone columnas y operadores
 fijos. Un producto sin precio no pasa un filtro de precio: es la semántica de `NULL` en SQL.
@@ -15,6 +16,7 @@ from appkit import BadRequestError
 from shop.catalog.schema import DEPARTMENT_LENGTH
 
 CONDITION_SEPARATOR = " AND "
+MAX_RATING = 5.0
 
 
 class InvalidPriceRangeError(BadRequestError):
@@ -28,6 +30,7 @@ class CatalogFilter:
     department: str | None = None
     min_price: float | None = None
     max_price: float | None = None
+    min_rating: float | None = None
 
     def __post_init__(self) -> None:
         if (
@@ -36,13 +39,17 @@ class CatalogFilter:
             and self.min_price > self.max_price
         ):
             raise InvalidPriceRangeError(
-                f"el precio mínimo ({self.min_price:g}) es mayor que el máximo "
-                f"({self.max_price:g})"
+                f"el precio mínimo ({self.min_price:g}) es mayor que el máximo ({self.max_price:g})"
             )
 
     @property
     def is_empty(self) -> bool:
-        return self.department is None and self.min_price is None and self.max_price is None
+        return (
+            self.department is None
+            and self.min_price is None
+            and self.max_price is None
+            and self.min_rating is None
+        )
 
     def conditions(self, first_parameter: int) -> tuple[str, list[object]]:
         """Las condiciones `AND` del filtro, numeradas desde `$first_parameter`, y sus
@@ -53,6 +60,7 @@ class CatalogFilter:
             ("departamento = ", self.department),
             ("precio >= ", self.min_price),
             ("precio <= ", self.max_price),
+            ("valoracion >= ", self.min_rating),
         ):
             if value is None:
                 continue
@@ -62,18 +70,17 @@ class CatalogFilter:
 
 
 def catalog_filter(
-    departamento: Annotated[
-        str | None, Query(min_length=1, max_length=DEPARTMENT_LENGTH)
-    ] = None,
+    departamento: Annotated[str | None, Query(min_length=1, max_length=DEPARTMENT_LENGTH)] = None,
     precio_min: Annotated[float | None, Query(ge=0)] = None,
     precio_max: Annotated[float | None, Query(ge=0)] = None,
+    valoracion_min: Annotated[float | None, Query(ge=0, le=MAX_RATING)] = None,
 ) -> CatalogFilter:
     """El filtro de una búsqueda, de sus parámetros de consulta.
 
     Raises:
         InvalidPriceRangeError: si `precio_min` es mayor que `precio_max`.
     """
-    return CatalogFilter(departamento, precio_min, precio_max)
+    return CatalogFilter(departamento, precio_min, precio_max, valoracion_min)
 
 
 Filter = Annotated[CatalogFilter, Depends(catalog_filter)]

@@ -78,11 +78,16 @@ async def text_search(
 ) -> list[ScoredProduct]:
     """Productos cuyo título o descripción contienen las palabras de `q`, por BM25, y que
     cumplen el filtro de departamento y precio."""
+    return await bm25_search(engine, q, search_limit(limite, settings), filters)
+
+
+async def bm25_search(
+    engine: AsyncClient, query: str, limit: int, filters: CatalogFilter
+) -> list[ScoredProduct]:
+    """Los `limit` productos de mayor BM25 para `query` que cumplen `filters`."""
     conditions, values = filters.conditions(queries.TEXT_SEARCH_FIXED_PARAMETERS + 1)
     with timed(ENGINE_STAGE):
-        found = await engine.fetch_all(
-            queries.text_search(conditions), [q, search_limit(limite, settings), *values]
-        )
+        found = await engine.fetch_all(queries.text_search(conditions), [query, limit, *values])
     return [_scored(row, row["puntaje"]) for row in found]
 
 

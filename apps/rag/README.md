@@ -477,6 +477,22 @@ por pregunta (~0,01 USD sin caché). Una pregunta de seguimiento de menos de
 la pregunta anterior, que es la que nombra el tema; la respuesta se escribe solo con los
 documentos del turno actual.
 
+**Reescritura de la consulta** (`rag.rewriting`). Antes de buscar, Claude Haiku 5.5 (sin
+razonamiento, `RAG_REWRITE_MAX_TOKENS` 150) recibe la pregunta y los últimos tres turnos y
+escribe una consulta autónoma: en inglés con los términos de los papers, o en español si trata
+del material del curso. Sin ella, una pregunta en español sin términos en inglés («¿Cómo
+reemplazan los índices aprendidos a los árboles B?», «¿Qué es una base de datos vectorial?»)
+encontraba por idioma casi solo los documentos del curso, los únicos en español, con BM25 y
+con los embeddings; y una repregunta no nombraba su tema. La consulta reescrita va a BM25 y a
+los embeddings (RRF igual); el modelo que responde recibe la pregunta original, así que la
+respuesta sigue en su idioma. Medido contra la API: de 0,6 a 0,9 s y unos 0,00006 USD por
+pregunta, que entran en el tope del día y en el costo de la respuesta (una fila más en
+«Llamadas al modelo»). Si falla o tarda más de `RAG_REWRITE_TIMEOUT_SECONDS` (2 s), se busca
+como antes (la pregunta, con la anterior si es una repregunta corta): nunca bloquea la
+respuesta. La charla no se reescribe. `RAG_QUERY_REWRITING=false` la apaga; con el proveedor
+simulado no hay reescritura. El evento `sources` trae `search_query`, y la pestaña
+Recuperación busca y muestra esa misma consulta.
+
 Un saludo, un agradecimiento o una pregunta sobre la app («hola», «¿qué puedes hacer?», solos
 o juntos) se reconoce sin llamar a nadie (`is_small_talk`, frases fijas en español e inglés):
 no se busca en el corpus, el modelo recibe la pregunta sin `<documents>` y las instrucciones
@@ -576,7 +592,7 @@ piden las instrucciones.
 
 | Evento | Cuándo | `data` |
 |---|---|---|
-| `sources` | primero | `question`, `model` y `sources`: `n`, `chunk_id`, `paper` (como en `/search`), `page_start`, `page_end`, `text` |
+| `sources` | primero | `question`, `search_query` (lo que se buscó), `model` y `sources`: `n`, `chunk_id`, `paper` (como en `/search`), `page_start`, `page_end`, `text` |
 | `delta` | cada trozo de texto | `{"text": "…"}` |
 | `fallback` | si la API pasó la respuesta a otro modelo | `{"from_model": "claude-sonnet-5-5", "to_model": "claude-sonnet-5"}` |
 | `done` | al terminar | ver abajo |

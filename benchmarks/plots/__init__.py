@@ -19,6 +19,7 @@ from benchmarks.plots import (
     rag_evaluation,
     segments,
     shop,
+    shop_evaluation,
     shop_recommend,
     spatial,
     storage,
@@ -31,11 +32,19 @@ from benchmarks.plots.model import (
     CurveFigure,
     Figure,
     GalleryFigure,
+    IntervalFigure,
     XYFigure,
 )
 
 FIGURES: tuple[
-    Figure | BarFigure | CurveFigure | GalleryFigure | BreakdownFigure | XYFigure, ...
+    Figure
+    | BarFigure
+    | CurveFigure
+    | GalleryFigure
+    | BreakdownFigure
+    | XYFigure
+    | IntervalFigure,
+    ...,
 ] = (
     *storage.FIGURES,
     *indexes.FIGURES,
@@ -56,4 +65,5 @@ FIGURES: tuple[
     *rag.FIGURES,
     *shop_recommend.FIGURES,
     *rag_evaluation.FIGURES,
+    *shop_evaluation.FIGURES,
 )

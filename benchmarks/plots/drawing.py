@@ -72,6 +72,7 @@ from benchmarks.plots.style import (
     INTERVAL_LABEL_DECIMALS,
     INTERVAL_LABEL_ROOM,
     INTERVAL_LINE_WIDTH,
+    INTERVAL_PANEL_CHROME,
     LABEL_SIZE,
     LEADER_EXTRA,
     LEADER_THRESHOLD,
@@ -1037,7 +1038,7 @@ def _compose_intervals(figure: IntervalFigure, report: dict[str, Any]) -> Any:
     bars = max(len(panel.bars) for panel in figure.panels)
     shades = {bar.shade.label for panel in figure.panels for bar in panel.bars}
     header = _header_height(figure.subtitle, 1)
-    row_height = max(BREAKDOWN_ROW_HEIGHT * bars, BREAKDOWN_MIN_HEIGHT)
+    row_height = BREAKDOWN_ROW_HEIGHT * bars + INTERVAL_PANEL_CHROME
     width = BREAKDOWN_PANEL_WIDTH * figure.columns
     height = row_height * rows + header
     canvas, grid = plt.subplots(

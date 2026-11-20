@@ -164,3 +164,5 @@ INTERVAL_LINE_WIDTH = 1.1
 INTERVAL_CAP = 3.0
 INTERVAL_LABEL_DECIMALS = 3
 INTERVAL_LABEL_ROOM = 1.3
+# Alto de cada fila de paneles además de sus barras: título, marcas y rótulo del eje.
+INTERVAL_PANEL_CHROME = 1.1

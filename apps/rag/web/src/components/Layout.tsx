@@ -30,7 +30,8 @@ export function Layout() {
         Ir a la pregunta
       </a>
       <header className="strip">
-        <Link to="/" className="strip__mark" aria-label={`${APP.name}, inicio`}>
+        {/* La conversación vive en el estado de la página: volver al inicio sin recargar la dejaría igual. */}
+        <Link to="/" reloadDocument className="strip__mark" aria-label={`${APP.name}, nueva conversación`} title="Nueva conversación">
           {APP.name}
         </Link>
         <CorpusScope />

@@ -23,6 +23,11 @@ Además de lo común a todo servicio (`RAG_ENGINE_URL`, `RAG_ENGINE_KEY`,
 | `RAG_DAILY_BUDGET_USD` | gasto máximo del día en el modelo, por réplica | `5` |
 | `RAG_ANTHROPIC_TIMEOUT_SECONDS` | plazo de la API de Anthropic | `60` |
 | `RAG_ANTHROPIC_MAX_RETRIES` | reintentos del SDK (429, 5xx, red) | `2` |
+| `RAG_ANSWER_HISTORY_TURNS` | turnos anteriores que se reenvían al modelo | `6` |
+| `RAG_ANSWER_HISTORY_CHARACTERS` | tope de cada respuesta anterior reenviada | `2000` |
+| `RAG_ANSWER_FOLLOW_UP_WORDS` | por debajo, se busca junto con la pregunta anterior | `8` |
+| `RAG_ENGINE_BUSY_RETRIES` | reintentos de una lectura con el catálogo ocupado | `3` |
+| `RAG_ENGINE_BUSY_BACKOFF_SECONDS` | primera espera entre reintentos (se duplica) | `0.5` |
 """
 
 from __future__ import annotations
@@ -39,9 +44,16 @@ from pydantic_settings import SettingsConfigDict
 
 from appkit import ServiceSettings
 
-from .answering import AnswerSettings
+from .answering import (
+    DEFAULT_FOLLOW_UP_WORDS,
+    DEFAULT_HISTORY_CHARACTERS,
+    DEFAULT_HISTORY_TURNS,
+    AnswerSettings,
+)
 from .claude import ClaudeModel, ClaudeOptions, Effort
+from .conversation import MAX_EXCHANGE_ANSWER_CHARACTERS, MAX_HISTORY_EXCHANGES
 from .embeddings import DEFAULT_BATCH_SIZE, E5Embedder, EmbedderSettings
+from .engine_reader import BusyRetry
 from .fusion import RRF_K
 from .llm import AnswerModel
 from .models import DEFAULT_MODEL_VARIANT, ModelVariant, locate_model
@@ -68,6 +80,10 @@ DEFAULT_ANSWER_EFFORT: Effort = "low"
 DEFAULT_DAILY_BUDGET_USD = 5.0
 DEFAULT_ANTHROPIC_TIMEOUT_SECONDS = 60.0
 DEFAULT_ANTHROPIC_MAX_RETRIES = 2
+# El gestor ya espera su plazo de bloqueo (5 s) antes de decir que está ocupado: tres
+# reintentos cubren un CREATE INDEX de unos 20 s sin dejar a quien pregunta un minuto mirando.
+DEFAULT_ENGINE_BUSY_RETRIES = 3
+DEFAULT_ENGINE_BUSY_BACKOFF_SECONDS = 0.5
 
 logger = logging.getLogger(__name__)
 
@@ -100,6 +116,13 @@ class RagSettings(ServiceSettings):
     daily_budget_usd: float = Field(default=DEFAULT_DAILY_BUDGET_USD, ge=0)
     anthropic_timeout_seconds: float = Field(default=DEFAULT_ANTHROPIC_TIMEOUT_SECONDS, gt=0)
     anthropic_max_retries: int = Field(default=DEFAULT_ANTHROPIC_MAX_RETRIES, ge=0)
+    answer_history_turns: int = Field(default=DEFAULT_HISTORY_TURNS, ge=0, le=MAX_HISTORY_EXCHANGES)
+    answer_history_characters: int = Field(
+        default=DEFAULT_HISTORY_CHARACTERS, ge=1, le=MAX_EXCHANGE_ANSWER_CHARACTERS
+    )
+    answer_follow_up_words: int = Field(default=DEFAULT_FOLLOW_UP_WORDS, ge=0)
+    engine_busy_retries: int = Field(default=DEFAULT_ENGINE_BUSY_RETRIES, ge=0)
+    engine_busy_backoff_seconds: float = Field(default=DEFAULT_ENGINE_BUSY_BACKOFF_SECONDS, ge=0)
 
     @field_validator("anthropic_api_key", mode="before")
     @classmethod
@@ -126,6 +149,14 @@ class RagSettings(ServiceSettings):
             context_tokens=self.answer_context_tokens,
             max_tokens=self.answer_max_tokens,
             rrf_k=self.rrf_k,
+            history_turns=self.answer_history_turns,
+            history_characters=self.answer_history_characters,
+            follow_up_words=self.answer_follow_up_words,
+        )
+
+    def busy_retry(self) -> BusyRetry:
+        return BusyRetry(
+            retries=self.engine_busy_retries, backoff_seconds=self.engine_busy_backoff_seconds
         )
 
     @property

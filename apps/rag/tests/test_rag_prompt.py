@@ -5,11 +5,14 @@ from __future__ import annotations
 
 from rag_llm_fakes import hit, sources
 
+from rag.claude import messages_of
+from rag.conversation import Exchange
 from rag.prompt import (
     CHARACTERS_PER_TOKEN,
     SYSTEM_INSTRUCTIONS,
     TRUNCATION_MARK,
     Source,
+    build_conversational_prompt,
     build_prompt,
     estimated_tokens,
     render_document,
@@ -124,3 +127,32 @@ def test_every_source_fits_with_room_to_spare():
 def test_a_budget_smaller_than_every_source_selects_nothing():
     selected = select_sources([hit("long passage " * 50)], context_tokens=1, passage_tokens=NO_CAP)
     assert selected == []
+
+
+def test_earlier_turns_go_first_as_user_and_assistant_messages_and_the_question_last():
+    history = [Exchange(question="¿Qué es <BM25>?", answer="Un ranking.")]
+    prompt = build_prompt("¿y su k1?", sources("BM25 saturates tf."), history)
+    messages = messages_of(prompt)
+    assert [message["role"] for message in messages] == ["user", "assistant", "user"]
+    assert messages[0]["content"] == "<question>¿Qué es &lt;BM25&gt;?</question>"
+    assert messages[1]["content"] == "Un ranking."
+    assert [block["text"] for block in messages[2]["content"]] == [  # type: ignore[index, union-attr]
+        prompt.documents,
+        prompt.question,
+    ]
+    alone = build_prompt("¿y su k1?", sources("BM25 saturates tf."))
+    assert prompt.estimated_tokens > alone.estimated_tokens
+
+
+def test_small_talk_sends_no_documents_block():
+    prompt = build_conversational_prompt("hola")
+    assert prompt.conversational
+    assert prompt.system == SYSTEM_INSTRUCTIONS
+    assert messages_of(prompt) == [
+        {"role": "user", "content": [{"type": "text", "text": "<question>hola</question>"}]}
+    ]
+
+
+def test_the_instructions_cover_small_talk_and_follow_ups():
+    assert "no <documents> element" in SYSTEM_INSTRUCTIONS
+    assert "Earlier turns of the conversation" in SYSTEM_INSTRUCTIONS

@@ -3,8 +3,8 @@
 No entiende nada: cita los documentos que comparten alguna palabra de contenido con la
 pregunta y, si ninguno la comparte, dice que los documentos no la responden. Cuenta cada
 palabra como un token de salida y corta en `max_tokens`, como la API. Basta para
-probar de punta a punta el streaming, las citas, el «no está en los documentos» y el formato
-SSE sin una clave de la API. Se elige con `RAG_LLM_PROVIDER=simulated`.
+probar de punta a punta el streaming, las citas, el «no está en los documentos», la charla
+sin documentos y el formato SSE sin una clave de la API. Se elige con `RAG_LLM_PROVIDER=simulated`.
 """
 
 from __future__ import annotations
@@ -18,6 +18,9 @@ from .pricing import SIMULATED_MODEL, Attempt, TokenUsage
 from .prompt import Prompt
 
 NOT_IN_DOCUMENTS = "Los documentos recuperados no responden esta pregunta."
+SMALL_TALK_ANSWER = (
+    "Hola. Respondo preguntas sobre los papers del corpus con la página de cada afirmación."
+)
 CITED_ANSWER = "Respuesta simulada, sin modelo de lenguaje: el documento {n} trata «{word}» [{n}]."
 # El texto de los documentos y de la pregunta llega escapado: no tiene `<`.
 DOCUMENT = re.compile(
@@ -59,6 +62,8 @@ class SimulatedModel:
 
 
 def _answer(prompt: Prompt) -> str:
+    if prompt.conversational:
+        return SMALL_TALK_ANSWER
     question = QUESTION.search(prompt.question)
     words = _content_words(unescape(question.group(1)) if question else "")
     matches = [

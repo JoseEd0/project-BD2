@@ -27,7 +27,7 @@ from rag.pipeline import CorpusPaths
 from rag.prompt import SYSTEM_INSTRUCTIONS, Prompt
 from rag.schema import CHUNKS_TABLE
 from rag.seed import seed
-from rag.simulated import NOT_IN_DOCUMENTS, SimulatedModel
+from rag.simulated import NOT_IN_DOCUMENTS, SMALL_TALK_ANSWER, SimulatedModel
 
 BTREE_QUESTION = "How does a B+ tree answer a range query with linked leaves?"
 INJECTION = (
@@ -324,3 +324,31 @@ def test_the_provider_comes_from_the_environment(monkeypatch: pytest.MonkeyPatch
     assert loaded.llm_provider is LlmProvider.SIMULATED
     assert loaded.anthropic_api_key is not None
     assert "sk-de-prueba" not in repr(loaded)
+
+
+def test_a_greeting_is_answered_without_searching_the_corpus(
+    service: TestClient, recording: RecordingModel
+):
+    events = ask(service, "¡Hola! ¿Qué puedes hacer?")
+    assert data_of(events, "sources")["sources"] == []
+    done = data_of(events, "done")
+    assert done["answer"] == SMALL_TALK_ANSWER
+    assert done["conversational"] is True
+    assert done["answered_from_documents"] is False
+    assert recording.prompts[-1].documents == ""
+    assert "bm25" not in service.post("/answers", json={"question": "hola"}).headers.get(
+        "server-timing", ""
+    )
+
+
+def test_a_follow_up_carries_the_earlier_turns_and_searches_with_the_previous_question(
+    service: TestClient, recording: RecordingModel
+):
+    history = [{"question": BTREE_QUESTION, "answer": "Leaves are linked [1]."}]
+    response = service.post("/answers", json={"question": "¿y por qué?", "history": history})
+    assert response.status_code == 200, response.text
+    sources = data_of(parse_sse(response.text), "sources")["sources"]
+    assert BTREE_CHUNK in [source["chunk_id"] for source in sources]
+    prompt = recording.prompts[-1]
+    assert [exchange.question for exchange in prompt.history] == [BTREE_QUESTION]
+    assert prompt.history[0].answer == "Leaves are linked."

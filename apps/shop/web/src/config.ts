@@ -16,6 +16,10 @@ export const DEFAULT_LOCATION = { lat: -12.0453, lon: -77.0311 } as const;
 export const NEARBY_RADIUS_METERS = 5000;
 
 export const SEARCH_RESULTS = 24;
+/** Lo que muestra la vista previa bajo el buscador y cuánto se espera a que dejes de escribir. */
+export const PREVIEW_RESULTS = 6;
+export const PREVIEW_DEBOUNCE_MILLISECONDS = 180;
+export const PREVIEW_MIN_CHARACTERS = 2;
 /** Recomendaciones que se piden: la fila fundida y, de ellas, las de cada señal. */
 export const RECOMMENDATIONS = 24;
 export const STORES_SHOWN = 8;

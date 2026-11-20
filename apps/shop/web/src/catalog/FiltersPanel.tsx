@@ -2,6 +2,7 @@ import { useId, useState, type FormEvent } from "react";
 
 import { useDepartments } from "../api/shop";
 import { Icon } from "../components/Icon";
+import { Stars } from "../components/Stars";
 import { formatCount } from "../format";
 import {
   activeFilterCount,
@@ -9,6 +10,7 @@ import {
   NO_FILTERS,
   PRICE_RANGES,
   priceRangeIsUpsideDown,
+  RATING_STEPS,
   type CatalogFilters,
 } from "./filters";
 
@@ -22,7 +24,9 @@ function amount(value: string): number | null {
   return value.trim() === "" || !Number.isFinite(parsed) || parsed < 0 ? null : parsed;
 }
 
-/** Departamento y precio: una columna en el escritorio, un desplegable en el celular. */
+const DEPARTMENT_SKELETON_ROWS = 6;
+
+/** Departamento, precio y valoración: una columna en el escritorio, un desplegable en el celular. */
 export function FiltersPanel({ filters, onChange }: FiltersPanelProps) {
   const departments = useDepartments();
   const [open, setOpen] = useState(false);
@@ -57,11 +61,18 @@ export function FiltersPanel({ filters, onChange }: FiltersPanelProps) {
         <fieldset className="filter-group">
           <legend>Departamento</legend>
           {departments.isError ? (
-            <p className="muted">No se pudieron cargar los departamentos.</p>
-          ) : departments.isPending ? (
-            <p className="muted" role="status">
-              Cargando departamentos…
+            <p className="filter-problem">
+              No pudimos cargar los departamentos.{" "}
+              <button type="button" className="button button-link" onClick={() => void departments.refetch()}>
+                Volver a cargar
+              </button>
             </p>
+          ) : departments.isPending ? (
+            <ul className="filter-options" role="status" aria-label="Cargando departamentos">
+              {Array.from({ length: DEPARTMENT_SKELETON_ROWS }, (_, index) => (
+                <li key={index} className="filter-skeleton" />
+              ))}
+            </ul>
           ) : (
             <ul className="filter-options">
               <li>
@@ -139,6 +150,36 @@ export function FiltersPanel({ filters, onChange }: FiltersPanelProps) {
             </p>
           )}
           <p className="filter-note">Un producto sin precio no pasa un filtro de precio.</p>
+        </fieldset>
+        <fieldset className="filter-group">
+          <legend>Valoración</legend>
+          <ul className="filter-options">
+            <li>
+              <label className="filter-option">
+                <input
+                  type="radio"
+                  name={`${id}-rating`}
+                  checked={filters.minRating === null}
+                  onChange={() => onChange({ ...filters, minRating: null })}
+                />
+                <span>Cualquiera</span>
+              </label>
+            </li>
+            {RATING_STEPS.map((step) => (
+              <li key={step}>
+                <label className="filter-option">
+                  <input
+                    type="radio"
+                    name={`${id}-rating`}
+                    checked={filters.minRating === step}
+                    onChange={() => onChange({ ...filters, minRating: step })}
+                  />
+                  <Stars rating={step} count={null} />
+                  <span>o más</span>
+                </label>
+              </li>
+            ))}
+          </ul>
         </fieldset>
         {active > 0 && (
           <button

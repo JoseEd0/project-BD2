@@ -42,7 +42,7 @@ function wavExcerpt(path: string, startSeconds: number): Buffer {
   throw new Error(`${path} no es un WAV PCM con sus bloques fmt y data`);
 }
 
-test("an excerpt of a catalog track is flagged with its original, its offset and a/b listening", async ({ page }) => {
+test("an excerpt of a catalog track is flagged with its original, its offset and one-click listening", async ({ page }) => {
   await page.goto("/");
   await page.getByLabel("Audio para analizar").setInputFiles({
     name: "extracto.wav",
@@ -57,10 +57,9 @@ test("an excerpt of a catalog track is flagged with its original, its offset and
   await expect(page.getByText(/desfase −0:02,5/).first()).toBeVisible();
 
   const original = page.waitForResponse((response) => /\/api\/songs\/2\/audio$/.test(response.url()) && response.ok());
-  await page.getByRole("button", { name: "Reproducir el tramo" }).click();
+  await page.getByRole("button", { name: /^Escuchar el original Melodía 2/ }).first().click();
   await original;
-  await expect(page.getByRole("button", { name: "Pausar" })).toBeVisible();
-  await expect(page.getByRole("radio", { name: /A tu audio/ })).toBeChecked();
-  await page.keyboard.press("x");
-  await expect(page.getByRole("radio", { name: /B original/ })).toBeChecked();
+  await expect(page.getByRole("button", { name: /^Pausar el original Melodía 2/ }).first()).toBeVisible();
+  await spans.first().click();
+  await expect(spans.first()).toHaveAttribute("data-playing", "true");
 });

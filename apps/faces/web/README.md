@@ -11,9 +11,10 @@ habla solo con su API por `/api`, que el nginx de su imagen reenvía a `faces-ap
 
 | Pantalla | Ruta | Qué hace |
 |---|---|---|
-| Inicio | `/` | registrarse, reconocer, mis datos; el estado del servicio y el tema |
+| Inicio | `/` | registrarse, reconocer, ¿a qué famoso te pareces?, mis datos; el estado del servicio y el tema |
 | Registro | `/registro` | el consentimiento servido por `GET /consent` (texto y versión, «sí» explícito), el nombre, la cámara con el óvalo y las tres tomas, el código final |
 | Reconocer | `/reconocer` | la cámara (trasera por omisión) con una caja por rostro: nombre y parecido, «desconocido» en otro color y trazo, «acércate»; la latencia |
+| ¿A qué famoso te pareces? | `/famosos` | una selfie (`capture="user"`) o una foto elegida → las cinco personas públicas de LFW más parecidas (`POST /lookalikes`) con su foto, el porcentaje y el coseno; nunca compara con personas registradas |
 | Mis datos | `/mis-datos` | lo que se guarda de cada persona registrada desde este celular, y borrarla (`DELETE /person` con `X-Person-Id`) tras confirmar |
 
 ```

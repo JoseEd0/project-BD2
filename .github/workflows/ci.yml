@@ -220,6 +220,12 @@ jobs:
         run: |
           python3 -m tools.compose_keys --service ejemplo:EJEMPLO_
           deploy/certs.sh
+      - name: Perfil de observabilidad
+        # Sin levantarlo: el compose con el perfil y la configuración de Prometheus se leen bien.
+        run: |
+          docker compose --profile observability config --quiet
+          docker run --rm --entrypoint promtool -v "$PWD/deploy/observability:/cfg:ro" \
+            prom/prometheus:v3.5.0 check config /cfg/prometheus.yml
       - name: Construir y levantar
         run: docker compose up --build --detach --wait --wait-timeout 600
       - name: La topología
@@ -269,6 +275,14 @@ jobs:
             --header "X-Request-ID: humo-escritura" --data '{"id": 7, "texto": "hola"}'
           curl --fail --silent --show-error --cacert data/certs/cert.pem "$EXAMPLE_TLS_URL/api/notas/7" \
             --header "X-Request-ID: humo-lectura" | grep -q hola
+      - name: Las métricas se leen por la red interna y no por el nginx
+        run: |
+          docker compose exec -T example-web wget -q -T 3 -O - http://example-api:8000/metrics \
+            | grep -q 'http_requests_total{method="POST",route="/notas",status="201"}'
+          docker compose exec -T example-api python -c "import urllib.request as u
+          assert b'http_request_duration_seconds_bucket' in u.urlopen('http://engine:8000/metrics', timeout=3).read()"
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' "$EXAMPLE_URL/api/metrics")" = 404
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' "$WEB_URL/api/metrics")" = 404
       - name: El mismo X-Request-ID en el nginx, la API y el gestor
         run: |
           for service in example-web example-api engine; do

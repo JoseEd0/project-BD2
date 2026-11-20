@@ -1,0 +1,45 @@
+# Qué lee Prometheus: el gestor y la API de cada app, cada una por su nombre en el DNS de
+# Docker, que con `--scale` devuelve una dirección por réplica. Volver a preguntar cada pocos
+# segundos encuentra las réplicas que se suman o se quitan.
+global:
+  scrape_interval: 5s
+  scrape_timeout: 4s
+  evaluation_interval: 5s
+
+scrape_configs:
+  - job_name: engine
+    dns_sd_configs:
+      - names: [engine]
+        type: A
+        port: 8000
+        refresh_interval: 5s
+  - job_name: shop-api
+    dns_sd_configs:
+      - names: [shop-api]
+        type: A
+        port: 8000
+        refresh_interval: 5s
+  - job_name: papers-api
+    dns_sd_configs:
+      - names: [papers-api]
+        type: A
+        port: 8000
+        refresh_interval: 5s
+  - job_name: copyright-api
+    dns_sd_configs:
+      - names: [copyright-api]
+        type: A
+        port: 8000
+        refresh_interval: 5s
+  - job_name: faces-api
+    dns_sd_configs:
+      - names: [faces-api]
+        type: A
+        port: 8000
+        refresh_interval: 5s
+  - job_name: example-api
+    dns_sd_configs:
+      - names: [example-api]
+        type: A
+        port: 8000
+        refresh_interval: 5s

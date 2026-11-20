@@ -216,6 +216,7 @@ deploy/
   service/           imagen del API de cualquier aplicación (uv, sin privilegios, solo lectura)
   app.compose.yaml   lo común de los servicios de cada app, que extiende su compose
   example/           el servicio de ejemplo del kit montado como una app (perfil example)
+  observability/     Prometheus y Grafana con su tablero versionado (perfil observability)
   compose.dev.yaml   publica el gestor en :8000 para desarrollar
   certs.sh           certificado local para el HTTPS de cada app
   postgres/          imagen de PostgreSQL con PostGIS y pgvector contra la que se miden GiST,
@@ -338,6 +339,15 @@ docker compose --profile tunnel up -d
 docker compose logs faces-tunnel | grep trycloudflare.com
 ```
 
+**Métricas (perfil `observability`).** Prometheus lee `GET /metrics` del gestor y de cada
+réplica de cada API, y Grafana muestra en `http://localhost:8300` peticiones, latencia por
+ruta, errores, aciertos de la caché, réplicas y CPU
+([`deploy/observability/`](deploy/observability/README.md)):
+
+```bash
+docker compose --profile observability up -d
+```
+
 `docker compose ps` muestra el sistema tal como es:
 
 | Contenedor | Red | Puerto en el anfitrión | Qué es |
@@ -350,6 +360,8 @@ docker compose logs faces-tunnel | grep trycloudflare.com
 | `<app>-web` | `<app>` | `810x` y `840x` | su interfaz: nginx que reenvía `/api` solo a su API |
 | `<app>-seed` (perfil `seed`) | `data` | — | la carga inicial de la aplicación |
 | `<app>-tunnel` (perfil `tunnel`) | `<app>` | — | la URL pública temporal de su web |
+| `prometheus` (perfil `observability`) | `data`, cada `<app>`, `observability` | ninguno | lee las métricas del gestor y de cada réplica |
+| `grafana` (perfil `observability`) | `observability` | `8300`, solo localhost | el tablero de las métricas |
 
 Cada aplicación tiene su compose (`apps/<app>/compose.yaml`), incluido desde
 [`compose.yaml`](compose.yaml); cómo se conecta una nueva está en

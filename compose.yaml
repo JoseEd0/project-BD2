@@ -9,6 +9,8 @@ include:
   - apps/faces/compose.yaml
   - apps/copyright/compose.yaml
   - apps/rag/compose.yaml
+  # Perfil `observability`: Prometheus y Grafana.
+  - deploy/observability/compose.yaml
 
 x-engine: &engine
   image: minigestor-api

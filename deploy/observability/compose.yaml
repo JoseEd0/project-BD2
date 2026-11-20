@@ -1,0 +1,69 @@
+# Perfil `observability`: Prometheus lee `GET /metrics` del gestor y de cada réplica de cada
+# API, y Grafana lo muestra en un tablero versionado. Lo incluye el compose raíz:
+#
+#     docker compose --profile observability up -d
+#
+# Prometheus está en la red interna del gestor y en la de cada app, solo para leer: encuentra
+# las réplicas por el DNS de Docker, así que una `--scale <app>-api=N` aparece sola. Ninguno
+# de los dos publica nada fuera de localhost.
+
+services:
+  prometheus:
+    profiles: [observability]
+    image: prom/prometheus:${PROMETHEUS_VERSION:-v3.5.0}
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=${PROMETHEUS_RETENTION:-6h}
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    networks: [data, example, shop, papers, copyright, faces, observability]
+    read_only: true
+    # Las series viven en memoria: es el tablero de una demo, no un histórico.
+    tmpfs:
+      - /prometheus:uid=65534,gid=65534
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: ${PROMETHEUS_MEMORY:-512m}
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:9090/-/ready"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  grafana:
+    profiles: [observability]
+    image: grafana/grafana:${GRAFANA_VERSION:-12.1.1}
+    environment:
+      # Un tablero de solo lectura en localhost: entra quien abre la página, como lector, y
+      # no hay inicio de sesión que proteger ni contraseña que guardar.
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      GF_AUTH_BASIC_ENABLED: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/grafana/dashboards/minigestor.json
+      GF_LOG_MODE: console
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_PLUGINS_PREINSTALL_DISABLED: "true"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/etc/grafana/dashboards:ro
+    ports:
+      - 127.0.0.1:${GRAFANA_PORT:-8300}:3000
+    networks: [observability]
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/lib/grafana:uid=472,gid=0
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: ${GRAFANA_MEMORY:-256m}
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    restart: unless-stopped
+
+networks:
+  observability: {}

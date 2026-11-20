@@ -16,8 +16,10 @@ from fastapi.testclient import TestClient
 from tests.shop.conftest import ENGINE_KEY, ENGINE_URL, FakeImageEncoder
 
 from appkit import RedisFactory, redis_factory
+from appkit.metrics import REGISTRY
 from minigestor_client import AsyncClient
 from shop.api import create_app
+from shop.api.recommendations import CACHE_METRIC
 from shop.catalog.schema import COPURCHASES, HISTORY, PURCHASES
 from shop.recommend import queries
 from shop.settings import ShopSettings
@@ -171,6 +173,18 @@ def test_a_response_is_served_from_the_cache_the_second_time(shop: TestClient):
     assert [first.headers["X-Cache"], second.headers["X-Cache"]] == ["miss", "hit"]
     assert second.json() == first.json()
     assert other.headers["X-Cache"] == "miss"
+
+
+def cache_lookups(result: str) -> float:
+    found = REGISTRY.get_sample_value("cache_lookups_total", {"cache": CACHE_METRIC, "result": result})
+    return found or 0.0
+
+
+def test_the_metrics_count_each_cache_hit_and_miss(shop: TestClient):
+    hits, misses = cache_lookups("hit"), cache_lookups("miss")
+    shop.get(f"/productos/{GUITAR}/recomendaciones")
+    shop.get(f"/productos/{GUITAR}/recomendaciones")
+    assert (cache_lookups("hit") - hits, cache_lookups("miss") - misses) == (1, 1)
 
 
 def test_a_purchase_updates_the_pairs_and_invalidates_the_cache(

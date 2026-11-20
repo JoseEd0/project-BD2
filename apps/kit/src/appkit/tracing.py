@@ -21,6 +21,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from appkit.errors import unexpected_failure_response
 from appkit.logs import log_request
+from appkit.metrics import observe_request, route_of
 from minigestor_client import (
     REQUEST_ID_HEADER,
     SERVER_TIMING_HEADER,
@@ -135,8 +136,8 @@ class _TracedSend:
 
 
 class RequestTracingMiddleware:
-    """Middleware ASGI: id y etapas de la petición, cabeceras de la respuesta y su línea de
-    log. Va por fuera de las rutas, así que también un `500` sale con su id: una excepción
+    """Middleware ASGI: id y etapas de la petición, cabeceras de la respuesta, su línea de
+    log y sus métricas. Va por fuera de las rutas, así que también un `500` sale con su id: una excepción
     que nadie atendió se responde aquí con la forma de error de siempre."""
 
     def __init__(self, app: ASGIApp, service: str) -> None:
@@ -162,6 +163,12 @@ class RequestTracingMiddleware:
                 traced_send.status,
                 trace.request_id,
                 duration_ms,
+            )
+            observe_request(
+                scope["method"],
+                route_of(scope),
+                traced_send.status,
+                duration_ms / MILLISECONDS_PER_SECOND,
             )
 
     async def _answer(

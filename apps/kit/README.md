@@ -12,6 +12,7 @@ sondear igual. Eso vive aquí y no copiado en cada app:
 | [`engine.py`](src/appkit/engine.py) | el `AsyncClient` del gestor armado con la configuración; la dependencia `Engine` |
 | [`health.py`](src/appkit/health.py) | `/health` y `/ready`, que pregunta al gestor y guarda la respuesta unos segundos |
 | [`cache.py`](src/appkit/cache.py) | `OptionalRedis`: la caché en Redis de la que el servicio puede prescindir (*fail-open*) |
+| [`metrics.py`](src/appkit/metrics.py) | `GET /metrics` para Prometheus: peticiones y latencia por ruta, búsquedas en la caché y CPU |
 | [`migrations.py`](src/appkit/migrations.py) | migraciones repetibles al arrancar |
 | [`service.py`](src/appkit/service.py) | `create_service_app`: la aplicación FastAPI con todo lo anterior puesto |
 | [`download.py`](src/appkit/download.py) | descargas verificadas de modelos y datasets (ver [`apps/README.md`](../README.md)) |
@@ -152,6 +153,26 @@ Si una pieza opcional del servicio falta —las que recibe `create_service_app(.
 degradables=[...])`, como su caché—, las dos respuestas lo dicen sin cambiar su estado, porque
 el servicio sigue atendiendo: `{"status": "ok", "version": "…", "degraded": {"redis": "sin
 caché: Redis no responde (…)"}}`.
+
+## Métricas
+
+`GET /metrics` responde en el formato de texto de Prometheus, sin clave y fuera del contrato
+OpenAPI. El nginx de la app no la reenvía (`/api/metrics` es un `404`): la lee Prometheus por
+la red de la app, réplica por réplica (perfil `observability`, ver
+[`deploy/observability/`](../../deploy/observability/README.md)). Son los mismos nombres que
+las del gestor:
+
+| Métrica | Etiquetas | Qué cuenta |
+|---|---|---|
+| `http_requests_total` | `method`, `route`, `status` | peticiones respondidas |
+| `http_request_duration_seconds` | `method`, `route` | histograma del tiempo de respuesta, de 5 ms a 30 s |
+| `cache_lookups_total` | `cache`, `result` | búsquedas en la caché: `hit`, `miss` o `bypass` (sin Redis ahora) |
+| `process_cpu_seconds_total`, `process_resident_memory_bytes` | | CPU y memoria de la réplica |
+
+`route` es la plantilla (`/productos/{product_id}`), no la URL, para que el número de series
+no crezca con los ids; una ruta que no existe cuenta como `unmatched`. El middleware de trazas
+cuenta cada petición al terminar, con un contador y un histograma en memoria: no hace E/S. Un
+servicio cuenta su caché con `count_cache_lookup("recomendaciones", CACHE_HIT)`.
 
 ## Caché en Redis
 

@@ -23,6 +23,7 @@ from fastapi import FastAPI
 from appkit.engine import engine_client
 from appkit.errors import install_error_handlers
 from appkit.health import Degradable, ReadinessProbe, add_probes
+from appkit.metrics import add_metrics_route
 from appkit.migrations import check_repeatable, migrate
 from appkit.settings import ServiceSettings
 from appkit.tracing import RequestTracingMiddleware
@@ -43,7 +44,7 @@ def create_service_app(
     degradables: Sequence[Degradable] = (),
 ) -> FastAPI:
     """La aplicación del servicio `name`, con middleware de trazas, errores uniformes,
-    `/health`, `/ready` y el ciclo de vida del cliente del gestor.
+    `/health`, `/ready`, `/metrics` y el ciclo de vida del cliente del gestor.
 
     `migrations` son las sentencias del esquema (ver `appkit.migrations`), con la clave de
     migraciones si está configurada. `lifespan` es el arranque y apagado propios del servicio:
@@ -76,6 +77,7 @@ def create_service_app(
     app.add_middleware(RequestTracingMiddleware, service=name)
     install_error_handlers(app)
     add_probes(app, version, lambda: app.state.readiness, degradables)
+    add_metrics_route(app)
     return app
 
 

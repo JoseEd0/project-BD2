@@ -5,7 +5,8 @@
 
 Al arrancar aplica las migraciones del catálogo (`shop.catalog.schema.SCHEMA`) y carga las
 dos torres de CLIP (la de texto para buscar fotos con palabras, la de imagen para buscar con
-una foto); las rutas están en `routes.py`, `photos.py`, `facets.py` y `recommendations.py`.
+una foto); las rutas están en `routes.py`, `search.py`, `photos.py`, `facets.py` y
+`recommendations.py`.
 """
 
 from __future__ import annotations
@@ -35,6 +36,8 @@ from .photos import PixelEmbedder
 from .photos import router as photos_router
 from .recommendations import router as recommendations_router
 from .routes import TextEmbedder, router
+from .search import RememberedVocabulary
+from .search import router as search_router
 
 NAME = "shop"
 VERSION = "0.1.0"
@@ -83,7 +86,9 @@ def create_app(
     )
     app.state.settings = settings
     app.state.facets = Facets()
+    app.state.vocabulary = RememberedVocabulary(settings)
     app.include_router(router)
+    app.include_router(search_router)
     app.include_router(photos_router)
     app.include_router(facets_router)
     app.include_router(recommendations_router)

@@ -37,6 +37,15 @@ class ScoredProduct(BaseModel):
     puntaje: float
 
 
+class TextSearchResult(BaseModel):
+    """Una búsqueda por palabras: lo que se pidió, la consulta corregida que se buscó en su
+    lugar (o `None`) y lo encontrado."""
+
+    consulta: str
+    corregida: str | None
+    resultados: list[ScoredProduct]
+
+
 class Location(BaseModel):
     lat: float
     lon: float

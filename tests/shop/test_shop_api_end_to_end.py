@@ -110,6 +110,18 @@ def test_text_search_ranks_by_bm25(shop: TestClient):
     assert scores == sorted(scores, reverse=True)
 
 
+def test_a_misspelled_search_finds_the_corrected_words(shop: TestClient):
+    found = shop.get("/busqueda/productos", params={"q": "electrc guitr"}).json()
+    assert found["consulta"] == "electrc guitr"
+    assert found["corregida"] == "electric guitar"
+    assert {"B000GUITAR", "B000COPYGT"} <= {item["producto"]["id"] for item in found["resultados"]}
+
+
+def test_an_exact_search_is_not_corrected(shop: TestClient):
+    found = shop.get("/busqueda/productos", params={"q": "guitr", "exacta": True}).json()
+    assert found == {"consulta": "guitr", "corregida": None, "resultados": []}
+
+
 def test_search_text_is_a_parameter_not_sql(shop: TestClient):
     found = shop.get("/busqueda/texto", params={"q": "guitar'; drop table shop_productos; --"})
     assert found.status_code == 200, found.json()
@@ -198,9 +210,7 @@ def test_an_uploaded_photo_finds_the_product_in_it(shop: TestClient, photos: dic
     assert "clip" in found.headers["Server-Timing"]
 
 
-def test_an_uploaded_photo_in_another_format_is_read_too(
-    shop: TestClient, photos: dict[str, Path]
-):
+def test_an_uploaded_photo_in_another_format_is_read_too(shop: TestClient, photos: dict[str, Path]):
     png = io.BytesIO()
     with Image.open(photos[QUERY_PRODUCT]) as image:
         image.save(png, "PNG")

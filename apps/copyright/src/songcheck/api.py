@@ -29,6 +29,9 @@ from appkit import (
 )
 from minigestor_client import Record
 from minigestor_client.queries import Params
+from songcheck.demo_clips import DemoSongs
+from songcheck.demo_clips_api import ClipCache
+from songcheck.demo_clips_api import router as demo_clips_router
 from songcheck.detection_api import DetectionSettings
 from songcheck.detection_api import router as detection_router
 from songcheck.schema import SCHEMA, SEGMENT_INDEX_NAME, SEGMENTS_TABLE, SONGS_TABLE
@@ -236,6 +239,8 @@ def build_app(
     app.state.detection = DetectionSettings.of(settings)
     app.include_router(router)
     app.include_router(detection_router)
+    app.state.demo_clips = ClipCache(DemoSongs(*settings.demo_song_ids))
+    app.include_router(demo_clips_router)
     return app
 
 

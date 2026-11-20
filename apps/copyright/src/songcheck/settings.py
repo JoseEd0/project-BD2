@@ -45,6 +45,9 @@ DEFAULT_MAX_MATCHES = 10
 # Por debajo, silencio digital o el ruido de fondo de una grabación: -60 dBFS es mil veces
 # menos potencia que una pista a -30 dBFS, que ya suena bajo.
 DEFAULT_SILENCE_THRESHOLD_DBFS = -60.0
+# Canciones de `fma_small` cuyo audio se encuentra a sí mismo con puntaje 1 en el catálogo
+# cargado: las de los audios de prueba (`demo_clips`), las dos de la mezcla y la del extracto.
+DEFAULT_DEMO_SONG_IDS = (2, 140, 10)
 
 
 class CopyrightSettings(ServiceSettings):
@@ -59,6 +62,7 @@ class CopyrightSettings(ServiceSettings):
         match_threshold: puntaje desde el que una coincidencia cuenta como copia.
         max_matches: coincidencias que se devuelven, las de mayor puntaje.
         silence_threshold_dbfs: nivel por debajo del cual una ventana no vota.
+        demo_song_ids: las canciones de los audios de prueba (ver `demo_clips.DemoSongs`).
     """
 
     model_config = SettingsConfigDict(env_prefix=ENV_PREFIX, frozen=True, extra="ignore")
@@ -70,6 +74,7 @@ class CopyrightSettings(ServiceSettings):
     match_threshold: float = Field(default=DEFAULT_MATCH_THRESHOLD, ge=0, le=1)
     max_matches: int = Field(default=DEFAULT_MAX_MATCHES, ge=1)
     silence_threshold_dbfs: float = DEFAULT_SILENCE_THRESHOLD_DBFS
+    demo_song_ids: tuple[int, int, int] = DEFAULT_DEMO_SONG_IDS
 
 
 class SeedSettings(CopyrightSettings):

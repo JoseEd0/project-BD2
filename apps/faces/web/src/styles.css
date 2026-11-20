@@ -1398,3 +1398,58 @@ ul {
 .attribution {
   margin-top: var(--space-4);
 }
+
+/* Tomar o elegir: dos botones del mismo ancho, uno al lado del otro. */
+.photo-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+}
+
+.lookalike-query {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.lookalike-query img {
+  flex: none;
+  border-radius: var(--radius);
+  object-fit: cover;
+}
+
+/* El obturador de la cabina: un disco claro con su anillo, al centro y al alcance del pulgar. */
+.shutter {
+  justify-self: center;
+  display: grid;
+  place-items: center;
+  width: 4.5rem;
+  height: 4.5rem;
+  padding: 0;
+  border-radius: var(--pill);
+  border: 4px solid var(--flash);
+  background: transparent;
+  cursor: pointer;
+}
+
+.shutter span {
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: var(--pill);
+  background: var(--flash);
+  transition: transform var(--quick) var(--ease-out);
+}
+
+.shutter:active span {
+  transform: scale(0.9);
+}
+
+.shutter:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.shutter:focus-visible {
+  outline: 3px solid var(--lamp);
+  outline-offset: 3px;
+}

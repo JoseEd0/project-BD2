@@ -1,6 +1,10 @@
 # Rostros (opción D): su API, que es la única que habla con el gestor, y su interfaz, la PWA
 # de la cámara (apps/faces/web). Se incluye desde el compose.yaml raíz; las redes data y
 # cache están declaradas allí.
+#
+# LFW (`python -m faces lfw --salida data/datasets/lfw`) se monta de solo lectura: la carga
+# (`faces-seed`) saca de ahí las personas públicas de «¿A qué famoso te pareces?» y el API
+# sirve sus fotos.
 
 services:
   faces-api:
@@ -9,7 +13,7 @@ services:
       args:
         APP_DIR: faces
     image: minigestor-faces-api
-    environment:
+    environment: &faces-environment
       FACES_ENGINE_URL: http://engine:8000
       FACES_ENGINE_KEY: ${FACES_ENGINE_KEY:-}
       FACES_MIGRATION_KEY: ${FACES_MIGRATION_KEY:-}
@@ -25,6 +29,10 @@ services:
       FACES_REDIS_URL: ${FACES_REDIS_URL:-redis://redis:6379/1}
       FACES_STREAM_MAX_FPS: ${FACES_STREAM_MAX_FPS:-15}
       FACES_STREAM_MAX_CONNECTIONS: ${FACES_STREAM_MAX_CONNECTIONS:-16}
+      FACES_DATA_DIR: /app/data/datasets
+      FACES_LOOKALIKE_COUNT: ${FACES_LOOKALIKE_COUNT:-5}
+    volumes:
+      - ${MINIGESTOR_DATASETS_DIR:-../../data/datasets}:/app/data/datasets:ro
     # Cada pipeline de análisis carga YuNet y SFace (37 MiB en disco) y decodifica fotos de
     # celular de hasta 50 MP.
     mem_limit: ${FACES_API_MEMORY:-1g}
@@ -55,6 +63,22 @@ services:
       - ${FACES_WEB_PORT:-8104}:8080
       - ${FACES_WEB_TLS_PORT:-8404}:8443
     networks: [faces]
+    depends_on:
+      faces-api:
+        condition: service_healthy
+
+  faces-seed:
+    extends: { file: ../../deploy/app.compose.yaml, service: seed }
+    profiles: [seed]
+    image: minigestor-faces-api
+    environment:
+      <<: *faces-environment
+      FACES_SEED_WORKERS: ${FACES_SEED_WORKERS:-2}
+    volumes:
+      - ${MINIGESTOR_DATASETS_DIR:-../../data/datasets}:/app/data/datasets:ro
+    # Dos procesos con YuNet y SFace y las fotos de LFW (250 x 250) que van analizando.
+    mem_limit: ${FACES_SEED_MEMORY:-2g}
+    networks: [data]
     depends_on:
       faces-api:
         condition: service_healthy

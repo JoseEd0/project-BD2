@@ -184,20 +184,24 @@ function ModeResult({
 }
 
 interface RetrievalPaneProps {
-  readonly question: string;
+  /** Lo que buscó el servicio para la respuesta: así cada lista es la que leyó el modelo. */
+  readonly query: string;
   readonly filters: ResearchFilters;
   /** Los fragmentos que la respuesta envió al modelo, con su número de cita. */
   readonly sentAs: ReadonlyMap<string, number>;
   readonly onOpen: (hit: SearchHit) => void;
 }
 
-/** Lo que trajo cada método para la pregunta, el SQL que corrió y cuánto tardó. */
-export function RetrievalPane({ question, filters, sentAs, onOpen }: RetrievalPaneProps) {
+/** Lo que trajo cada método para la consulta, el SQL que corrió y cuánto tardó. */
+export function RetrievalPane({ query, filters, sentAs, onOpen }: RetrievalPaneProps) {
   const [mode, setMode] = useState<SearchMode>("hybrid");
-  const queries = useRetrieval(question, filters);
+  const queries = useRetrieval(query, filters);
   const selected = queries[RETRIEVAL_MODES.indexOf(mode)];
   return (
     <section className="retrieval" aria-label="Recuperación">
+      <p className="retrieval__query">
+        Búsqueda: <q>{query}</q>
+      </p>
       <fieldset className="segmented">
         <legend className="visually-hidden">Método de búsqueda</legend>
         {RETRIEVAL_MODES.map((option, index) => (

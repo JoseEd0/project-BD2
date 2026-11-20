@@ -57,7 +57,7 @@ function TabPanel({ tab, turn, target, onPage, onOpenHit }: Omit<WorkbenchProps,
     return <EmptyPage hasTurn={false} />;
   }
   if (tab === "retrieval") {
-    return <RetrievalPane question={turn.question} filters={turn.filters} sentAs={sentAs} onOpen={onOpenHit} />;
+    return <RetrievalPane query={turn.searchQuery ?? turn.question} filters={turn.filters} sentAs={sentAs} onOpen={onOpenHit} />;
   }
   return <MeasuresPane turn={turn} />;
 }

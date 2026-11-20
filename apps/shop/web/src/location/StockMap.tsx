@@ -12,8 +12,11 @@ const DEFAULT_ZOOM = 12;
 /** Las tiendas suelen estar a menos de un kilómetro: más cerca, cada número se lee y se toca. */
 const FIT_MAX_ZOOM = 16;
 const FIT_PADDING: L.PointTuple = [28, 28];
-const MARKER_SIZE: L.PointTuple = [30, 30];
-const YOU_SIZE: L.PointTuple = [20, 20];
+const MARKER_SIZE: L.PointTuple = [30, 40];
+// La punta del alfiler, abajo al centro, es la que marca la tienda.
+const MARKER_ANCHOR: L.PointTuple = [15, 40];
+const YOU_SIZE: L.PointTuple = [22, 22];
+const PIN_PATH = "M15 39C15 39 28 24.5 28 14A13 13 0 0 0 2 14C2 24.5 15 39 15 39Z";
 
 interface StockMapProps {
   readonly point: Point;
@@ -27,8 +30,9 @@ interface StockMapProps {
 function storeIcon(index: number, selected: boolean): L.DivIcon {
   return L.divIcon({
     className: selected ? "map-store map-store-selected" : "map-store",
-    html: `<span>${index + 1}</span>`,
+    html: `<svg viewBox="0 0 30 40" width="30" height="40" aria-hidden="true"><path d="${PIN_PATH}"/></svg><span>${index + 1}</span>`,
     iconSize: MARKER_SIZE,
+    iconAnchor: MARKER_ANCHOR,
   });
 }
 
@@ -83,7 +87,7 @@ export default function StockMap({ point, stores, selectedStore, choosing, onCho
     const here: L.LatLngTuple = [point.lat, point.lon];
     L.circle(here, { radius: NEARBY_RADIUS_METERS, className: "map-radius", interactive: false }).addTo(group);
     L.marker(here, {
-      icon: L.divIcon({ className: "map-you", iconSize: YOU_SIZE }),
+      icon: L.divIcon({ className: "map-you", html: "<span></span>", iconSize: YOU_SIZE }),
       keyboard: false,
       interactive: false,
     }).addTo(group);

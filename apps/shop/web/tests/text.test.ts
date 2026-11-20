@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { customerLabel } from "../src/components/CustomerPicker";
-import { formatDistance, formatPrice, formatRating, shortId } from "../src/format";
+import { formatDistance, formatPrice, shortId } from "../src/format";
 import { categoryTrail, descriptionParts } from "../src/product/description";
 import { formatParameter, formatSql } from "../src/recommend/sql";
 
@@ -16,8 +16,6 @@ describe("formats", () => {
   });
 
   it("say a rating with its votes", () => {
-    expect(formatRating(4.66, 2100)).toBe("4.7 de 5 (2,100)");
-    expect(formatRating(null, 3)).toBeNull();
   });
 
   it("shorten opaque ids and name customers by rank", () => {

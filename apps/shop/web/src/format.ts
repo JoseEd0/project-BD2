@@ -1,5 +1,4 @@
 const PRICE = new Intl.NumberFormat("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const RATING = new Intl.NumberFormat("es-PE", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 const COUNT = new Intl.NumberFormat("es-PE");
 const MILLISECONDS = new Intl.NumberFormat("es-PE", { maximumFractionDigits: 1 });
 const KILOMETERS = new Intl.NumberFormat("es-PE", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
@@ -9,14 +8,6 @@ const METERS_ROUNDING = 10;
 /** `US$ 12,99`, o `null` si el producto no trae precio. */
 export function formatPrice(price: number | null | undefined): string | null {
   return price === null || price === undefined ? null : `US$ ${PRICE.format(price)}`;
-}
-
-export function formatRating(rating: number | null | undefined, count: number | null | undefined): string | null {
-  if (rating === null || rating === undefined) {
-    return null;
-  }
-  const votes = count === null || count === undefined ? "" : ` (${COUNT.format(count)})`;
-  return `${RATING.format(rating)} de 5${votes}`;
 }
 
 export function formatCount(value: number): string {

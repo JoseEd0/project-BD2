@@ -6,9 +6,10 @@ import type { Product, Recommendations } from "../api/types";
 import { Icon } from "../components/Icon";
 import { ProblemNotice } from "../components/ProblemNotice";
 import { ProductPhoto } from "../components/ProductPhoto";
+import { Stars } from "../components/Stars";
 import { RecommendationRails } from "../components/RecommendationRails";
 import { useCustomer } from "../customer/CustomerContext";
-import { formatPrice, formatRating } from "../format";
+import { formatPrice } from "../format";
 import { APP } from "../identity";
 import { useShopperLocation } from "../location/LocationContext";
 import { categoryTrail, descriptionParts } from "../product/description";
@@ -19,38 +20,27 @@ import { ChangedNotice } from "../components/ChangedNotice";
 
 function ProductSheet({ product }: { readonly product: Product }) {
   const price = formatPrice(product.precio);
-  const rating = formatRating(product.valoracion, product.valoraciones);
   const trail = categoryTrail(product.ruta_categoria);
   return (
-    <div className="sheet-tag tag tag-large">
-      <span className="tag-eyelet" aria-hidden="true" />
+    <div className="sheet">
       {trail.length > 0 && (
         <p className="sheet-trail" lang="en">
           {trail.join(" › ")}
         </p>
       )}
-      <p className={price === null ? "tag-price tag-price-missing" : "tag-price"}>{price ?? "Sin precio"}</p>
       <h1 className="sheet-title" lang="en">
         {product.titulo ?? "Producto sin título"}
       </h1>
-      <dl className="sheet-facts">
-        {product.marca && (
-          <div>
-            <dt>Marca</dt>
-            <dd>{product.marca}</dd>
-          </div>
-        )}
-        {rating && (
-          <div>
-            <dt>Valoración</dt>
-            <dd>{rating}</dd>
-          </div>
-        )}
-        <div>
-          <dt>N.º de catálogo</dt>
-          <dd className="code">{product.id}</dd>
-        </div>
-      </dl>
+      {product.marca && (
+        <p className="sheet-brand">
+          Marca: <strong>{product.marca}</strong>
+        </p>
+      )}
+      <Stars rating={product.valoracion} count={product.valoraciones} />
+      <p className={price === null ? "sheet-price sheet-price-missing" : "sheet-price"}>{price ?? "Precio no disponible"}</p>
+      <p className="sheet-id">
+        N.º de catálogo <span className="code">{product.id}</span>
+      </p>
     </div>
   );
 }
@@ -131,7 +121,6 @@ export default function ProductPage() {
           <div className="product-photo">
             <ProductPhoto productId={item.id} hasPhoto={item.imagen !== null} eager />
           </div>
-          <span className="tile-string product-string" aria-hidden="true" />
           <ProductSheet product={item} />
           <Description text={item.descripcion} />
         </div>

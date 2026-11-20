@@ -8,6 +8,7 @@ from shop.recommend.candidates import CopurchaseEvidence, Signal, StockEvidence
 from shop.recommend.explanations import (
     MissingEvidenceError,
     Scope,
+    contributed,
     explanation,
     format_distance,
     reason,
@@ -60,6 +61,13 @@ def test_the_explanation_follows_the_contributions_in_order():
         (part(Signal.VISUAL, weighted=0.3), part(Signal.TEXT, weighted=0.2)),
     )
     assert explanation(fused, Scope.PRODUCT) == "se ve parecido · descripción parecida"
+
+
+def test_a_signal_with_weight_zero_proposes_but_is_not_explained():
+    text = part(Signal.TEXT, weighted=0.2)
+    fused = FusedProduct("a", 0.2, (text, part(Signal.VISUAL, weighted=0.0)))
+    assert contributed(fused) == (text,)
+    assert explanation(fused, Scope.PRODUCT) == "descripción parecida"
 
 
 def test_a_signal_without_its_evidence_is_an_error():

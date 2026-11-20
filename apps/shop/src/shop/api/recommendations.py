@@ -22,7 +22,7 @@ from shop.recommend.cache import (
     ResponseCache,
 )
 from shop.recommend.candidates import Signal, VisualMethod
-from shop.recommend.explanations import REASON_SEPARATOR, Scope, reason
+from shop.recommend.explanations import REASON_SEPARATOR, Scope, contributed, reason
 from shop.recommend.fusion import FusedProduct
 from shop.recommend.purchases import record_purchase
 from shop.recommend.recommender import (
@@ -206,7 +206,7 @@ def _recommendation(fused: FusedProduct, product: Record, scope: Scope) -> model
             aporte=round(part.weighted, SCORE_DIGITS),
             texto=reason(part, scope),
         )
-        for part in fused.contributions
+        for part in contributed(fused)
     ]
     return models.Recommendation(
         producto=models.ProductSummary.model_validate(product),

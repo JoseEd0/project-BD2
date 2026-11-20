@@ -104,6 +104,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/busqueda/productos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Forgiving Search
+         * @description BM25 sobre la consulta corregida, con `corregida` si se cambió alguna palabra; con
+         *     `exacta`, sobre `q` tal cual.
+         */
+        get: operations["forgiving_search_busqueda_productos_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/productos/{product_id}/foto": {
         parameters: {
             query?: never;
@@ -482,6 +503,19 @@ export interface components {
             /** Unidades */
             unidades: number;
         };
+        /**
+         * TextSearchResult
+         * @description Una búsqueda por palabras: lo que se pidió, la consulta corregida que se buscó en su
+         *     lugar (o `None`) y lo encontrado.
+         */
+        TextSearchResult: {
+            /** Consulta */
+            consulta: string;
+            /** Corregida */
+            corregida: string | null;
+            /** Resultados */
+            resultados: components["schemas"]["ScoredProduct"][];
+        };
         /** ValidationError */
         ValidationError: {
             /** Location */
@@ -543,6 +577,7 @@ export interface operations {
                 departamento?: string | null;
                 precio_min?: number | null;
                 precio_max?: number | null;
+                valoracion_min?: number | null;
             };
             header?: never;
             path?: never;
@@ -578,6 +613,7 @@ export interface operations {
                 departamento?: string | null;
                 precio_min?: number | null;
                 precio_max?: number | null;
+                valoracion_min?: number | null;
             };
             header?: never;
             path?: never;
@@ -673,6 +709,43 @@ export interface operations {
             };
         };
     };
+    forgiving_search_busqueda_productos_get: {
+        parameters: {
+            query: {
+                q: string;
+                limite?: number | null;
+                exacta?: boolean;
+                departamento?: string | null;
+                precio_min?: number | null;
+                precio_max?: number | null;
+                valoracion_min?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TextSearchResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     product_photo_productos__product_id__foto_get: {
         parameters: {
             query?: never;
@@ -709,6 +782,7 @@ export interface operations {
                 departamento?: string | null;
                 precio_min?: number | null;
                 precio_max?: number | null;
+                valoracion_min?: number | null;
             };
             header?: never;
             path?: never;

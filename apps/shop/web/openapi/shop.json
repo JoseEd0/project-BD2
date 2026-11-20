@@ -129,6 +129,24 @@
               ],
               "title": "Precio Max"
             }
+          },
+          {
+            "name": "valoracion_min",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "maximum": 5.0,
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Valoracion Min"
+            }
           }
         ],
         "responses": {
@@ -243,6 +261,24 @@
                 }
               ],
               "title": "Precio Max"
+            }
+          },
+          {
+            "name": "valoracion_min",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "maximum": 5.0,
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Valoracion Min"
             }
           }
         ],
@@ -431,6 +467,145 @@
         }
       }
     },
+    "/busqueda/productos": {
+      "get": {
+        "summary": "Forgiving Search",
+        "description": "BM25 sobre la consulta corregida, con `corregida` si se cambió alguna palabra; con\n`exacta`, sobre `q` tal cual.",
+        "operationId": "forgiving_search_busqueda_productos_get",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "title": "Q"
+            }
+          },
+          {
+            "name": "limite",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limite"
+            }
+          },
+          {
+            "name": "exacta",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Exacta"
+            }
+          },
+          {
+            "name": "departamento",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Departamento"
+            }
+          },
+          {
+            "name": "precio_min",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Precio Min"
+            }
+          },
+          {
+            "name": "precio_max",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Precio Max"
+            }
+          },
+          {
+            "name": "valoracion_min",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "maximum": 5.0,
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Valoracion Min"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TextSearchResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/productos/{product_id}/foto": {
       "get": {
         "summary": "Product Photo",
@@ -537,6 +712,24 @@
                 }
               ],
               "title": "Precio Max"
+            }
+          },
+          {
+            "name": "valoracion_min",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "maximum": 5.0,
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Valoracion Min"
             }
           }
         ],
@@ -1636,6 +1829,40 @@
         ],
         "title": "StoreWithStock",
         "description": "Una tienda que tiene el producto, con cuántas unidades."
+      },
+      "TextSearchResult": {
+        "properties": {
+          "consulta": {
+            "type": "string",
+            "title": "Consulta"
+          },
+          "corregida": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Corregida"
+          },
+          "resultados": {
+            "items": {
+              "$ref": "#/components/schemas/ScoredProduct"
+            },
+            "type": "array",
+            "title": "Resultados"
+          }
+        },
+        "type": "object",
+        "required": [
+          "consulta",
+          "corregida",
+          "resultados"
+        ],
+        "title": "TextSearchResult",
+        "description": "Una búsqueda por palabras: lo que se pidió, la consulta corregida que se buscó en su\nlugar (o `None`) y lo encontrado."
       },
       "ValidationError": {
         "properties": {

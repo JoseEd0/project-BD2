@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { formatBytes, formatClock, formatOffset, formatPercent, formatSpan } from "../src/analysis/format";
+import { catalogStateOf, withoutSong } from "../src/analysis/catalog";
 import { apiMessage, problemOf, unreachableProblem } from "../src/analysis/problem";
 import { barlineTimes, rulerTicks } from "../src/analysis/ruler";
 import { HIGHLIGHTER_INKS, layoutSpans, songLetter } from "../src/analysis/spans";
@@ -127,6 +128,16 @@ describe("problemOf", () => {
     expect(problemOf(429, {}).title).toBe("Demasiadas subidas seguidas");
   });
 
+  it("tells a catalog still loading or busy apart from a bad upload", () => {
+    const loading = problemOf(400, { error: "La tabla 'cr_segmentos' no tiene un índice HNSW sobre la columna 'ruta'" });
+    expect(loading).toMatchObject({ kind: "loading", title: "El catálogo se está cargando" });
+    expect(loading.detail).not.toContain("cr_segmentos");
+    expect(problemOf(400, { error: "el catálogo lleva más de 5 s ocupado por otra transacción" })).toMatchObject({
+      kind: "busy",
+      title: "El catálogo está ocupado",
+    });
+  });
+
   it("ignores bodies without a usable message", () => {
     expect(apiMessage(null)).toBeNull();
     expect(apiMessage({ error: "  " })).toBeNull();
@@ -167,5 +178,23 @@ describe("ruler", () => {
     expect(thinned.length).toBeLessThanOrEqual(96);
     expect(thinned.slice(0, 2)).toEqual([7.5, 15]);
     expect(barlineTimes(10, 0, 10)).toEqual([]);
+  });
+});
+
+describe("catalog", () => {
+  const summary = { songs: 10, segments: 100, window_seconds: 5, hop_seconds: 2.5, segments_indexed: true, genres: [] };
+
+  it("is ready only with songs, segments and their index", () => {
+    expect(catalogStateOf(summary)).toBe("ready");
+    expect(catalogStateOf({ ...summary, segments_indexed: false })).toBe("indexing");
+    expect(catalogStateOf({ ...summary, songs: 0, segments: 0 })).toBe("empty");
+  });
+
+  it("drops the matches of the chosen song with itself", () => {
+    const own = match(7, [0, 30], 1);
+    const other = match(8, [5, 15], 0.2);
+    const result = withoutSong(detection([own, other]), 7);
+    expect(result.matches).toEqual([other]);
+    expect(result.detected).toBe(false);
   });
 });

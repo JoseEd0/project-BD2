@@ -9,6 +9,13 @@ describe("api problems", () => {
     expect([problem.kind, problem.title, problem.retryable]).toEqual(["rejected", "La búsqueda tiene un operador suelto", false]);
   });
 
+  it("retry a busy engine with a friendly message instead of its own", () => {
+    const busy = problemOf(400, { error: "el catálogo lleva más de 5 s ocupado por otra sesión", kind: "EngineBusyError" });
+    expect(busy.title).toBe("La tienda está ocupada");
+    expect(busy.detail).not.toMatch(/sesión/);
+    expect(busy.retryable).toBe(true);
+  });
+
   it("explain photo rejections by their kind", () => {
     expect(problemOf(413, { error: "x", kind: "TooManyPixelsError" }).title).toBe("La foto es demasiado grande");
     expect(problemOf(400, { error: "x", kind: "UnreadablePhotoError" }).detail).toBe("Sube un JPEG, PNG o WebP.");

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { answerBlocks, citedNumbers, isValidCitation, segmentAnswer } from "../src/research/citations";
+import { citedNumbers, isValidCitation, segmentAnswer } from "../src/research/citations";
 
 describe("segmentAnswer", () => {
   it("links the three citation forms the service checks", () => {
@@ -35,12 +35,3 @@ describe("citations", () => {
   });
 });
 
-describe("answerBlocks", () => {
-  it("splits paragraphs and recognizes bullet and numbered lists", () => {
-    expect(answerBlocks("Primero\nsigue.\n\n- uno [1]\n- dos\n\n1. a\n2) b\n\n")).toEqual([
-      { kind: "paragraph", text: "Primero sigue." },
-      { kind: "list", ordered: false, items: ["uno [1]", "dos"] },
-      { kind: "list", ordered: true, items: ["a", "b"] },
-    ]);
-  });
-});

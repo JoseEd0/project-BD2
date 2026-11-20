@@ -113,6 +113,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/lookalikes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Lookalikes
+         * @description Las personas públicas de LFW que más se parecen al rostro más grande de la foto. Solo
+         *     se compara con LFW, nunca con las personas registradas, y la foto no se guarda.
+         */
+        post: operations["lookalikes_lookalikes_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/lookalikes/{famous_id}/photo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lookalike Photo
+         * @description La foto de LFW de una persona de `POST /lookalikes`.
+         */
+        get: operations["lookalike_photo_lookalikes__famous_id__photo_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/person": {
         parameters: {
             query?: never;
@@ -140,6 +181,14 @@ export interface components {
     schemas: {
         /** Body_identify_identify_post */
         Body_identify_identify_post: {
+            /**
+             * Image
+             * @description La foto: JPEG, PNG, WebP, BMP, GIF o TIFF.
+             */
+            image: string;
+        };
+        /** Body_lookalikes_lookalikes_post */
+        Body_lookalikes_lookalikes_post: {
             /**
              * Image
              * @description La foto: JPEG, PNG, WebP, BMP, GIF o TIFF.
@@ -227,6 +276,36 @@ export interface components {
             /** Height */
             height: number;
         };
+        /** FamousLookalike */
+        FamousLookalike: {
+            /**
+             * Id
+             * @description La persona en `face_famosos`; su foto, en `photo_path`.
+             */
+            id: number;
+            /** Name */
+            name: string;
+            /**
+             * Similarity
+             * @description El coseno entre tu rostro y el de la persona.
+             */
+            similarity: number;
+            /**
+             * Percent
+             * @description El coseno en porcentaje, de 0 a 100.
+             */
+            percent: number;
+            /**
+             * Photos
+             * @description Fotos de LFW que se promediaron para esta persona.
+             */
+            photos: number;
+            /**
+             * Photo Path
+             * @description La ruta del API que sirve su foto de LFW.
+             */
+            photo_path: string;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -253,6 +332,16 @@ export interface components {
              * @description El coseno con la persona más parecida, la reconozca o no.
              */
             score?: number | null;
+        };
+        /** Lookalikes */
+        Lookalikes: {
+            /**
+             * People
+             * @description De la más parecida a la menos.
+             */
+            people: components["schemas"]["FamousLookalike"][];
+            /** Message */
+            message: string;
         };
         /**
          * MatchStatus
@@ -569,6 +658,68 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["Identification"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    lookalikes_lookalikes_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_lookalikes_lookalikes_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Lookalikes"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    lookalike_photo_lookalikes__famous_id__photo_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                famous_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

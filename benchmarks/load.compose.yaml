@@ -1,0 +1,53 @@
+# El despliegue de la prueba de carga (`load_benchmark`), encima del compose.yaml raíz y con su
+# propio proyecto (`-p carga`): imágenes con otro nombre, para no reemplazar las del despliegue
+# de siempre, y el gestor sobre el volumen que el benchmark llena con la copia de los datos ya
+# cargados de una app (LOAD_ENGINE_VOLUME). La demo no carga nada: el gestor sirve solo eso.
+#
+# k6 corre en un contenedor en la red de la app y entra por su nginx, como un navegador. El
+# límite de peticiones por IP del nginx se levanta: todas las peticiones llegan desde la misma
+# IP, la de k6. Los puertos de las webs se publican en localhost en uno libre
+# (`<APP>_WEB_PORT=127.0.0.1:`), para que el benchmark prepare la prueba desde el anfitrión.
+x-unlimited: &unlimited
+  API_RATE_LIMIT: 100000r/s
+  API_RATE_BURST: 100000
+
+services:
+  demo:
+    image: carga-engine
+    command: ["true"]
+  engine:
+    image: carga-engine
+  console:
+    image: carga-console
+
+  shop-api:
+    image: carga-shop-api
+  shop-web:
+    image: carga-shop-web
+    environment: *unlimited
+  copyright-api:
+    image: carga-copyright-api
+  copyright-web:
+    image: carga-copyright-web
+    environment: *unlimited
+  papers-api:
+    image: carga-papers-api
+    environment:
+      # Sin clave del modelo: la prueba solo busca (`/search`), nunca pregunta.
+      RAG_LLM_PROVIDER: simulated
+  papers-web:
+    image: carga-papers-web
+    environment: *unlimited
+  faces-api:
+    image: carga-faces-api
+    environment:
+      # La persona se registra con dos tomas de frente, las que dan las fotos de prueba.
+      FACES_ENROLLMENT_POSES: '["front", "front"]'
+  faces-web:
+    image: carga-faces-web
+    environment: *unlimited
+
+volumes:
+  minigestor-data:
+    external: true
+    name: ${LOAD_ENGINE_VOLUME:?el benchmark fija el volumen del gestor}

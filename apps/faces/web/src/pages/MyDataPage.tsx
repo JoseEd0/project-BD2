@@ -138,6 +138,7 @@ function AddCodeForm({ onAdded }: { readonly onAdded: () => void }) {
         id={inputId}
         value={value}
         onChange={(event) => setValue(event.target.value)}
+        placeholder="32 letras y números, como 3f9a…"
         autoComplete="off"
         autoCapitalize="none"
         spellCheck={false}

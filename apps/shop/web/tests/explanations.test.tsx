@@ -51,6 +51,16 @@ describe("recommendation rails", () => {
     expect(within(visual).queryByText(/no tiene foto/)).toBeNull();
   });
 
+  it("say that a weighted signal with candidates was outranked in the fusion", () => {
+    const base = recommendations();
+    const visualQuery = { senal: "visual", sql: "SELECT id FROM shop_fotos", parametros: [], candidatos: 51, milisegundos: 40 };
+    renderPiece(
+      <RecommendationRails result={{ data: recommendations({ senales: [...base.senales, visualQuery] }), ...MEASURED }} scope="producto" fusedTitle="Lo que más va" />,
+    );
+    const visual = rail(/Se ve parecido/);
+    expect(within(visual).getByText(/ninguno quedó entre los primeros de la fusión/)).toBeTruthy();
+  });
+
   it("show the exact sql of a signal with its parameters on request", async () => {
     const user = userEvent.setup();
     renderPiece(<RecommendationRails result={{ data: recommendations(), ...MEASURED }} scope="producto" fusedTitle="Lo que más va" />);

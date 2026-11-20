@@ -21,12 +21,15 @@ const FUSED_EMPTY: Record<Scope, string> = {
   usuario: "Este cliente no tiene compras con que recomendarle. Compra algo y vuelve aquí.",
 };
 
-/** Una señal que corrió y trajo candidatos pero pesa 0 en la fusión no deja productos en su fila. */
+/** Una señal que corrió y trajo candidatos puede quedar sin fila: pesa 0 o las otras señales llenaron la fusión. */
 const ZERO_WEIGHT_EMPTY = "Esta señal encontró candidatos, pero pesa 0\u00a0% en la fusión (los pesos se ajustaron en validación), así que no aporta productos.";
+const OUTRANKED_EMPTY = "Esta señal encontró candidatos, pero ninguno quedó entre los primeros de la fusión: las otras señales pesan más.";
 
 function railEmptyText(rail: SignalRail, scope: Scope): string {
-  const ranWithCandidates = rail.query !== null && rail.query.candidatos > 0;
-  return ranWithCandidates && weightPercent(rail.weight) === 0 ? ZERO_WEIGHT_EMPTY : SIGNAL_WORDING[rail.signal].whenEmpty[scope];
+  if (rail.query === null || rail.query.candidatos === 0) {
+    return SIGNAL_WORDING[rail.signal].whenEmpty[scope];
+  }
+  return weightPercent(rail.weight) === 0 ? ZERO_WEIGHT_EMPTY : OUTRANKED_EMPTY;
 }
 
 /** La fila fundida y una fila por señal, cada recomendación con sus sellos y su frase. */

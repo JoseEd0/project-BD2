@@ -585,9 +585,11 @@ coseno medio de 0.994 con los de fp32. Para evaluar la recuperación se escribie
 corpus (tabla~\ref{tab:rag-recuperacion}). La búsqueda híbrida trae el fragmento correcto
 entre los 10 primeros en el 57.8\,\% de las preguntas y un fragmento del paper correcto en el
 84.4\,\%, contra 53.3\,\% y 80.0\,\% de la vectorial; BM25 llega a 42.2\,\% porque a la
-pregunta se le quitan sus palabras vacías (con la pregunta entera era 11.1\,\%). La calidad de
-las respuestas generadas (fidelidad, citas y respuestas \guillemotleft{}no está en los
-documentos\guillemotright{}) todavía no se midió porque requiere la clave del API del modelo.
+pregunta se le quitan sus palabras vacías (con la pregunta entera era 11.1\,\%). Con Claude Sonnet 5.5
+respondiendo y Haiku 5.5 como juez, 40 de las 45 respuestas son fieles a sus fragmentos, el
+fragmento correcto se cita las 28 veces que llega al prompt, las 18 preguntas sin respuesta
+reciben \guillemotleft{}no está en los documentos\guillemotright{} y cada respuesta cuesta
+0.021~USD; el límite es la recuperación, no el modelo.
 
 
 

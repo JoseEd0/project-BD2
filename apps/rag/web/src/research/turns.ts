@@ -18,6 +18,8 @@ export interface Turn {
   readonly status: TurnStatus;
   readonly model: string | null;
   readonly sources: readonly AnswerSource[];
+  /** La consulta con que el servicio buscó los fragmentos, cuando llega con `sources`. */
+  readonly searchQuery: string | null;
   readonly text: string;
   readonly done: DoneData | null;
   readonly fallback: FallbackData | null;
@@ -51,6 +53,7 @@ function newTurn(action: Extract<TurnAction, { type: "asked" }>): Turn {
     status: "retrieving",
     model: null,
     sources: [],
+    searchQuery: null,
     text: "",
     done: null,
     fallback: null,
@@ -73,7 +76,13 @@ function settle(turn: Turn, status: TurnStatus, at: number, failure: Failure | n
 function applyEvent(turn: Turn, event: AnswerEvent, at: number): Turn {
   switch (event.type) {
     case "sources":
-      return { ...turn, status: "streaming", model: event.data.model, sources: event.data.sources };
+      return {
+        ...turn,
+        status: "streaming",
+        model: event.data.model,
+        sources: event.data.sources,
+        searchQuery: event.data.search_query ?? null,
+      };
     case "delta":
       return {
         ...turn,

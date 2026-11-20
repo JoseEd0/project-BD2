@@ -76,7 +76,7 @@ export function MeasuresPane({ turn }: { readonly turn: Turn }) {
           </table>
           {done.attempts.length > 1 && (
             <table className="tokens">
-              <caption>Intentos</caption>
+              <caption>Llamadas al modelo</caption>
               <tbody>
                 {done.attempts.map((attempt, index) => (
                   <tr key={index}>

@@ -1483,6 +1483,17 @@ button.key::after {
   justify-self: start;
 }
 
+.retrieval__query {
+  color: var(--ink-2);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
+.retrieval__query q {
+  color: var(--ink);
+  font-family: var(--font-mono);
+}
+
 .mode-note {
   max-inline-size: 60ch;
   color: var(--ink-2);

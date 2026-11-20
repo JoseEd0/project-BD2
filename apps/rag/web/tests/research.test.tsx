@@ -142,6 +142,19 @@ describe("asking a question", () => {
     expect(screen.getByRole("button", { name: /Learned indexes replace inner nodes/ })).toBeTruthy();
   });
 
+  it("searches the retrieval tab with the query the service searched, and shows it", async () => {
+    const rewritten = "learned index replacing B-tree inner nodes";
+    const stream = answerStream(ANSWER).replace('"question":"q",', `"question":"q","search_query":"${rewritten}",`);
+    const { requests } = api(() => sseResponse(stream));
+    const user = await ask();
+    await user.click(await screen.findByRole("button", { name: "Recuperación" }));
+    expect(await screen.findByText(rewritten)).toBeTruthy();
+    const searches = () => requests.filter((request) => new URL(request.url).pathname === "/api/search");
+    await waitFor(() => expect(searches().length).toBe(3));
+    const bodies = (await Promise.all(searches().map((request) => request.json()))) as { query: string }[];
+    expect(new Set(bodies.map((body) => body.query))).toEqual(new Set([rewritten]));
+  });
+
   it("explains that answers are off when the service has no model key, and offers the chunks", async () => {
     api(() => Response.json({ error: "falta la clave", kind: "AnswersUnavailableError", request_id: "r1" }, { status: 503 }));
     const user = await ask();

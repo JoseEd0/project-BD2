@@ -15,6 +15,9 @@ export interface AnswerSource {
 
 export interface SourcesData {
   readonly question: string;
+  /** Lo que se buscó en el corpus: la consulta reescrita (en inglés con los términos de los
+   * papers, o con el tema de una repregunta) o la pregunta tal cual. */
+  readonly search_query?: string;
   readonly model: string;
   readonly sources: readonly AnswerSource[];
 }

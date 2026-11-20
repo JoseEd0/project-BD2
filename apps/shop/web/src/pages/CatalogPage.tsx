@@ -161,7 +161,9 @@ export default function CatalogPage() {
               <div>
                 <h1 id="results-title">{title}</h1>
                 <p className="results-how">
-                  {result === undefined
+                  {search.isError
+                    ? `La búsqueda ${HOW[mode]} no se pudo hacer.`
+                    : result === undefined
                     ? `Buscando ${HOW[mode]}…`
                     : `${result.data.products.length === 1 ? "1 producto" : `${result.data.products.length} productos`} ${HOW[mode]}.`}
                 </p>

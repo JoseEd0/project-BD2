@@ -35,6 +35,7 @@ FROM nginxinc/nginx-unprivileged:${NGINX_VERSION}-alpine
 
 COPY web-kit/docker/nginx/templates /etc/nginx/templates
 COPY web-kit/docker/nginx/tls.conf.template /etc/nginx/app/tls.conf.template
+COPY --chmod=755 web-kit/docker/nginx/16-api-upstream.envsh /docker-entrypoint.d/16-api-upstream.envsh
 COPY --chmod=755 web-kit/docker/nginx/25-tls.sh /docker-entrypoint.d/25-tls.sh
 COPY --from=build /csp.conf /etc/nginx/app/csp.conf
 COPY --from=build /dist /usr/share/nginx/html
@@ -46,6 +47,8 @@ ENV WEB_PORT=8080 \
     WEB_TLS_PORT=8443 \
     API_UPSTREAM=http://api:8000 \
     API_TIMEOUT=60s \
+    API_KEEPALIVE_CONNECTIONS=32 \
+    API_KEEPALIVE_TIMEOUT=4s \
     API_MAX_BODY_SIZE=1m \
     API_RATE_LIMIT=20r/s \
     API_RATE_BURST=40 \

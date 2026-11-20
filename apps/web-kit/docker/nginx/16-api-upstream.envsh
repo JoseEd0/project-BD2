@@ -1,0 +1,5 @@
+#!/bin/sh
+# `upstream` pide `host:puerto`, no una URL: se deriva de API_UPSTREAM para que cada compose
+# siga diciendo a qué API reenvía con una sola variable.
+api_upstream_server="${API_UPSTREAM#*://}"
+export API_UPSTREAM_SERVER="${api_upstream_server%%/*}"

@@ -100,6 +100,8 @@ de una a otra son variables que pone su `compose.yaml`:
 |---|---|---|
 | `API_UPSTREAM` | la API de la app: el único destino de `/api/` (y del WebSocket) | `http://api:8000` |
 | `API_TIMEOUT` | plazo de una respuesta de la API | `60s` |
+| `API_KEEPALIVE_CONNECTIONS` | conexiones inactivas con la API que cada proceso de nginx guarda para reutilizar | `32` |
+| `API_KEEPALIVE_TIMEOUT` | cuánto espera una de ellas antes de cerrarse; menos que el keep-alive de uvicorn (5 s) | `4s` |
 | `API_MAX_BODY_SIZE` | lo más que se puede subir en una petición (`413` si pasa) | `1m` |
 | `API_RATE_LIMIT`, `API_RATE_BURST` | peticiones a `/api/` por IP y su ráfaga (`429` si pasa) | `20r/s`, `40` |
 | `WEB_PERMISSIONS_POLICY` | `Permissions-Policy`: la cámara, el micrófono o la ubicación, solo en la app que los usa | todo apagado |

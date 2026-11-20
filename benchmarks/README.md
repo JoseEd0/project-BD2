@@ -2862,67 +2862,71 @@ empezar, entre los segundos de reloj): **1 es un núcleo entero**.
 | rostros: `/identify` | YuNet y SFace en la API, HNSW en el gestor | una selfie de 40 KiB de la persona registrada |
 
 Apple M4 Pro (12 núcleos), macOS, Docker Desktop 28.4.0 con 12 CPU y 7,7 GiB para su máquina
-virtual, commit `035faf8`. **El equipo no estaba libre**: había otros procesos, y la carga
-media del anfitrión fue de 3,5 a 20,9 (la de la máquina de Docker, de 2,2 a 25,0) según la
-medida; cada una está en el JSON. Una sola ejecución.
+virtual, commit `f4b5baa` (con el `keepalive` del nginx). La carga media del anfitrión fue de
+2,4 a 27,1 (la de la máquina de Docker, de 0,9 a 28,1) según la medida: la sube la propia
+prueba (k6 y las réplicas de rostros y de la detección ocupan casi todos los núcleos), y cada
+una está en el JSON. Una sola ejecución.
 
 ![Prueba de carga: réplicas de cada API frente a un solo gestor](figures/carga-replicas.png)
 
 | Ruta | Réplicas | Respuestas 2xx por s | p50 | p95 | p99 | CPU del gestor | CPU de las API | Fallidas |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| tienda: recomendación, caché fría | 1 | 12,3 | 2 551 ms | 3 207 ms | 3 507 ms | 0,90 | 0,29 | 0,0 % |
-| tienda: recomendación, caché fría | 2 | 12,4 | 2 486 ms | 3 444 ms | 4 010 ms | 0,97 | 0,15 | 0,0 % |
-| tienda: recomendación, caché fría | 4 | 12,3 | 2 509 ms | 3 497 ms | 3 991 ms | 0,96 | 0,17 | 0,0 % |
-| tienda: recomendación, caché caliente | 1 | 439 | 12,9 ms | 35,4 ms | 60,0 ms | 0,02 | 0,33 | 78,3 % |
-| tienda: recomendación, caché caliente | 2 | 2 799 | 11,3 ms | 20,4 ms | 23,1 ms | 0,01 | 2,04 | 0,0 % |
-| tienda: recomendación, caché caliente | 4 | 4 689 | 5,75 ms | 15,6 ms | 19,9 ms | 0,01 | 3,82 | 0,0 % |
-| papers: /search híbrida | 1 | 52,7 | 613 ms | 740 ms | 804 ms | 1,02 | 1,30 | 0,0 % |
-| papers: /search híbrida | 2 | 53,4 | 600 ms | 828 ms | 881 ms | 1,01 | 1,12 | 0,0 % |
-| papers: /search híbrida | 4 | 53,8 | 590 ms | 725 ms | 783 ms | 1,01 | 1,13 | 0,0 % |
-| copyright: /songs/{id} | 1 | 340 | 82,0 ms | 193 ms | 261 ms | 1,01 | 0,97 | 0,0 % |
-| copyright: /songs/{id} | 2 | 353 | 85,2 ms | 129 ms | 144 ms | 1,00 | 0,72 | 0,0 % |
-| copyright: /songs/{id} | 4 | 318 | 99,9 ms | 134 ms | 152 ms | 1,03 | 0,71 | 0,0 % |
-| copyright: detección de 10 s | 1 | 32,7 | 961 ms | 1 312 ms | 1 475 ms | 10,80 | 0,54 | 0,0 % |
-| copyright: detección de 10 s | 2 | 34,5 | 896 ms | 1 373 ms | 1 599 ms | 10,86 | 0,43 | 0,0 % |
-| copyright: detección de 10 s | 4 | 37,7 | 817 ms | 1 254 ms | 1 638 ms | 10,86 | 0,46 | 0,0 % |
-| rostros: /identify | 1 | 105 | 299 ms | 346 ms | 372 ms | 0,46 | 8,58 | 0,0 % |
-| rostros: /identify | 2 | 112 | 284 ms | 509 ms | 563 ms | 0,56 | 9,80 | 0,0 % |
-| rostros: /identify | 4 | 100 | 265 ms | 738 ms | 941 ms | 0,56 | 10,22 | 0,0 % |
+| tienda: recomendación, caché fría | 1 | 12,4 | 2 538 ms | 3 164 ms | 3 507 ms | 0,97 | 0,32 | 0,0 % |
+| tienda: recomendación, caché fría | 2 | 11,1 | 2 789 ms | 4 079 ms | 4 612 ms | 0,98 | 0,15 | 0,0 % |
+| tienda: recomendación, caché fría | 4 | 12,7 | 2 416 ms | 3 414 ms | 3 951 ms | 0,97 | 0,18 | 0,0 % |
+| tienda: recomendación, caché caliente | 1 | 1 837 | 15,2 ms | 27,4 ms | 59,7 ms | 0,02 | 1,01 | 0,0 % |
+| tienda: recomendación, caché caliente | 2 | 3 467 | 8,98 ms | 12,9 ms | 17,5 ms | 0,01 | 2,05 | 0,0 % |
+| tienda: recomendación, caché caliente | 4 | 5 595 | 5,43 ms | 8,60 ms | 10,9 ms | 0,01 | 4,11 | 0,0 % |
+| papers: /search híbrida | 1 | 54,2 | 594 ms | 713 ms | 785 ms | 1,01 | 1,28 | 0,0 % |
+| papers: /search híbrida | 2 | 50,4 | 623 ms | 794 ms | 980 ms | 0,93 | 1,02 | 0,0 % |
+| papers: /search híbrida | 4 | 49,1 | 646 ms | 794 ms | 873 ms | 1,02 | 1,13 | 0,0 % |
+| copyright: /songs/{id} | 1 | 326 | 87,1 ms | 195 ms | 264 ms | 1,02 | 0,95 | 0,0 % |
+| copyright: /songs/{id} | 2 | 360 | 83,9 ms | 124 ms | 136 ms | 1,01 | 0,70 | 0,0 % |
+| copyright: /songs/{id} | 4 | 361 | 83,8 ms | 122 ms | 140 ms | 1,01 | 0,74 | 0,0 % |
+| copyright: detección de 10 s | 1 | 32,1 | 979 ms | 1 305 ms | 1 568 ms | 10,78 | 0,51 | 0,0 % |
+| copyright: detección de 10 s | 2 | 37,7 | 824 ms | 1 220 ms | 1 407 ms | 10,93 | 0,44 | 0,0 % |
+| copyright: detección de 10 s | 4 | 34,8 | 900 ms | 1 358 ms | 1 528 ms | 10,90 | 0,42 | 0,0 % |
+| rostros: /identify | 1 | 99,2 | 318 ms | 360 ms | 381 ms | 0,42 | 7,67 | 0,0 % |
+| rostros: /identify | 2 | 110 | 289 ms | 485 ms | 533 ms | 0,56 | 9,87 | 0,0 % |
+| rostros: /identify | 4 | 105 | 273 ms | 633 ms | 701 ms | 0,56 | 10,51 | 0,0 % |
 
 Conclusiones:
 
 - **El gestor es el límite de todo lo que llega a él, y lo es en un núcleo.** La tienda con
-  caché fría (12,3, 12,4 y 12,3 req/s), la búsqueda de papers (52,7, 53,4 y 53,8) y la
-  canción por id (340, 353 y 318) no suben con las réplicas, y el gestor está en 0,96, 1,01
-  y 1,03 núcleos: es un solo proceso de Python, y sus sentencias (planificar, recorrer
+  caché fría (12,4, 11,1 y 12,7 req/s), la búsqueda de papers (54,2, 50,4 y 49,1) y la
+  canción por id (326, 360 y 361) no suben con las réplicas, y el gestor está en 0,97, 1,02
+  y 1,01 núcleos: es un solo proceso de Python, y sus sentencias (planificar, recorrer
   páginas, armar filas) se ejecutan de a una con el GIL, aunque la máquina tenga 12 CPU. Las
-  API casi no trabajan (0,17 núcleos entre las cuatro de la tienda).
-- **La latencia es la cola delante del gestor.** Con 32 usuarios y 12,3 req/s, cada petición
-  espera unos 32 / 12,3 ≈ 2,6 s, y la mediana medida es 2,6 s (ley de Little). En papers, el
-  `Server-Timing` lo muestra por etapa: el embedding en la API tarda 4,63 ms y el BM25 y el
-  HNSW en el gestor 456 y 382 ms de mediana con 4 réplicas, casi todo espera. Más réplicas
-  solo mandan más peticiones a la misma cola: el p95 de la tienda fría pasa de 3,2 a 3,5 s.
+  API casi no trabajan (0,18 núcleos entre las cuatro de la tienda).
+- **La latencia es la cola delante del gestor.** Con 32 usuarios y 12,4 req/s, cada petición
+  espera unos 32 / 12,4 ≈ 2,6 s, y la mediana medida es 2,5 s (ley de Little). En papers, el
+  `Server-Timing` lo muestra por etapa: el embedding en la API tarda 4,67 ms y el BM25 y el
+  HNSW en el gestor 498 y 419 ms de mediana con 4 réplicas, casi todo espera. Más réplicas
+  solo mandan más peticiones a la misma cola: el p95 de la tienda fría no baja de 3,2 s.
 - **La detección de copyright ocupa toda la máquina desde el gestor.** Decodificar y sacar
   los MFCC es código nativo (librosa y numpy) que usa varios hilos, así que el gestor llega
   a 10,8 núcleos de 12 con una réplica: no queda CPU que darle a otra, y el caudal apenas se
-  mueve (32,7, 34,5 y 37,7 req/s). La API no hace casi nada (0,54 núcleos).
+  mueve (32,1, 37,7 y 34,8 req/s). La API no hace casi nada (0,51 núcleos).
 - **Escalar la API sirve cuando el trabajo está en la API.** La tienda con caché caliente no
-  toca el gestor (0,01 núcleos) y pasa de 2 799 a 4 689 req/s de 2 a 4 réplicas, con el p95
-  de 20,4 a 15,6 ms; frente a la caché fría con 4 réplicas son 381 veces más peticiones:
-  **la caché es lo que escala la tienda, no las réplicas**.
-- **Con una sola réplica, el nginx se queda sin puertos.** El nginx de cada app abre una
-  conexión nueva hacia la API en cada petición (`proxy_pass` con una variable, para resolver
-  las réplicas por DNS, no reutiliza conexiones), y cada una queda unos 60 s en TIME_WAIT
-  ocupando un puerto local. A más de 2 000 req/s hacia **una sola dirección** se acaban los
-  28 232 puertos del contenedor (32768–60999): 78 % de las respuestas de la tienda caliente
-  con una réplica fueron 502 (en una reproducción aparte, el log del nginx dice `connect() …
-  failed (99: Address not available)` en cada una), con 28 267 conexiones en TIME_WAIT al
-  terminar; solo 439 req/s salieron bien. Con 2 y 4 réplicas los puertos se reparten entre
-  más direcciones y no falla ninguna. Ninguna otra ruta llega a ese ritmo. El arreglo es un
-  `upstream` con `keepalive` en el nginx, y queda pendiente.
+  toca el gestor (0,01 núcleos) y cada réplica es un proceso que llena su núcleo (1,01, 2,05
+  y 4,11 núcleos entre todas): pasa de 1 837 a 3 467 y 5 595 req/s con 1, 2 y 4 réplicas, con
+  el p95 de 27,4 a 8,60 ms. Frente a la caché fría con 4 réplicas son 440 veces más
+  peticiones: **la caché es lo que escala la tienda, y con ella las réplicas sí suman**.
+- **El nginx reutiliza las conexiones con la API (`keepalive`).** La primera medida (commit
+  `035faf8`, en el historial del JSON) encontró que con una réplica el nginx se quedaba sin
+  puertos: `proxy_pass` con una variable, para resolver las réplicas por DNS, abría una
+  conexión nueva en cada petición, cada una quedaba unos 60 s en TIME_WAIT, y a más de 2 000
+  req/s hacia **una sola dirección** se acababan los 28 232 puertos del contenedor
+  (32768–60999): 78 % de las respuestas de la tienda caliente fueron 502 (`connect() …
+  failed (99: Address not available)` en el log del nginx), con 28 267 conexiones en
+  TIME_WAIT, y solo 439 req/s salieron bien. Ahora el nginx reenvía a un `upstream` con
+  `keepalive` y `server … resolve` (el DNS se sigue consultando, así que las réplicas de
+  `--scale` entran solas): con una réplica, 1 837 req/s sin ninguna fallida y 120 conexiones
+  en TIME_WAIT; con 2 y 4, de 2 799 a 3 467 y de 4 689 a 5 595 req/s, porque ya no hay un
+  saludo TCP por petición.
 - **Rostros está limitado por la CPU de la máquina, no por el gestor.** Una réplica ya ocupa
-  8,6 núcleos (OpenCV y onnxruntime usan varios hilos por foto) y el gestor 0,46: con 2 y 4
-  réplicas el caudal casi no cambia (105, 112 y 100 req/s) y el p95 sube de 346 a 738 ms,
+  7,7 núcleos (OpenCV y onnxruntime usan varios hilos por foto) y el gestor 0,42: con 2 y 4
+  réplicas el caudal casi no cambia (99,2, 110 y 105 req/s) y el p95 sube de 360 a 633 ms,
   porque las réplicas se quitan CPU entre ellas. Para escalar hace falta más CPU (otra
   máquina), no más réplicas en esta.
 - **Lo que no se midió:** `GET /catalog` de copyright no entra en la prueba: sus `COUNT(*)`

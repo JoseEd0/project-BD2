@@ -4,8 +4,9 @@ import { useQueries, useQuery, type UseQueryResult } from "@tanstack/react-query
 import { papersApi } from "../api/client";
 import { toRequestFilters, type Facets, type ResearchFilters, type SearchMode, type SearchResponse } from "../api/types";
 
-/** Los fragmentos que muestra cada lista del panel de recuperación. */
-export const RETRIEVAL_RESULTS = 10;
+/** Los fragmentos que muestra cada lista del panel de recuperación: los que lee el modelo
+ * con la configuración por omisión del servicio (`RAG_ANSWER_CHUNKS`). */
+export const RETRIEVAL_RESULTS = 12;
 export const RETRIEVAL_MODES: readonly SearchMode[] = ["bm25", "vector", "hybrid"];
 
 export interface RetrievalResult {

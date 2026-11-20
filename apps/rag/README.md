@@ -815,12 +815,14 @@ material del curso, donde el vectorial acierta 1 de 5), y el vectorial conserva 
 Con los 12 fragmentos del prompt, 28 de las 45 preguntas reciben su fragmento correcto.
 int8 contra fp32 no se midió: exige recalcular los 98 585 embeddings y sembrar otro gestor.
 
-**Pendiente de la clave**: las preguntas de la Batch API, las respuestas de Claude (citas
-válidas, si citan el fragmento correcto, «no está en los documentos» en las 18 sin
-respuesta, costo y latencia hasta el primer texto), el juez y su acuerdo con la revisión a
-mano. Con `--answers simulated` el camino entero corrió sin clave (63 preguntas; el evento
-`sources` sale a los 21 ms de mediana), pero esas respuestas no dicen nada de la calidad.
-Costo estimado de la evaluación completa, unas 133 preguntas: **≈ 3,2 USD** (cota 8,0).
+**Las respuestas de Claude** (las mismas 63 preguntas, Sonnet 5.5 en esfuerzo `low`, Haiku
+5.5 como juez): **40 de 45** respuestas fieles (27 de 28 cuando el fragmento correcto llega al
+prompt), el fragmento correcto **citado las 28 veces** que se envió, las **18** preguntas sin
+respuesta en el corpus contestadas con «no está en los documentos», una cita inválida en 63
+respuestas y ninguna cortada. Primer texto en 1,08 s y respuesta completa en 3,85 s de mediana
+(con la máquina cargada), 1,43 USD en total: 0,021 USD por pregunta. El límite es la
+recuperación (28 de 45 llegan al prompt), no la generación. Faltan las preguntas de la Batch
+API y validar el juez contra una revisión a mano.
 
 # Tests
 

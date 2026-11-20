@@ -1,31 +1,35 @@
 import { THEME_PREFERENCES, useThemePreference, type ThemePreference } from "@minigestor/web-kit";
 
-const PREFERENCE_LABELS: Record<ThemePreference, string> = {
-  system: "Sistema",
-  light: "Claro",
-  dark: "Oscuro",
+import { Icon, type IconName } from "./Icon";
+
+const PREFERENCES: Record<ThemePreference, { readonly label: string; readonly icon: IconName }> = {
+  system: { label: "Tema del sistema", icon: "themeAuto" },
+  light: { label: "Claro", icon: "sun" },
+  dark: { label: "Oscuro", icon: "moon" },
 };
 
-/** Tres opciones de radio: con el teclado se recorren con las flechas, como cualquier grupo. */
+/**
+ * El tema de las pantallas de texto, en la barra de cada una: tres opciones de radio con
+ * ícono, que con el teclado se recorren con las flechas como cualquier grupo.
+ */
 export function ThemeChoice() {
   const { preference, choosePreference } = useThemePreference();
   return (
     <fieldset className="theme-choice">
-      <legend>Tema de las pantallas de texto</legend>
-      <div className="segmented">
-        {THEME_PREFERENCES.map((option) => (
-          <label key={option}>
-            <input
-              type="radio"
-              name="theme"
-              value={option}
-              checked={preference === option}
-              onChange={() => choosePreference(option)}
-            />
-            {PREFERENCE_LABELS[option]}
-          </label>
-        ))}
-      </div>
+      <legend className="visually-hidden">Tema de las pantallas de texto</legend>
+      {THEME_PREFERENCES.map((option) => (
+        <label key={option} title={PREFERENCES[option].label}>
+          <input
+            type="radio"
+            name="theme"
+            value={option}
+            aria-label={PREFERENCES[option].label}
+            checked={preference === option}
+            onChange={() => choosePreference(option)}
+          />
+          <Icon name={PREFERENCES[option].icon} size={20} />
+        </label>
+      ))}
     </fieldset>
   );
 }

@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Link } from "react-router";
 
 import { Icon } from "./Icon";
+import { ThemeChoice } from "./ThemeChoice";
 
 export interface TextScreenProps {
   readonly title: string;
@@ -43,6 +44,7 @@ export function TextScreen({ title, intro, back, children, actions, documentTitl
           ) : (
             <BackControl back={back} />
           )}
+          <ThemeChoice />
         </div>
         <div className="text-screen-heading">
           <h1 id="titulo">{title}</h1>

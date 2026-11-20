@@ -40,7 +40,7 @@ test.describe("before the app loads", () => {
 
   test("the remembered theme is already applied", async ({ page, context }) => {
     await page.goto("/");
-    await page.getByText("Oscuro", { exact: true }).click();
+    await page.getByRole("radio", { name: "Oscuro" }).check();
     await context.route("**/assets/index-*.js", () => undefined);
     await page.reload({ waitUntil: "commit" });
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");

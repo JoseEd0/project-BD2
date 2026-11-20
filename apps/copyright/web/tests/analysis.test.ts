@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { formatBytes, formatClock, formatOffset, formatPercent, formatSpan } from "../src/analysis/format";
-import { catalogStateOf, withoutSong } from "../src/analysis/catalog";
+import { catalogStateOf, notableMatches, withoutSong } from "../src/analysis/catalog";
 import { apiMessage, problemOf, unreachableProblem } from "../src/analysis/problem";
 import { barlineTimes, rulerTicks } from "../src/analysis/ruler";
 import { HIGHLIGHTER_INKS, layoutSpans, songLetter } from "../src/analysis/spans";
@@ -196,5 +196,17 @@ describe("catalog", () => {
     const result = withoutSong(detection([own, other]), 7);
     expect(result.matches).toEqual([other]);
     expect(result.detected).toBe(false);
+  });
+});
+
+describe("notableMatches", () => {
+  it("keeps only the matches above the threshold", () => {
+    const strong = match(1, [0, 10], 0.9);
+    expect(notableMatches([strong, match(2, [10, 20], 0.1), match(3, [20, 30], 0)])).toEqual([strong]);
+  });
+
+  it("falls back to the best few with some evidence", () => {
+    const weak = [0.3, 0.2, 0.1, 0.05].map((score, index) => match(index, [0, 10], score));
+    expect(notableMatches([...weak, match(9, [0, 10], 0)])).toEqual(weak.slice(0, 3));
   });
 });

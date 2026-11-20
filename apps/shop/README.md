@@ -380,6 +380,7 @@ con palabras y la de imagen para buscar con una foto; con las dos, el proceso oc
 |---|---|
 | `GET /productos/{id}` | igualdad sobre el B+ de `id` |
 | `GET /busqueda/texto?q=&limite=` | `MATCH(texto, $1) USING BM25` sobre el invertido en inglés; `q` admite `AND`, `OR`, `NOT` y paréntesis |
+| `GET /busqueda/productos?q=&limite=&exacta=` | el mismo BM25, sobre `q` con sus erratas corregidas (`shop.spelling`); dice en `corregida` qué buscó, y con `exacta=true` busca `q` tal cual |
 | `GET /busqueda/imagenes?q=&limite=` | el embedding de `q` con la torre de texto, y `SIMILAR_TO(embedding, $1, k = $2)` sobre el HNSW de CLIP |
 | `GET /tiendas/cercanas?lat=&lon=&limite=` | `ORDER BY distancia(ubicacion, $1) LIMIT $2`, k vecinos con el R-Tree, en metros |
 | `POST /busqueda/foto?limite=` (multipart, `foto`) | el embedding de la foto con la torre de imagen, y el mismo `SIMILAR_TO` sobre el HNSW de CLIP |
@@ -388,6 +389,20 @@ con palabras y la de imagen para buscar con una foto; con las dos, el proceso oc
 | `GET /departamentos` | `GROUP BY departamento HAVING COUNT(*) >= $1`, una vez por proceso |
 | `GET /usuarios` | los `SHOP_FEATURED_USERS` (12) clientes con más compras, una vez por proceso |
 | `GET /usuarios/{id}/compras?limite=` | su historial en la partición del recomendador, por el B+ de `usuario` |
+
+Las búsquedas admiten además `departamento`, `precio_min`, `precio_max` y `valoracion_min`.
+
+**Erratas.** «guitr», «amplifer» o «condensor microphone» no están en el invertido tal cual:
+`/busqueda/productos` cambia cada palabra que no está en el vocabulario de títulos y marcas
+de `products.csv` (9 625 palabras que salen al menos dos veces) por la más cercana en
+distancia de edición con transposiciones —una edición hasta 5 letras, dos desde 6—, la más
+frecuente si empatan; una palabra que sí está pero tiene una vecina 50 veces más frecuente
+(«amplifer», que sale en 3 fichas, frente a «amplifier») también se corrige. Las candidatas a
+una edición salen de un índice de borrados (SymSpell); las de dos, de las palabras de la
+misma inicial. El vocabulario se lee una vez por proceso (0,8 s) y corregir una consulta
+tarda 0,03 ms de mediana (medido en un Apple M4 Pro con 12 consultas × 20). La búsqueda
+sigue siendo el `MATCH ... USING BM25` del gestor; si la consulta corregida no encuentra
+nada, se busca la original.
 
 `limite` va de 1 a `SHOP_MAX_SEARCH_LIMIT` (100; por omisión `SHOP_SEARCH_LIMIT`, 10). Las
 tres búsquedas aceptan además `departamento`, `precio_min` y `precio_max`, que van al `WHERE`

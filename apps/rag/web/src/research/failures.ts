@@ -9,6 +9,7 @@ export type FailureKind =
   | "model-unavailable"
   | "model-misconfigured"
   | "engine-unavailable"
+  | "engine-busy"
   | "invalid-question"
   | "network"
   | "interrupted"
@@ -27,6 +28,7 @@ const RETRYABLE: ReadonlySet<FailureKind> = new Set<FailureKind>([
   "rate-limited",
   "model-unavailable",
   "engine-unavailable",
+  "engine-busy",
   "network",
   "interrupted",
   "unexpected",
@@ -40,6 +42,7 @@ const KIND_BY_ERROR: Readonly<Record<string, FailureKind>> = {
   LlmAccessError: "model-misconfigured",
   LlmRequestError: "model-misconfigured",
   EngineUnavailableError: "engine-unavailable",
+  EngineBusyError: "engine-busy",
   RequestValidationError: "invalid-question",
 };
 

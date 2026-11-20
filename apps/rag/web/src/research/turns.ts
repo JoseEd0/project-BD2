@@ -109,6 +109,24 @@ function updateTurn(turn: Turn, action: Exclude<TurnAction, { type: "asked" }>):
   }
 }
 
+/** Un turno anterior tal como lo recibe el servicio para seguir la conversación. */
+export interface Exchange {
+  readonly question: string;
+  readonly answer: string;
+}
+
+/**
+ * Los últimos `limit` turnos respondidos, para que el modelo entienda un seguimiento. El
+ * servicio vuelve a acotarlos (`RAG_ANSWER_HISTORY_TURNS`); este tope solo evita mandar una
+ * conversación larga entera.
+ */
+export function conversationHistory(turns: readonly Turn[], limit: number): Exchange[] {
+  return turns
+    .filter((turn) => turn.status === "answered" && turn.done?.complete === true && turn.text !== "")
+    .slice(-limit)
+    .map((turn) => ({ question: turn.question, answer: turn.text }));
+}
+
 /** Las preguntas de la sesión, de la más vieja a la más nueva. */
 export function turnsReducer(turns: readonly Turn[], action: TurnAction): readonly Turn[] {
   if (action.type === "asked") {

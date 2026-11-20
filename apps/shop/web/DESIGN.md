@@ -5,6 +5,18 @@ trabajo (modo *operar*): buscar, abrir una ficha, leer las recomendaciones, ver 
 stock y comprar. Los tokens viven en [`src/styles/tokens.css`](src/styles/tokens.css); este
 documento dice por qué.
 
+## Vitrina (#162)
+
+Desde #162 el catálogo se lee como una tienda grande: tarjetas blancas con la foto arriba,
+marca, título en dos líneas, estrellas con su número de opiniones y el precio grande; la
+ficha lleva una caja de compra aparte. La barra es pizarra (`--tolex` `#131A22`), el acento
+es la madera del cajón (`--accent` `#B4501A`, en `src/styles/storefront.css`) y las estrellas,
+ámbar. La etiqueta manila se retiró: `--tag` es ahora un gris neutro que solo sostiene los
+sellos de las recomendaciones, que siguen siendo el gesto propio. En el mapa, cada tienda es
+un alfiler blanco con su número en el acento (relleno cuando está elegida, igual que en la
+lista) y quien compra, un punto azul con halo. Lo que sigue describe el diseño anterior en lo
+que no contradiga esto.
+
 ## La idea: la etiqueta colgante y el sello
 
 En una tienda de instrumentos (las de Jr. Paruro, en el centro de Lima, o cualquier tienda

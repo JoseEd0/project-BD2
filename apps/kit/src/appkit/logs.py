@@ -20,7 +20,8 @@ UVICORN_LOGGERS = ("uvicorn", "uvicorn.error")
 UVICORN_ACCESS_LOGGER = "uvicorn.access"
 HEALTH_PATH = "/health"
 READY_PATH = "/ready"
-PROBE_PATHS = frozenset({HEALTH_PATH, READY_PATH})
+METRICS_PATH = "/metrics"
+PROBE_PATHS = frozenset({HEALTH_PATH, READY_PATH, METRICS_PATH})
 FIRST_ERROR_STATUS = 400
 
 
@@ -67,7 +68,8 @@ def log_request(
     service: str, method: str, path: str, status: int, request_id: str, duration_ms: float
 ) -> None:
     """La línea de acceso de una petición respondida. Las sondas que responden bien van en
-    DEBUG: el healthcheck de Docker llama cada pocos segundos y taparía lo demás."""
+    DEBUG: el healthcheck de Docker y Prometheus llaman cada pocos segundos y taparían lo
+    demás."""
     logging.getLogger(ACCESS_LOGGER).log(
         _access_level(path, status),
         "%s %s %d",

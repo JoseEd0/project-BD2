@@ -11,7 +11,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Request, Response
 
-from appkit import BadRequestError, Engine, timed
+from appkit import BadRequestError, Engine, count_cache_lookup, timed
 from minigestor_client import Point, Record
 from shop.catalog.queries import fetch_products
 from shop.recommend.cache import (
@@ -39,6 +39,7 @@ from .routes import ENGINE_STAGE, LATITUDE_LIMIT, LONGITUDE_LIMIT, Settings, sea
 
 CACHE_HEADER = "X-Cache"
 CACHE_STAGE = "cache"
+CACHE_METRIC = "recomendaciones"
 JSON_MEDIA_TYPE = "application/json"
 MAX_RADIUS_METERS = 50_000.0
 PRODUCT_ROUTE = "producto"
@@ -164,6 +165,7 @@ async def _cached(
 ) -> Response:
     with timed(CACHE_STAGE):
         lookup = await cache.lookup(entry)
+    count_cache_lookup(CACHE_METRIC, lookup.status.value)
     if lookup.payload is not None:
         return _json(lookup.payload, lookup.status)
     result = await compute()

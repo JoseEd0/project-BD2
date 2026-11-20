@@ -258,6 +258,78 @@
         }
       }
     },
+    "/lookalikes": {
+      "post": {
+        "summary": "Lookalikes",
+        "description": "Las personas públicas de LFW que más se parecen al rostro más grande de la foto. Solo\nse compara con LFW, nunca con las personas registradas, y la foto no se guarda.",
+        "operationId": "lookalikes_lookalikes_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_lookalikes_lookalikes_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Lookalikes"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/lookalikes/{famous_id}/photo": {
+      "get": {
+        "summary": "Lookalike Photo",
+        "description": "La foto de LFW de una persona de `POST /lookalikes`.",
+        "operationId": "lookalike_photo_lookalikes__famous_id__photo_get",
+        "parameters": [
+          {
+            "name": "famous_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Famous Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/person": {
       "get": {
         "summary": "Person",
@@ -349,6 +421,21 @@
           "image"
         ],
         "title": "Body_identify_identify_post"
+      },
+      "Body_lookalikes_lookalikes_post": {
+        "properties": {
+          "image": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "Image",
+            "description": "La foto: JPEG, PNG, WebP, BMP, GIF o TIFF."
+          }
+        },
+        "type": "object",
+        "required": [
+          "image"
+        ],
+        "title": "Body_lookalikes_lookalikes_post"
       },
       "Body_submit_shot_enrollments__enrollment_id__shots_post": {
         "properties": {
@@ -545,6 +632,49 @@
         ],
         "title": "FaceBox"
       },
+      "FamousLookalike": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id",
+            "description": "La persona en `face_famosos`; su foto, en `photo_path`."
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "similarity": {
+            "type": "number",
+            "title": "Similarity",
+            "description": "El coseno entre tu rostro y el de la persona."
+          },
+          "percent": {
+            "type": "integer",
+            "title": "Percent",
+            "description": "El coseno en porcentaje, de 0 a 100."
+          },
+          "photos": {
+            "type": "integer",
+            "title": "Photos",
+            "description": "Fotos de LFW que se promediaron para esta persona."
+          },
+          "photo_path": {
+            "type": "string",
+            "title": "Photo Path",
+            "description": "La ruta del API que sirve su foto de LFW."
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "similarity",
+          "percent",
+          "photos",
+          "photo_path"
+        ],
+        "title": "FamousLookalike"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -618,6 +748,28 @@
           "status"
         ],
         "title": "IdentifiedFace"
+      },
+      "Lookalikes": {
+        "properties": {
+          "people": {
+            "items": {
+              "$ref": "#/components/schemas/FamousLookalike"
+            },
+            "type": "array",
+            "title": "People",
+            "description": "De la más parecida a la menos."
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "people",
+          "message"
+        ],
+        "title": "Lookalikes"
       },
       "MatchStatus": {
         "type": "string",

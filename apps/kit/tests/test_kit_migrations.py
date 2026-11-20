@@ -54,6 +54,24 @@ async def test_statements_run_in_order(engine: FakeEngine):
     assert [sql for sql, _ in engine.queries()] == list(SCHEMA)
 
 
+@pytest.mark.anyio
+async def test_a_busy_catalog_is_retried_before_giving_up(engine: FakeEngine):
+    engine.failures["CREATE TABLE"] = (400, "EngineBusyError")
+    async with AsyncClient(ENGINE_URL, transport=engine.transport()) as client:
+        with pytest.raises(MigrationError, match="EngineBusyError"):
+            await migrate(client, SCHEMA[:1], busy_retries=2, busy_first_wait_seconds=0)
+    assert len(engine.queries()) == 3
+
+
+@pytest.mark.anyio
+async def test_other_engine_errors_are_not_retried(engine: FakeEngine):
+    engine.failures["CREATE TABLE"] = (400, "DefinitionMismatchError")
+    async with AsyncClient(ENGINE_URL, transport=engine.transport()) as client:
+        with pytest.raises(MigrationError):
+            await migrate(client, SCHEMA[:1], busy_retries=2, busy_first_wait_seconds=0)
+    assert len(engine.queries()) == 1
+
+
 def test_the_service_migrates_with_its_own_key_when_there_is_no_other(service, engine: FakeEngine):
     assert engine.queries() == [(sql, "Bearer clave-de-la-app") for sql in SCHEMA]
 

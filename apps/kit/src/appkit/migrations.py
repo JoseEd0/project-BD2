@@ -10,6 +10,7 @@ fallar después en la primera carga.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 from collections.abc import Sequence
@@ -17,9 +18,17 @@ from collections.abc import Sequence
 from minigestor_client import (
     AsyncClient,
     DefinitionMismatchError,
+    DomainError,
     MinigestorError,
     PermissionDeniedError,
 )
+
+ENGINE_BUSY_KIND = "EngineBusyError"
+# Otra app puede tener el catálogo tomado con un CREATE INDEX largo justo cuando esta arranca:
+# esperar unos 45 s (1, 2, 4 y luego 8 s) evita que el servicio caiga y reinicie en bucle.
+BUSY_RETRIES = 8
+BUSY_FIRST_WAIT_SECONDS = 1.0
+BUSY_MAX_WAIT_SECONDS = 8.0
 
 REPEATABLE_DDL = re.compile(r"\s*CREATE\s+(?:TABLE|INDEX)\s+IF\s+NOT\s+EXISTS\b", re.IGNORECASE)
 
@@ -44,9 +53,15 @@ def check_repeatable(statements: Sequence[str]) -> None:
             )
 
 
-async def migrate(engine: AsyncClient, statements: Sequence[str]) -> None:
+async def migrate(
+    engine: AsyncClient,
+    statements: Sequence[str],
+    busy_retries: int = BUSY_RETRIES,
+    busy_first_wait_seconds: float = BUSY_FIRST_WAIT_SECONDS,
+) -> None:
     """Aplica `statements` en orden. Cada una es idempotente, así que se reintenta si el gestor
-    no respondió.
+    no respondió o tiene el catálogo ocupado (hasta `busy_retries` veces, esperando el doble
+    cada vez a partir de `busy_first_wait_seconds`).
 
     Raises:
         NonRepeatableMigrationError: si alguna no es repetible; no se aplica ninguna.
@@ -55,10 +70,27 @@ async def migrate(engine: AsyncClient, statements: Sequence[str]) -> None:
     check_repeatable(statements)
     for position, sql in enumerate(statements, start=1):
         try:
-            await engine.execute(sql, idempotent=True)
+            await _execute_when_free(engine, sql, busy_retries, busy_first_wait_seconds)
         except MinigestorError as error:
             raise MigrationError(_explained(position, sql, error)) from error
     logger.info("esquema al día: %d migraciones aplicadas o ya presentes", len(statements))
+
+
+async def _execute_when_free(
+    engine: AsyncClient, sql: str, retries: int, first_wait_seconds: float
+) -> None:
+    wait = first_wait_seconds
+    for _ in range(retries):
+        try:
+            await engine.execute(sql, idempotent=True)
+            return
+        except DomainError as error:
+            if error.kind != ENGINE_BUSY_KIND:
+                raise
+            logger.warning("catálogo ocupado; la migración espera %.1f s", wait)
+            await asyncio.sleep(wait)
+            wait = min(wait * 2, BUSY_MAX_WAIT_SECONDS)
+    await engine.execute(sql, idempotent=True)
 
 
 def _explained(position: int, sql: str, error: MinigestorError) -> str:

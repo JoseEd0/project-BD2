@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-FONT = b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"
+FONT = b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>"
 CATALOG = b"<< /Type /Catalog /Pages 2 0 R >>"
 PAGE_TEMPLATE = (
     b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "

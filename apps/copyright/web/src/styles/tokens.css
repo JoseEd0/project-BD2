@@ -1,25 +1,25 @@
 /* Los tokens de DESIGN.md. `data-theme` lo fija el kit en <html> antes de pintar. */
 :root {
   color-scheme: light;
-  --paper: #f4f6fa;
+  --paper: #f5f4f8;
   --paper-raised: #ffffff;
-  --paper-sunken: #e9edf4;
-  --ink: #111827;
-  --ink-soft: #3b4659;
-  --ink-faint: #566175;
-  --rule: #d3d9e4;
-  --rule-strong: #aab3c3;
-  --edition: #1b3874;
-  --edition-deep: #142b5a;
-  --on-edition: #f3f6fc;
-  --on-edition-soft: #c3cfe8;
-  --focus: #2563eb;
+  --paper-sunken: #ebe8f1;
+  --ink: #1b1726;
+  --ink-soft: #433d55;
+  --ink-faint: #5d5770;
+  --rule: #dcd8e6;
+  --rule-strong: #b3abc6;
+  --edition: #3a2a8c;
+  --edition-deep: #2b1f6b;
+  --on-edition: #f6f4ff;
+  --on-edition-soft: #cfc7f2;
+  --focus: #5b3fd9;
   --alert: #a3261b;
   --alert-wash: #fbeceb;
   --clear: #17683d;
   --clear-wash: #e6f4ec;
-  --waveform: #3b4659;
-  --waveform-played: #111827;
+  --waveform: #433d55;
+  --waveform-played: #1b1726;
   --swipe-alpha: 0.85;
   --chip-ink: #111827;
 
@@ -52,29 +52,29 @@
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
   --quick: 160ms;
   --stroke: 420ms;
-  --measure-width: 72rem;
+  --measure-width: 90rem;
 }
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --paper: #0d1424;
-  --paper-raised: #141e35;
-  --paper-sunken: #0a101d;
-  --ink: #e8edf6;
-  --ink-soft: #b4bed1;
-  --ink-faint: #8f9bb3;
-  --rule: #26324e;
-  --rule-strong: #3b4a6d;
-  --edition: #15254a;
-  --edition-deep: #0f1c3a;
-  --on-edition: #e8edf6;
-  --on-edition-soft: #a9b8d8;
-  --focus: #93b8ff;
+  --paper: #16131f;
+  --paper-raised: #201c2d;
+  --paper-sunken: #110e18;
+  --ink: #eeebf6;
+  --ink-soft: #c2bcd4;
+  --ink-faint: #9b94b0;
+  --rule: #322c45;
+  --rule-strong: #4b4363;
+  --edition: #2a2160;
+  --edition-deep: #1d1747;
+  --on-edition: #f1eeff;
+  --on-edition-soft: #bdb3ea;
+  --focus: #b7a6ff;
   --alert: #ff9a8f;
   --alert-wash: #2c1820;
   --clear: #7fd9a4;
   --clear-wash: #10261e;
-  --waveform: #8f9bb3;
-  --waveform-played: #e8edf6;
+  --waveform: #9b94b0;
+  --waveform-played: #eeebf6;
   --swipe-alpha: 0.9;
 }

@@ -48,7 +48,7 @@ export function DropZone({ onFile, disabled, notice, children }: DropZoneProps) 
           ¿Esta canción usa música del catálogo?
         </h1>
         <p id={hintId} className="dropzone__hint">
-          Arrastra aquí un audio o elígelo. Te mostramos qué tramos coinciden con qué canción original y los escuchas uno contra otro.
+          Arrastra aquí tu audio o elige una canción del catálogo con «Buscar parecidas». Te mostramos qué tramos coinciden con qué canción original y los escuchas uno contra otro.
         </p>
         <div className="dropzone__actions">
           <button type="button" className="button button--primary" disabled={disabled} aria-describedby={hintId} onClick={() => input.current?.click()}>

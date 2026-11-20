@@ -1,0 +1,9 @@
+# Lo único que la suite e2e cambia del compose de producción, sumado con
+# `-f compose.yaml -f e2e/compose.yaml` (ver e2e/run.sh). Todo lo demás —el gestor, las API,
+# las web, Redis, las claves— es el despliegue real.
+services:
+  faces-api:
+    environment:
+      # La cámara simulada repite una foto de frente: no puede girar la cabeza. Con el plan de
+      # una sola pose el registro termina de verdad (tomas, duplicados y `finish` en el gestor).
+      FACES_ENROLLMENT_POSES: '["front"]'

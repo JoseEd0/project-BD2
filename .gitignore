@@ -63,6 +63,10 @@ frontend/build/
 apps/**/dist/
 apps/**/test-results/
 apps/**/playwright-report/
+e2e/test-results/
+e2e/playwright-report/
+# Los datos diminutos, las claves y el video de la cámara que arma e2e/run.sh.
+e2e/.state/
 .vite/
 *.tsbuildinfo
 .eslintcache

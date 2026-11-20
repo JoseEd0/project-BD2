@@ -71,6 +71,25 @@ export default function LookalikesPage() {
           {search.error.message}
         </p>
       )}
+      {search.data === undefined && !search.isPending && (
+        <ol className="how-steps">
+          <li>
+            <p>
+              <strong>Tu foto se vuelve una huella.</strong> Encontramos tu cara y la convertimos en 128 números; la foto no se guarda.
+            </p>
+          </li>
+          <li>
+            <p>
+              <strong>El gestor busca a los más cercanos.</strong> Compara esa huella con las de 5 740 personas públicas en su índice HNSW.
+            </p>
+          </li>
+          <li>
+            <p>
+              <strong>Ves a tus cinco parecidos.</strong> Con su foto y cuánto se parecen a ti.
+            </p>
+          </li>
+        </ol>
+      )}
       {search.data !== undefined && (
         <section className="panel" aria-live="polite">
           <p>{search.data.message}</p>
@@ -83,7 +102,7 @@ export default function LookalikesPage() {
           )}
         </section>
       )}
-      <p className="muted">Labeled Faces in the Wild (Huang et al., UMass Amherst, 2007): 13 233 fotos de prensa de 5 749 personas.</p>
+      <p className="muted attribution">Labeled Faces in the Wild (Huang et al., UMass Amherst, 2007): 13 233 fotos de prensa de 5 749 personas.</p>
     </TextScreen>
   );
 }

@@ -39,4 +39,4 @@ Prometheus es un servicio en una red a la que está conectado y que el tablero s
 métricas que se exportan; la CI corre además `promtool check config`.
 
 La prueba de carga con 1, 2 y 4 réplicas que se mira en este tablero está en la
-[sección 20 de los benchmarks](../../benchmarks/README.md#20-prueba-de-carga--réplicas-de-cada-api-frente-a-un-solo-gestor).
+[sección 21 de los benchmarks](../../benchmarks/README.md#21-prueba-de-carga--réplicas-de-cada-api-frente-a-un-solo-gestor).

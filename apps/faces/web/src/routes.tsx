@@ -14,6 +14,7 @@ const HomePage = lazy(() => import("./pages/HomePage"));
 const EnrollPage = lazy(() => import("./pages/EnrollPage"));
 const RecognizePage = lazy(() => import("./pages/RecognizePage"));
 const MyDataPage = lazy(() => import("./pages/MyDataPage"));
+const LookalikesPage = lazy(() => import("./pages/LookalikesPage"));
 
 function Shell() {
   return (
@@ -35,7 +36,7 @@ function Shell() {
   );
 }
 
-export const ROUTES = { home: "/", enroll: "/registro", recognize: "/reconocer", myData: "/mis-datos" } as const;
+export const ROUTES = { home: "/", enroll: "/registro", recognize: "/reconocer", lookalikes: "/famosos", myData: "/mis-datos" } as const;
 
 export const routes: RouteObject[] = [
   {
@@ -46,6 +47,7 @@ export const routes: RouteObject[] = [
       { index: true, Component: HomePage, ErrorBoundary: RouteErrorBoundary },
       { path: "registro", Component: EnrollPage, ErrorBoundary: RouteErrorBoundary },
       { path: "reconocer", Component: RecognizePage, ErrorBoundary: RouteErrorBoundary },
+      { path: "famosos", Component: LookalikesPage, ErrorBoundary: RouteErrorBoundary },
       { path: "mis-datos", Component: MyDataPage, ErrorBoundary: RouteErrorBoundary },
       { path: "*", Component: NotFoundPage },
     ],

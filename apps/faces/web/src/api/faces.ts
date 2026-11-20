@@ -10,6 +10,8 @@ export type ShotResult = components["schemas"]["ShotResult"];
 export type Person = components["schemas"]["Person"];
 export type Enrolled = components["schemas"]["Enrolled"];
 export type Pose = components["schemas"]["Pose"];
+export type Lookalikes = components["schemas"]["Lookalikes"];
+export type FamousLookalike = components["schemas"]["FamousLookalike"];
 
 export type Outcome<T> = { readonly ok: true; readonly data: T } | { readonly ok: false; readonly problem: ApiProblem };
 
@@ -84,4 +86,19 @@ export function fetchPerson(personId: string): Promise<Outcome<Person>> {
 
 export function forgetPerson(personId: string): Promise<Outcome<unknown>> {
   return settle(client.DELETE("/person", { params: { header: { [PERSON_ID_HEADER]: personId } } }));
+}
+
+/** Las personas públicas de LFW más parecidas a la cara de la foto; la foto no se guarda. */
+export function findLookalikes(photo: Blob): Promise<Outcome<Lookalikes>> {
+  return settle(
+    client.POST("/lookalikes", {
+      body: { image: "" },
+      bodySerializer: () => photoForm(photo),
+    }),
+  );
+}
+
+/** La dirección de la foto de LFW que devuelve `findLookalikes` (`photo_path`). */
+export function lookalikePhotoUrl(person: FamousLookalike): string {
+  return `${API_BASE_URL}${person.photo_path}`;
 }

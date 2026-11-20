@@ -10,7 +10,8 @@ recomendador (Hit@10, NDCG@10) sea honesta, fichas y fotos de los productos, y t
 reales de Lima; y **el catálogo en el gestor** (#80): el esquema, la carga, las dos
 representaciones visuales (SIFT de la Parte 4 y CLIP en ONNX) y un API de lectura; y **el
 recomendador** (#81): cuatro señales del gestor fundidas y explicadas, con caché en Redis.
-La interfaz, **Cajón** (#83), vive en [`web/`](web/README.md); la evaluación llega en #82.
+La interfaz, **Cajón** (#83), vive en [`web/`](web/README.md); la evaluación (#82), en
+[Medido: calidad](#medido-calidad-82).
 
 | Módulo | Qué hace |
 |---|---|
@@ -517,8 +518,8 @@ Conclusiones:
 - **SIFT cuesta la mitad que CLIP en tiempo, y más en espacio de índice**: 71,5 s de
   `CREATE INDEX`, casi todo extraer SIFT de 24 580 fotos en 12 procesos, contra 138 s de
   embeddings más 0,8 s de HNSW. Su índice ocupa 60 MiB (el almacén de palabras de cada foto,
-  32 MiB, más el HNSW), más que el HNSW de CLIP (52 MiB). Cuál de las dos señales recomienda
-  mejor lo mide #82.
+  32 MiB, más el HNSW), más que el HNSW de CLIP (52 MiB). Como señal de recomendación, ninguna
+  de las dos predice la siguiente compra (ver [Medido: calidad](#medido-calidad-82)).
 - **Construir al final paga**: el invertido de 24 587 fichas en 3,0 s y el HNSW de 24 580
   vectores en 0,8 s, de una vez, dentro de las cargas de 15,4 y 16,9 s.
 - **El archivo secuencial carga rápido en orden**: 12 787 compras por segundo, porque cada
@@ -692,8 +693,39 @@ en
 | **recomendación completa, caché fría** | 100 | 68,9 ms | 142,8 ms |
 | **recomendación completa, caché caliente (Redis)** | 100 | 1,9 ms | 3,4 ms |
 
-Lo que esta medida no dice: la calidad de las recomendaciones, que es #82, y el
-comportamiento con varias réplicas a la vez.
+Lo que esta medida no dice: la calidad de las recomendaciones, que es la sección siguiente,
+y el comportamiento con varias réplicas a la vez.
+
+### Medido: calidad (#82)
+
+`python -m benchmarks.shop_evaluation_benchmark` deja fuera la última compra de cada usuario
+(prueba) y la penúltima (validación), le pide al recomendador una lista con sus compras de
+entrenamiento y mira si la compra que falta está en el top 10. 5 000 usuarios al azar
+(semilla 82), intervalos bootstrap del 95 % y compras conjuntas materializadas solo con el
+entrenamiento (comprobado). Detalle, figuras y conclusiones en la
+[sección 20 de los benchmarks](../../benchmarks/README.md#20-evaluación-del-recomendador-de-la-tienda--hit10-y-ndcg10-con-leave-last-out).
+
+| En la prueba | Hit@10 | NDCG@10 | Cobertura |
+|---|---:|---:|---:|
+| compras conjuntas | 4,36 % [3,82; 4,90] | 0,0239 | 13,2 % |
+| visual (CLIP) | 0,22 % [0,10; 0,36] | 0,0011 | 27,9 % |
+| texto (BM25) | 1,08 % [0,80; 1,36] | 0,0059 | 48,0 % |
+| cercanía (desde el centro de Lima) | 1,54 % [1,18; 1,88] | 0,0067 | 6,2 % |
+| fusión, pesos de partida (0,4 · 0,25 · 0,25 · 0,1) | 3,58 % [3,08; 4,06] | 0,0207 | 33,2 % |
+| **fusión, pesos ajustados (0,8 · 0 · 0,1 · 0,1)** | **4,58 % [3,98; 5,12]** | **0,0249** | 16,9 % |
+| lo más vendido | 2,58 % [2,16; 3,04] | 0,0137 | 0,07 % |
+| al azar | 0,04 % [0,00; 0,10] | 0,0003 | 86,8 % |
+
+- **Los pesos se ajustaron en la validación** (rejilla de pasos de 0,1, mayor NDCG@10) y se
+  midieron una vez en la prueba: +1,00 punto de Hit@10 [+0,66; +1,34] sobre los de partida.
+  Son los pesos por omisión desde entonces; cuestan variedad (cobertura del 33 % al 17 %).
+- **Las compras conjuntas hacen casi todo el acierto**; la imagen, con CLIP (0,22 %) o con
+  SIFT (0,30 %, sin diferencia significativa), casi no predice la siguiente compra, y la
+  validación le da peso 0.
+- **El arranque en frío está en los productos**: si el producto que hay que acertar tiene
+  menos de 5 compras de entrenamiento, ni las compras conjuntas ni lo más vendido aciertan y
+  el texto es la única señal que acierta claramente (1,22 %), aunque la fusión lo diluye
+  (0,17 %). Los usuarios con pocas compras, en cambio, reciben mejores listas (5,79 % con 3).
 
 ## Licencias
 

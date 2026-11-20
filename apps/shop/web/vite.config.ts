@@ -14,7 +14,7 @@ const TEST_API_BASE_URL = "http://app.test/api";
 // Los mismos valores que `--floor` y `--tolex` del tema claro en `src/styles/tokens.css`: el
 // manifiesto no puede leer CSS, y el sistema los pinta antes de que cargue la página.
 const BACKGROUND_COLOR = "#f2f3f1";
-const THEME_COLOR = "#151515";
+const THEME_COLOR = "#131a22";
 
 /** En desarrollo, el API se reenvía sin su prefijo, como lo hace nginx. */
 function devProxy(env: Record<string, string>): Record<string, ProxyOptions> {

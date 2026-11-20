@@ -39,6 +39,9 @@ gráficas de [`figures/`](figures/) y todas las tablas de este documento.
     --frames 200 --warmup 20 --fps 10
 .venv/bin/python -m benchmarks.copyright_evaluation_benchmark \
     --engine-dir data/copyright-engine --data-dir data/datasets
+.venv/bin/python -m benchmarks.shop_evaluation_benchmark --data-dir data/datasets \
+    --engine-data-dir <copia de un gestor con shop.seed> --signals <archivo de candidatos> \
+    --users 5000 --starting-weights 0.4 0.25 0.25 0.1
 .venv/bin/python -m benchmarks.plot              # redibuja todas las gráficas
 ```
 
@@ -2641,6 +2644,189 @@ Escribe `results/rag_evaluacion.json` (por modo y grupo, y el detalle de cada pr
 `results/rag_evaluacion_respuestas.json` (por pregunta: tiempos, fragmentos enviados, citas,
 tokens, costo, respuesta y, con `--judge`, el veredicto). Sin `--answers`, solo la
 recuperación.
+
+## 20. Evaluación del recomendador de la tienda — Hit@10 y NDCG@10 con *leave-last-out*
+
+`shop_evaluation_benchmark.py` mide la calidad del recomendador de la tienda (#81) con la
+partición `last_out` de Amazon Reviews 2023 (instrumentos musicales; ver
+[`apps/shop`](../apps/shop/README.md#la-partición-last_out-no-timestamp)): de cada usuario,
+la última compra es la **prueba** y la penúltima la **validación**; el resto es
+entrenamiento. Se le pide al recomendador de verdad (`Recommender.for_user`, el mismo código
+que `GET /usuarios/{id}/recomendaciones`) una lista a partir de las compras de entrenamiento
+del usuario y se mira si la compra que falta está entre las 10 primeras.
+
+- **Nada de la validación ni de la prueba alimenta al recomendador.** Las compras conjuntas
+  están materializadas solo con el entrenamiento: el experimento lo comprueba en
+  `shop_materializaciones` (`particion = train`, soporte 2, 500 pares por producto, 369 087
+  filas) y se detiene si no. El historial que describe al usuario es el de entrenamiento, y
+  [`test_shop_evaluation_end_to_end.py`](../tests/shop/test_shop_evaluation_end_to_end.py)
+  comprueba contra el gestor real que la tabla de pares coincide con la calculada solo con
+  el entrenamiento (y no con todas las compras), y que ninguna compra que se deja fuera está
+  en el historial ni suma clientes a un par con las compras del usuario.
+- **Medidas.** Con una sola compra que acertar, Hit@10 es 1 si está entre las 10 primeras y
+  NDCG@10 es `1 / log2(puesto + 1)` (0 fuera del top 10). Además, la **cobertura** (la
+  fracción de los 24 587 productos que aparece en alguna lista) y la **popularidad media**
+  (compras de entrenamiento de un producto recomendado, por puesto). Ninguna lista repite una
+  compra de entrenamiento del usuario (el recomendador las excluye); en este dataset ninguna
+  compra de validación ni de prueba es una recompra (0 de 57 439), así que excluirlas no le
+  quita aciertos posibles.
+- **Qué se compara.** Cada señal sola (sus candidatos en el orden en que los da el gestor),
+  la fusión del recomendador (`fuse`, min-max por señal y suma ponderada) con los pesos de
+  partida de #81 (0,4 · 0,25 · 0,25 · 0,1) y con los pesos ajustados, y dos referencias: **lo
+  más vendido** del entrenamiento y una lista **al azar** con semilla.
+- **La cercanía no tiene una ubicación real**: los usuarios del dataset no la tienen y el
+  inventario es sintético (cada tienda tiene productos muestreados en proporción a sus compras
+  de entrenamiento). Se mide desde el centro de Lima con el radio por omisión (5 km), así que
+  aquí la cercanía es, en la práctica, una señal de popularidad, y así se lee su peso.
+- **Muestra e intervalos.** 5 000 de los 57 439 usuarios, al azar con semilla 82 (una muestra
+  mayor con la misma semilla contiene a la menor). Los intervalos son **bootstrap por
+  percentiles del 95 %** sobre los usuarios (1 000 remuestreos), y las diferencias entre dos
+  listas son **pareadas** (se remuestrean usuarios, con las dos medidas de cada uno). Con 5 000
+  usuarios el intervalo de un Hit@10 del 4,6 % es de ±0,6 puntos y todas las diferencias que
+  se concluyen abajo lo excluyen al 0; pedir los candidatos de todos llevaría unas 4,8 h
+  (0,30 s por usuario) para estrechar los intervalos unas 3,4 veces.
+- **Coste.** Pedir los candidatos de los 5 000 usuarios tardó 24,6 min (0,30 s por usuario:
+  una petición con CLIP y cercanía y otra con SIFT, contra el gestor en otro proceso); se
+  guardan en un archivo JSON Lines y todo lo demás —la búsqueda de pesos, las señales solas,
+  los grupos— es Python sobre esas listas.
+
+Apple M4 Pro (12 núcleos), macOS, Python 3.12, con otros procesos en el equipo: carga media
+de 5 a 6 mientras se pedían los candidatos, y de 2,75 al empezar el análisis y 2,41 al
+terminar. Cifras crudas en
+[`results/tienda_evaluacion.json`](results/tienda_evaluacion.json).
+
+![Tienda: Hit@10 y NDCG@10 en la prueba](figures/tienda-evaluacion.png)
+
+| En la prueba (5 000 usuarios) | Hit@10 | NDCG@10 | Cobertura | Popularidad media |
+|---|---:|---:|---:|---:|
+| compras conjuntas | 4,36 % [3,82; 4,90] | 0,0239 [0,0205; 0,0271] | 13,2 % | 736 |
+| visual (CLIP) | 0,22 % [0,10; 0,36] | 0,0011 [0,0005; 0,0018] | 27,9 % | 19 |
+| texto (BM25) | 1,08 % [0,80; 1,36] | 0,0059 [0,0042; 0,0077] | 48,0 % | 23 |
+| cercanía (desde el centro de Lima) | 1,54 % [1,18; 1,88] | 0,0067 [0,0051; 0,0083] | 6,2 % | 370 |
+| fusión, pesos de partida (0,4 · 0,25 · 0,25 · 0,1) | 3,58 % [3,08; 4,06] | 0,0207 [0,0175; 0,0238] | 33,2 % | 468 |
+| **fusión, pesos ajustados (0,8 · 0 · 0,1 · 0,1)** | **4,58 % [3,98; 5,12]** | **0,0249 [0,0213; 0,0282]** | 16,9 % | 734 |
+| lo más vendido (entrenamiento) | 2,58 % [2,16; 3,04] | 0,0137 [0,0113; 0,0163] | 0,07 % | 1 158 |
+| al azar | 0,04 % [0,00; 0,10] | 0,0003 [0,0000; 0,0008] | 86,8 % | 16 |
+
+Entre corchetes, el intervalo del 95 %. En la validación, las mismas listas dan para las
+compras conjuntas 5,84 % y 0,0317, para la fusión de partida 4,44 % y 0,0264 y para la
+ajustada 6,00 % y 0,0327: todas bajan en la prueba, que está más lejos en el tiempo del
+entrenamiento.
+
+### Los pesos, ajustados en la validación
+
+La búsqueda recorre la rejilla de pasos de 0,1 sobre los pesos que suman 1 (286
+combinaciones de compras · visual · texto · cercanía; solo importa la proporción, porque cada
+señal ya vale de 0 a 1) y elige el **mayor NDCG@10 en la validación** (un empate, por Hit@10
+y después por los pesos). La prueba se mira una sola vez, con los pesos ya elegidos.
+
+![Tienda: la búsqueda de pesos en la validación](figures/tienda-evaluacion-pesos.png)
+
+| Pesos (compras · visual · texto · cercanía) | NDCG@10 validación | Hit@10 validación |
+|---|---:|---:|
+| **0,8 · 0 · 0,1 · 0,1** (puesto 1) | 0,0327 [0,0285; 0,0369] | 6,00 % |
+| 0,7 · 0 · 0,1 · 0,2 (2) | 0,0326 | 6,00 % |
+| 0,7 · 0,1 · 0,1 · 0,1 (3) | 0,0325 | 5,96 % |
+| 0,9 · 0 · 0,1 · 0 (5) | 0,0325 | 5,94 % |
+| 0,4 · 0,25 · 0,25 · 0,1 (de partida) | 0,0264 [0,0227; 0,0304] | 4,44 % |
+
+| Diferencia en la prueba (pareada) | Hit@10 | NDCG@10 |
+|---|---:|---:|
+| ajustados menos de partida | +1,00 puntos [+0,66; +1,34] | +0,0041 [+0,0028; +0,0055] |
+| fusión ajustada menos compras conjuntas solas | +0,22 puntos [+0,04; +0,40] | +0,0009 [+0,0002; +0,0016] |
+
+### Arranque en frío
+
+![Tienda: arranque en frío por grupo](figures/tienda-evaluacion-frio.png)
+
+| Hit@10 en la prueba | Usuarios | Compras conjuntas | Texto | Fusión ajustada | Lo más vendido |
+|---|---:|---:|---:|---:|---:|
+| usuarios con 3 compras de entrenamiento | 1 434 | 5,37 % | 1,53 % | 5,79 % | 3,07 % |
+| usuarios con 4 | 868 | 4,84 % | 1,27 % | 5,41 % | 2,53 % |
+| usuarios con 5 a 9 | 1 804 | 4,05 % | 0,67 % | 4,05 % | 2,61 % |
+| usuarios con 10 o más | 894 | 2,91 % | 1,01 % | 2,91 % | 1,79 % |
+| producto acertado con 0 a 4 compras | 576 | 0 % | **1,22 % [0,35; 2,26]** | 0,17 % | 0 % |
+| producto acertado con 5 a 19 | 1 623 | 0,12 % | **1,05 %** | 0,49 % | 0 % |
+| producto acertado con 20 a 99 | 1 685 | 1,25 % | 1,36 % | 1,31 % | 0 % |
+| producto acertado con 100 o más | 1 116 | 17,47 % | 0,63 % | 17,74 % | 11,56 % |
+
+La fusión sin compras conjuntas (el arranque en frío del recomendador, que pasa su peso a
+imagen y texto) se dio en 6 de los 5 000 usuarios: con hasta 10 compras de perfil casi
+siempre hay algún par con soporte 2. No es una cifra que se pueda leer.
+
+### CLIP contra SIFT
+
+![Tienda: CLIP contra SIFT](figures/tienda-evaluacion-visual.png)
+
+| En la prueba | Hit@10 | NDCG@10 | Cobertura |
+|---|---:|---:|---:|
+| CLIP sola | 0,22 % [0,10; 0,36] | 0,0011 | 27,9 % |
+| SIFT sola | 0,30 % [0,14; 0,46] | 0,0017 | 56,2 % |
+| SIFT menos CLIP, solas (pareada) | +0,08 puntos [−0,12; +0,28] | +0,0007 [−0,0004; +0,0019] | |
+| compras + CLIP + texto (pesos de validación 0,9 · 0 · 0,1) | 4,50 % | 0,0247 | 19,0 % |
+| compras + SIFT + texto (pesos de validación 0,9 · 0 · 0,1) | 4,50 % | 0,0246 | 19,0 % |
+
+Las dos pasadas (con CLIP y con SIFT) trajeron exactamente las mismas compras conjuntas y el
+mismo texto para los 5 000 usuarios, así que la diferencia es solo la señal visual.
+
+### Conclusiones
+
+- **Las compras conjuntas son casi todo lo que acierta.** Solas dan 4,36 % de Hit@10, 1,7
+  veces lo más vendido (2,58 %) y cien veces el azar; ninguna otra señal sola pasa del
+  1,6 %. Fundir le suma poco pero algo medible: +0,22 puntos [+0,04; +0,40] con los pesos
+  ajustados.
+- **Los pesos de partida perdían acierto, los ajustados lo recuperan.** La fusión de #81
+  (0,4 · 0,25 · 0,25 · 0,1) quedaba por debajo de las compras conjuntas solas (3,58 % contra
+  4,36 %): la imagen y el texto, con un cuarto del peso cada una, desplazaban pares buenos. En
+  la validación ganan los pesos 0,8 · 0 · 0,1 · 0,1 y en la prueba suben 1,00 punto
+  [+0,66; +1,34] de Hit@10 y +0,0041 de NDCG@10 sobre los de partida, con intervalos pareados
+  que excluyen el 0. **Pasan a ser los pesos por omisión** (`SHOP_*_WEIGHT`).
+- **La rejilla no distingue bien entre sus primeras combinaciones**: las ocho mejores caen en
+  0,0322 a 0,0327 de NDCG@10 en la validación, dentro del intervalo unas de otras. Lo que sí
+  está claro es la forma: compras conjuntas entre 0,6 y 0,9, texto 0,1, imagen 0 o 0,1.
+  0,7 · 0,1 · 0,1 · 0,1 (tercera, a 0,0002) conserva algo de imagen si la tienda la quiere por
+  variedad, algo que esta medida no premia.
+- **El precio del acierto es la variedad.** Los pesos ajustados recomiendan el 16,9 % del
+  catálogo (los de partida, el 33,2 %) y productos con 734 compras de media (468): se parecen
+  a las compras conjuntas, que ya tiran a lo popular. Lo más vendido cubre el 0,07 % y el azar
+  el 86,8 %.
+- **El arranque en frío está en los productos, no en los usuarios.** Un usuario con 3 compras
+  recibe mejores listas que uno con 10 o más (5,79 % contra 2,91 %): sus pocas compras son
+  recientes y cercanas a la siguiente. En cambio, cuando el producto que hay que acertar tiene
+  menos de 5 compras de entrenamiento (el 11,5 % de los usuarios), las compras conjuntas y lo
+  más vendido no aciertan nunca y **el texto es la única señal que acierta claramente**
+  (1,22 %; de 5 a 19 compras, 1,05 %; el azar acierta 2 de 576). La fusión ajustada lo diluye (0,17 % y 0,49 %): con el texto a 0,1, sus candidatos
+  quedan detrás de los pares. Una fusión que diera más peso al texto cuando los candidatos
+  tienen pocas compras atacaría ese grupo; queda como trabajo pendiente, no se probó.
+- **La imagen casi no predice la siguiente compra, con CLIP ni con SIFT.** Solas dan 0,22 % y
+  0,30 % (la diferencia pareada, +0,08 puntos [−0,12; +0,28], no es distinta de 0), cinco
+  veces el azar pero muy por debajo del texto. Quien compra un pedal compra después un cable,
+  no otro pedal parecido. Por eso la validación les da peso 0 en la fusión a las dos y las
+  fusiones con CLIP y con SIFT quedan iguales (4,50 %). SIFT cubre el doble del catálogo
+  (56 % contra 28 %): sus vecinos se reparten más. El parecido visual sigue sirviendo para lo
+  que esta medida no ve, como «se ve parecido» en la ficha o buscar fotos con palabras.
+- **La cercanía se lleva un 0,1 por ser popularidad**, no por geografía: desde un punto fijo
+  y con un inventario muestreado por ventas, sus productos tienen 370 compras de media.
+- **Lo que esta medida no dice**: la última compra es una sola de muchas compras posibles, así
+  que un Hit@10 del 4,6 % no es «acierta una de cada veinte veces» sino «la compra exacta que
+  hizo está en sus 10». Tampoco mide la recomendación por producto (la ficha), ni la
+  explicación, ni la cercanía con una ubicación real.
+
+### Reproducirlo
+
+```bash
+cp -R <gestor cargado con shop.seed> /tmp/tienda-evaluacion && rm -f /tmp/tienda-evaluacion/.motor.lock
+uv run --no-sync python -m benchmarks.shop_evaluation_benchmark --data-dir data/datasets \
+    --engine-data-dir /tmp/tienda-evaluacion --signals data/tienda-evaluacion-senales.jsonl \
+    --users 5000 --seed 82 --starting-weights 0.4 0.25 0.25 0.1
+uv run --no-sync python -m benchmarks.plot
+```
+
+`--signals` guarda los candidatos de cada usuario y una ejecución cortada sigue desde el
+último guardado; con el archivo completo, la evaluación entera se repite sin volver a pedirlos.
+`--starting-weights` fija los pesos con que se compara la fusión ajustada (los de #81); sin él
+se usan los de la configuración, que desde esta medida son los ajustados. `--grid-steps`,
+`--k`, `--resamples` y `--confidence` cambian la rejilla, el corte y el bootstrap.
 
 ## Gráficas
 

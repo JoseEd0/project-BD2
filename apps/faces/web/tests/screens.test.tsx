@@ -66,6 +66,7 @@ describe("screens", () => {
     expect(await screen.findByRole("heading", { level: 1, name: "Tu cara, tres tomas y listo" })).toBeTruthy();
     expect(screen.getByRole("link", { name: /Registrarme/ })).toBeTruthy();
     expect(screen.getByRole("link", { name: /Reconocer en vivo/ })).toBeTruthy();
+    expect(screen.getByRole("link", { name: /A qué famoso te pareces/ })).toBeTruthy();
     expect(screen.getByRole("link", { name: /Mis datos/ })).toBeTruthy();
     expect(await screen.findByText("Servicio disponible")).toBeTruthy();
   });
@@ -110,6 +111,25 @@ describe("screens", () => {
     expect(deletion?.headers.get("X-Person-Id")).toBe(PERSON_ID);
     expect(new URL(deletion?.url ?? "").pathname).toBe("/api/person");
     expect(loadPeople()).toEqual([]);
+  });
+
+  it("shows the public figures that look like the chosen photo, with their LFW photo", async () => {
+    const people = [
+      { id: 7, name: "Eileen Collins", similarity: 0.61, percent: 61, photos: 2, photo_path: "/lookalikes/7/photo" },
+      { id: 3, name: "Bo Li", similarity: 0.24, percent: 24, photos: 1, photo_path: "/lookalikes/3/photo" },
+    ];
+    const requests = service((url) => (url.pathname === "/api/lookalikes" ? jsonResponse({ people, message: "Las personas públicas de LFW que más se te parecen." }) : null));
+    const user = userEvent.setup();
+    renderAt("/famosos");
+    const picker = await screen.findByLabelText("Tomar o elegir una foto");
+    await user.upload(picker, new File(["jpeg"], "yo.jpg", { type: "image/jpeg" }));
+    expect(await screen.findByText(/Eileen Collins/)).toBeTruthy();
+    expect(screen.getByText(/61 % de parecido/)).toBeTruthy();
+    const photo = screen.getByRole("img", { name: "Foto de Eileen Collins en LFW" }).getAttribute("src") ?? "";
+    expect(new URL(photo, "http://app.test").pathname).toBe("/api/lookalikes/7/photo");
+    expect(screen.getAllByRole("listitem")).toHaveLength(2);
+    const query = requests.find((request) => request.method === "POST");
+    expect(new URL(query?.url ?? "").pathname).toBe("/api/lookalikes");
   });
 
   it("answers an unknown path with a way back", async () => {

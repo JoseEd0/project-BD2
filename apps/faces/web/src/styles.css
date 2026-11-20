@@ -1251,3 +1251,57 @@ ul {
     border: 1px solid CanvasText;
   }
 }
+
+/* «¿A qué famoso te pareces?»: el input de archivo queda oculto y su etiqueta hace de botón. */
+.photo-picker:focus-visible + .button {
+  outline: 3px solid var(--focus);
+  outline-offset: 3px;
+}
+
+.lookalikes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.lookalike {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+}
+
+.lookalike img {
+  border-radius: var(--radius);
+  object-fit: cover;
+  flex: none;
+  background: var(--line);
+}
+
+.lookalike-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+  flex: 1;
+}
+
+.lookalike-rank {
+  color: var(--ink-soft);
+}
+
+.lookalike-meter {
+  display: block;
+  height: 6px;
+  border-radius: var(--pill);
+  background: var(--line);
+  overflow: hidden;
+}
+
+.lookalike-meter span {
+  display: block;
+  height: 100%;
+  background: var(--primary);
+}

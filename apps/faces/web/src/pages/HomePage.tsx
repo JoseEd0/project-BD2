@@ -47,6 +47,7 @@ export default function HomePage() {
       <nav className="home-actions" aria-label="Qué quieres hacer">
         <Choice to="/registro" icon="user" title="Registrarme" detail="Consentimiento, tu nombre y tres tomas" primary />
         <Choice to="/reconocer" icon="scan" title="Reconocer en vivo" detail="Apunta la cámara a una o varias caras" />
+        <Choice to="/famosos" icon="faceFront" title="¿A qué famoso te pareces?" detail="Una selfie contra 5 749 personas públicas" />
         <Choice
           to="/mis-datos"
           icon="shield"

@@ -71,6 +71,8 @@ uvicorn --factory faces.api:create_app --host 0.0.0.0 --port 8000
 | `DELETE /enrollments/{id}` | cancela: borra la sesión y sus tomas (`204`, también si ya no estaba) |
 | `POST /enrollments/{id}/finish` | `201` con la persona creada y su `person_id`, el código para ver o borrar el registro |
 | `POST /identify` | una foto → cada rostro, del más grande al más chico, con `known` (nombre y coseno), `unknown` (y el mejor coseno visto) o `too_small` |
+| `POST /lookalikes` | una foto → las `FACES_LOOKALIKE_COUNT` (5) personas públicas de LFW más parecidas a su rostro más grande, con su coseno, el porcentaje y la ruta de su foto: ver *¿A qué famoso te pareces?* |
+| `GET /lookalikes/{id}/photo` | la foto de LFW de una de esas personas; la ruta sale de la tabla, nunca de la petición (`404` si no está) |
 | `GET /person` | con el código en la cabecera `X-Person-Id`: lo que se guarda de la persona, salvo sus embeddings (derecho de acceso) |
 | `DELETE /person` | con el código en `X-Person-Id`: borra la persona y todos sus embeddings (`204`, también si ya no estaba) |
 | `WS /ws/recognize` | el reconocimiento en vivo: ver *Reconocimiento en vivo* |
@@ -78,7 +80,7 @@ uvicorn --factory faces.api:create_app --host 0.0.0.0 --port 8000
 
 Cada respuesta lleva `X-Request-ID` y `Server-Timing` con las etapas `analisis` (decodificar,
 detectar, medir y embeber), `sesion` (leer la sesión y sus tomas), `galeria` (el HNSW y los
-nombres) y `guardar`. Los errores tienen la forma común `{error, kind, request_id}`; `error`
+nombres), `famosos` (el HNSW de LFW) y `guardar`. Los errores tienen la forma común `{error, kind, request_id}`; `error`
 es un mensaje en español para la persona y `kind` lo que la interfaz usa para decidir:
 
 | `kind` | Estado | Cuándo |
@@ -339,6 +341,34 @@ y `/ready` responden con `"degraded": {"redis": "…"}` sin dejar de estar `ok` 
 caché y tampoco es una degradación. Un cliente puede pedir cuadros sin rastros con
 `"track_cache": false` en su `hello`: es lo que usa el benchmark para medir su efecto.
 
+## ¿A qué famoso te pareces?
+
+La pantalla `/famosos` de la PWA toma una selfie (o una foto elegida) y muestra las cinco
+personas públicas de **LFW** que más se le parecen, con su foto y el porcentaje de parecido.
+Es la búsqueda k-NN del gestor a la vista: el embedding de SFace del rostro más grande va a
+`SIMILAR_TO(embedding, $1, k = 5)` sobre el HNSW de `face_famosos`.
+
+- **Una fila por persona.** `faces.famous` promedia los embeddings de todas las fotos de
+  cada persona (el centro de su nube, normalizado) y guarda la foto más cercana a ese
+  centro, que es la que se muestra. Así los cinco vecinos ya son cinco personas distintas y
+  una persona con 530 fotos no tapa a las demás. De cada foto se toma el rostro del centro,
+  como en la evaluación (`faces.detection.center_face`).
+- **La carga** (`faces.seed`, `docker compose run --rm faces-seed`) lee
+  `data/datasets/lfw/lfw` de solo lectura (`python -m faces lfw --salida data/datasets/lfw`),
+  calcula los embeddings en `FACES_SEED_WORKERS` procesos y carga la tabla con la carga
+  masiva. Si la tabla ya tiene filas no hace nada; si el gestor rechaza un lote, borra lo
+  cargado y la siguiente ejecución empieza de cero.
+- **Medido** con las 13 233 fotos, en proceso contra el gestor real (M4 Pro, 4 procesos, con
+  la máquina cargada: carga media de 7,8 a 71,7): **5 740 de las 5 749 personas** tienen al
+  menos una foto con rostro y la carga tarda **92,2 s**. `POST /lookalikes` tarda **22,2 ms de
+  mediana** (p95 24,2 ms, 38 consultas): 18,3 ms en analizar la foto y **2,8 ms en el HNSW**.
+- **Solo personas públicas.** Se compara con `face_famosos` y nunca con `face_embeddings`:
+  ver la privacidad, abajo.
+- **LFW** (Huang, Ramesh, Berg y Learned-Miller, *Labeled Faces in the Wild*, UMass Amherst,
+  2007) se publica para investigación; sus fotos son de prensa y sus derechos, de sus
+  autores. Aquí se usan en una demostración académica sin fines comerciales, y la interfaz
+  lo dice bajo los resultados.
+
 ## Privacidad (Ley 29733)
 
 Un rostro es un dato biométrico, y la Ley 29733 de Protección de Datos Personales lo cuenta
@@ -365,6 +395,12 @@ y por escrito, y la persona tiene derecho a acceder a sus datos y a cancelarlos.
   cualquier proxy que se sume, y enmascarar exigiría acordarse de cada uno. Lo prueban un
   test del log del servicio, otro del `log_format` del nginx y la CI, que pide y borra un
   registro por `:8104` y busca el código en los logs de `faces-web` y `faces-api`.
+- **Nunca a quién de la galería te pareces.** Ni el registro ni «¿A qué famoso te
+  pareces?» dicen a qué persona registrada se parece alguien: sería tratar el dato
+  biométrico de un tercero para algo que no consintió. Por eso un registro demasiado
+  parecido a otro se rechaza sin nombrarlo (`LookalikeError`), y la búsqueda de parecidos
+  usa solo las personas públicas de LFW, en su propia tabla. La foto de esa búsqueda
+  tampoco se guarda.
 - **Caducidad.** Cada registro vence a los `FACES_RETENTION_DAYS` (30) días. Al vencer deja
   de reconocerse y de verse **en ese momento** (las consultas filtran por `expira_en`), y
   cada réplica corre cada `FACES_PURGE_INTERVAL_SECONDS` (5 minutos) un borrado de lo
@@ -398,6 +434,9 @@ Además de lo común de `appkit` (`FACES_ENGINE_URL`, `FACES_ENGINE_KEY`,
 | `FACES_STREAM_MAX_FPS` | cuadros por segundo que procesa una conexión | `15` |
 | `FACES_STREAM_IDLE_TIMEOUT_SECONDS` | sin mensajes por este tiempo, se cierra | `30` |
 | `FACES_STREAM_MAX_CONNECTIONS` | conexiones de reconocimiento por réplica | `16` |
+| `FACES_DATA_DIR` | la carpeta de datasets, con LFW en `lfw/lfw/`: de ahí salen las fotos de «¿A qué famoso te pareces?» (obligatoria en la carga) | ninguna; el compose usa `/app/data/datasets` |
+| `FACES_LOOKALIKE_COUNT` | personas de LFW que devuelve `POST /lookalikes` | `5` |
+| `FACES_SEED_WORKERS` | procesos que calculan los embeddings de LFW en la carga | `2` |
 | `FACES_TRACK_MIN_IOU`, `FACES_TRACK_VERIFY_SECONDS`, `FACES_TRACK_LOST_SECONDS` | el seguimiento: solapamiento mínimo, cuánto vale una identidad, cuánto se guarda un rastro perdido | `0.3`, `2`, `1` |
 | `FACES_TRACK_SESSION_TTL_SECONDS` | cuánto viven en Redis los rastros de una sesión sin cuadros | `60` |
 
@@ -415,9 +454,11 @@ Con dos pipelines y recién arrancada, una réplica usa unos 290 MiB; su tope es
 [`web/`](web/README.md), servida por la imagen común del kit; su nginx permite la cámara
 (`camera=(self)`, y nada de micrófono ni ubicación), acepta
 subidas de 11 MB (`FACES_WEB_MAX_BODY_SIZE`: una foto de 10 MiB y el multipart) y baja el
-límite a 5 peticiones por segundo por IP con ráfaga de 20, porque cada foto cuesta CPU. No
-hay carga inicial (`faces.seed`): el servicio arranca vacío y sus tablas las crean las
-migraciones. La CI levanta el compose y, por `:8104`, comprueba las sondas, el
+límite a 5 peticiones por segundo por IP con ráfaga de 20, porque cada foto cuesta CPU. El servicio
+arranca sin personas registradas y sus tablas las crean las migraciones; la carga
+`faces-seed` (perfil `seed`) solo trae las personas públicas de LFW, que el compose monta de
+solo lectura en el API (para servir sus fotos) y en la carga (`FACES_DATA_DIR`). La CI
+levanta el compose y, por `:8104`, comprueba las sondas, el
 consentimiento, una toma aceptada de frente con un retrato de prueba, el reconocimiento de
 la foto de grupo y el WebSocket: dos cuadros de un retrato por el nginx, con su respuesta y
 su rastro guardado en Redis. La API usa el `redis` del compose (red `cache`, base 1) para
@@ -426,6 +467,7 @@ los rastros; si se cae, el reconocimiento en vivo sigue sin ellos.
 ```bash
 python -m tools.compose_keys && deploy/certs.sh
 docker compose up -d --build                     # http://localhost:8104, https://<ip>:8404
+docker compose run --rm faces-seed               # LFW para «¿A qué famoso te pareces?»
 docker compose --profile tunnel up -d faces-tunnel && docker compose logs faces-tunnel | grep trycloudflare.com
 ```
 

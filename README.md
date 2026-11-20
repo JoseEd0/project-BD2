@@ -307,8 +307,9 @@ aplicación: una `write` con la que atiende y una `admin` solo para sus migracio
 recibe sus huellas en `MINIGESTOR_API_KEYS`. Conserva las que ya hay. Sin `.env` el gestor
 queda abierto, lo que solo sirve para desarrollar.
 
-**Datos de cada aplicación (perfil `seed`).** Rostros arranca vacío: cada persona se
-registra desde la web. Las otras tres cargan su dataset con un trabajo que se puede repetir
+**Datos de cada aplicación (perfil `seed`).** Rostros arranca sin personas registradas:
+cada una se registra desde la web; su carga solo trae las personas públicas de LFW para
+«¿A qué famoso te pareces?». Las otras tres cargan su dataset con un trabajo que se puede repetir
 (la segunda vez no carga nada). Los datos se bajan antes en el anfitrión, en `data/datasets/`,
 que el gestor y la carga montan de solo lectura; para eso sí hace falta el entorno de
 Python del proyecto (`uv sync --all-packages`, ver 3.3):
@@ -326,6 +327,10 @@ docker compose run --rm shop-seed
 uv run python -m rag.corpus build --data-dir data/datasets \
     --material Proyecto_Integrador_BD2.md --material docs/informe.pdf
 docker compose run --rm papers-seed
+
+# rostros: las 5 749 personas públicas de LFW para «¿A qué famoso te pareces?» (172 MiB)
+uv run python -m faces lfw --salida data/datasets/lfw
+docker compose run --rm faces-seed
 ```
 
 Los tiempos y el espacio de cada carga están en [`benchmarks/README.md`](benchmarks/README.md)

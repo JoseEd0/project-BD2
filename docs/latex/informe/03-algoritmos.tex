@@ -136,9 +136,10 @@ de la Parte~4 sobre sus MFCC: 83\,290 filas. Una subida se corta con las mismas 
 el gestor busca los vecinos de todas en un solo lote. Un tramo suelto puede parecerse a
 cualquier canción del mismo género, así que se detecta una copia cuando varias ventanas
 seguidas votan por la misma canción con el mismo desfase $t_{subida} - t_{original}$ y el
-original avanza con la subida. El puntaje es la similitud media de la racha por su
-cobertura, la fracción de ventanas que las dos grabaciones podían compartir. Las ventanas
-en silencio no votan.
+original avanza con la subida. El puntaje mide la evidencia de la racha: su largo en
+ventanas sobre 7 (una copia de 20~s), a lo sumo 1, por su similitud media llevada de
+$[0.85, 1]$ a $[0, 1]$, porque por debajo de 0.85 dos canciones distintas del FMA ya dan
+rachas. Las ventanas en silencio no votan.
 
 \paragraph{Tienda.} Usa los cuatro tipos de datos del gestor: compras en un archivo
 secuencial ordenado por fecha, descripciones en un índice invertido en inglés, fotos con

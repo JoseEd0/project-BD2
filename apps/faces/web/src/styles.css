@@ -345,7 +345,14 @@ ul {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  background: linear-gradient(to bottom, transparent, var(--ground) var(--space-4));
+  background: var(--ground);
+  border-top: 1px solid var(--line);
+  box-shadow: 0 -8px 16px -12px rgb(12 43 58 / 0.35);
+}
+
+.checkbox-compact {
+  border-width: 1px;
+  padding: var(--space-2) var(--space-3);
 }
 
 .brand {
@@ -584,44 +591,30 @@ ul {
 
 /* El tema */
 
+/* El tema, en la barra de cada pantalla de texto: tres íconos sobre la cortina. */
 .theme-choice {
-  border: 0;
-  padding: 0;
-  margin: 0;
   display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.theme-choice legend {
-  padding: 0;
-  margin-bottom: var(--space-2);
-  font-size: var(--text-sm);
-  color: var(--ink-soft);
-}
-
-.segmented {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  padding: 4px;
-  gap: 4px;
+  gap: 2px;
+  margin: 0 0 0 auto;
+  padding: 3px;
+  border: 0;
   border-radius: var(--pill);
-  background: var(--surface);
-  border: 1px solid var(--line);
+  background: var(--curtain-raised);
 }
 
-.segmented label {
+.theme-choice label {
   position: relative;
   display: grid;
   place-items: center;
-  min-height: 2.75rem;
+  width: 2.75rem;
+  height: 2.75rem;
   border-radius: var(--pill);
-  font-size: var(--text-sm);
-  font-weight: 600;
+  color: var(--curtain-ink-soft);
   cursor: pointer;
+  transition: background-color var(--quick) var(--ease-out), color var(--quick) var(--ease-out);
 }
 
-.segmented input {
+.theme-choice input {
   position: absolute;
   inset: 0;
   opacity: 0;
@@ -629,13 +622,17 @@ ul {
   cursor: pointer;
 }
 
-.segmented label:has(input:checked) {
-  background: var(--primary);
-  color: var(--primary-ink);
+.theme-choice label:hover {
+  color: var(--curtain-ink);
 }
 
-.segmented label:has(input:focus-visible) {
-  outline: 3px solid var(--focus);
+.theme-choice label:has(input:checked) {
+  background: var(--flash);
+  color: var(--curtain);
+}
+
+.theme-choice label:has(input:focus-visible) {
+  outline: 3px solid var(--lamp);
   outline-offset: 2px;
 }
 
@@ -675,57 +672,114 @@ ul {
   height: 70%;
 }
 
-.home-actions {
+.home-nav {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--space-4);
+}
+
+/* La acción principal es la que abre la cabina: la luz de «ahora» la marca. */
+.home-start {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-5) var(--space-4) var(--space-5) var(--space-5);
+  border-radius: var(--radius);
+  background: var(--primary);
+  color: var(--primary-ink);
+  text-decoration: none;
+  box-shadow: 0 8px 20px -10px rgb(12 43 58 / 0.55);
+  transition: transform var(--quick) var(--ease-out), box-shadow var(--quick) var(--ease-out);
+}
+
+.home-start:hover {
+  box-shadow: 0 12px 24px -10px rgb(12 43 58 / 0.6);
+}
+
+.home-start:active {
+  transform: scale(0.985);
+}
+
+.home-start-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  flex: 1;
+}
+
+.home-start-text strong {
+  font-size: var(--text-lg);
+}
+
+.home-start-text span {
+  font-size: var(--text-sm);
+  opacity: 0.88;
+}
+
+.home-start-go {
+  display: grid;
+  place-items: center;
+  width: var(--target);
+  height: var(--target);
+  flex: none;
+  border-radius: var(--pill);
+  background: var(--lamp);
+  color: var(--curtain);
+}
+
+/* Lo demás, en una sola lista: filas, no tarjetas iguales. */
+.home-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.home-list li + li {
+  border-top: 1px solid var(--line);
 }
 
 .home-choice {
   display: grid;
   grid-template-columns: auto 1fr auto;
   align-items: center;
-  gap: var(--space-4);
-  padding: var(--space-4);
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4);
   min-height: 4.5rem;
-  border-radius: var(--radius);
-  border: 2px solid var(--line);
-  background: var(--surface);
   color: var(--ink);
   text-decoration: none;
-  transition: border-color var(--quick) var(--ease-out);
+  transition: background-color var(--quick) var(--ease-out);
 }
 
 .home-choice:hover {
-  border-color: var(--ink-soft);
+  background: color-mix(in srgb, var(--ground) 70%, var(--surface));
 }
 
-.home-choice:active {
-  opacity: 0.85;
+.home-choice:focus-visible {
+  outline-offset: -3px;
 }
 
-.home-choice strong {
-  display: block;
-  font-size: var(--text-md);
-}
-
-.home-choice span {
-  font-size: var(--text-sm);
+.home-choice > svg {
   color: var(--ink-soft);
 }
 
-.home-choice-primary {
-  background: var(--primary);
-  border-color: var(--primary);
-  color: var(--primary-ink);
+.home-choice-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
-.home-choice-primary:hover {
-  border-color: var(--primary);
+.home-choice-text strong {
+  font-size: var(--text-md);
 }
 
-.home-choice-primary span {
-  color: inherit;
+.home-choice-text span {
+  font-size: var(--text-sm);
+  color: var(--ink-soft);
+  line-height: 1.4;
 }
 
 .home-choice-icon {
@@ -735,12 +789,7 @@ ul {
   height: 2.75rem;
   border-radius: 12px;
   background: var(--ground);
-  color: var(--ink);
-}
-
-.home-choice-primary .home-choice-icon {
-  background: var(--lamp);
-  color: var(--curtain);
+  color: var(--primary);
 }
 
 /* La cámara: el video llena la pantalla; arriba solo lectura, abajo lo que se toca. */
@@ -1304,4 +1353,48 @@ ul {
   display: block;
   height: 100%;
   background: var(--primary);
+}
+
+/* Cómo funciona una búsqueda de parecidos: los tres pasos, en orden, antes de la primera foto. */
+.how-steps {
+  list-style: none;
+  counter-reset: how-step;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.how-steps li {
+  counter-increment: how-step;
+  display: grid;
+  grid-template-columns: 2rem 1fr;
+  gap: var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--ink-soft);
+  line-height: 1.45;
+}
+
+.how-steps li::before {
+  content: counter(how-step);
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: var(--pill);
+  background: var(--primary);
+  color: var(--primary-ink);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.how-steps strong {
+  display: block;
+  color: var(--ink);
+  font-size: var(--text-md);
+}
+
+.attribution {
+  margin-top: var(--space-4);
 }

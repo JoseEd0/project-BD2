@@ -1,9 +1,10 @@
 import { useMutation } from "@tanstack/react-query";
-import { useId, type ChangeEvent } from "react";
+import { useEffect, useId, useState, type ChangeEvent } from "react";
 
 import { findLookalikes, lookalikePhotoUrl, type FamousLookalike, type Lookalikes } from "../api/faces";
 import type { ApiProblem } from "../api/problems";
 import { Icon } from "../components/Icon";
+import { SelfieCamera } from "../components/SelfieCamera";
 import { TextScreen } from "../components/TextScreen";
 
 class LookalikesError extends Error {
@@ -39,27 +40,68 @@ function LookalikeCard({ person, rank }: { readonly person: FamousLookalike; rea
   );
 }
 
+/** La foto enviada, para verla junto a los resultados; su URL se libera al cambiarla. */
+function usePhotoPreview(photo: Blob | null): string | null {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (photo === null) {
+      setUrl(null);
+      return;
+    }
+    const created = URL.createObjectURL(photo);
+    setUrl(created);
+    return () => URL.revokeObjectURL(created);
+  }, [photo]);
+  return url;
+}
+
 export default function LookalikesPage() {
   const inputId = useId();
   const search = useMutation({ mutationFn: lookalikesOf });
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [photo, setPhoto] = useState<Blob | null>(null);
+  const preview = usePhotoPreview(photo);
+  const send = (chosen: Blob) => {
+    setPhoto(chosen);
+    search.mutate(chosen);
+  };
   const choose = (event: ChangeEvent<HTMLInputElement>) => {
-    const photo = event.target.files?.[0];
+    const chosen = event.target.files?.[0];
     event.target.value = "";
-    if (photo !== undefined) {
-      search.mutate(photo);
+    if (chosen !== undefined) {
+      send(chosen);
     }
   };
+
+  if (cameraOpen) {
+    return (
+      <SelfieCamera
+        title="Tu selfie"
+        onCancel={() => setCameraOpen(false)}
+        onCapture={(captured) => {
+          setCameraOpen(false);
+          send(captured);
+        }}
+      />
+    );
+  }
+
   return (
     <TextScreen
       title="¿A qué famoso te pareces?"
       intro="Tómate una selfie o elige una foto. Te comparamos solo con las personas públicas de LFW, nunca con quienes se registraron, y tu foto no se guarda."
       back={{ to: "/", label: "Volver al inicio" }}
     >
-      <input id={inputId} className="visually-hidden photo-picker" type="file" accept="image/*" capture="user" onChange={choose} disabled={search.isPending} />
-      <label htmlFor={inputId} className="button button-primary">
-        <Icon name="camera" />
-        {search.isPending ? "Buscando…" : "Tomar o elegir una foto"}
-      </label>
+      <div className="photo-actions">
+        <button type="button" className="button button-primary" onClick={() => setCameraOpen(true)} disabled={search.isPending}>
+          <Icon name="camera" />
+          {photo === null ? "Tomar foto" : "Tomar otra"}
+        </button>
+        <input id={inputId} className="visually-hidden photo-picker" type="file" accept="image/*" onChange={choose} disabled={search.isPending} />
+        <label htmlFor={inputId} className="button button-secondary">
+          Elegir foto
+        </label>
+      </div>
       {search.isPending && (
         <p className="loading" role="status">
           <span className="spinner" aria-hidden="true" />
@@ -92,7 +134,10 @@ export default function LookalikesPage() {
       )}
       {search.data !== undefined && (
         <section className="panel" aria-live="polite">
-          <p>{search.data.message}</p>
+          <div className="lookalike-query">
+            {preview !== null && <img src={preview} alt="La foto que enviaste" width={72} height={72} />}
+            <p>{search.data.message}</p>
+          </div>
           {search.data.people.length > 0 && (
             <ol className="lookalikes">
               {search.data.people.map((person, index) => (

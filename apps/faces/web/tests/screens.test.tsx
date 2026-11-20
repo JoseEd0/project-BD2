@@ -121,7 +121,7 @@ describe("screens", () => {
     const requests = service((url) => (url.pathname === "/api/lookalikes" ? jsonResponse({ people, message: "Las personas públicas de LFW que más se te parecen." }) : null));
     const user = userEvent.setup();
     renderAt("/famosos");
-    const picker = await screen.findByLabelText("Tomar o elegir una foto");
+    const picker = await screen.findByLabelText("Elegir foto");
     await user.upload(picker, new File(["jpeg"], "yo.jpg", { type: "image/jpeg" }));
     expect(await screen.findByText(/Eileen Collins/)).toBeTruthy();
     expect(screen.getByText(/61 % de parecido/)).toBeTruthy();
@@ -130,6 +130,18 @@ describe("screens", () => {
     expect(screen.getAllByRole("listitem")).toHaveLength(2);
     const query = requests.find((request) => request.method === "POST");
     expect(new URL(query?.url ?? "").pathname).toBe("/api/lookalikes");
+    expect(screen.getByRole("img", { name: "La foto que enviaste" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Tomar otra/ })).toBeTruthy();
+  });
+
+  it("opens the camera for the selfie and says how to get out when it cannot be used", async () => {
+    service();
+    const user = userEvent.setup();
+    renderAt("/famosos");
+    await user.click(await screen.findByRole("button", { name: /Tomar foto/ }));
+    expect(await screen.findByRole("alert")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Elegir una foto en su lugar" }));
+    expect(await screen.findByLabelText("Elegir foto")).toBeTruthy();
   });
 
   it("answers an unknown path with a way back", async () => {

@@ -21,6 +21,8 @@ const stageTrends = Object.fromEntries(
   STAGES.map((stage, position) => [stage, new Trend(`stage_${position}`, true)]),
 );
 const cacheResults = new Counter('cache_results');
+const responses = new Counter('responses');
+const STATUS_CLASSES = ['2xx', '3xx', '4xx', '5xx', 'sin_respuesta'];
 
 export const options = {
   scenarios: {
@@ -29,11 +31,13 @@ export const options = {
   summaryTrendStats: ['avg', 'min', 'med', 'p(95)', 'p(99)', 'max', 'count'],
   discardResponseBodies: true,
   // La prueba mide, no aprueba ni reprueba: estos umbrales siempre se cumplen y solo sirven
-  // para que el resumen cuente aparte los aciertos y los fallos de la caché.
-  thresholds: {
-    'cache_results{result:hit}': ['count>=0'],
-    'cache_results{result:miss}': ['count>=0'],
-  },
+  // para que el resumen cuente aparte los aciertos y los fallos de la caché y cada clase de
+  // estado de las respuestas.
+  thresholds: Object.fromEntries([
+    ['cache_results{result:hit}', ['count>=0']],
+    ['cache_results{result:miss}', ['count>=0']],
+    ...STATUS_CLASSES.map((status) => [`responses{status:${status}}`, ['count>=0']]),
+  ]),
 };
 
 function send(request) {
@@ -51,6 +55,10 @@ function send(request) {
   return http.get(url);
 }
 
+function statusClass(status) {
+  return status === 0 ? 'sin_respuesta' : `${Math.floor(status / 100)}xx`;
+}
+
 function recordStages(response) {
   const timing = response.headers['Server-Timing'] || '';
   for (const part of timing.split(',')) {
@@ -65,6 +73,7 @@ export default function () {
   const request = requests[exec.scenario.iterationInTest % requests.length];
   const response = send(request);
   recordStages(response);
+  responses.add(1, { status: statusClass(response.status) });
   const cache = response.headers['X-Cache'];
   if (cache) {
     cacheResults.add(1, { result: cache });

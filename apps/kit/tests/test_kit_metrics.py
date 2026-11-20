@@ -32,14 +32,18 @@ def requests(found: Samples, route: str, status: str) -> float:
     return value(found, "http_requests_total", method="GET", route=route, status=status)
 
 
+def counted(before: Samples, after: Samples, route: str, status: str) -> float:
+    return requests(after, route, status) - requests(before, route, status)
+
+
 def test_requests_are_counted_by_route_template_and_status(service: TestClient, engine: FakeEngine):
     engine.rows[7] = [7, "hola"]
     before = samples(service)
     service.get("/notas/7")
     service.get("/notas/99")
     after = samples(service)
-    assert requests(after, "/notas/{note_id}", "200") - requests(before, "/notas/{note_id}", "200") == 1
-    assert requests(after, "/notas/{note_id}", "404") - requests(before, "/notas/{note_id}", "404") == 1
+    assert counted(before, after, "/notas/{note_id}", "200") == 1
+    assert counted(before, after, "/notas/{note_id}", "404") == 1
     assert not any("/notas/7" in str(labels) for _, labels in after)
 
 
@@ -48,15 +52,16 @@ def test_an_unknown_route_and_a_failure_are_counted(service: TestClient):
     service.get("/no-existe")
     service.get("/fallo")
     after = samples(service)
-    assert requests(after, UNMATCHED_ROUTE, "404") - requests(before, UNMATCHED_ROUTE, "404") == 1
-    assert requests(after, "/fallo", "500") - requests(before, "/fallo", "500") == 1
+    assert counted(before, after, UNMATCHED_ROUTE, "404") == 1
+    assert counted(before, after, "/fallo", "500") == 1
 
 
 def test_latency_is_a_histogram_per_route(service: TestClient):
     service.get("/health")
     found = samples(service)
     assert value(found, "http_request_duration_seconds_count", method="GET", route="/health") >= 1
-    assert value(found, "http_request_duration_seconds_bucket", method="GET", route="/health", le="+Inf") >= 1
+    bucket = {"method": "GET", "route": "/health", "le": "+Inf"}
+    assert value(found, "http_request_duration_seconds_bucket", **bucket) >= 1
 
 
 def test_cache_lookups_are_counted_by_result(service: TestClient):

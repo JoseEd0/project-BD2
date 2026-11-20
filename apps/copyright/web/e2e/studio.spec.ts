@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
-import { DETECTION_TIMING, mockApi, remixFile, REMIX_DETECTION, respondWith } from "./fixtures";
+import { DETECTION_TIMING, mockApi, READY_CATALOG, remixFile, REMIX_DETECTION, respondWith } from "./fixtures";
 
 async function upload(page: Page): Promise<void> {
   await page.goto("/");
@@ -36,7 +36,7 @@ test.describe("with the service up", () => {
     await expect(page.getByRole("radio", { name: /B original/ })).toBeChecked();
     await page.keyboard.press("a");
     await expect(page.getByRole("radio", { name: /A tu audio/ })).toBeChecked();
-    await expect.poll(() => page.locator("audio").first().evaluate((audio: HTMLAudioElement) => audio.currentTime)).toBeGreaterThan(15);
+    await expect.poll(() => page.locator('audio[data-group="ab"]').first().evaluate((audio: HTMLAudioElement) => audio.currentTime)).toBeGreaterThan(15);
 
     await page.getByText("Cuánto tardó").click();
     await expect(page.getByRole("rowheader", { name: "Buscar en el gestor" })).toBeVisible();
@@ -63,6 +63,32 @@ test.describe("with the service up", () => {
     await upload(page);
     await expect(page.getByRole("heading", { name: "No encontramos coincidencias con el catálogo" })).toBeVisible();
     await expect(page.getByRole("group", { name: /Tramos que coinciden/ })).toHaveCount(0);
+  });
+
+  test("a catalog song is played and its similar songs are found without itself", async ({ page, context }) => {
+    await mockApi(context, respondWith(200, REMIX_DETECTION, { "Server-Timing": DETECTION_TIMING }));
+    await page.goto("/");
+    const catalog = page.getByRole("list", { name: "Canciones del catálogo" });
+    await catalog.getByRole("button", { name: "Escuchar Melodía 2" }).click();
+    await expect(catalog.getByRole("button", { name: "Pausar Melodía 2" })).toBeVisible();
+    await catalog.getByRole("listitem").filter({ hasText: "Melodía 2" }).getByRole("button", { name: "Buscar parecidas" }).click();
+    await expect(page.getByRole("heading", { name: "Parecidas a «Melodía 2» de Muestra" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Posible uso no autorizado: 1 fragmento de 1 canción" })).toBeVisible();
+    await page.getByRole("button", { name: "Adelantar 5 s" }).click();
+    await expect(page.getByRole("slider", { name: "Posición en el audio elegido" })).toHaveValue("5");
+  });
+
+  test("a catalog still indexing says so instead of an engine error", async ({ page, context }) => {
+    await mockApi(
+      context,
+      respondWith(400, { error: "La tabla 'cr_segmentos' no tiene un índice HNSW sobre 'ruta'", kind: "DomainError" }),
+      { ...READY_CATALOG, segments_indexed: false },
+    );
+    await page.goto("/");
+    await expect(page.getByText("El catálogo se está cargando")).toBeVisible();
+    await page.getByLabel("Audio para analizar").setInputFiles(remixFile());
+    await expect(page.getByRole("heading", { name: "El catálogo se está cargando" })).toBeVisible();
+    await expect(page.getByText(/cr_segmentos/)).toHaveCount(0);
   });
 
   test("an upload can be cancelled", async ({ page, context }) => {

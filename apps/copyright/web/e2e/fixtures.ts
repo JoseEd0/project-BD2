@@ -120,9 +120,22 @@ export function respondWith(status: number, body: unknown, headers: Record<strin
   return (route) => route.fulfill({ status, json: body, headers });
 }
 
-/** Simula el API de la app: salud, canciones, su audio y `POST /detections`. */
-export async function mockApi(context: BrowserContext, detections: Responder): Promise<void> {
+export const READY_CATALOG = {
+  songs: songs.size,
+  segments: songs.size * 11,
+  window_seconds: 5,
+  hop_seconds: 2.5,
+  segments_indexed: true,
+  genres: [],
+};
+
+/** Simula el API de la app: salud, catálogo, canciones, su audio y `POST /detections`. */
+export async function mockApi(context: BrowserContext, detections: Responder, catalog: object = READY_CATALOG): Promise<void> {
   await context.route("**/api/health", (route) => route.fulfill({ json: { status: "ok", version: "0.1.0" } }));
+  await context.route("**/api/catalog", (route) => route.fulfill({ json: catalog }));
+  await context.route(/\/api\/songs(\?.*)?$/, (route) =>
+    route.fulfill({ json: { songs: [...songs.values()].map(({ segments: _segments, ...song }) => song) } }),
+  );
   await context.route("**/api/detections", detections);
   await context.route(/\/api\/songs\/(\d+)\/audio$/, (route) => {
     const id = Number(new URL(route.request().url()).pathname.split("/").at(-2));

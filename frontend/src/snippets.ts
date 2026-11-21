@@ -23,6 +23,11 @@ export interface SnippetGroup {
  *
  * Los del grupo «Vectores» usan `fragmentos`, con un embedding VECTOR(16) por fila. Sus
  * vectores de consulta son los de los fragmentos 1 y 2 de `demos/samples/fragmentos.csv`.
+ *
+ * Los grupos «App: …» no usan la demo: leen las tablas de las apps de la Parte 5 (`cr_`,
+ * `shop_`, `rag_`, `face_`) en el gestor desplegado, con el SQL que corre cada app. Son solo
+ * lecturas. De rostros solo se lee `face_famosos`, nunca a las personas registradas. Las
+ * búsquedas por embedding (CLIP, e5, SFace) no están: pedirían pegar el vector entero.
  */
 export const SNIPPET_GROUPS: SnippetGroup[] = [
   {
@@ -873,6 +878,215 @@ UPDATE lecturas SET emb = [0, 0.2, 1] WHERE id = 2;
 SELECT id, SIMILARITY_SCORE() AS score
 FROM lecturas
 WHERE SIMILAR_TO(emb, [1, 0, 0], k = 3);`,
+      },
+    ],
+  },
+  {
+    name: "App: Copyright",
+    snippets: [
+      {
+        label: "Catálogo por texto",
+        description:
+          "La búsqueda del catálogo de la app: BM25 sobre el invertido de título y artista, paginada",
+        sql: `SELECT id, titulo, artista, genero, duracion, SCORE() AS puntaje
+FROM cr_canciones
+WHERE MATCH(busqueda, 'love night')
+USING BM25
+ORDER BY puntaje DESC
+LIMIT 10 OFFSET 0;`,
+      },
+      {
+        label: "Géneros de una búsqueda",
+        description: "SCORE() con GROUP BY: de qué géneros son las canciones que nombran 'love'",
+        sql: `SELECT genero, COUNT(*) AS canciones, MAX(SCORE()) AS mejor
+FROM cr_canciones
+WHERE MATCH(busqueda, 'love')
+GROUP BY genero
+USING BM25
+ORDER BY canciones DESC;`,
+      },
+      {
+        label: "Tramos de una canción",
+        description:
+          "El id de un tramo es canción · 1000 + ventana: los de la canción 2 salen del B+ por rango, con su fragmento #t=",
+        sql: `SELECT id, inicio, fin, ruta
+FROM cr_segmentos
+WHERE id BETWEEN 2000 AND 2999
+ORDER BY id;`,
+      },
+      {
+        label: "k-NN de un tramo",
+        description:
+          "Lo que la detección pide por cada ventana: los 5 tramos del catálogo más parecidos por MFCC, en el HNSW",
+        sql: `SELECT id, cancion, inicio, fin, SIMILARITY_SCORE() AS score
+FROM cr_segmentos
+WHERE SIMILAR_TO('data/datasets/fma_small/pistas/000/000002.mp3#t=10,15', k = 5)
+USING HNSW;`,
+      },
+      {
+        label: "Parecidos de otras canciones",
+        description: "El mismo k-NN con el resto del WHERE como filtro previo: sin los tramos de la canción 2",
+        sql: `SELECT id, cancion, inicio, fin, SIMILARITY_SCORE() AS score
+FROM cr_segmentos
+WHERE SIMILAR_TO('data/datasets/fma_small/pistas/000/000002.mp3#t=10,15', k = 5)
+  AND cancion <> 2
+USING HNSW;`,
+      },
+      {
+        label: "EXPLAIN del k-NN",
+        description: "VectorSearchScan sobre los 83 290 tramos: extracción del fragmento y búsqueda en el HNSW",
+        sql: `EXPLAIN ANALYZE
+SELECT id, cancion, inicio, fin, SIMILARITY_SCORE() AS score
+FROM cr_segmentos
+WHERE SIMILAR_TO('data/datasets/fma_small/pistas/000/000002.mp3#t=10,15', k = 5)
+USING HNSW;`,
+      },
+    ],
+  },
+  {
+    name: "App: Tienda",
+    snippets: [
+      {
+        label: "Búsqueda BM25",
+        description: "La búsqueda de la tienda: BM25 sobre el invertido en inglés de los productos",
+        sql: `SELECT id, titulo, marca, departamento, precio, valoracion, SCORE() AS puntaje
+FROM shop_productos
+WHERE MATCH(texto, 'wireless headphones')
+USING BM25
+ORDER BY puntaje DESC
+LIMIT 10;`,
+      },
+      {
+        label: "Tiendas a 2 km",
+        description: "Rango en el R-Tree: las tiendas a menos de 2 km de la Plaza Mayor de Lima",
+        sql: `SELECT id, nombre, tipo, ubicacion,
+  distancia(ubicacion, POINT(-12.0453, -77.0311)) AS metros
+FROM shop_tiendas
+WHERE distancia(ubicacion, POINT(-12.0453, -77.0311)) < 2000
+ORDER BY metros;`,
+      },
+      {
+        label: "5 más cercanas",
+        description: "k-NN en el R-Tree: las 5 tiendas más cercanas a la Plaza Mayor, como en el mapa de la app",
+        sql: `SELECT id, nombre, tipo, ubicacion,
+  distancia(ubicacion, POINT(-12.0453, -77.0311)) AS metros
+FROM shop_tiendas
+ORDER BY metros
+LIMIT 5;`,
+      },
+      {
+        label: "Stock cerca",
+        description:
+          "Dónde hay stock del afinador Snark SN-5: el inventario entra por su hash y se une con las tiendas, por cercanía",
+        sql: `SELECT t.id AS id, t.nombre AS nombre, t.tipo AS tipo, i.unidades AS unidades,
+  distancia(t.ubicacion, POINT(-12.0453, -77.0311)) AS metros
+FROM shop_inventario i JOIN shop_tiendas t ON i.tienda = t.id
+WHERE i.producto = 'B004XNK7AI'
+ORDER BY metros
+LIMIT 5;`,
+      },
+      {
+        label: "Compras conjuntas",
+        description:
+          "La señal «quienes lo compraron también compraron»: pares materializados del afinador, por B+",
+        sql: `SELECT otro, veces
+FROM shop_compras_conjuntas
+WHERE producto = 'B004XNK7AI' AND particion = 'train'
+ORDER BY veces DESC, otro
+LIMIT 10;`,
+      },
+      {
+        label: "Fotos parecidas (SIFT)",
+        description:
+          "La señal visual: SIFT + bolsa de palabras visuales en el HNSW de la columna de fotos, desde la foto del afinador",
+        sql: `SELECT id, titulo, SIMILARITY_SCORE() AS puntaje
+FROM shop_productos
+WHERE SIMILAR_TO(imagen, 'data/datasets/amazon_musical_instruments/images/6e/6eda61d24547bec1162c6a05ba6b978242e9dd6631b83ed07833324803b53e3d.jpg', k = 5)
+USING HNSW;`,
+      },
+      {
+        label: "EXPLAIN del stock",
+        description: "El plan del JOIN: IndexLookup en el hash del inventario en vez de recorrer sus 209 000 filas, y HashJoin con las tiendas",
+        sql: `EXPLAIN ANALYZE
+SELECT t.nombre AS nombre, i.unidades AS unidades,
+  distancia(t.ubicacion, POINT(-12.0453, -77.0311)) AS metros
+FROM shop_inventario i JOIN shop_tiendas t ON i.tienda = t.id
+WHERE i.producto = 'B004XNK7AI'
+ORDER BY metros
+LIMIT 5;`,
+      },
+    ],
+  },
+  {
+    name: "App: Papers",
+    snippets: [
+      {
+        label: "Pasajes BM25",
+        description: "La recuperación léxica del RAG: BM25 sobre el invertido de los 98 585 fragmentos",
+        sql: `SELECT chunk_id, paper_id, page_start, page_end, content, SCORE() AS score
+FROM rag_chunks
+WHERE MATCH(content, 'hnsw graph index recall')
+USING BM25
+ORDER BY score DESC
+LIMIT 5;`,
+      },
+      {
+        label: "Pasajes de una página",
+        description:
+          "El lector: los fragmentos de una página, por el rango de su clave <paper_id># en el B+ primario",
+        sql: `SELECT chunk_id, ordinal, page_start, page_end, content
+FROM rag_chunks
+WHERE chunk_id >= '2610.30425#' AND chunk_id < '2610.30425$'
+  AND paper_id = '2610.30425' AND page_start <= 6 AND page_end >= 6
+ORDER BY ordinal;`,
+      },
+      {
+        label: "Papers por categoría",
+        description: "El corpus por categoría de arXiv (cs.DB, cs.IR) y los documentos del curso",
+        sql: `SELECT primary_category, COUNT(*) AS papers
+FROM rag_papers
+GROUP BY primary_category
+ORDER BY papers DESC;`,
+      },
+      {
+        label: "Papers por año",
+        description: "El corpus por año de publicación",
+        sql: `SELECT year, COUNT(*) AS papers
+FROM rag_papers
+GROUP BY year
+ORDER BY year;`,
+      },
+      {
+        label: "EXPLAIN de BM25",
+        description: "TextSearchScan: términos de la consulta, listas leídas y top-k del invertido",
+        sql: `EXPLAIN ANALYZE
+SELECT chunk_id, paper_id, SCORE() AS score
+FROM rag_chunks
+WHERE MATCH(content, 'hnsw graph index recall')
+USING BM25
+ORDER BY score DESC
+LIMIT 5;`,
+      },
+    ],
+  },
+  {
+    name: "App: Rostros",
+    snippets: [
+      {
+        label: "Famosos de LFW",
+        description:
+          "Las personas públicas de LFW para «¿a qué famoso te pareces?»; las registradas no se consultan desde aquí",
+        sql: `SELECT COUNT(*) AS famosos, SUM(fotos) AS fotos
+FROM face_famosos;`,
+      },
+      {
+        label: "Con más fotos",
+        description: "Los famosos cuyo embedding promedia más fotos de LFW",
+        sql: `SELECT id, nombre, fotos
+FROM face_famosos
+WHERE fotos >= 20
+ORDER BY fotos DESC
+LIMIT 10;`,
       },
     ],
   },

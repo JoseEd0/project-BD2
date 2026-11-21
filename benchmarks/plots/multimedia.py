@@ -55,15 +55,24 @@ from benchmarks.plots.model import (
     Technique,
     compare,
 )
-from benchmarks.plots.style import AQUA, AXIS, BLUE, DARK_BLUE, LIGHT_BLUE, MUTED_INK, ORANGE
+from benchmarks.plots.style import (
+    AQUA,
+    AXIS,
+    BLUE,
+    DARK_BLUE,
+    LIGHT_BLUE,
+    LIGHT_ORANGE,
+    MUTED_INK,
+    ORANGE,
+)
 from index.vector import VectorMetric
 
 EXACT_STYLE = Technique(EXACT, Style(MUTED_INK, "x", dashed=True), "búsqueda exacta")
 IVF = Technique(ENGINE_IVF, Style(BLUE, "o"))
 HNSW = Technique(ENGINE_HNSW, Style(ORANGE, "s"))
 USEARCH = Technique(USEARCH_HNSW, Style(AQUA, "^"))
-PG_IVF = Technique(PGVECTOR_IVF, Style(BLUE, "D", dashed=True))
-PG_HNSW = Technique(PGVECTOR_HNSW, Style(ORANGE, "v", dashed=True))
+PG_IVF = Technique(PGVECTOR_IVF, Style(LIGHT_BLUE, "D", dashed=True))
+PG_HNSW = Technique(PGVECTOR_HNSW, Style(LIGHT_ORANGE, "v", dashed=True))
 SQL = Technique(SQL_HNSW, Style(DARK_BLUE, "P"), "HNSW (gestor, por SQL)")
 RANDOM = Technique(RANDOM_NEIGHBOURS, Style(AXIS, "x"))
 WITHOUT_ZEROS = Technique(

@@ -18,7 +18,16 @@ from benchmarks.plots.model import (
     Segment,
     StackedBar,
 )
-from benchmarks.plots.style import AQUA, AXIS, BLUE, DARK_BLUE, LIGHT_BLUE, ORANGE
+from benchmarks.plots.style import (
+    AQUA,
+    AXIS,
+    BLUE,
+    DARK_BLUE,
+    LIGHT_BLUE,
+    LIGHT_VIOLET,
+    ORANGE,
+    VIOLET,
+)
 
 MILLISECONDS = Measure("tiempo por cuadro (ms)", "ms")
 TARGETS = (("nginx", "por el nginx"), ("directo", "directo a la API"))
@@ -58,8 +67,8 @@ FIGURES: tuple[BreakdownFigure, ...] = (
                 MILLISECONDS,
                 BARS,
                 (
-                    Segment("p50", "servidor_p50_ms", BLUE),
-                    Segment("hasta p95", SERVER_TAIL_FIELD, LIGHT_BLUE),
+                    Segment("p50", "servidor_p50_ms", VIOLET),
+                    Segment("hasta p95", SERVER_TAIL_FIELD, LIGHT_VIOLET),
                 ),
             ),
             BreakdownPanel(
@@ -67,10 +76,11 @@ FIGURES: tuple[BreakdownFigure, ...] = (
                 MILLISECONDS,
                 BARS,
                 (
-                    Segment("p50", "p50_ms", BLUE),
-                    Segment("hasta p95", TAIL_FIELD, LIGHT_BLUE),
+                    Segment("p50", "p50_ms", VIOLET),
+                    Segment("hasta p95", TAIL_FIELD, LIGHT_VIOLET),
                 ),
             ),
         ),
+        columns=2,
     ),
 )

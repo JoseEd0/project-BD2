@@ -251,24 +251,28 @@ class BreakdownPanel:
 
 @dataclass(frozen=True, slots=True)
 class BreakdownFigure:
-    """Una imagen de desgloses: un panel por columna, para cifras de una sola ejecución
-    (cuánto tardó cada paso, cuánto ocupa cada tabla) en vez de una serie por tamaño."""
+    """Una imagen de desgloses para cifras de una sola ejecución (cuánto tardó cada paso,
+    cuánto ocupa cada tabla) en vez de una serie por tamaño; `columns` paneles por fila, o
+    todos en una fila si es 0."""
 
     filename: str
     report: str
     title: str
     subtitle: str
     panels: tuple[BreakdownPanel, ...]
+    columns: int = 0
 
 
 @dataclass(frozen=True, slots=True)
 class Axis:
     """Un eje de un panel XY: su rótulo, con la magnitud y su unidad, la clave de `extra`
-    de donde salen sus valores y si es logarítmico."""
+    de donde salen sus valores, si es logarítmico y, en uno lineal, sus marcas si no son
+    las de matplotlib (las réplicas medidas, 1, 2 y 4, sin un 3 que no se midió)."""
 
     label: str
     field: str
     logarithmic: bool = False
+    ticks: tuple[float, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

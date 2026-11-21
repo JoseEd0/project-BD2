@@ -25,6 +25,7 @@ Qué se dibuja está declarado en `benchmarks/plots/`, un módulo por experiment
 from __future__ import annotations
 
 import argparse
+from dataclasses import replace
 from pathlib import Path
 
 from benchmarks.common import RESULTS_DIRECTORY
@@ -32,6 +33,22 @@ from benchmarks.plots import FIGURES
 from benchmarks.plots.drawing import draw, load
 
 FIGURES_DIRECTORY = "figures"
+REPORT_FIGURES_DIRECTORY = Path("docs") / "latex" / "figuras"
+# Las figuras que incluye el informe. Ahí van sin título ni subtítulo, que repetirían el pie
+# de LaTeX, para que a todo el ancho de la página sus rótulos se lean.
+REPORT_FIGURES = frozenset(
+    {
+        "almacenamiento",
+        "indices",
+        "espacial-radio",
+        "espacial-knn",
+        "espacial-indice",
+        "texto-consultas",
+        "multimedia-consulta",
+        "rostros-tiempo-real",
+        "carga-replicas",
+    }
+)
 
 
 def main() -> None:
@@ -39,13 +56,20 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--results", type=Path, default=here / RESULTS_DIRECTORY)
     parser.add_argument("--output", type=Path, default=here / FIGURES_DIRECTORY)
+    parser.add_argument(
+        "--report-output", type=Path, default=here.parent / REPORT_FIGURES_DIRECTORY
+    )
     arguments = parser.parse_args()
     for figure in FIGURES:
         source = arguments.results / f"{figure.report}.json"
         if not source.exists():
             print(f"falta {source}: no se dibuja {figure.filename}")
             continue
-        print(draw(figure, load(source), arguments.output))
+        report = load(source)
+        print(draw(figure, report, arguments.output))
+        if figure.filename in REPORT_FIGURES:
+            untitled = replace(figure, title="", subtitle="")
+            print(draw(untitled, report, arguments.report_output))
 
 
 if __name__ == "__main__":

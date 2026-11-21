@@ -38,6 +38,7 @@ from benchmarks.plots.style import (
     BREAKDOWN_BAR_SHARE,
     BREAKDOWN_LABEL_GAP,
     BREAKDOWN_LABEL_ROOM,
+    BREAKDOWN_LEGEND_ENTRIES_PER_PANEL,
     BREAKDOWN_MIN_HEIGHT,
     BREAKDOWN_PANEL_WIDTH,
     BREAKDOWN_ROW_HEIGHT,
@@ -259,14 +260,16 @@ def _start_drawing() -> Any:
     return plt
 
 
-def _header_height(subtitle: str, legend_rows: int) -> float:
-    return (
-        HEADER_TOP
-        + TITLE_HEIGHT
-        + SUBTITLE_LINE_HEIGHT * (subtitle.count("\n") + 1)
-        + LEGEND_ROW_HEIGHT * legend_rows
-        + HEADER_BOTTOM
-    )
+def _header_height(figure: AnyFigure, legend_rows: int) -> float:
+    return HEADER_TOP + _titles_height(figure) + LEGEND_ROW_HEIGHT * legend_rows + HEADER_BOTTOM
+
+
+def _titles_height(figure: AnyFigure) -> float:
+    """Alto del título y del subtítulo; cero en la versión del informe, que los lleva en el
+    pie de la figura."""
+    title = TITLE_HEIGHT if figure.title else 0.0
+    lines = figure.subtitle.count("\n") + 1 if figure.subtitle else 0
+    return title + SUBTITLE_LINE_HEIGHT * lines
 
 
 def _compose_lines(figure: Figure, report: dict[str, Any]) -> Any:
@@ -274,7 +277,7 @@ def _compose_lines(figure: Figure, report: dict[str, Any]) -> Any:
     rows = -(-len(figure.panels) // figure.columns)
     legend_columns = figure.legend_columns or LEGEND_ENTRIES_PER_COLUMN * figure.columns
     legend_rows = -(-len(_legend_labels(figure)) // legend_columns)
-    header = _header_height(figure.subtitle, legend_rows)
+    header = _header_height(figure, legend_rows)
     width = PANEL_WIDTH * figure.columns
     height = PANEL_HEIGHT * rows + header
     canvas, grid = plt.subplots(
@@ -348,7 +351,7 @@ def _compose_bars(figure: BarFigure, report: dict[str, Any]) -> Any:
         dict.fromkeys(technique for panel in figure.panels for technique in panel.techniques)
     )
     legend_columns = LEGEND_ENTRIES_PER_COLUMN * columns
-    header = _header_height(figure.subtitle, -(-len(techniques) // legend_columns))
+    header = _header_height(figure, -(-len(techniques) // legend_columns))
     width = BAR_PANEL_WIDTH * columns
     height = BAR_PANEL_HEIGHT * len(sizes) + header
     canvas, grid = plt.subplots(
@@ -436,20 +439,24 @@ def segment_values(
 def _compose_breakdown(figure: BreakdownFigure, report: dict[str, Any]) -> Any:
     plt = _start_drawing()
     bars = max(len(panel.bars) for panel in figure.panels)
-    legend_columns = len(
-        {segment.label for panel in figure.panels for segment in panel.segments}
-    )
-    header = _header_height(figure.subtitle, 1)
-    width = BREAKDOWN_PANEL_WIDTH * len(figure.panels)
-    height = max(BREAKDOWN_ROW_HEIGHT * bars, BREAKDOWN_MIN_HEIGHT) + header
-    canvas, grid = plt.subplots(
-        1, len(figure.panels), figsize=(width, height), dpi=DPI, squeeze=False
-    )
+    columns = figure.columns or len(figure.panels)
+    rows = -(-len(figure.panels) // columns)
+    labels = {segment.label for panel in figure.panels for segment in panel.segments}
+    legend_columns = min(len(labels), BREAKDOWN_LEGEND_ENTRIES_PER_PANEL * columns)
+    header = _header_height(figure, -(-len(labels) // legend_columns))
+    width = BREAKDOWN_PANEL_WIDTH * columns
+    height = max(BREAKDOWN_ROW_HEIGHT * bars, BREAKDOWN_MIN_HEIGHT) * rows + header
+    canvas, grid = plt.subplots(rows, columns, figsize=(width, height), dpi=DPI, squeeze=False)
     canvas.set_facecolor(SURFACE)
-    for axis, panel in zip(grid[0], figure.panels, strict=True):
+    axes = [axis for row in grid for axis in row]
+    for axis in axes[len(figure.panels) :]:
+        axis.remove()
+    for axis, panel in zip(axes, figure.panels, strict=False):
         _draw_breakdown_panel(axis, panel, report)
     _draw_header(canvas, figure, height, legend_columns)
-    canvas.tight_layout(rect=(0.0, 0.0, 1.0, 1.0 - header / height), w_pad=PANEL_GAP)
+    canvas.tight_layout(
+        rect=(0.0, 0.0, 1.0, 1.0 - header / height), w_pad=PANEL_GAP, h_pad=ROW_GAP
+    )
     return canvas
 
 
@@ -530,20 +537,21 @@ def _draw_header(canvas: Any, figure: AnyFigure, height: float, legend_columns: 
     """Título, subtítulo y leyenda, alineados a la izquierda sobre los paneles."""
     left = 0.14 / canvas.get_figwidth()
     top = 1.0 - HEADER_TOP / height
-    canvas.text(
-        left, top, figure.title, color=INK, fontsize=TITLE_SIZE, fontweight="bold", va="top"
-    )
-    canvas.text(
-        left,
-        top - TITLE_HEIGHT / height,
-        figure.subtitle,
-        color=SECONDARY_INK,
-        fontsize=LABEL_SIZE + 0.5,
-        va="top",
-        linespacing=1.4,
-    )
-    subtitle_lines = figure.subtitle.count("\n") + 1
-    legend_top = top - (TITLE_HEIGHT + SUBTITLE_LINE_HEIGHT * subtitle_lines) / height
+    if figure.title:
+        canvas.text(
+            left, top, figure.title, color=INK, fontsize=TITLE_SIZE, fontweight="bold", va="top"
+        )
+    if figure.subtitle:
+        canvas.text(
+            left,
+            top - (TITLE_HEIGHT if figure.title else 0.0) / height,
+            figure.subtitle,
+            color=SECONDARY_INK,
+            fontsize=LABEL_SIZE + 0.5,
+            va="top",
+            linespacing=1.4,
+        )
+    legend_top = top - _titles_height(figure) / height
     handles: dict[str, Any] = {}
     for axis in canvas.axes:
         for handle, label in zip(*axis.get_legend_handles_labels(), strict=True):
@@ -714,7 +722,7 @@ def _compose_curves(figure: CurveFigure, report: dict[str, Any]) -> Any:
     techniques = list(
         dict.fromkeys(technique for panel in figure.panels for technique in panel.techniques)
     )
-    header = _header_height(figure.subtitle, -(-len(techniques) // legend_columns))
+    header = _header_height(figure, -(-len(techniques) // legend_columns))
     height = CURVE_PANEL_HEIGHT * rows + header
     canvas, grid = plt.subplots(
         rows,
@@ -825,7 +833,7 @@ def _compose_gallery(figure: GalleryFigure, report: dict[str, Any]) -> Any:
     plt = _start_drawing()
     rows = gallery_rows(report, figure)
     columns = 1 + max((len(case["vecinos"]) for _, case in rows), default=0)
-    header = _header_height(figure.subtitle, 1)
+    header = _header_height(figure, 1)
     height = GALLERY_CELL_HEIGHT * max(len(rows), 1) + header
     canvas, grid = plt.subplots(
         max(len(rows), 1),
@@ -913,7 +921,7 @@ def _compose_xy(figure: XYFigure, report: dict[str, Any]) -> Any:
     rows = -(-len(figure.panels) // figure.columns)
     legend_columns = figure.legend_columns or LEGEND_ENTRIES_PER_COLUMN * figure.columns
     labels = dict.fromkeys(series.label for panel in figure.panels for series in panel.series)
-    header = _header_height(figure.subtitle, -(-len(labels) // legend_columns))
+    header = _header_height(figure, -(-len(labels) // legend_columns))
     height = CURVE_PANEL_HEIGHT * rows + header
     canvas, grid = plt.subplots(
         rows,
@@ -995,7 +1003,7 @@ def _axis_scale(
     margin = (high - low) * XY_MARGIN or abs(high) * XY_MARGIN or XY_MARGIN
     low, high = low - margin, high + margin
     set_limits(low, high)
-    found = MaxNLocator(nbins=XY_TICKS, steps=XY_TICK_STEPS).tick_values(low, high)
+    found = chosen.ticks or MaxNLocator(nbins=XY_TICKS, steps=XY_TICK_STEPS).tick_values(low, high)
     ticks.set_major_locator(FixedLocator([tick for tick in found if low <= tick <= high]))
 
 
@@ -1037,7 +1045,7 @@ def _compose_intervals(figure: IntervalFigure, report: dict[str, Any]) -> Any:
     rows = -(-len(figure.panels) // figure.columns)
     bars = max(len(panel.bars) for panel in figure.panels)
     shades = {bar.shade.label for panel in figure.panels for bar in panel.bars}
-    header = _header_height(figure.subtitle, 1)
+    header = _header_height(figure, 1)
     row_height = BREAKDOWN_ROW_HEIGHT * bars + INTERVAL_PANEL_CHROME
     width = BREAKDOWN_PANEL_WIDTH * figure.columns
     height = row_height * rows + header

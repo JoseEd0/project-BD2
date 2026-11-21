@@ -16,7 +16,7 @@ from benchmarks.load_benchmark import (
 from benchmarks.plots.model import Axis, Series, Style, XYFigure, XYPanel
 from benchmarks.plots.style import AQUA, BLUE, DARK_BLUE, LIGHT_BLUE, MUTED_INK, ORANGE
 
-REPLICAS = Axis("réplicas de la API de la app", "replicas")
+REPLICAS = Axis("réplicas de la API de la app", "replicas", ticks=(1.0, 2.0, 4.0))
 SERIES = tuple(
     Series(scenario.label, style, scenario.label, OPERATION)
     for scenario, style in (

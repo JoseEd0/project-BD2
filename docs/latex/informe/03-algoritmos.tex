@@ -160,8 +160,10 @@ embedding de multilingual-e5-small (384 dimensiones, ONNX cuantizado a int8) en 
 columna \texttt{VECTOR(384)} con HNSW por coseno, y su texto en un índice invertido en
 inglés. La búsqueda híbrida pide 50 fragmentos a BM25 y 50 al HNSW y los fusiona con
 Reciprocal Rank Fusion ($\sum 1/(60 + \text{puesto})$), que solo usa los puestos porque los
-dos puntajes no tienen la misma escala; a una pregunta en español se le quitan sus palabras
-vacías antes de BM25, porque el analizador del índice está en inglés. Los 12 primeros
+dos puntajes no tienen la misma escala. Antes de buscar, Claude Haiku reescribe la pregunta
+y los últimos turnos de la conversación como una búsqueda en inglés con sus términos técnicos,
+porque el índice invertido está en inglés; si tarda más de 2~s, se busca la pregunta sin sus
+palabras vacías. Los 12 primeros
 fragmentos que caben en 9\,000 tokens van como datos (escapados) a Claude Sonnet, que
 responde por SSE citando cada afirmación con el número del fragmento; las citas se comprueban
 contra los fragmentos enviados y un tope diario limita el costo.
@@ -175,4 +177,5 @@ reconocer contra toda la galería (1:N) y 0.50 para avisar que la persona ya est
 registrada. El reconocimiento en vivo recibe cuadros por WebSocket, descarta el cuadro
 viejo si llega uno nuevo y sigue cada rostro entre cuadros por IoU; un rostro ya
 identificado no se vuelve a embeber durante 2~s, y sus rastros viven en Redis para que
-cualquier réplica continúe la sesión.
+cualquier réplica continúe la sesión. Una búsqueda aparte compara la foto con 5\,740 personas
+públicas de LFW, nunca con las registradas, para mostrar a qué famoso se parece.

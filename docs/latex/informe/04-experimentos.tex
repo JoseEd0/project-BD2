@@ -20,10 +20,12 @@ sus invariantes y se compara contra un modelo o contra la misma consulta sin ín
 Sobre la misma tabla se midió insertar todas las filas, 100 búsquedas y 100 borrados por
 clave primaria (cada uno es una operación aparte, como un \texttt{WHERE id = k}), el espacio
 y la reorganización. La reorganización no se forzó: se siguió borrando hasta que el
-desperdicio pasó del 30\,\% y se midió el borrado que la disparó.
+desperdicio pasó del 30\,\% y se midió el borrado que la disparó. La figura~\ref{fig:almacenamiento} muestra los resultados y la
+tabla~\ref{tab:resumen-almacenamiento} los resume.
 
-\grafica[0.58\textwidth]{almacenamiento.png}{fig:almacenamiento}{Heap file vs archivo
-secuencial: inserción, búsqueda y borrado por clave, espacio en disco y reorganización.}
+\grafica{almacenamiento.png}{fig:almacenamiento}{Heap file vs archivo
+secuencial: inserción de todas las filas, 100 búsquedas y 100 borrados por clave, espacio en
+disco y reorganización al pasar del 30\,\%. Ejes logarítmicos; más abajo es mejor; el valor rotulado es el de 100\,000 filas.}
 
 Sin índice, el heap recorre de media la mitad del archivo por cada clave, así que su tiempo
 crece en proporción al tamaño, mientras que el del secuencial casi no cambia: con 100\,000
@@ -31,29 +33,6 @@ filas el secuencial es 484 veces más rápido al buscar y 468 veces al borrar, p
 es encontrar la fila y marcarla. A cambio, insertar cuesta 8.5 veces más (hay que ubicar la
 página, desplazar registros y reorganizar cada cierto tiempo) y ocupa 1.7 veces más, por el
 llenado del 80\,\% que deja cada reorganización. Reorganizar 100\,000 filas tomó 164~ms.
-
-\begin{table}[!htb]
-\centering
-\caption{Resultados del experimento 1. Tiempos en ms y espacio en KiB.}\label{tab:almacenamiento}
-\small
-\begin{tabular}{@{}llR{1.5cm}R{1.5cm}R{1.5cm}@{}}
-\toprule
- & & \multicolumn{3}{c}{\textbf{Número de filas de la tabla}} \\
-\cmidrule(lr){3-5}
-\textbf{Operación} & \textbf{Técnica} & \textbf{1\,000} & \textbf{10\,000} & \textbf{100\,000} \\
-\midrule
-Inserción de todas las filas (ms) & heap file & \textbf{3.59} & \textbf{37.5} & \textbf{373} \\
- & archivo secuencial & 23.9 & 273 & 3\,182 \\
-100 búsquedas por clave (ms) & heap file & 27.6 & 262 & 2\,724 \\
- & archivo secuencial & \textbf{4.32} & \textbf{4.73} & \textbf{5.63} \\
-100 borrados por clave (ms) & heap file & 26.2 & 243 & 2\,561 \\
- & archivo secuencial & \textbf{4.79} & \textbf{5.02} & \textbf{5.48} \\
-Espacio en disco (KiB) & heap file & \textbf{64.0} & \textbf{576} & \textbf{5\,720} \\
- & archivo secuencial & 104 & 960 & 9\,528 \\
-Reorganización al pasar del 30\,\% (ms) & archivo secuencial & 2.08 & 16.9 & 164 \\
-\bottomrule
-\end{tabular}
-\end{table}
 
 \begin{table}[!htb]
 \centering
@@ -74,45 +53,14 @@ Archivo secuencial & Búsqueda y borrado por clave en $O(\log P)$: 484 veces má
 
 Se midió construir el índice, 100 búsquedas por igualdad, 100 por rango, el recorrido
 ordenado de toda la tabla, eliminar y volver a insertar el 10\,\% de las filas y el espacio
-(tabla~\ref{tab:indices}). El B+ no agrupado y el hash guardan direcciones, así que cada uno
+(figura~\ref{fig:indices}). El B+ no agrupado y el hash guardan direcciones, así que cada uno
 tiene su propio heap: construirlos incluye escribir las filas en él y sus búsquedas
 incluyen leer la fila.
 
-\begin{table}[!htb]
-\centering
-\caption{Resultados del experimento 2. Tiempos en ms y espacio en KiB. \emph{No soportado}
-indica que el índice no puede resolver esa operación.}\label{tab:indices}
-\small
-\begin{tabular}{@{}llR{1.5cm}R{1.5cm}R{1.5cm}@{}}
-\toprule
- & & \multicolumn{3}{c}{\textbf{Número de filas de la tabla}} \\
-\cmidrule(lr){3-5}
-\textbf{Operación} & \textbf{Técnica} & \textbf{1\,000} & \textbf{10\,000} & \textbf{100\,000} \\
-\midrule
-Construcción del índice (ms) & B+ agrupado & 20.4 & 302 & 4\,428 \\
- & B+ no agrupado & 179 & 2\,094 & 25\,920 \\
- & hash extendible & \textbf{11.1} & \textbf{135} & \textbf{1\,317} \\
-100 búsquedas por igualdad (ms) & B+ agrupado & \textbf{1.20} & \textbf{3.04} & \textbf{4.06} \\
- & B+ no agrupado & 12.3 & 12.3 & 16.1 \\
- & hash extendible & 4.58 & 3.48 & 4.29 \\
-100 búsquedas por rango (ms) & B+ agrupado & \textbf{2.49} & \textbf{4.48} & \textbf{5.47} \\
- & B+ no agrupado & 20.9 & 21.7 & 27.0 \\
- & hash extendible & \multicolumn{3}{c}{\emph{no soportado}} \\
-Recorrido ordenado de la tabla (ms) & B+ agrupado & \textbf{0.25} & \textbf{2.50} & \textbf{31.8} \\
- & B+ no agrupado & 1.79 & 18.9 & 199 \\
- & hash extendible & \multicolumn{3}{c}{\emph{no soportado}} \\
-Eliminar y reinsertar el 10\,\% (ms) & B+ agrupado & \textbf{4.75} & 87.2 & 1\,129 \\
- & B+ no agrupado & 44.4 & 478 & 5\,047 \\
- & hash extendible & 5.32 & \textbf{45.0} & \textbf{531} \\
-Espacio en disco (KiB) & B+ agrupado & 108 & 956 & 9\,356 \\
- & B+ no agrupado & \textbf{24.0} & \textbf{220} & \textbf{2\,040} \\
- & hash extendible & 28.0 & 264 & 2\,056 \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\grafica[0.58\textwidth]{indices.png}{fig:indices}{B+ agrupado vs B+ no agrupado vs hash
-extendible. El hash no aparece en el rango ni en el recorrido ordenado porque no los soporta.}
+\grafica{indices.png}{fig:indices}{B+ agrupado vs B+ no agrupado vs hash
+extendible: construcción, 100 búsquedas por igualdad y por rango, recorrido ordenado,
+espacio y borrar y reinsertar el 10\,\%. El hash no aparece en el rango ni en el recorrido
+ordenado porque no los soporta. Ejes logarítmicos; más abajo es mejor; el valor rotulado es el de 100\,000 filas.}
 
 El B+ agrupado es el más rápido al buscar: 100 búsquedas por igualdad toman 4.06~ms con
 100\,000 filas, contra 4.29~ms del hash y 16.1~ms del no agrupado. Leer la fila del heap es
@@ -123,7 +71,7 @@ toma 31.8~ms en el agrupado y 199~ms en el no agrupado (6.3 veces más), de los 
 son lecturas sueltas del heap. El hash es el más rápido de construir (20 veces más que el
 no agrupado) y, desde 10\,000 filas, de borrar y reinsertar (531~ms contra 1\,129~ms del
 agrupado), pero no soporta rangos ni orden. El agrupado ocupa 4.6 veces más porque guarda
-las filas completas.
+las filas completas. La tabla~\ref{tab:resumen-indices} resume cuándo conviene cada índice.
 
 \begin{table}[!htb]
 \centering
@@ -149,75 +97,21 @@ midieron 100 consultas por rango para cada radio (1, 5 y 10~km) y 100 k-NN para 
 ejecutan la consulta SQL completa en el gestor; GiST usa una columna \texttt{geography} de
 PostGIS con \texttt{ST\_DWithin} y el operador \texttt{<->}. Antes de comparar tiempos se
 verificó que las tres técnicas devuelven las mismas filas en las 1\,800 consultas y, con
-\texttt{EXPLAIN}, que PostgreSQL usa el índice GiST en todas.
+\texttt{EXPLAIN}, que PostgreSQL usa el índice GiST en todas. Las figuras~\ref{fig:radio}
+y~\ref{fig:knn} dan los tiempos de consulta y la figura~\ref{fig:indice}, la construcción, el
+espacio y la memoria del índice.
 
-\grafica[0.62\textwidth]{espacial-radio.png}{fig:radio}{Consultas por rango: tiempo promedio
-por consulta para radios de 1, 5 y 10~km.}
-\grafica[0.62\textwidth]{espacial-knn.png}{fig:knn}{Consultas k-NN: tiempo promedio por
-consulta para $k$ = 10, 50 y 100.}
+\grafica{espacial-radio.png}{fig:radio}{Consultas por rango: tiempo promedio
+por consulta (100 consultas) para radios de 1, 5 y 10~km. Ejes logarítmicos; más abajo es mejor; el valor rotulado es el de 100\,000 puntos.}
+\grafica{espacial-knn.png}{fig:knn}{Consultas k-NN: tiempo promedio por
+consulta (100 consultas) para $k$ = 10, 50 y 100. Ejes logarítmicos; más abajo es mejor; el valor rotulado es el de 100\,000 puntos.}
 
-\begin{table}[!htb]
-\centering
-\caption{Consultas espaciales: tiempo promedio por consulta en ms (100 consultas). Entre
-paréntesis, los puntos que devuelve en promedio una consulta por rango con 100\,000.}\label{tab:espacial}
-\small
-\begin{tabular}{@{}llR{1.5cm}R{1.5cm}R{1.5cm}@{}}
-\toprule
- & & \multicolumn{3}{c}{\textbf{Número de puntos de la tabla}} \\
-\cmidrule(lr){3-5}
-\textbf{Consulta} & \textbf{Técnica} & \textbf{1\,000} & \textbf{10\,000} & \textbf{100\,000} \\
-\midrule
-Radio de 1 km (64.1 puntos) & búsqueda secuencial & 3.52 & 33.8 & 338 \\
- & R-Tree & 0.27 & 0.42 & 0.96 \\
- & GiST (PostgreSQL) & \textbf{0.043} & \textbf{0.048} & \textbf{0.24} \\
-Radio de 5 km (544 puntos) & búsqueda secuencial & 3.51 & 33.9 & 339 \\
- & R-Tree & 0.33 & 0.82 & 4.39 \\
- & GiST (PostgreSQL) & \textbf{0.042} & \textbf{0.063} & \textbf{0.48} \\
-Radio de 10 km (1\,577 puntos) & búsqueda secuencial & 3.55 & 34.3 & 339 \\
- & R-Tree & 0.42 & 1.40 & 11.1 \\
- & GiST (PostgreSQL) & \textbf{0.050} & \textbf{0.099} & \textbf{1.00} \\
-k-NN, $k = 10$ & búsqueda secuencial & 5.82 & 70.2 & 1\,171 \\
- & R-Tree & 0.33 & 0.44 & 0.57 \\
- & GiST (PostgreSQL) & \textbf{0.059} & \textbf{0.058} & \textbf{0.12} \\
-k-NN, $k = 50$ & búsqueda secuencial & 5.85 & 71.1 & 1\,173 \\
- & R-Tree & 0.54 & 0.70 & 0.86 \\
- & GiST (PostgreSQL) & \textbf{0.095} & \textbf{0.097} & \textbf{0.19} \\
-k-NN, $k = 100$ & búsqueda secuencial & 5.94 & 73.7 & 1\,170 \\
- & R-Tree & 0.79 & 1.14 & 1.31 \\
- & GiST (PostgreSQL) & \textbf{0.12} & \textbf{0.14} & \textbf{0.26} \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\grafica[0.62\textwidth]{espacial-indice.png}{fig:indice}{Índice espacial: construcción,
+\grafica{espacial-indice.png}{fig:indice}{Índice espacial: construcción,
 espacio en disco y memoria pico al consultar. La línea punteada es el R-Tree construido
-insertando los puntos uno por uno.}
+insertando los puntos uno por uno; la memoria se midió solo en el gestor (con
+\texttt{tracemalloc}). Ejes logarítmicos; más abajo es mejor; el valor rotulado es el de 100\,000 puntos.}
 
-\begin{table}[!htb]
-\centering
-\caption{Construcción, espacio en disco y memoria del índice espacial. Tiempos en ms,
-espacio y memoria en KiB.}\label{tab:indice}
-\small
-\begin{tabular}{@{}llR{1.5cm}R{1.5cm}R{1.5cm}@{}}
-\toprule
- & & \multicolumn{3}{c}{\textbf{Número de puntos de la tabla}} \\
-\cmidrule(lr){3-5}
-\textbf{Medida} & \textbf{Técnica} & \textbf{1\,000} & \textbf{10\,000} & \textbf{100\,000} \\
-\midrule
-Construcción del índice (ms) & R-Tree, carga masiva & 3.46 & 40.6 & 544 \\
- & R-Tree, inserción uno a uno & 145 & 1\,854 & 22\,549 \\
- & GiST (PostgreSQL) & \textbf{1.47} & \textbf{18.8} & \textbf{188} \\
-Espacio en disco del índice (KiB) & R-Tree, carga masiva & \textbf{32.0} & \textbf{248} & \textbf{2\,428} \\
- & R-Tree, inserción uno a uno & 40.0 & 324 & 3\,260 \\
- & GiST (PostgreSQL) & 88.0 & 808 & 7\,760 \\
-Memoria pico al consultar (KiB) & búsqueda secuencial & 200 & 772 & 1\,468 \\
- & R-Tree & \textbf{98.2} & \textbf{167} & \textbf{1\,365} \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-
-La búsqueda secuencial tarda lo mismo con cualquier radio (tabla~\ref{tab:espacial}: 338~ms con 100\,000 puntos)
+La búsqueda secuencial tarda lo mismo con cualquier radio (figura~\ref{fig:radio}: 338~ms con 100\,000 puntos)
 porque siempre calcula todas las distancias, mientras que el R-Tree depende de cuántos
 puntos devuelve: es 351 veces más rápido para 1~km, 77 para 5~km y 31 para 10~km, cuando
 cada consulta ya devuelve el 1.6\,\% de la tabla. En k-NN la diferencia es mayor: sin
@@ -227,7 +121,8 @@ GiST es entre 4.0 y 14 veces más rápido, con curvas de la misma forma: está e
 dentro de PostgreSQL y el R-Tree del proyecto deserializa en Python cada nodo que lee. La
 carga masiva STR es 41 veces más rápida que insertar uno por uno y deja 606 nodos en lugar
 de 814 (26\,\% menos espacio); el índice ocupa 3.2 veces menos que el de PostGIS, que para
-\texttt{geography} indexa cajas en tres dimensiones.
+\texttt{geography} indexa cajas en tres dimensiones. La tabla~\ref{tab:resumen-espacial} resume
+las tres técnicas.
 
 \begin{table}[!htb]
 \centering
@@ -256,33 +151,12 @@ calificó como exacto. TF-IDF y BM25 usan el mismo índice invertido y se miden 
 \texttt{ts\_rank\_cd}. Cada consulta se repite 5 veces y cuenta la más rápida. Los dos
 analizadores usan Snowball pero no cortan igual las palabras (el motor separa \guillemotleft{}ps4\guillemotright{} en
 \texttt{ps} y \texttt{4}), así que el motor ve más candidatos: con 100\,000 productos, el
-96\,\% de los de GIN están también en el motor.
+96\,\% de los de GIN están también en el motor. La figura~\ref{fig:texto} da los tiempos, la tabla~\ref{tab:texto-relevancia} la relevancia
+y la tabla~\ref{tab:texto-indice} la construcción, el espacio y la memoria.
 
-\grafica[0.72\textwidth]{texto-consultas.png}{fig:texto}{Tiempo por consulta de un top-10
-según el número de palabras de la consulta.}
-
-\begin{table}[!htb]
-\centering
-\caption{Tiempo por consulta en ms, por número de palabras de la consulta.}\label{tab:texto-tiempo}
-\small
-\begin{tabular}{@{}llR{1.5cm}R{1.5cm}R{1.5cm}@{}}
-\toprule
- & & \multicolumn{3}{c}{\textbf{Número de productos}} \\
-\cmidrule(lr){3-5}
-\textbf{Consulta} & \textbf{Técnica} & \textbf{1\,000} & \textbf{10\,000} & \textbf{100\,000} \\
-\midrule
-1 palabra & TF-IDF + coseno & 0.019 & \textbf{0.047} & 0.24 \\
- & BM25 & \textbf{0.019} & 0.049 & \textbf{0.23} \\
- & GIN (PostgreSQL) & 0.082 & 0.096 & 0.64 \\
-3 palabras & TF-IDF + coseno & \textbf{0.062} & 0.17 & 1.24 \\
- & BM25 & 0.070 & \textbf{0.17} & \textbf{0.95} \\
- & GIN (PostgreSQL) & 0.23 & 1.82 & 19.3 \\
-5 o más palabras & TF-IDF + coseno & \textbf{0.087} & \textbf{0.36} & 2.99 \\
- & BM25 & 0.10 & 0.38 & \textbf{2.69} \\
- & GIN (PostgreSQL) & 0.39 & 4.82 & 51.7 \\
-\bottomrule
-\end{tabular}
-\end{table}
+\grafica{texto-consultas.png}{fig:texto}{Tiempo por consulta de un top-10
+según el número de palabras de la consulta (la más rápida de 5 repeticiones). Ejes logarítmicos; más abajo es mejor; el valor rotulado es el de 100\,000
+documentos.}
 
 \begin{table}[!htb]
 \centering
@@ -338,7 +212,7 @@ BM25 tarda 7.0 veces más. GIN construye 1.2 veces más rápido (11.0 contra 13.
 índice es 1.9 veces más chico porque comprime las listas, pero su ranking necesita además la
 columna \texttt{tsvector} (115~MiB). La memoria de SPIMI está acotada: con 100\,000 productos
 escribe 9 bloques y los mezcla en 2 pasadas, y diez veces más documentos que con 10\,000
-cuestan 1.4 veces la memoria.
+cuestan 1.4 veces la memoria. La tabla~\ref{tab:resumen-texto} resume las tres técnicas.
 
 \begin{table}[!htb]
 \centering
@@ -365,7 +239,10 @@ tamaño. El Recall@10 se calcula contra la búsqueda exacta hecha aparte con num
 \texttt{float64}, y \emph{vecinos de su clase@10} es la fracción de los 10 vecinos de la
 misma clase que la consulta, que mide la representación y no el índice. Cada consulta se
 responde 3 veces y cuenta su mediana. FAISS, USearch y pgvector~0.8.7 (en Docker) usan un
-hilo y los mismos parámetros.
+hilo y los mismos parámetros. La tabla~\ref{tab:clase} mide la representación con cada
+métrica; la figura~\ref{fig:multimedia} y la tabla~\ref{tab:multimedia-consulta}, el tiempo y
+el recall de cada índice; la tabla~\ref{tab:multimedia-indice}, la construcción y la memoria; y
+la figura~\ref{fig:galeria} muestra aciertos y errores.
 
 \begin{table}[!htb]
 \centering
@@ -424,20 +301,19 @@ que la euclidiana aleja de todo; en audio las dos empatan, porque todos los clip
 en imágenes). Con la euclidiana, 294 fotos sin descriptores SIFT tienen el vector cero, que
 está cerca de todo y deja al HNSW de FAISS en un Recall@10 de 0.538; el gestor las deja
 fuera del grafo y por SQL llega a 0.880. El producto punto sobre TF-IDF sin normalizar
-queda por debajo del azar en imágenes (0.11 contra 0.27).
+queda por debajo del azar en imágenes (0.11 contra 0.27). La tabla~\ref{tab:resumen-multimedia}
+resume las recomendaciones.
+
+\grafica{multimedia-consulta.png}{fig:multimedia}{Mediana del tiempo por consulta según el
+número de objetos de la colección, por dataset y métrica, con el esfuerzo por omisión. Las
+líneas punteadas son pgvector, que incluye el viaje al servidor. Ejes logarítmicos; más abajo es mejor; el valor rotulado es el de 100\,000 objetos.}
 
 \begin{figure}[!htb]
 \centering
-\begin{minipage}[c]{0.6\textwidth}
-\includegraphics[width=\linewidth]{../../benchmarks/figures/multimedia-consulta.png}
-\end{minipage}\hfill
-\begin{minipage}[c]{0.38\textwidth}
-\includegraphics[width=\linewidth]{../../benchmarks/figures/multimedia-galeria-imagenes.png}
-\end{minipage}
-\caption{Izquierda: mediana del tiempo por consulta según el número de objetos, por dataset
-y métrica. Derecha: galería de aciertos (arriba) y errores (abajo) del HNSW con el coseno y
-100\,000 fotos; cada fila es una consulta y sus 5 primeros vecinos.}
-\label{fig:multimedia}
+\includegraphics[width=0.5\textwidth]{../../benchmarks/figures/multimedia-galeria-imagenes.png}
+\caption{Galería de aciertos (arriba) y errores (abajo) del HNSW con el coseno y 100\,000
+fotos: cada fila es una consulta, seguida de sus 5 primeros vecinos.}
+\label{fig:galeria}
 \end{figure}
 
 \begin{table}[!htb]
@@ -589,7 +465,10 @@ pregunta se le quitan sus palabras vacías (con la pregunta entera era 11.1\,\%)
 respondiendo y Haiku 5.5 como juez, 40 de las 45 respuestas son fieles a sus fragmentos, el
 fragmento correcto se cita las 28 veces que llega al prompt, las 18 preguntas sin respuesta
 reciben \guillemotleft{}no está en los documentos\guillemotright{} y cada respuesta cuesta
-0.021~USD; el límite es la recuperación, no el modelo.
+0.021~USD; el límite es la recuperación, no el modelo. Después de esta evaluación se agregó
+una reescritura de la pregunta con Claude Haiku antes de buscar, que la convierte, junto con la
+conversación, en una búsqueda en inglés con los términos técnicos (unos 0.8~s y 0.0001~USD por
+pregunta); las cifras de la tabla~\ref{tab:rag-recuperacion} son anteriores a ese cambio.
 
 
 
@@ -658,7 +537,7 @@ el gestor, el HNSW coincide con la búsqueda exacta en el primer vecino en el 99
 7\,481 consultas (rank-1 de 98.60\,\% contra 98.72\,\%) y las dos tardan 0.2~ms por SQL. En
 vivo, por WebSocket y a través del nginx, un cuadro de 640 $\times$ 480 tarda 16.4~ms de
 mediana con la caché de rastros y 23.8~ms sin ella (p95 de 25.6 y 29.2~ms), muy por debajo
-de la meta de 100~ms del enunciado. La caché acierta en el 92 a 95\,\% de los cuadros
+de la meta de 100~ms del enunciado. La figura~\ref{fig:rostros} desglosa ese tiempo por etapa. La caché acierta en el 92 a 95\,\% de los cuadros
 mientras el rostro se mueve hasta 40~px por cuadro; desde 48~px el IoU entre cuadros baja
 de 0.3 y el rastro se pierde.
 
@@ -679,9 +558,9 @@ galería del gestor.}\label{tab:rostros}
 \end{tabular}
 \end{table}
 
-\grafica[0.88\textwidth]{rostros-tiempo-real.png}{fig:rostros}{Latencia de un cuadro por WebSocket: etapas
+\grafica[0.9\textwidth]{rostros-tiempo-real.png}{fig:rostros}{Latencia de un cuadro por WebSocket: etapas
 en el servidor y p50 y p95 en el servidor y en el cliente, por el nginx o directo al API,
-con y sin la caché de rastros.}
+con y sin la caché de rastros (cuadros de 640 $\times$ 480; la meta es 100~ms).}
 
 \paragraph{Carga.} Con k6, 32 usuarios sin pausa contra el nginx de cada app durante 30~s
 y 1, 2 y 4 réplicas de su API (figura~\ref{fig:carga}), el gestor es el límite de todo lo
@@ -695,10 +574,13 @@ casos otra réplica en la misma máquina no tiene CPU que usar. Las réplicas so
 cuando el trabajo está en la API: con la caché de Redis caliente, la tienda pasa de
 1\,837 a 3\,467 y 5\,595 req/s. La primera medida encontró que con una réplica el nginx
 se quedaba sin puertos locales (78\,\% de respuestas 502), porque abría una conexión
-nueva por petición; con \texttt{keepalive} hacia la API no falló ninguna.
+nueva por petición; con \texttt{keepalive} hacia la API no falló ninguna. La tabla~\ref{tab:resumen-apps} resume
+las técnicas que se midieron en las cuatro aplicaciones.
 
-\grafica[0.88\textwidth]{carga-replicas.png}{fig:carga}{Prueba de carga con 1, 2 y 4
-réplicas de cada API: respuestas correctas por segundo, p95 y CPU del gestor.}
+\grafica[0.9\textwidth]{carga-replicas.png}{fig:carga}{Prueba de carga con 1, 2 y 4
+réplicas de cada API: respuestas correctas (2xx) por segundo, latencia p95 y núcleos de CPU
+que ocupa el gestor, con 32 usuarios de k6 durante 30~s. Ejes de respuestas y de latencia
+logarítmicos.}
 
 \begin{table}[H]
 \centering

@@ -8,6 +8,10 @@ que es como se usan en la demostración.
 Las tablas multimedia de la demo salen de fotos y pistas reales que no viven en el
 repositorio. En su lugar, el test genera las que nombran los atajos —en las mismas rutas— y
 unas cuantas más, con los CSV de esas tablas.
+
+Los grupos «App: …» leen las tablas de las apps de la Parte 5 en el gestor desplegado, que no
+están en el dataset de la demostración, así que no se ejecutan aquí: se comprueba que se
+analizan, que son solo lecturas y que solo nombran tablas de las apps.
 """
 
 import csv
@@ -25,6 +29,8 @@ from tests.multimedia.media_support import TEXTURE_SIDE, chirp, textured_pixels,
 from api.main import create_app
 from config import EngineConfig
 from query.engine import Engine
+from sql import parse_script
+from sql.nodes import ExplainStatement, SelectStatement
 
 REPOSITORY = Path(__file__).resolve().parents[2]
 SNIPPETS = REPOSITORY / "frontend" / "src" / "snippets.ts"
@@ -46,6 +52,10 @@ CLIP_SECONDS = 1.0
 FRAGMENTED_CLIP_SECONDS = 30.0
 # Unas pocas fotos y pistas no dan descriptores para las 256 palabras por omisión.
 STAND_IN_VOCABULARY = 16
+APP_GROUP_PREFIX = "App: "
+APP_TABLE_PREFIXES = ("cr_", "shop_", "rag_", "face_")
+# Las personas registradas y sus embeddings no se leen desde la consola (Ley 29733).
+PRIVATE_APP_TABLES = frozenset({"face_personas", "face_embeddings", "face_sesiones", "face_tomas"})
 
 
 def snippets() -> list[tuple[str, str, str]]:
@@ -56,6 +66,14 @@ def snippets() -> list[tuple[str, str, str]]:
         for label, template, quoted in SNIPPET_PATTERN.findall(body):
             found.append((group, label, template or quoted))
     return found
+
+
+def demo_snippets() -> list[tuple[str, str, str]]:
+    return [snippet for snippet in snippets() if not snippet[0].startswith(APP_GROUP_PREFIX)]
+
+
+def app_snippets() -> list[tuple[str, str, str]]:
+    return [snippet for snippet in snippets() if snippet[0].startswith(APP_GROUP_PREFIX)]
 
 
 @pytest.fixture(scope="module")
@@ -96,7 +114,7 @@ def client(
 def write_stand_in_datasets(root: Path, dataset: ModuleType) -> None:
     """Las fotos y pistas que nombran los atajos, más algunas de relleno, y el CSV de cada
     tabla multimedia de la demo apuntando a ellas."""
-    found = [match for _, _, sql in snippets() for match in MEDIA_PATH.findall(sql)]
+    found = [match for _, _, sql in demo_snippets() for match in MEDIA_PATH.findall(sql)]
     named = {path for path, _ in found}
     fragmented = {path for path, fragment in found if fragment}
     images = sorted(path for path in named if path.endswith(".jpg"))
@@ -150,7 +168,7 @@ def test_every_snippet_runs_twice_on_the_demo_dataset(
 ):
     monkeypatch.chdir(workspace)
     for round_number in range(ROUNDS):
-        for group, label, sql in snippets():
+        for group, label, sql in demo_snippets():
             if ENDS_A_TRANSACTION.match(sql) and not in_transaction(client):
                 run(client, "BEGIN TRANSACTION;")
             response = client.post("/query", json={"sql": sql, "session_id": SESSION})
@@ -159,6 +177,20 @@ def test_every_snippet_runs_twice_on_the_demo_dataset(
             )
     if in_transaction(client):
         run(client, "ROLLBACK;")
+
+
+def test_app_snippets_only_read_app_tables():
+    found = app_snippets()
+    assert found, "no hay atajos de las apps en snippets.ts"
+    for group, label, sql in found:
+        for statement in parse_script(sql):
+            query = statement.query if isinstance(statement, ExplainStatement) else statement
+            assert isinstance(query, SelectStatement), f"[{group}] {label} no es una lectura"
+            tables = {query.source.name, *(join.table.name for join in query.joins)}
+            assert all(table.startswith(APP_TABLE_PREFIXES) for table in tables), (
+                f"[{group}] {label} nombra tablas fuera de las apps: {tables}"
+            )
+            assert not tables & PRIVATE_APP_TABLES, f"[{group}] {label} lee datos personales"
 
 
 def in_transaction(client: TestClient) -> bool:

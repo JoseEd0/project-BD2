@@ -519,9 +519,11 @@ Los CSV del dataset están en [`demos/samples/`](demos/samples/):
 
 Después, el atajo **Carga → Índices tras cargar CSV** crea los dos índices secundarios del
 e-commerce, **Espacial → Crear R-Tree**, el de `tiendas.ubicacion`, y **Texto → Índice
-invertido**, el de `catalogo.texto`. Con eso los 78 atajos del editor quedan listos para
+invertido**, el de `catalogo.texto`. Con eso los 78 atajos de la demo quedan listos para
 usarse; los 8 del grupo **Multimedia** necesitan además las tablas `imagenes` y `canciones`
-de la demo.
+de la demo. Los otros 20, de los grupos **App: Copyright**, **App: Tienda**, **App: Papers**
+y **App: Rostros**, leen las tablas de las apps de la Parte 5 en el gestor desplegado, con
+el SQL que corre cada app.
 
 **Datos espaciales reales.** Para probar el R-Tree con lugares de verdad —unos 128 000
 puntos de interés del Perú, de OpenStreetMap— hay un guion que los descarga en el formato

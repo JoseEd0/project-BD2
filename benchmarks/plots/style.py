@@ -19,6 +19,12 @@ AQUA = "#1baf7a"
 # Un solo tono de claro a oscuro, para series que tienen orden (radio pequeño → grande).
 LIGHT_BLUE = "#86b6ef"
 DARK_BLUE = "#104281"
+# La versión clara del naranja, para la misma técnica en otra biblioteca: en barras no hay
+# líneas punteadas que la distingan.
+LIGHT_ORANGE = "#f4b08f"
+# Un segundo tono, para percentiles junto a etapas que ya usan los azules.
+VIOLET = "#6f4fc8"
+LIGHT_VIOLET = "#c4b6ef"
 
 FONT_FAMILY = ["Helvetica Neue", "Helvetica", "Arial", "DejaVu Sans"]
 DPI = 170
@@ -135,6 +141,7 @@ BREAKDOWN_ROW_HEIGHT = 0.42
 BREAKDOWN_MIN_HEIGHT = 1.6
 BREAKDOWN_BAR_SHARE = 0.68
 BREAKDOWN_LABEL_ROOM = 1.22
+BREAKDOWN_LEGEND_ENTRIES_PER_PANEL = 2
 BREAKDOWN_LABEL_GAP = 0.015
 
 
